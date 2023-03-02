@@ -16,6 +16,8 @@
 
 package com.android.server.biometrics.sensors.fingerprint.aidl;
 
+import static com.google.common.truth.Truth.assertThat;
+
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyFloat;
@@ -39,7 +41,6 @@ import android.hardware.biometrics.common.OperationContext;
 import android.hardware.biometrics.fingerprint.ISession;
 import android.hardware.biometrics.fingerprint.PointerContext;
 import android.hardware.fingerprint.Fingerprint;
-import android.hardware.fingerprint.FingerprintManager;
 import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
 import android.hardware.fingerprint.ISidefpsController;
 import android.hardware.fingerprint.IUdfpsOverlayController;
@@ -53,10 +54,10 @@ import android.testing.TestableContext;
 import androidx.test.filters.SmallTest;
 import androidx.test.platform.app.InstrumentationRegistry;
 
-import com.android.internal.R;
 import com.android.server.biometrics.log.BiometricContext;
 import com.android.server.biometrics.log.BiometricLogger;
 import com.android.server.biometrics.log.CallbackWithProbe;
+import com.android.server.biometrics.log.OperationContextExt;
 import com.android.server.biometrics.log.Probe;
 import com.android.server.biometrics.sensors.AuthSessionCoordinator;
 import com.android.server.biometrics.sensors.ClientMonitorCallback;
@@ -131,7 +132,7 @@ public class FingerprintAuthenticationClientTest {
     @Mock
     private Clock mClock;
     @Captor
-    private ArgumentCaptor<OperationContext> mOperationContextCaptor;
+    private ArgumentCaptor<OperationContextExt> mOperationContextCaptor;
     @Captor
     private ArgumentCaptor<Consumer<OperationContext>> mContextInjector;
     private final TestLooper mLooper = new TestLooper();
@@ -164,7 +165,7 @@ public class FingerprintAuthenticationClientTest {
         order.verify(mBiometricContext).updateContext(
                 mOperationContextCaptor.capture(), anyBoolean());
         order.verify(mHal).authenticateWithContext(
-                eq(OP_ID), same(mOperationContextCaptor.getValue()));
+                eq(OP_ID), same(mOperationContextCaptor.getValue().toAidlContext()));
         verify(mHal, never()).authenticate(anyLong());
     }
 
@@ -236,9 +237,14 @@ public class FingerprintAuthenticationClientTest {
         final FingerprintAuthenticationClient client = createClient();
         client.start(mCallback);
 
-        verify(mHal).authenticateWithContext(eq(OP_ID), mOperationContextCaptor.capture());
-        OperationContext opContext = mOperationContextCaptor.getValue();
-        verify(mBiometricContext).subscribe(eq(opContext), mContextInjector.capture());
+        final ArgumentCaptor<OperationContext> captor =
+                ArgumentCaptor.forClass(OperationContext.class);
+        verify(mHal).authenticateWithContext(eq(OP_ID), captor.capture());
+        OperationContext opContext = captor.getValue();
+        verify(mBiometricContext).subscribe(
+                mOperationContextCaptor.capture(), mContextInjector.capture());
+        assertThat(mOperationContextCaptor.getValue().toAidlContext())
+                .isSameInstanceAs(opContext);
 
         mContextInjector.getValue().accept(opContext);
         verify(mLuxProbe, never()).enable();
@@ -282,9 +288,14 @@ public class FingerprintAuthenticationClientTest {
         final FingerprintAuthenticationClient client = createClient();
         client.start(mCallback);
 
-        verify(mHal).authenticateWithContext(eq(OP_ID), mOperationContextCaptor.capture());
-        OperationContext opContext = mOperationContextCaptor.getValue();
-        verify(mBiometricContext).subscribe(eq(opContext), mContextInjector.capture());
+        final ArgumentCaptor<OperationContext> captor =
+                ArgumentCaptor.forClass(OperationContext.class);
+        verify(mHal).authenticateWithContext(eq(OP_ID), captor.capture());
+        OperationContext opContext = captor.getValue();
+        verify(mBiometricContext).subscribe(
+                mOperationContextCaptor.capture(), mContextInjector.capture());
+        assertThat(opContext).isSameInstanceAs(
+                mOperationContextCaptor.getValue().toAidlContext());
 
         mContextInjector.getValue().accept(opContext);
         verify(mLuxProbe, never()).enable();
@@ -310,16 +321,21 @@ public class FingerprintAuthenticationClientTest {
         final FingerprintAuthenticationClient client = createClient();
         client.start(mCallback);
 
-        verify(mHal).authenticateWithContext(eq(OP_ID), mOperationContextCaptor.capture());
-        OperationContext opContext = mOperationContextCaptor.getValue();
+        final ArgumentCaptor<OperationContext> captor =
+                ArgumentCaptor.forClass(OperationContext.class);
+        verify(mHal).authenticateWithContext(eq(OP_ID), captor.capture());
+        OperationContext opContext = captor.getValue();
 
         // fake an update to the context
-        verify(mBiometricContext).subscribe(eq(opContext), mContextInjector.capture());
+        verify(mBiometricContext).subscribe(
+                mOperationContextCaptor.capture(), mContextInjector.capture());
+        assertThat(opContext).isSameInstanceAs(
+                mOperationContextCaptor.getValue().toAidlContext());
         mContextInjector.getValue().accept(opContext);
         verify(mHal).onContextChanged(eq(opContext));
 
         client.stopHalOperation();
-        verify(mBiometricContext).unsubscribe(same(opContext));
+        verify(mBiometricContext).unsubscribe(same(mOperationContextCaptor.getValue()));
     }
 
     @Test
@@ -378,274 +394,6 @@ public class FingerprintAuthenticationClientTest {
         mLooper.moveTimeForward(10);
         mLooper.dispatchAll();
         verify(mCancellationSignal).cancel();
-    }
-
-    @Test
-    public void fingerprintPowerIgnoresAuthInWindow() throws Exception {
-        when(mSensorProps.isAnySidefpsType()).thenReturn(true);
-        when(mHal.authenticate(anyLong())).thenReturn(mCancellationSignal);
-
-        final FingerprintAuthenticationClient client = createClient(1);
-        client.start(mCallback);
-        client.onPowerPressed();
-        client.onAuthenticated(new Fingerprint("friendly", 1 /* fingerId */, 2 /* deviceId */),
-                true /* authenticated */, new ArrayList<>());
-        mLooper.moveTimeForward(1000);
-        mLooper.dispatchAll();
-
-        verify(mCallback).onClientFinished(any(), eq(false));
-        verify(mCancellationSignal).cancel();
-    }
-
-    @Test
-    public void fingerprintAuthIgnoredWaitingForPower() throws Exception {
-        when(mSensorProps.isAnySidefpsType()).thenReturn(true);
-        when(mHal.authenticate(anyLong())).thenReturn(mCancellationSignal);
-
-        final FingerprintAuthenticationClient client = createClient(1);
-        client.start(mCallback);
-        client.onAuthenticated(new Fingerprint("friendly", 3 /* fingerId */, 4 /* deviceId */),
-                true /* authenticated */, new ArrayList<>());
-        client.onPowerPressed();
-        mLooper.moveTimeForward(1000);
-        mLooper.dispatchAll();
-
-        verify(mCallback).onClientFinished(any(), eq(false));
-        verify(mCancellationSignal).cancel();
-    }
-
-    @Test
-    public void fingerprintAuthFailsWhenAuthAfterPower() throws Exception {
-        when(mSensorProps.isAnySidefpsType()).thenReturn(true);
-        when(mHal.authenticate(anyLong())).thenReturn(mCancellationSignal);
-
-        final FingerprintAuthenticationClient client = createClient(1);
-        client.start(mCallback);
-        client.onPowerPressed();
-        mLooper.dispatchAll();
-        mLooper.moveTimeForward(1000);
-        mLooper.dispatchAll();
-        client.onAuthenticated(new Fingerprint("friendly", 4 /* fingerId */, 5 /* deviceId */),
-                true /* authenticated */, new ArrayList<>());
-        mLooper.dispatchAll();
-        mLooper.moveTimeForward(1000);
-        mLooper.dispatchAll();
-
-        verify(mCallback, never()).onClientFinished(any(), eq(true));
-        verify(mCallback).onClientFinished(any(), eq(false));
-        when(mHal.authenticateWithContext(anyLong(), any())).thenReturn(mCancellationSignal);
-    }
-
-    @Test
-    public void sideFingerprintDoesntSendAuthImmediately() throws Exception {
-        when(mSensorProps.isAnySidefpsType()).thenReturn(true);
-
-        final FingerprintAuthenticationClient client = createClient(1);
-        client.start(mCallback);
-        mLooper.dispatchAll();
-        client.onAuthenticated(new Fingerprint("friendly", 4 /* fingerId */, 5 /* deviceId */),
-                true /* authenticated */, new ArrayList<>());
-        mLooper.dispatchAll();
-
-        verify(mCallback, never()).onClientFinished(any(), anyBoolean());
-    }
-
-    @Test
-    public void sideFingerprintSkipsWindowIfFingerUp() throws Exception {
-        when(mSensorProps.isAnySidefpsType()).thenReturn(true);
-
-        mContext.getOrCreateTestableResources().addOverride(
-                R.integer.config_sidefpsSkipWaitForPowerAcquireMessage, FINGER_UP);
-
-        final FingerprintAuthenticationClient client = createClient(1);
-        client.start(mCallback);
-        mLooper.dispatchAll();
-        client.onAuthenticated(new Fingerprint("friendly", 4 /* fingerId */, 5 /* deviceId */),
-                true /* authenticated */, new ArrayList<>());
-        client.onAcquired(FINGER_UP, 0);
-        mLooper.dispatchAll();
-
-        verify(mCallback).onClientFinished(any(), eq(true));
-    }
-
-    @Test
-    public void sideFingerprintSkipsWindowIfVendorMessageMatch() throws Exception {
-        when(mSensorProps.isAnySidefpsType()).thenReturn(true);
-        final int vendorAcquireMessage = 1234;
-
-        mContext.getOrCreateTestableResources().addOverride(
-                R.integer.config_sidefpsSkipWaitForPowerAcquireMessage,
-                FingerprintManager.FINGERPRINT_ACQUIRED_VENDOR);
-        mContext.getOrCreateTestableResources().addOverride(
-                R.integer.config_sidefpsSkipWaitForPowerVendorAcquireMessage,
-                vendorAcquireMessage);
-
-        final FingerprintAuthenticationClient client = createClient(1);
-        client.start(mCallback);
-        mLooper.dispatchAll();
-        client.onAuthenticated(new Fingerprint("friendly", 4 /* fingerId */, 5 /* deviceId */),
-                true /* authenticated */, new ArrayList<>());
-        client.onAcquired(FingerprintManager.FINGERPRINT_ACQUIRED_VENDOR, vendorAcquireMessage);
-        mLooper.dispatchAll();
-
-        verify(mCallback).onClientFinished(any(), eq(true));
-    }
-
-    @Test
-    public void sideFingerprintDoesNotSkipWindowOnVendorErrorMismatch() throws Exception {
-        when(mSensorProps.isAnySidefpsType()).thenReturn(true);
-        final int vendorAcquireMessage = 1234;
-
-        mContext.getOrCreateTestableResources().addOverride(
-                R.integer.config_sidefpsSkipWaitForPowerAcquireMessage,
-                FingerprintManager.FINGERPRINT_ACQUIRED_VENDOR);
-        mContext.getOrCreateTestableResources().addOverride(
-                R.integer.config_sidefpsSkipWaitForPowerVendorAcquireMessage,
-                vendorAcquireMessage);
-
-        final FingerprintAuthenticationClient client = createClient(1);
-        client.start(mCallback);
-        mLooper.dispatchAll();
-        client.onAuthenticated(new Fingerprint("friendly", 4 /* fingerId */, 5 /* deviceId */),
-                true /* authenticated */, new ArrayList<>());
-        client.onAcquired(FingerprintManager.FINGERPRINT_ACQUIRED_VENDOR, 1);
-        mLooper.dispatchAll();
-
-        verify(mCallback, never()).onClientFinished(any(), anyBoolean());
-    }
-
-    @Test
-    public void sideFingerprintSendsAuthIfFingerUp() throws Exception {
-        when(mSensorProps.isAnySidefpsType()).thenReturn(true);
-
-        mContext.getOrCreateTestableResources().addOverride(
-                R.integer.config_sidefpsSkipWaitForPowerAcquireMessage, FINGER_UP);
-
-        final FingerprintAuthenticationClient client = createClient(1);
-        client.start(mCallback);
-        mLooper.dispatchAll();
-        client.onAcquired(FINGER_UP, 0);
-        client.onAuthenticated(new Fingerprint("friendly", 4 /* fingerId */, 5 /* deviceId */),
-                true /* authenticated */, new ArrayList<>());
-        mLooper.dispatchAll();
-
-        verify(mCallback).onClientFinished(any(), eq(true));
-    }
-
-    @Test
-    public void sideFingerprintShortCircuitExpires() throws Exception {
-        when(mSensorProps.isAnySidefpsType()).thenReturn(true);
-
-        final int timeBeforeAuthSent = 500;
-
-        mContext.getOrCreateTestableResources().addOverride(
-                R.integer.config_sidefpsKeyguardPowerPressWindow, timeBeforeAuthSent);
-        mContext.getOrCreateTestableResources().addOverride(
-                R.integer.config_sidefpsSkipWaitForPowerAcquireMessage, FINGER_UP);
-
-        final FingerprintAuthenticationClient client = createClient(1);
-        client.start(mCallback);
-        mLooper.dispatchAll();
-        client.onAcquired(FINGER_UP, 0);
-        mLooper.dispatchAll();
-
-        mLooper.moveTimeForward(500);
-        mLooper.dispatchAll();
-        client.onAuthenticated(new Fingerprint("friendly", 4 /* fingerId */, 5 /* deviceId */),
-                true /* authenticated */, new ArrayList<>());
-        mLooper.dispatchAll();
-        verify(mCallback, never()).onClientFinished(any(), anyBoolean());
-
-        mLooper.moveTimeForward(500);
-        mLooper.dispatchAll();
-        verify(mCallback).onClientFinished(any(), eq(true));
-    }
-
-    @Test
-    public void sideFingerprintPowerWindowStartsOnAcquireStart() throws Exception {
-        final int powerWindow = 500;
-        final long authStart = 300;
-
-        when(mSensorProps.isAnySidefpsType()).thenReturn(true);
-        mContext.getOrCreateTestableResources().addOverride(
-                R.integer.config_sidefpsBpPowerPressWindow, powerWindow);
-
-        final FingerprintAuthenticationClient client = createClient(1);
-        client.start(mCallback);
-
-        // Acquire start occurs at time = 0ms
-        when(mClock.millis()).thenReturn(0L);
-        client.onAcquired(FingerprintManager.FINGERPRINT_ACQUIRED_START, 0 /* vendorCode */);
-
-        // Auth occurs at time = 300
-        when(mClock.millis()).thenReturn(authStart);
-        // At this point the delay should be 500 - (300 - 0) == 200 milliseconds.
-        client.onAuthenticated(new Fingerprint("friendly", 4 /* fingerId */, 5 /* deviceId */),
-                true /* authenticated */, new ArrayList<>());
-        mLooper.dispatchAll();
-        verify(mCallback, never()).onClientFinished(any(), anyBoolean());
-
-        // After waiting 200 milliseconds, auth should succeed.
-        mLooper.moveTimeForward(powerWindow - authStart);
-        mLooper.dispatchAll();
-        verify(mCallback).onClientFinished(any(), eq(true));
-    }
-
-    @Test
-    public void sideFingerprintPowerWindowStartsOnLastAcquireStart() throws Exception {
-        final int powerWindow = 500;
-
-        when(mSensorProps.isAnySidefpsType()).thenReturn(true);
-        mContext.getOrCreateTestableResources().addOverride(
-                R.integer.config_sidefpsBpPowerPressWindow, powerWindow);
-
-        final FingerprintAuthenticationClient client = createClient(1);
-        client.start(mCallback);
-        // Acquire start occurs at time = 0ms
-        when(mClock.millis()).thenReturn(0L);
-        client.onAcquired(FingerprintManager.FINGERPRINT_ACQUIRED_START, 0 /* vendorCode */);
-
-        // Auth reject occurs at time = 300ms
-        when(mClock.millis()).thenReturn(300L);
-        client.onAuthenticated(new Fingerprint("friendly", 4 /* fingerId */, 5 /* deviceId */),
-                false /* authenticated */, new ArrayList<>());
-        mLooper.dispatchAll();
-
-        mLooper.moveTimeForward(300);
-        mLooper.dispatchAll();
-        verify(mCallback, never()).onClientFinished(any(), anyBoolean());
-
-        when(mClock.millis()).thenReturn(1300L);
-        client.onAcquired(FingerprintManager.FINGERPRINT_ACQUIRED_START, 0 /* vendorCode */);
-
-        // If code is correct, the new acquired start timestamp should be used
-        // and the code should only have to wait 500 - (1500-1300)ms.
-        when(mClock.millis()).thenReturn(1500L);
-        client.onAuthenticated(new Fingerprint("friendly", 4 /* fingerId */, 5 /* deviceId */),
-                true /* authenticated */, new ArrayList<>());
-        mLooper.dispatchAll();
-
-        mLooper.moveTimeForward(299);
-        mLooper.dispatchAll();
-        verify(mCallback, never()).onClientFinished(any(), anyBoolean());
-
-        mLooper.moveTimeForward(1);
-        mLooper.dispatchAll();
-        verify(mCallback).onClientFinished(any(), eq(true));
-    }
-
-    @Test
-    public void sideFpsPowerPressCancelsIsntantly() throws Exception {
-        when(mSensorProps.isAnySidefpsType()).thenReturn(true);
-
-        final FingerprintAuthenticationClient client = createClient(1);
-        client.start(mCallback);
-
-        client.onPowerPressed();
-        mLooper.dispatchAll();
-
-        verify(mCallback, never()).onClientFinished(any(), eq(true));
-        verify(mCallback).onClientFinished(any(), eq(false));
     }
 
     private FingerprintAuthenticationClient createClient() throws RemoteException {

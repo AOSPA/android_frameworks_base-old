@@ -31,6 +31,7 @@ import com.android.systemui.BootCompleteCacheImpl;
 import com.android.systemui.appops.dagger.AppOpsModule;
 import com.android.systemui.assist.AssistModule;
 import com.android.systemui.biometrics.AlternateUdfpsTouchProvider;
+import com.android.systemui.biometrics.FingerprintInteractiveToAuthProvider;
 import com.android.systemui.biometrics.UdfpsDisplayModeProvider;
 import com.android.systemui.biometrics.dagger.BiometricsModule;
 import com.android.systemui.biometrics.dagger.UdfpsModule;
@@ -40,6 +41,7 @@ import com.android.systemui.controls.dagger.ControlsModule;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.demomode.dagger.DemoModeModule;
 import com.android.systemui.doze.dagger.DozeComponent;
+import com.android.systemui.dreams.complication.dagger.ComplicationComponent;
 import com.android.systemui.dreams.dagger.DreamModule;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.flags.FeatureFlags;
@@ -53,6 +55,7 @@ import com.android.systemui.motiontool.MotionToolModule;
 import com.android.systemui.navigationbar.NavigationBarComponent;
 import com.android.systemui.notetask.NoteTaskModule;
 import com.android.systemui.people.PeopleModule;
+import com.android.systemui.plugins.BcSmartspaceConfigPlugin;
 import com.android.systemui.plugins.BcSmartspaceDataPlugin;
 import com.android.systemui.privacy.PrivacyModule;
 import com.android.systemui.qs.FgsManagerController;
@@ -163,6 +166,7 @@ import dagger.Provides;
         },
         subcomponents = {
             CentralSurfacesComponent.class,
+            ComplicationComponent.class,
             NavigationBarComponent.class,
             NotificationRowComponent.class,
             DozeComponent.class,
@@ -208,6 +212,9 @@ public abstract class SystemUIModule {
     abstract BcSmartspaceDataPlugin optionalBcSmartspaceDataPlugin();
 
     @BindsOptionalOf
+    abstract BcSmartspaceConfigPlugin optionalBcSmartspaceConfigPlugin();
+
+    @BindsOptionalOf
     abstract Recents optionalRecents();
 
     @BindsOptionalOf
@@ -218,6 +225,9 @@ public abstract class SystemUIModule {
 
     @BindsOptionalOf
     abstract AlternateUdfpsTouchProvider optionalUdfpsTouchProvider();
+
+    @BindsOptionalOf
+    abstract FingerprintInteractiveToAuthProvider optionalFingerprintInteractiveToAuthProvider();
 
     @SysUISingleton
     @Binds

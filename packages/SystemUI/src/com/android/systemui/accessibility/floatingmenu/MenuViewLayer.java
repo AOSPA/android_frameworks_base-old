@@ -20,23 +20,30 @@ import static android.view.WindowInsets.Type.ime;
 
 import static androidx.core.view.WindowInsetsCompat.Type;
 
+import static com.android.internal.accessibility.AccessibilityShortcutController.ACCESSIBILITY_BUTTON_COMPONENT_NAME;
 import static com.android.internal.accessibility.common.ShortcutConstants.AccessibilityFragmentType.INVISIBLE_TOGGLE;
 import static com.android.internal.accessibility.util.AccessibilityUtils.getAccessibilityServiceFragmentType;
 import static com.android.internal.accessibility.util.AccessibilityUtils.setAccessibilityServiceState;
 import static com.android.systemui.accessibility.floatingmenu.MenuMessageView.Index;
+import static com.android.systemui.util.PluralMessageFormaterKt.icuMessageFormat;
 
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.annotation.IntDef;
+import android.annotation.StringDef;
 import android.annotation.SuppressLint;
+import android.content.ComponentCallbacks;
 import android.content.Context;
+import android.content.Intent;
 import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.UserHandle;
 import android.provider.Settings;
-import android.util.PluralsMessageFormatter;
 import android.view.MotionEvent;
+import android.view.View;
+import android.view.ViewTreeObserver;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.view.WindowMetrics;
@@ -45,6 +52,7 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.lifecycle.Observer;
 
 import com.android.internal.accessibility.dialog.AccessibilityTarget;
 import com.android.internal.annotations.VisibleForTesting;
@@ -55,9 +63,8 @@ import com.android.wm.shell.common.magnetictarget.MagnetizedObject;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 
 /**
  * The basic interactions with the child views {@link MenuView}, {@link DismissView}, and
@@ -66,11 +73,13 @@ import java.util.Map;
  * message view would be shown and allowed users to undo it.
  */
 @SuppressLint("ViewConstructor")
-class MenuViewLayer extends FrameLayout {
+class MenuViewLayer extends FrameLayout implements
+        ViewTreeObserver.OnComputeInternalInsetsListener, View.OnClickListener, ComponentCallbacks {
     private static final int SHOW_MESSAGE_DELAY_MS = 3000;
 
     private final WindowManager mWindowManager;
     private final MenuView mMenuView;
+    private final MenuListViewTouchHandler mMenuListViewTouchHandler;
     private final MenuMessageView mMessageView;
     private final DismissView mDismissView;
     private final MenuViewAppearance mMenuViewAppearance;
@@ -79,18 +88,38 @@ class MenuViewLayer extends FrameLayout {
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final IAccessibilityFloatingMenu mFloatingMenu;
     private final DismissAnimationController mDismissAnimationController;
+    private final MenuViewModel mMenuViewModel;
+    private final Observer<Boolean> mDockTooltipObserver =
+            this::onDockTooltipVisibilityChanged;
+    private final Observer<Boolean> mMigrationTooltipObserver =
+            this::onMigrationTooltipVisibilityChanged;
     private final Rect mImeInsetsRect = new Rect();
+    private boolean mIsMigrationTooltipShowing;
+    private boolean mShouldShowDockTooltip;
+    private Optional<MenuEduTooltipView> mEduTooltipView = Optional.empty();
 
     @IntDef({
             LayerIndex.MENU_VIEW,
             LayerIndex.DISMISS_VIEW,
             LayerIndex.MESSAGE_VIEW,
+            LayerIndex.TOOLTIP_VIEW,
     })
     @Retention(RetentionPolicy.SOURCE)
     @interface LayerIndex {
         int MENU_VIEW = 0;
         int DISMISS_VIEW = 1;
         int MESSAGE_VIEW = 2;
+        int TOOLTIP_VIEW = 3;
+    }
+
+    @StringDef({
+            TooltipType.MIGRATION,
+            TooltipType.DOCK,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    @interface TooltipType {
+        String MIGRATION = "migration";
+        String DOCK = "dock";
     }
 
     @VisibleForTesting
@@ -108,8 +137,8 @@ class MenuViewLayer extends FrameLayout {
                             AccessibilityServiceInfo.FEEDBACK_ALL_MASK);
             serviceInfoList.forEach(info -> {
                 if (getAccessibilityServiceFragmentType(info) == INVISIBLE_TOGGLE) {
-                    setAccessibilityServiceState(mContext, info.getComponentName(), /* enabled= */
-                            false);
+                    setAccessibilityServiceState(getContext(),
+                            info.getComponentName(), /* enabled= */ false);
                 }
             });
 
@@ -121,16 +150,19 @@ class MenuViewLayer extends FrameLayout {
             AccessibilityManager accessibilityManager, IAccessibilityFloatingMenu floatingMenu) {
         super(context);
 
+        // Simplifies the translation positioning and animations
+        setLayoutDirection(LAYOUT_DIRECTION_LTR);
+
         mWindowManager = windowManager;
         mAccessibilityManager = accessibilityManager;
         mFloatingMenu = floatingMenu;
 
-        final MenuViewModel menuViewModel = new MenuViewModel(context);
+        mMenuViewModel = new MenuViewModel(context, accessibilityManager);
         mMenuViewAppearance = new MenuViewAppearance(context, windowManager);
-        mMenuView = new MenuView(context, menuViewModel, mMenuViewAppearance);
+        mMenuView = new MenuView(context, mMenuViewModel, mMenuViewAppearance);
         mMenuAnimationController = mMenuView.getMenuAnimationController();
         mMenuAnimationController.setDismissCallback(this::hideMenuAndShowMessage);
-
+        mMenuAnimationController.setSpringAnimationsEndAction(this::onSpringAnimationsEndAction);
         mDismissView = new DismissView(context);
         mDismissAnimationController = new DismissAnimationController(mDismissView, mMenuView);
         mDismissAnimationController.setMagnetListener(new MagnetizedObject.MagnetListener() {
@@ -153,9 +185,9 @@ class MenuViewLayer extends FrameLayout {
             }
         });
 
-        final MenuListViewTouchHandler menuListViewTouchHandler = new MenuListViewTouchHandler(
-                mMenuAnimationController, mDismissAnimationController);
-        mMenuView.addOnItemTouchListenerToList(menuListViewTouchHandler);
+        mMenuListViewTouchHandler = new MenuListViewTouchHandler(mMenuAnimationController,
+                mDismissAnimationController);
+        mMenuView.addOnItemTouchListenerToList(mMenuListViewTouchHandler);
 
         mMessageView = new MenuMessageView(context);
 
@@ -180,20 +212,30 @@ class MenuViewLayer extends FrameLayout {
     }
 
     @Override
-    protected void onConfigurationChanged(Configuration newConfig) {
-        super.onConfigurationChanged(newConfig);
+    public void onConfigurationChanged(@NonNull Configuration newConfig) {
         mDismissView.updateResources();
+        mDismissAnimationController.updateResources();
+    }
+
+    @Override
+    public void onLowMemory() {
+        // Do nothing.
     }
 
     private String getMessageText(List<AccessibilityTarget> newTargetFeatures) {
         Preconditions.checkArgument(newTargetFeatures.size() > 0,
                 "The list should at least have one feature.");
 
-        final Map<String, Object> arguments = new HashMap<>();
-        arguments.put("count", newTargetFeatures.size());
-        arguments.put("label", newTargetFeatures.get(0).getLabel());
-        return PluralsMessageFormatter.format(getResources(), arguments,
-                R.string.accessibility_floating_button_undo_message_text);
+        final int featuresSize = newTargetFeatures.size();
+        final Resources resources = getResources();
+        if (featuresSize == 1) {
+            return resources.getString(
+                    R.string.accessibility_floating_button_undo_message_label_text,
+                    newTargetFeatures.get(0).getLabel());
+        }
+
+        return icuMessageFormat(resources,
+                R.string.accessibility_floating_button_undo_message_number_text, featuresSize);
     }
 
     @Override
@@ -210,9 +252,14 @@ class MenuViewLayer extends FrameLayout {
         super.onAttachedToWindow();
 
         mMenuView.show();
+        setOnClickListener(this);
         setOnApplyWindowInsetsListener((view, insets) -> onWindowInsetsApplied(insets));
+        getViewTreeObserver().addOnComputeInternalInsetsListener(this);
+        mMenuViewModel.getDockTooltipVisibilityData().observeForever(mDockTooltipObserver);
+        mMenuViewModel.getMigrationTooltipVisibilityData().observeForever(
+                mMigrationTooltipObserver);
         mMessageView.setUndoListener(view -> undo());
-        mContext.registerComponentCallbacks(mDismissAnimationController);
+        getContext().registerComponentCallbacks(this);
     }
 
     @Override
@@ -220,9 +267,30 @@ class MenuViewLayer extends FrameLayout {
         super.onDetachedFromWindow();
 
         mMenuView.hide();
+        setOnClickListener(null);
         setOnApplyWindowInsetsListener(null);
+        getViewTreeObserver().removeOnComputeInternalInsetsListener(this);
+        mMenuViewModel.getDockTooltipVisibilityData().removeObserver(mDockTooltipObserver);
+        mMenuViewModel.getMigrationTooltipVisibilityData().removeObserver(
+                mMigrationTooltipObserver);
         mHandler.removeCallbacksAndMessages(/* token= */ null);
-        mContext.unregisterComponentCallbacks(mDismissAnimationController);
+        getContext().unregisterComponentCallbacks(this);
+    }
+
+    @Override
+    public void onComputeInternalInsets(ViewTreeObserver.InternalInsetsInfo inoutInfo) {
+        inoutInfo.setTouchableInsets(ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_REGION);
+
+        if (mEduTooltipView.isPresent()) {
+            final int x = (int) getX();
+            final int y = (int) getY();
+            inoutInfo.touchableRegion.union(new Rect(x, y, x + getWidth(), y + getHeight()));
+        }
+    }
+
+    @Override
+    public void onClick(View v) {
+        mEduTooltipView.ifPresent(this::removeTooltip);
     }
 
     private WindowInsets onWindowInsetsApplied(WindowInsets insets) {
@@ -247,6 +315,78 @@ class MenuViewLayer extends FrameLayout {
         }
 
         return insets;
+    }
+
+    private void onMigrationTooltipVisibilityChanged(boolean visible) {
+        mIsMigrationTooltipShowing = visible;
+
+        if (mIsMigrationTooltipShowing) {
+            mEduTooltipView = Optional.of(new MenuEduTooltipView(mContext, mMenuViewAppearance));
+            mEduTooltipView.ifPresent(
+                    view -> addTooltipView(view, getMigrationMessage(), TooltipType.MIGRATION));
+        }
+    }
+
+    private void onDockTooltipVisibilityChanged(boolean hasSeenTooltip) {
+        mShouldShowDockTooltip = !hasSeenTooltip;
+    }
+
+    private void onSpringAnimationsEndAction() {
+        if (mShouldShowDockTooltip) {
+            mEduTooltipView = Optional.of(new MenuEduTooltipView(mContext, mMenuViewAppearance));
+            mEduTooltipView.ifPresent(view -> addTooltipView(view,
+                    getContext().getText(R.string.accessibility_floating_button_docking_tooltip),
+                    TooltipType.DOCK));
+
+            mMenuAnimationController.startTuckedAnimationPreview();
+        }
+    }
+
+    private CharSequence getMigrationMessage() {
+        final Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_DETAILS_SETTINGS);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.putExtra(Intent.EXTRA_COMPONENT_NAME,
+                ACCESSIBILITY_BUTTON_COMPONENT_NAME.flattenToShortString());
+
+        final AnnotationLinkSpan.LinkInfo linkInfo = new AnnotationLinkSpan.LinkInfo(
+                AnnotationLinkSpan.LinkInfo.DEFAULT_ANNOTATION,
+                v -> {
+                    getContext().startActivity(intent);
+                    mEduTooltipView.ifPresent(this::removeTooltip);
+                });
+
+        final int textResId = R.string.accessibility_floating_button_migration_tooltip;
+
+        return AnnotationLinkSpan.linkify(getContext().getText(textResId), linkInfo);
+    }
+
+    private void addTooltipView(MenuEduTooltipView tooltipView, CharSequence message,
+            CharSequence tag) {
+        addView(tooltipView, LayerIndex.TOOLTIP_VIEW);
+
+        tooltipView.show(message);
+        tooltipView.setTag(tag);
+
+        mMenuListViewTouchHandler.setOnActionDownEndListener(
+                () -> mEduTooltipView.ifPresent(this::removeTooltip));
+    }
+
+    private void removeTooltip(View tooltipView) {
+        if (tooltipView.getTag().equals(TooltipType.MIGRATION)) {
+            mMenuViewModel.updateMigrationTooltipVisibility(/* visible= */ false);
+            mIsMigrationTooltipShowing = false;
+        }
+
+        if (tooltipView.getTag().equals(TooltipType.DOCK)) {
+            mMenuViewModel.updateDockTooltipVisibility(/* hasSeen= */ true);
+            mMenuView.clearAnimation();
+            mShouldShowDockTooltip = false;
+        }
+
+        removeView(tooltipView);
+
+        mMenuListViewTouchHandler.setOnActionDownEndListener(null);
+        mEduTooltipView = Optional.empty();
     }
 
     private void hideMenuAndShowMessage() {

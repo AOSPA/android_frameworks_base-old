@@ -268,7 +268,8 @@ public class BluetoothUtils {
                 BluetoothDevice.METADATA_DEVICE_TYPE);
         if (TextUtils.equals(deviceType, BluetoothDevice.DEVICE_TYPE_UNTETHERED_HEADSET)
                 || TextUtils.equals(deviceType, BluetoothDevice.DEVICE_TYPE_WATCH)
-                || TextUtils.equals(deviceType, BluetoothDevice.DEVICE_TYPE_DEFAULT)) {
+                || TextUtils.equals(deviceType, BluetoothDevice.DEVICE_TYPE_DEFAULT)
+                || TextUtils.equals(deviceType, BluetoothDevice.DEVICE_TYPE_STYLUS)) {
             Log.d(TAG, "isAdvancedDetailsHeader: deviceType is " + deviceType);
             return true;
         }
@@ -296,6 +297,18 @@ public class BluetoothUtils {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Check if a device class matches with a defined BluetoothClass device.
+     *
+     * @param device Must be one of the public constants in {@link BluetoothClass.Device}
+     * @return true if device class matches, false otherwise.
+     */
+    public static boolean isDeviceClassMatched(@NonNull BluetoothDevice bluetoothDevice,
+            int device) {
+        return bluetoothDevice.getBluetoothClass() != null
+                && bluetoothDevice.getBluetoothClass().getDeviceClass() == device;
     }
 
     private static boolean isAdvancedHeaderEnabled() {

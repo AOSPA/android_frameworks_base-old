@@ -16,11 +16,14 @@
 
 package com.android.internal.app;
 
+import static android.util.PollingCheck.waitFor;
+
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.action.ViewActions.swipeUp;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.isSelected;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
@@ -47,6 +50,8 @@ import androidx.test.rule.ActivityTestRule;
 import com.android.internal.R;
 import com.android.internal.app.ResolverActivity.ResolvedComponentInfo;
 import com.android.internal.app.ResolverActivityWorkProfileTest.TestCase.Tab;
+
+import junit.framework.AssertionFailedError;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -87,7 +92,7 @@ public class ResolverActivityWorkProfileTest {
     public void testBlocker() {
         setUpPersonalAndWorkComponentInfos();
         sOverrides.hasCrossProfileIntents = mTestCase.hasCrossProfileIntents();
-        sOverrides.myUserId = mTestCase.getMyUserHandle().getIdentifier();
+        sOverrides.tabOwnerUserHandleForLaunch = mTestCase.getMyUserHandle();
 
         launchActivity(/* callingUser= */ mTestCase.getExtraCallingUser());
         switchToTab(mTestCase.getTab());
@@ -225,19 +230,21 @@ public class ResolverActivityWorkProfileTest {
     }
 
     private List<ResolvedComponentInfo> createResolvedComponentsForTestWithOtherProfile(
-            int numberOfResults, int userId) {
+            int numberOfResults, int userId, UserHandle resolvedForUser) {
         List<ResolvedComponentInfo> infoList = new ArrayList<>(numberOfResults);
         for (int i = 0; i < numberOfResults; i++) {
             infoList.add(
-                    ResolverDataProvider.createResolvedComponentInfoWithOtherId(i, userId));
+                    ResolverDataProvider
+                            .createResolvedComponentInfoWithOtherId(i, userId, resolvedForUser));
         }
         return infoList;
     }
 
-    private List<ResolvedComponentInfo> createResolvedComponentsForTest(int numberOfResults) {
+    private List<ResolvedComponentInfo> createResolvedComponentsForTest(int numberOfResults,
+            UserHandle resolvedForUser) {
         List<ResolvedComponentInfo> infoList = new ArrayList<>(numberOfResults);
         for (int i = 0; i < numberOfResults; i++) {
-            infoList.add(ResolverDataProvider.createResolvedComponentInfo(i));
+            infoList.add(ResolverDataProvider.createResolvedComponentInfo(i, resolvedForUser));
         }
         return infoList;
     }
@@ -249,9 +256,9 @@ public class ResolverActivityWorkProfileTest {
         int workProfileTargets = 4;
         List<ResolvedComponentInfo> personalResolvedComponentInfos =
                 createResolvedComponentsForTestWithOtherProfile(3,
-                        /* userId */ WORK_USER_HANDLE.getIdentifier());
+                        /* userId */ WORK_USER_HANDLE.getIdentifier(), PERSONAL_USER_HANDLE);
         List<ResolvedComponentInfo> workResolvedComponentInfos =
-                createResolvedComponentsForTest(workProfileTargets);
+                createResolvedComponentsForTest(workProfileTargets, WORK_USER_HANDLE);
         setupResolverControllers(personalResolvedComponentInfos, workResolvedComponentInfos);
     }
 
@@ -309,8 +316,17 @@ public class ResolverActivityWorkProfileTest {
         final int stringId = tab == Tab.WORK ? R.string.resolver_work_tab
                 : R.string.resolver_personal_tab;
 
-        onView(withText(stringId)).perform(click());
-        waitForIdle();
+        waitFor(() -> {
+            onView(withText(stringId)).perform(click());
+            waitForIdle();
+
+            try {
+                onView(withText(stringId)).check(matches(isSelected()));
+                return true;
+            } catch (AssertionFailedError e) {
+                return false;
+            }
+        });
 
         onView(withId(R.id.contentPanel))
                 .perform(swipeUp());

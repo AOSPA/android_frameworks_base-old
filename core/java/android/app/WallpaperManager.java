@@ -115,6 +115,9 @@ public class WallpaperManager {
     private static final @NonNull RectF LOCAL_COLOR_BOUNDS =
             new RectF(0, 0, 1, 1);
 
+    /** Temporary feature flag for project b/197814683 */
+    private final boolean mLockscreenLiveWallpaper;
+
     /** {@hide} */
     private static final String PROP_WALLPAPER = "ro.config.wallpaper";
     /** {@hide} */
@@ -637,7 +640,7 @@ public class WallpaperManager {
                 Bundle params = new Bundle();
                 try (ParcelFileDescriptor pfd = mService.getWallpaperWithFeature(
                         context.getOpPackageName(), context.getAttributionTag(), this, which,
-                        params, userId)) {
+                        params, userId, /* getCropped = */ true)) {
                     // Let's peek user wallpaper first.
                     if (pfd != null) {
                         BitmapFactory.Options options = new BitmapFactory.Options();
@@ -687,7 +690,7 @@ public class WallpaperManager {
                 Bundle params = new Bundle();
                 ParcelFileDescriptor pfd = mService.getWallpaperWithFeature(
                         context.getOpPackageName(), context.getAttributionTag(), this, which,
-                        params, userId);
+                        params, userId, /* getCropped = */ true);
 
                 if (pfd != null) {
                     try (BufferedInputStream bis = new BufferedInputStream(
@@ -750,6 +753,8 @@ public class WallpaperManager {
         mWcgEnabled = context.getResources().getConfiguration().isScreenWideColorGamut()
                 && context.getResources().getBoolean(R.bool.config_enableWcgMode);
         mCmProxy = new ColorManagementProxy(context);
+        mLockscreenLiveWallpaper = context.getResources()
+                .getBoolean(R.bool.config_independentLockscreenLiveWallpaper);
     }
 
     // no-op constructor called just by DisabledWallpaperManager
@@ -757,6 +762,7 @@ public class WallpaperManager {
         mContext = null;
         mCmProxy = null;
         mWcgEnabled = false;
+        mLockscreenLiveWallpaper = false;
     }
 
     /**
@@ -771,6 +777,15 @@ public class WallpaperManager {
     @UnsupportedAppUsage
     public IWallpaperManager getIWallpaperManager() {
         return sGlobals.mService;
+    }
+
+    /**
+     * Temporary method for project b/197814683.
+     * @return true if the lockscreen wallpaper always uses a wallpaperService, not a static image
+     * @hide
+     */
+    public boolean isLockscreenLiveWallpaperEnabled() {
+        return mLockscreenLiveWallpaper;
     }
 
     /**
@@ -809,14 +824,7 @@ public class WallpaperManager {
     @RequiresPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE)
     @Nullable
     public Drawable getDrawable() {
-        final ColorManagementProxy cmProxy = getColorManagementProxy();
-        Bitmap bm = sGlobals.peekWallpaperBitmap(mContext, true, FLAG_SYSTEM, cmProxy);
-        if (bm != null) {
-            Drawable dr = new BitmapDrawable(mContext.getResources(), bm);
-            dr.setDither(false);
-            return dr;
-        }
-        return null;
+        return getDrawable(FLAG_SYSTEM);
     }
 
     /**
@@ -835,13 +843,20 @@ public class WallpaperManager {
      * @return Returns a Drawable object that will draw the requested wallpaper,
      *     or {@code null} if the requested wallpaper does not exist or if the calling application
      *     is not able to access the wallpaper.
-     * @hide
      */
     @RequiresPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE)
     @Nullable
     public Drawable getDrawable(@SetWallpaperFlags int which) {
-        return getDrawable();
+        final ColorManagementProxy cmProxy = getColorManagementProxy();
+        Bitmap bm = sGlobals.peekWallpaperBitmap(mContext, true, which, cmProxy);
+        if (bm != null) {
+            Drawable dr = new BitmapDrawable(mContext.getResources(), bm);
+            dr.setDither(false);
+            return dr;
+        }
+        return null;
     }
+
     /**
      * Obtain a drawable for the built-in static system wallpaper.
      */
@@ -1059,18 +1074,11 @@ public class WallpaperManager {
      * wallpaper the user has currently set.
      *
      * @return Returns a Drawable object that will draw the wallpaper or a
-     * null pointer if these is none.
+     * null pointer if wallpaper is unset.
      */
     @Nullable
     public Drawable peekDrawable() {
-        final ColorManagementProxy cmProxy = getColorManagementProxy();
-        Bitmap bm = sGlobals.peekWallpaperBitmap(mContext, false, FLAG_SYSTEM, cmProxy);
-        if (bm != null) {
-            Drawable dr = new BitmapDrawable(mContext.getResources(), bm);
-            dr.setDither(false);
-            return dr;
-        }
-        return null;
+        return peekDrawable(FLAG_SYSTEM);
     }
 
     /**
@@ -1081,13 +1089,19 @@ public class WallpaperManager {
      *
      * @param which The {@code FLAG_*} identifier of a valid wallpaper type.  Throws
      *     IllegalArgumentException if an invalid wallpaper is requested.
-     * @return Returns a Drawable object that will draw the wallpaper or a null pointer if these
-     * is none.
-     * @hide
+     * @return Returns a Drawable object that will draw the wallpaper or a null pointer if
+     * wallpaper is unset.
      */
     @Nullable
     public Drawable peekDrawable(@SetWallpaperFlags int which) {
-        return peekDrawable();
+        final ColorManagementProxy cmProxy = getColorManagementProxy();
+        Bitmap bm = sGlobals.peekWallpaperBitmap(mContext, false, which, cmProxy);
+        if (bm != null) {
+            Drawable dr = new BitmapDrawable(mContext.getResources(), bm);
+            dr.setDither(false);
+            return dr;
+        }
+        return null;
     }
 
     /**
@@ -1106,16 +1120,11 @@ public class WallpaperManager {
     @RequiresPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE)
     @Nullable
     public Drawable getFastDrawable() {
-        final ColorManagementProxy cmProxy = getColorManagementProxy();
-        Bitmap bm = sGlobals.peekWallpaperBitmap(mContext, true, FLAG_SYSTEM, cmProxy);
-        if (bm != null) {
-            return new FastBitmapDrawable(bm);
-        }
-        return null;
+        return getFastDrawable(FLAG_SYSTEM);
     }
 
     /**
-     * Like {@link #getFastDrawable(int)}, but the returned Drawable has a number
+     * Like {@link #getDrawable(int)}, but the returned Drawable has a number
      * of limitations to reduce its overhead as much as possible. It will
      * never scale the wallpaper (only centering it if the requested bounds
      * do match the bitmap bounds, which should not be typical), doesn't
@@ -1128,12 +1137,16 @@ public class WallpaperManager {
      * @param which The {@code FLAG_*} identifier of a valid wallpaper type.  Throws
      *     IllegalArgumentException if an invalid wallpaper is requested.
      * @return Returns a Drawable object that will draw the wallpaper.
-     * @hide
      */
     @RequiresPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE)
     @Nullable
     public Drawable getFastDrawable(@SetWallpaperFlags int which) {
-        return getFastDrawable();
+        final ColorManagementProxy cmProxy = getColorManagementProxy();
+        Bitmap bm = sGlobals.peekWallpaperBitmap(mContext, true, which, cmProxy);
+        if (bm != null) {
+            return new FastBitmapDrawable(bm);
+        }
+        return null;
     }
 
     /**
@@ -1146,12 +1159,7 @@ public class WallpaperManager {
     @RequiresPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE)
     @Nullable
     public Drawable peekFastDrawable() {
-        final ColorManagementProxy cmProxy = getColorManagementProxy();
-        Bitmap bm = sGlobals.peekWallpaperBitmap(mContext, false, FLAG_SYSTEM, cmProxy);
-        if (bm != null) {
-            return new FastBitmapDrawable(bm);
-        }
-        return null;
+        return peekFastDrawable(FLAG_SYSTEM);
     }
 
     /**
@@ -1162,12 +1170,16 @@ public class WallpaperManager {
      *     IllegalArgumentException if an invalid wallpaper is requested.
      * @return Returns an optimized Drawable object that will draw the
      * wallpaper or a null pointer if these is none.
-     * @hide
      */
     @RequiresPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE)
     @Nullable
     public Drawable peekFastDrawable(@SetWallpaperFlags int which) {
-        return peekFastDrawable();
+        final ColorManagementProxy cmProxy = getColorManagementProxy();
+        Bitmap bm = sGlobals.peekWallpaperBitmap(mContext, false, which, cmProxy);
+        if (bm != null) {
+            return new FastBitmapDrawable(bm);
+        }
+        return null;
     }
 
     /**
@@ -1425,6 +1437,27 @@ public class WallpaperManager {
      */
     @UnsupportedAppUsage
     public ParcelFileDescriptor getWallpaperFile(@SetWallpaperFlags int which, int userId) {
+        return getWallpaperFile(which, userId, /* getCropped = */ true);
+    }
+
+    /**
+     * Version of {@link #getWallpaperFile(int)} that allows specifying whether to get the
+     * cropped version of the wallpaper file or the original.
+     *
+     * @param which The wallpaper whose image file is to be retrieved.  Must be a single
+     *    defined kind of wallpaper, either {@link #FLAG_SYSTEM} or {@link #FLAG_LOCK}.
+     * @param getCropped If true the cropped file will be retrieved, if false the original will
+     *                   be retrieved.
+     *
+     * @hide
+     */
+    @Nullable
+    public ParcelFileDescriptor getWallpaperFile(@SetWallpaperFlags int which, boolean getCropped) {
+        return getWallpaperFile(which, mContext.getUserId(), getCropped);
+    }
+
+    private ParcelFileDescriptor getWallpaperFile(@SetWallpaperFlags int which, int userId,
+            boolean getCropped) {
         checkExactlyOneWallpaperFlagSet(which);
 
         if (sGlobals.mService == null) {
@@ -1434,7 +1467,8 @@ public class WallpaperManager {
             try {
                 Bundle outParams = new Bundle();
                 return sGlobals.mService.getWallpaperWithFeature(mContext.getOpPackageName(),
-                        mContext.getAttributionTag(), null, which, outParams, userId);
+                        mContext.getAttributionTag(), null, which, outParams,
+                        userId, getCropped);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             } catch (SecurityException e) {
@@ -1514,6 +1548,28 @@ public class WallpaperManager {
             }
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Get an open, readable file descriptor for the file that contains metadata about the
+     * context user's wallpaper.
+     *
+     * The caller is responsible for closing the file descriptor when done ingesting the file.
+     *
+     * @hide
+     */
+    @Nullable
+    public ParcelFileDescriptor getWallpaperInfoFile() {
+        if (sGlobals.mService == null) {
+            Log.w(TAG, "WallpaperService not running");
+            throw new RuntimeException(new DeadSystemException());
+        } else {
+            try {
+                return sGlobals.mService.getWallpaperInfoFile(mContext.getUserId());
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
         }
     }
 

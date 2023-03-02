@@ -18,6 +18,7 @@ package com.android.server.power.stats;
 
 import static com.android.server.power.stats.BatteryStatsImpl.ExternalStatsSync.UPDATE_ALL;
 import static com.android.server.power.stats.BatteryStatsImpl.ExternalStatsSync.UPDATE_BT;
+import static com.android.server.power.stats.BatteryStatsImpl.ExternalStatsSync.UPDATE_CAMERA;
 import static com.android.server.power.stats.BatteryStatsImpl.ExternalStatsSync.UPDATE_CPU;
 import static com.android.server.power.stats.BatteryStatsImpl.ExternalStatsSync.UPDATE_DISPLAY;
 import static com.android.server.power.stats.BatteryStatsImpl.ExternalStatsSync.UPDATE_RADIO;
@@ -55,6 +56,7 @@ import java.util.concurrent.CompletableFuture;
  * Build/Install/Run:
  * atest FrameworksServicesTests:BatteryExternalStatsWorkerTest
  */
+@SuppressWarnings("GuardedBy")
 public class BatteryExternalStatsWorkerTest {
     private BatteryExternalStatsWorker mBatteryExternalStatsWorker;
     private TestBatteryStatsImpl mBatteryStatsImpl;
@@ -103,6 +105,11 @@ public class BatteryExternalStatsWorkerTest {
         tempAllIds.add(gnssId);
         mPowerStatsInternal.incrementEnergyConsumption(gnssId, 787878);
 
+        final int cameraId =
+                mPowerStatsInternal.addEnergyConsumer(EnergyConsumerType.CAMERA, 0, "camera");
+        tempAllIds.add(cameraId);
+        mPowerStatsInternal.incrementEnergyConsumption(cameraId, 901234);
+
         final int mobileRadioId = mPowerStatsInternal.addEnergyConsumer(
                 EnergyConsumerType.MOBILE_RADIO, 0, "mobile_radio");
         tempAllIds.add(mobileRadioId);
@@ -133,7 +140,7 @@ public class BatteryExternalStatsWorkerTest {
         mBatteryExternalStatsWorker.systemServicesReady();
 
         final EnergyConsumerResult[] displayResults =
-                mBatteryExternalStatsWorker.getMeasuredEnergyLocked(UPDATE_DISPLAY).getNow(null);
+                mBatteryExternalStatsWorker.getEnergyConsumersLocked(UPDATE_DISPLAY).getNow(null);
         // Results should only have the cpu cluster energy consumers
         final int[] receivedDisplayIds = new int[displayResults.length];
         for (int i = 0; i < displayResults.length; i++) {
@@ -143,25 +150,25 @@ public class BatteryExternalStatsWorkerTest {
         assertArrayEquals(displayIds, receivedDisplayIds);
 
         final EnergyConsumerResult[] wifiResults =
-                mBatteryExternalStatsWorker.getMeasuredEnergyLocked(UPDATE_WIFI).getNow(null);
+                mBatteryExternalStatsWorker.getEnergyConsumersLocked(UPDATE_WIFI).getNow(null);
         // Results should only have the wifi energy consumer
         assertEquals(1, wifiResults.length);
         assertEquals(wifiId, wifiResults[0].id);
 
         final EnergyConsumerResult[] bluetoothResults =
-                mBatteryExternalStatsWorker.getMeasuredEnergyLocked(UPDATE_BT).getNow(null);
+                mBatteryExternalStatsWorker.getEnergyConsumersLocked(UPDATE_BT).getNow(null);
         // Results should only have the bluetooth energy consumer
         assertEquals(1, bluetoothResults.length);
         assertEquals(btId, bluetoothResults[0].id);
 
         final EnergyConsumerResult[] mobileRadioResults =
-                mBatteryExternalStatsWorker.getMeasuredEnergyLocked(UPDATE_RADIO).getNow(null);
+                mBatteryExternalStatsWorker.getEnergyConsumersLocked(UPDATE_RADIO).getNow(null);
         // Results should only have the mobile radio energy consumer
         assertEquals(1, mobileRadioResults.length);
         assertEquals(mobileRadioId, mobileRadioResults[0].id);
 
         final EnergyConsumerResult[] cpuResults =
-                mBatteryExternalStatsWorker.getMeasuredEnergyLocked(UPDATE_CPU).getNow(null);
+                mBatteryExternalStatsWorker.getEnergyConsumersLocked(UPDATE_CPU).getNow(null);
         // Results should only have the cpu cluster energy consumers
         final int[] receivedCpuIds = new int[cpuResults.length];
         for (int i = 0; i < cpuResults.length; i++) {
@@ -170,8 +177,14 @@ public class BatteryExternalStatsWorkerTest {
         Arrays.sort(receivedCpuIds);
         assertArrayEquals(cpuClusterIds, receivedCpuIds);
 
+        final EnergyConsumerResult[] cameraResults =
+                mBatteryExternalStatsWorker.getEnergyConsumersLocked(UPDATE_CAMERA).getNow(null);
+        // Results should only have the camera energy consumer
+        assertEquals(1, cameraResults.length);
+        assertEquals(cameraId, cameraResults[0].id);
+
         final EnergyConsumerResult[] allResults =
-                mBatteryExternalStatsWorker.getMeasuredEnergyLocked(UPDATE_ALL).getNow(null);
+                mBatteryExternalStatsWorker.getEnergyConsumersLocked(UPDATE_ALL).getNow(null);
         // All energy consumer results should be available
         final int[] receivedAllIds = new int[allResults.length];
         for (int i = 0; i < allResults.length; i++) {

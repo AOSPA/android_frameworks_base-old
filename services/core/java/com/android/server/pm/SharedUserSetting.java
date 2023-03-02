@@ -253,7 +253,7 @@ public final class SharedUserSetting extends SettingBase implements SharedUserAp
         }
         if (mDisabledPackages.size() == 1) {
             final AndroidPackage pkg = mDisabledPackages.valueAt(0).getPkg();
-            return pkg != null && pkg.isLeavingSharedUid();
+            return pkg != null && pkg.isLeavingSharedUser();
         }
         return true;
     }
@@ -284,7 +284,7 @@ public final class SharedUserSetting extends SettingBase implements SharedUserAp
             if ((ps == null) || (ps.getPkg() == null)) {
                 continue;
             }
-            final boolean isPrivileged = isPrivileged() | ps.getPkg().isPrivileged();
+            final boolean isPrivileged = isPrivileged() | ps.isPrivileged();
             ps.getPkgState().setOverrideSeInfo(SELinuxMMAC.getSeInfo(ps.getPkg(), isPrivileged,
                     seInfoTargetSdkVersion));
             onChanged();

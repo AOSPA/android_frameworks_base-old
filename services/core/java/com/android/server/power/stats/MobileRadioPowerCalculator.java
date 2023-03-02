@@ -128,20 +128,20 @@ public class MobileRadioPowerCalculator extends PowerCalculator {
 
         PowerAndDuration total = new PowerAndDuration();
 
-        final long totalConsumptionUC = batteryStats.getMobileRadioMeasuredBatteryConsumptionUC();
+        final long totalConsumptionUC = batteryStats.getMobileRadioEnergyConsumptionUC();
         final int powerModel = getPowerModel(totalConsumptionUC, query);
 
         final double totalActivePowerMah;
         final ArrayList<UidBatteryConsumer.Builder> apps;
         final LongArrayQueue appDurationsMs;
-        if (powerModel == BatteryConsumer.POWER_MODEL_MEASURED_ENERGY) {
-            // Measured energy is available, don't bother calculating power.
+        if (powerModel == BatteryConsumer.POWER_MODEL_ENERGY_CONSUMPTION) {
+            // EnergyConsumer is available, don't bother calculating power.
             totalActivePowerMah = Double.NaN;
             apps = null;
             appDurationsMs = null;
         } else {
             totalActivePowerMah = calculateActiveModemPowerMah(batteryStats, rawRealtimeUs);
-            apps = new ArrayList();
+            apps = new ArrayList<>();
             appDurationsMs = new LongArrayQueue();
         }
 
@@ -169,9 +169,9 @@ public class MobileRadioPowerCalculator extends PowerCalculator {
             app.setUsageDurationMillis(BatteryConsumer.POWER_COMPONENT_MOBILE_RADIO,
                     radioActiveDurationMs);
 
-            if (powerModel == BatteryConsumer.POWER_MODEL_MEASURED_ENERGY) {
-                // Measured energy is available, populate the consumed power now.
-                final long appConsumptionUC = uid.getMobileRadioMeasuredBatteryConsumptionUC();
+            if (powerModel == BatteryConsumer.POWER_MODEL_ENERGY_CONSUMPTION) {
+                // EnergyConsumer is available, populate the consumed power now.
+                final long appConsumptionUC = uid.getMobileRadioEnergyConsumptionUC();
                 if (appConsumptionUC != BatteryStats.POWER_DATA_UNAVAILABLE) {
                     final double appConsumptionMah = uCtoMah(appConsumptionUC);
                     if (!app.isVirtualUid()) {
@@ -188,7 +188,7 @@ public class MobileRadioPowerCalculator extends PowerCalculator {
                                 continue;
                             }
                             final long consumptionInStateUc =
-                                    uid.getMobileRadioMeasuredBatteryConsumptionUC(processState);
+                                    uid.getMobileRadioEnergyConsumptionUC(processState);
                             final double powerInStateMah = uCtoMah(consumptionInStateUc);
                             app.setConsumedPower(key, powerInStateMah, powerModel);
                         }
@@ -207,7 +207,7 @@ public class MobileRadioPowerCalculator extends PowerCalculator {
             totalActiveDurationMs = total.totalAppDurationMs;
         }
 
-        if (powerModel != BatteryConsumer.POWER_MODEL_MEASURED_ENERGY) {
+        if (powerModel != BatteryConsumer.POWER_MODEL_ENERGY_CONSUMPTION) {
             // Need to smear the calculated total active power across the apps based on app
             // active durations.
             final int appSize = apps.size();
@@ -259,7 +259,7 @@ public class MobileRadioPowerCalculator extends PowerCalculator {
         total.remainingDurationMs = totalActiveDurationMs - total.totalAppDurationMs;
 
         // Calculate remaining power consumption.
-        if (powerModel == BatteryConsumer.POWER_MODEL_MEASURED_ENERGY) {
+        if (powerModel == BatteryConsumer.POWER_MODEL_ENERGY_CONSUMPTION) {
             total.remainingPowerMah = uCtoMah(totalConsumptionUC) - total.totalAppPowerMah;
             if (total.remainingPowerMah < 0) total.remainingPowerMah = 0;
         } else {
@@ -270,24 +270,27 @@ public class MobileRadioPowerCalculator extends PowerCalculator {
             // Calculate the inactive modem power consumption.
             final BatteryStats.ControllerActivityCounter modemActivity =
                     batteryStats.getModemControllerActivity();
-            if (modemActivity != null && (mSleepPowerEstimator != null
-                    || mIdlePowerEstimator != null)) {
+            double inactivePowerMah = Double.NaN;
+            if (modemActivity != null) {
                 final long sleepDurationMs = modemActivity.getSleepTimeCounter().getCountLocked(
                         BatteryStats.STATS_SINCE_CHARGED);
-                total.remainingPowerMah += mSleepPowerEstimator.calculatePower(sleepDurationMs);
                 final long idleDurationMs = modemActivity.getIdleTimeCounter().getCountLocked(
                         BatteryStats.STATS_SINCE_CHARGED);
-                total.remainingPowerMah += mIdlePowerEstimator.calculatePower(idleDurationMs);
-            } else {
+                inactivePowerMah = calcInactiveStatePowerMah(sleepDurationMs, idleDurationMs);
+            }
+            if (Double.isNaN(inactivePowerMah)) {
                 // Modem activity counters unavailable. Use legacy calculations for inactive usage.
                 final long scanningTimeMs = batteryStats.getPhoneSignalScanningTime(rawRealtimeUs,
                         BatteryStats.STATS_SINCE_CHARGED) / 1000;
-                total.remainingPowerMah += calcScanTimePowerMah(scanningTimeMs);
+                inactivePowerMah = calcScanTimePowerMah(scanningTimeMs);
                 for (int i = 0; i < NUM_SIGNAL_STRENGTH_LEVELS; i++) {
                     long strengthTimeMs = batteryStats.getPhoneSignalStrengthTime(i, rawRealtimeUs,
                             BatteryStats.STATS_SINCE_CHARGED) / 1000;
-                    total.remainingPowerMah += calcIdlePowerAtSignalStrengthMah(strengthTimeMs, i);
+                    inactivePowerMah += calcIdlePowerAtSignalStrengthMah(strengthTimeMs, i);
                 }
+            }
+            if (!Double.isNaN(inactivePowerMah)) {
+                total.remainingPowerMah += inactivePowerMah;
             }
 
         }
@@ -506,6 +509,22 @@ public class MobileRadioPowerCalculator extends PowerCalculator {
                     + ModemPowerProfile.keyToString((int) txKey));
         }
         return consumptionMah;
+    }
+
+    /**
+     * Calculates active transmit radio power consumption (in milliamp-hours) from the given state's
+     * duration.
+     */
+    public double calcInactiveStatePowerMah(long sleepDurationMs, long idleDurationMs) {
+        if (mSleepPowerEstimator == null || mIdlePowerEstimator == null) return Double.NaN;
+        final double sleepConsumptionMah = mSleepPowerEstimator.calculatePower(sleepDurationMs);
+        final double idleConsumptionMah = mIdlePowerEstimator.calculatePower(idleDurationMs);
+        if (DEBUG) {
+            Log.d(TAG, "Calculated sleep consumption " + sleepConsumptionMah
+                    + " mAH from a duration of " + sleepDurationMs + " ms and idle consumption "
+                    + idleConsumptionMah + " mAH from a duration of " + idleDurationMs);
+        }
+        return sleepConsumptionMah + idleConsumptionMah;
     }
 
     /**

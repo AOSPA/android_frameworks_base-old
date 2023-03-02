@@ -1491,13 +1491,7 @@ public class AccountManagerService
         Account[] sharedAccounts = getSharedAccountsAsUser(userId);
         if (sharedAccounts == null || sharedAccounts.length == 0) return;
         Account[] accounts = getAccountsAsUser(null, userId, mContext.getOpPackageName());
-        int parentUserId = UserManager.isSplitSystemUser()
-                ? getUserManager().getUserInfo(userId).restrictedProfileParentId
-                : UserHandle.USER_SYSTEM;
-        if (parentUserId < 0) {
-            Log.w(TAG, "User " + userId + " has shared accounts, but no parent user");
-            return;
-        }
+        int parentUserId = UserHandle.USER_SYSTEM;
         for (Account sa : sharedAccounts) {
             if (ArrayUtils.contains(accounts, sa)) continue;
             // Account doesn't exist. Copy it now.
@@ -2012,7 +2006,7 @@ public class AccountManagerService
 
     @Override
     public void hasFeatures(IAccountManagerResponse response,
-            Account account, String[] features, String opPackageName) {
+            Account account, String[] features, int userId, String opPackageName) {
         int callingUid = Binder.getCallingUid();
         mAppOpsManager.checkPackage(callingUid, opPackageName);
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
@@ -2020,12 +2014,22 @@ public class AccountManagerService
                     + ", response " + response
                     + ", features " + Arrays.toString(features)
                     + ", caller's uid " + callingUid
+                    + ", userId " + userId
                     + ", pid " + Binder.getCallingPid());
         }
         Preconditions.checkArgument(account != null, "account cannot be null");
         Preconditions.checkArgument(response != null, "response cannot be null");
         Preconditions.checkArgument(features != null, "features cannot be null");
-        int userId = UserHandle.getCallingUserId();
+
+        if (userId != UserHandle.getCallingUserId()
+                && callingUid != Process.SYSTEM_UID
+                && mContext.checkCallingOrSelfPermission(
+                android.Manifest.permission.INTERACT_ACROSS_USERS_FULL)
+                != PackageManager.PERMISSION_GRANTED) {
+            throw new SecurityException("User " + UserHandle.getCallingUserId()
+                    + " trying to check account features for " + userId);
+        }
+
         checkReadAccountsPermitted(callingUid, account.type, userId,
                 opPackageName);
 
@@ -3564,8 +3568,7 @@ public class AccountManagerService
             Bundle.setDefusable(result, true);
             mNumResults++;
             Intent intent = null;
-            if (result != null
-                    && (intent = result.getParcelable(AccountManager.KEY_INTENT, android.content.Intent.class)) != null) {
+            if (result != null) {
                 if (!checkKeyIntent(
                         Binder.getCallingUid(),
                         result)) {
@@ -4935,8 +4938,10 @@ public class AccountManagerService
                 EventLog.writeEvent(0x534e4554, "250588548", authUid, "");
                 return false;
             }
-
             Intent intent = bundle.getParcelable(AccountManager.KEY_INTENT, Intent.class);
+            if (intent == null) {
+                return true;
+            }
             // Explicitly set an empty ClipData to ensure that we don't offer to
             // promote any Uris contained inside for granting purposes
             if (intent.getClipData() == null) {
@@ -4986,8 +4991,12 @@ public class AccountManagerService
             Bundle simulateBundle = p.readBundle();
             p.recycle();
             Intent intent = bundle.getParcelable(AccountManager.KEY_INTENT, Intent.class);
-            return (intent.filterEquals(simulateBundle.getParcelable(AccountManager.KEY_INTENT,
-                Intent.class)));
+            Intent simulateIntent = simulateBundle.getParcelable(AccountManager.KEY_INTENT,
+                    Intent.class);
+            if (intent == null) {
+                return (simulateIntent == null);
+            }
+            return intent.filterEquals(simulateIntent);
         }
 
         private boolean isExportedSystemActivity(ActivityInfo activityInfo) {
@@ -5136,8 +5145,7 @@ public class AccountManagerService
                     }
                 }
             }
-            if (result != null
-                    && (intent = result.getParcelable(AccountManager.KEY_INTENT, android.content.Intent.class)) != null) {
+            if (result != null) {
                 if (!checkKeyIntent(
                         Binder.getCallingUid(),
                         result)) {

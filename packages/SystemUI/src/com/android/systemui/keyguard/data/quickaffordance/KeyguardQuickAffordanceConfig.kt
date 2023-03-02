@@ -17,11 +17,12 @@
 
 package com.android.systemui.keyguard.data.quickaffordance
 
+import android.app.AlertDialog
 import android.content.Intent
 import com.android.systemui.animation.Expandable
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.keyguard.shared.quickaffordance.ActivationState
-import com.android.systemui.shared.quickaffordance.data.content.KeyguardQuickAffordanceProviderContract as Contract
+import com.android.systemui.shared.customization.data.content.CustomizationProviderContract as Contract
 import kotlinx.coroutines.flow.Flow
 
 /** Defines interface that can act as data source for a single quick affordance model. */
@@ -45,7 +46,7 @@ interface KeyguardQuickAffordanceConfig {
      * Returns the [PickerScreenState] representing the affordance in the settings or selector
      * experience.
      */
-    suspend fun getPickerScreenState(): PickerScreenState = PickerScreenState.Default
+    suspend fun getPickerScreenState(): PickerScreenState = PickerScreenState.Default()
 
     /**
      * Notifies that the affordance was clicked by the user.
@@ -62,7 +63,10 @@ interface KeyguardQuickAffordanceConfig {
     sealed class PickerScreenState {
 
         /** The picker shows the item for selecting this affordance as it normally would. */
-        object Default : PickerScreenState()
+        data class Default(
+            /** Optional [Intent] to use to start an activity to configure this affordance. */
+            val configureIntent: Intent? = null,
+        ) : PickerScreenState()
 
         /**
          * The picker does not show an item for selecting this affordance as it is not supported on
@@ -89,8 +93,9 @@ interface KeyguardQuickAffordanceConfig {
              * the user to be able to set up the quick affordance and make it enabled.
              *
              * This is either just an action for the `Intent` or a package name and action,
-             * separated by [Contract.AffordanceTable.COMPONENT_NAME_SEPARATOR] for convenience, you
-             * can use the [componentName] function.
+             * separated by
+             * [Contract.LockScreenQuickAffordances.AffordanceTable.COMPONENT_NAME_SEPARATOR] for
+             * convenience, you can use the [componentName] function.
              */
             val actionComponentName: String? = null,
         ) : PickerScreenState() {
@@ -141,6 +146,16 @@ interface KeyguardQuickAffordanceConfig {
             val intent: Intent,
             val canShowWhileLocked: Boolean,
         ) : OnTriggeredResult()
+
+        /**
+         * Returning this as a result from the [onTriggered] method means that the implementation
+         * has _not_ taken care of the action and the system should show a Dialog using the given
+         * [AlertDialog] and [Expandable].
+         */
+        data class ShowDialog(
+            val dialog: AlertDialog,
+            val expandable: Expandable?,
+        ) : OnTriggeredResult()
     }
 
     companion object {
@@ -151,7 +166,8 @@ interface KeyguardQuickAffordanceConfig {
             return when {
                 action.isNullOrEmpty() -> null
                 !packageName.isNullOrEmpty() ->
-                    "$packageName${Contract.AffordanceTable.COMPONENT_NAME_SEPARATOR}$action"
+                    "$packageName${Contract.LockScreenQuickAffordances.AffordanceTable
+                        .COMPONENT_NAME_SEPARATOR}$action"
                 else -> action
             }
         }

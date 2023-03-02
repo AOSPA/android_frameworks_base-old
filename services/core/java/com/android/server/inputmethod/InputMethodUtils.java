@@ -199,9 +199,14 @@ final class InputMethodUtils {
     }
 
     /**
-     * Utility class for putting and getting settings for InputMethod
+     * Utility class for putting and getting settings for InputMethod.
+     *
+     * This is used in two ways:
+     * - Singleton instance in {@link InputMethodManagerService}, which is updated on user-switch to
+     * follow the current user.
+     * - On-demand instances when we need settings for non-current users.
+     *
      * TODO: Move all putters and getters of settings to this class.
-     * TODO(b/235661780): Make the setting supports multi-users.
      */
     @UserHandleAware
     public static class InputMethodSettings {
@@ -212,9 +217,9 @@ final class InputMethodUtils {
                 new TextUtils.SimpleStringSplitter(INPUT_METHOD_SUBTYPE_SEPARATOR);
 
         @NonNull
-        private final Context mUserAwareContext;
-        private final Resources mRes;
-        private final ContentResolver mResolver;
+        private Context mUserAwareContext;
+        private Resources mRes;
+        private ContentResolver mResolver;
         private final ArrayMap<String, InputMethodInfo> mMethodMap;
 
         /**
@@ -272,15 +277,19 @@ final class InputMethodUtils {
             return imsList;
         }
 
-        InputMethodSettings(@NonNull Context context,
-                ArrayMap<String, InputMethodInfo> methodMap, @UserIdInt int userId,
-                boolean copyOnWrite) {
+        private void initContentWithUserContext(@NonNull Context context, @UserIdInt int userId) {
             mUserAwareContext = context.getUserId() == userId
                     ? context
                     : context.createContextAsUser(UserHandle.of(userId), 0 /* flags */);
             mRes = mUserAwareContext.getResources();
             mResolver = mUserAwareContext.getContentResolver();
+        }
+
+        InputMethodSettings(@NonNull Context context,
+                ArrayMap<String, InputMethodInfo> methodMap, @UserIdInt int userId,
+                boolean copyOnWrite) {
             mMethodMap = methodMap;
+            initContentWithUserContext(context, userId);
             switchCurrentUser(userId, copyOnWrite);
         }
 
@@ -301,6 +310,9 @@ final class InputMethodUtils {
                 mEnabledInputMethodsStrCache = "";
                 // TODO: mCurrentProfileIds should be cleared here.
             }
+            if (mUserAwareContext.getUserId() != userId) {
+                initContentWithUserContext(mUserAwareContext, userId);
+            }
             mCurrentUserId = userId;
             mCopyOnWrite = copyOnWrite;
             // TODO: mCurrentProfileIds should be updated here.
@@ -318,11 +330,17 @@ final class InputMethodUtils {
 
         @Nullable
         private String getString(@NonNull String key, @Nullable String defaultValue) {
+            return getStringForUser(key, defaultValue, mCurrentUserId);
+        }
+
+        @Nullable
+        private String getStringForUser(
+                @NonNull String key, @Nullable String defaultValue, @UserIdInt int userId) {
             final String result;
             if (mCopyOnWrite && mCopyOnWriteDataStore.containsKey(key)) {
                 result = mCopyOnWriteDataStore.get(key);
             } else {
-                result = Settings.Secure.getStringForUser(mResolver, key, mCurrentUserId);
+                result = Settings.Secure.getStringForUser(mResolver, key, userId);
             }
             return result != null ? result : defaultValue;
         }
@@ -725,6 +743,16 @@ final class InputMethodUtils {
             final String imi = getString(Settings.Secure.DEFAULT_INPUT_METHOD, null);
             if (DEBUG) {
                 Slog.d(TAG, "getSelectedInputMethodStr: " + imi);
+            }
+            return imi;
+        }
+
+        @Nullable
+        String getSelectedInputMethodForUser(@UserIdInt int userId) {
+            final String imi =
+                    getStringForUser(Settings.Secure.DEFAULT_INPUT_METHOD, null, userId);
+            if (DEBUG) {
+                Slog.d(TAG, "getSelectedInputMethodForUserStr: " + imi);
             }
             return imi;
         }

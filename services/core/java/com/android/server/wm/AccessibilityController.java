@@ -141,7 +141,7 @@ final class AccessibilityController {
     private final SparseArray<WindowsForAccessibilityObserver> mWindowsForAccessibilityObserver =
             new SparseArray<>();
     private SparseArray<IBinder> mFocusedWindow = new SparseArray<>();
-    private int mFocusedDisplay = -1;
+    private int mFocusedDisplay = Display.INVALID_DISPLAY;
     private final SparseBooleanArray mIsImeVisibleArray = new SparseBooleanArray();
     // Set to true if initializing window population complete.
     private boolean mAllObserversInitialized = true;
@@ -891,8 +891,7 @@ final class AccessibilityController {
                 // to show the border. We will do so when the pending message is handled.
                 if (!mHandler.hasMessages(
                         MyHandler.MESSAGE_SHOW_MAGNIFIED_REGION_BOUNDS_IF_NEEDED)) {
-                    setMagnifiedRegionBorderShown(
-                            isMagnifying() || isForceShowingMagnifiableBounds(), true);
+                    setMagnifiedRegionBorderShown(isForceShowingMagnifiableBounds(), true);
                 }
             }
 
@@ -1057,7 +1056,7 @@ final class AccessibilityController {
                 // rotation or folding/unfolding the device. In the rotation case, the screenshot
                 // used for rotation already has the border. After the rotation is complete
                 // we will show the border.
-                if (isMagnifying() || isForceShowingMagnifiableBounds()) {
+                if (isForceShowingMagnifiableBounds()) {
                     setMagnifiedRegionBorderShown(false, false);
                     final long delay = (long) (mLongAnimationDuration
                             * mService.getWindowAnimationScaleLocked());
@@ -1398,8 +1397,7 @@ final class AccessibilityController {
 
                     case MESSAGE_SHOW_MAGNIFIED_REGION_BOUNDS_IF_NEEDED : {
                         synchronized (mService.mGlobalLock) {
-                            if (mMagnifedViewport.isMagnifying()
-                                    || isForceShowingMagnifiableBounds()) {
+                            if (isForceShowingMagnifiableBounds()) {
                                 mMagnifedViewport.setMagnifiedRegionBorderShown(true, true);
                                 mService.scheduleAnimationLocked();
                             }

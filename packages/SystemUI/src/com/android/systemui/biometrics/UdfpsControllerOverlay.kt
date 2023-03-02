@@ -33,6 +33,7 @@ import android.hardware.fingerprint.IUdfpsOverlayControllerCallback
 import android.os.Build
 import android.os.RemoteException
 import android.provider.Settings
+import android.util.FeatureFlagUtils
 import android.util.Log
 import android.util.RotationUtils
 import android.view.LayoutInflater
@@ -50,6 +51,7 @@ import com.android.systemui.animation.ActivityLaunchAnimator
 import com.android.systemui.dump.DumpManager
 import com.android.systemui.flags.FeatureFlags
 import com.android.systemui.flags.Flags
+import com.android.systemui.keyguard.domain.interactor.AlternateBouncerInteractor
 import com.android.systemui.keyguard.domain.interactor.PrimaryBouncerInteractor
 import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.shade.ShadeExpansionStateManager
@@ -59,7 +61,6 @@ import com.android.systemui.statusbar.phone.SystemUIDialogManager
 import com.android.systemui.statusbar.phone.UnlockedScreenOffAnimationController
 import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.statusbar.policy.KeyguardStateController
-import com.android.systemui.util.time.SystemClock
 
 private const val TAG = "UdfpsControllerOverlay"
 
@@ -86,7 +87,6 @@ class UdfpsControllerOverlay @JvmOverloads constructor(
         private val dumpManager: DumpManager,
         private val transitionController: LockscreenShadeTransitionController,
         private val configurationController: ConfigurationController,
-        private val systemClock: SystemClock,
         private val keyguardStateController: KeyguardStateController,
         private val unlockedScreenOffAnimationController: UnlockedScreenOffAnimationController,
         private var udfpsDisplayModeProvider: UdfpsDisplayModeProvider,
@@ -97,7 +97,8 @@ class UdfpsControllerOverlay @JvmOverloads constructor(
         private val activityLaunchAnimator: ActivityLaunchAnimator,
         private val featureFlags: FeatureFlags,
         private val primaryBouncerInteractor: PrimaryBouncerInteractor,
-        private val isDebuggable: Boolean = Build.IS_DEBUGGABLE
+        private val alternateBouncerInteractor: AlternateBouncerInteractor,
+        private val isDebuggable: Boolean = Build.IS_DEBUGGABLE,
 ) {
     /** The view, when [isShowing], or null. */
     var overlayView: UdfpsView? = null
@@ -232,18 +233,30 @@ class UdfpsControllerOverlay @JvmOverloads constructor(
         return when (filteredRequestReason) {
             REASON_ENROLL_FIND_SENSOR,
             REASON_ENROLL_ENROLLING -> {
-                UdfpsEnrollViewController(
-                    view.addUdfpsView(R.layout.udfps_enroll_view) {
-                        updateSensorLocation(sensorBounds)
-                    },
-                    enrollHelper ?: throw IllegalStateException("no enrollment helper"),
-                    statusBarStateController,
-                    shadeExpansionStateManager,
-                    dialogManager,
-                    dumpManager,
-                    featureFlags,
-                    overlayParams.scaleFactor
-                )
+                if (FeatureFlagUtils.isEnabled(context,
+                                FeatureFlagUtils.SETTINGS_SHOW_UDFPS_ENROLL_IN_SETTINGS)) {
+                    // Enroll udfps UI is handled by settings, so use empty view here
+                    UdfpsFpmEmptyViewController(
+                            view.addUdfpsView(R.layout.udfps_fpm_empty_view),
+                            statusBarStateController,
+                            shadeExpansionStateManager,
+                            dialogManager,
+                            dumpManager
+                    )
+                } else {
+                    UdfpsEnrollViewController(
+                            view.addUdfpsView(R.layout.udfps_enroll_view) {
+                                updateSensorLocation(sensorBounds)
+                            },
+                            enrollHelper ?: throw IllegalStateException("no enrollment helper"),
+                            statusBarStateController,
+                            shadeExpansionStateManager,
+                            dialogManager,
+                            dumpManager,
+                            featureFlags,
+                            overlayParams.scaleFactor
+                    )
+                }
             }
             REASON_AUTH_KEYGUARD -> {
                 UdfpsKeyguardViewController(
@@ -255,14 +268,14 @@ class UdfpsControllerOverlay @JvmOverloads constructor(
                     dumpManager,
                     transitionController,
                     configurationController,
-                    systemClock,
                     keyguardStateController,
                     unlockedScreenOffAnimationController,
                     dialogManager,
                     controller,
                     activityLaunchAnimator,
                     featureFlags,
-                    primaryBouncerInteractor
+                    primaryBouncerInteractor,
+                    alternateBouncerInteractor,
                 )
             }
             REASON_AUTH_BP -> {
@@ -277,8 +290,8 @@ class UdfpsControllerOverlay @JvmOverloads constructor(
             }
             REASON_AUTH_OTHER,
             REASON_AUTH_SETTINGS -> {
-                UdfpsFpmOtherViewController(
-                    view.addUdfpsView(R.layout.udfps_fpm_other_view),
+                UdfpsFpmEmptyViewController(
+                    view.addUdfpsView(R.layout.udfps_fpm_empty_view),
                     statusBarStateController,
                     shadeExpansionStateManager,
                     dialogManager,

@@ -101,6 +101,8 @@ class LargeScreenShadeHeaderController @Inject constructor(
         @VisibleForTesting
         internal val HEADER_TRANSITION_ID = R.id.header_transition
         @VisibleForTesting
+        internal val LARGE_SCREEN_HEADER_TRANSITION_ID = R.id.large_screen_header_transition
+        @VisibleForTesting
         internal val QQS_HEADER_CONSTRAINT = R.id.qqs_header_constraint
         @VisibleForTesting
         internal val QS_HEADER_CONSTRAINT = R.id.qs_header_constraint
@@ -111,7 +113,7 @@ class LargeScreenShadeHeaderController @Inject constructor(
             QQS_HEADER_CONSTRAINT -> "QQS Header"
             QS_HEADER_CONSTRAINT -> "QS Header"
             LARGE_SCREEN_HEADER_CONSTRAINT -> "Large Screen Header"
-            else -> "Unknown state"
+            else -> "Unknown state $this"
         }
     }
 
@@ -173,9 +175,10 @@ class LargeScreenShadeHeaderController @Inject constructor(
      */
     var shadeExpandedFraction = -1f
         set(value) {
-            if (visible && field != value) {
+            if (field != value) {
                 header.alpha = ShadeInterpolation.getContentAlpha(value)
                 field = value
+                updateVisibility()
             }
         }
 
@@ -293,6 +296,9 @@ class LargeScreenShadeHeaderController @Inject constructor(
 
     override fun onViewAttached() {
         privacyIconsController.chipVisibilityListener = chipVisibilityListener
+        updateVisibility()
+        updateTransition()
+
         if (header is MotionLayout) {
             header.setOnApplyWindowInsetsListener(insetListener)
             clock.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
@@ -305,9 +311,6 @@ class LargeScreenShadeHeaderController @Inject constructor(
         dumpManager.registerDumpable(this)
         configurationController.addCallback(configurationControllerListener)
         demoModeController.addCallback(demoModeReceiver)
-
-        updateVisibility()
-        updateTransition()
     }
 
     override fun onViewDetached() {
@@ -329,6 +332,9 @@ class LargeScreenShadeHeaderController @Inject constructor(
                 .setDuration(duration)
                 .alpha(if (show) 0f else 1f)
                 .setInterpolator(if (show) Interpolators.ALPHA_OUT else Interpolators.ALPHA_IN)
+                .setUpdateListener {
+                    updateVisibility()
+                }
                 .start()
     }
 
@@ -412,7 +418,7 @@ class LargeScreenShadeHeaderController @Inject constructor(
     private fun updateVisibility() {
         val visibility = if (!largeScreenActive && !combinedHeaders || qsDisabled) {
             View.GONE
-        } else if (qsVisible) {
+        } else if (qsVisible && header.alpha > 0f) {
             View.VISIBLE
         } else {
             View.INVISIBLE
@@ -429,24 +435,30 @@ class LargeScreenShadeHeaderController @Inject constructor(
         }
         header as MotionLayout
         if (largeScreenActive) {
-            header.getConstraintSet(LARGE_SCREEN_HEADER_CONSTRAINT).applyTo(header)
+            logInstantEvent("Large screen constraints set")
+            header.setTransition(LARGE_SCREEN_HEADER_TRANSITION_ID)
         } else {
+            logInstantEvent("Small screen constraints set")
             header.setTransition(HEADER_TRANSITION_ID)
-            header.transitionToStart()
-            updatePosition()
-            updateScrollY()
         }
+        header.jumpToState(header.startState)
+        updatePosition()
+        updateScrollY()
     }
 
     private fun updatePosition() {
         if (header is MotionLayout && !largeScreenActive && visible) {
-            Trace.instantForTrack(
-                TRACE_TAG_APP,
-                "LargeScreenHeaderController - updatePosition",
-                "position: $qsExpandedFraction"
-            )
+            logInstantEvent("updatePosition: $qsExpandedFraction")
             header.progress = qsExpandedFraction
         }
+    }
+
+    private fun logInstantEvent(message: String) {
+        Trace.instantForTrack(
+                TRACE_TAG_APP,
+                "LargeScreenHeaderController",
+                message
+        )
     }
 
     private fun updateListeners() {

@@ -62,12 +62,32 @@ final class PolicyState<V> {
     /**
      * Returns {@code true} if the resolved policy has changed, {@code false} otherwise.
      */
-    boolean setPolicy(@NonNull EnforcingAdmin admin, @NonNull V value) {
-        mPoliciesSetByAdmins.put(Objects.requireNonNull(admin), Objects.requireNonNull(value));
+    boolean addPolicy(@NonNull EnforcingAdmin admin, @NonNull V policy) {
+        mPoliciesSetByAdmins.put(Objects.requireNonNull(admin), Objects.requireNonNull(policy));
 
         return resolvePolicy();
     }
 
+    /**
+     * Takes into account global policies set by the admin when resolving the policy, this is only
+     * relevant to local policies that can be applied globally as well.
+     *
+     * <p> Note that local policies set by an admin takes precedence over global policies set by the
+     * same admin.
+     *
+     * Returns {@code true} if the resolved policy has changed, {@code false} otherwise.
+     */
+    boolean addPolicy(
+            @NonNull EnforcingAdmin admin, @NonNull V policy,
+            LinkedHashMap<EnforcingAdmin, V> globalPoliciesSetByAdmins) {
+        mPoliciesSetByAdmins.put(Objects.requireNonNull(admin), Objects.requireNonNull(policy));
+
+        return resolvePolicy(globalPoliciesSetByAdmins);
+    }
+
+    /**
+     * Returns {@code true} if the resolved policy has changed, {@code false} otherwise.
+     */
     boolean removePolicy(@NonNull EnforcingAdmin admin) {
         Objects.requireNonNull(admin);
 
@@ -78,8 +98,52 @@ final class PolicyState<V> {
         return resolvePolicy();
     }
 
+    /**
+     * Takes into account global policies set by the admin when resolving the policy, this is only
+     * relevant to local policies that can be applied globally as well.
+     *
+     * <p> Note that local policies set by an admin takes precedence over global policies set by the
+     * same admin.
+     *
+     * Returns {@code true} if the resolved policy has changed, {@code false} otherwise.
+     */
+    boolean removePolicy(
+            @NonNull EnforcingAdmin admin,
+            LinkedHashMap<EnforcingAdmin, V> globalPoliciesSetByAdmins) {
+        Objects.requireNonNull(admin);
+
+        if (mPoliciesSetByAdmins.remove(admin) == null) {
+            return false;
+        }
+
+        return resolvePolicy(globalPoliciesSetByAdmins);
+    }
+
+    /**
+     * Takes into account global policies set by the admin when resolving the policy, this is only
+     * relevant to local policies that can be applied globally as well.
+     *
+     * <p> Note that local policies set by an admin takes precedence over global policies set by the
+     * same admin.
+     *
+     * Returns {@code true} if the resolved policy has changed, {@code false} otherwise.
+     */
+    boolean resolvePolicy(LinkedHashMap<EnforcingAdmin, V> globalPoliciesSetByAdmins) {
+        // Add global policies first then override with local policies for the same admin.
+        LinkedHashMap<EnforcingAdmin, V> mergedPolicies =
+                new LinkedHashMap<>(globalPoliciesSetByAdmins);
+        mergedPolicies.putAll(mPoliciesSetByAdmins);
+
+        V resolvedPolicy = mPolicyDefinition.resolvePolicy(mergedPolicies);
+        boolean policyChanged = !Objects.equals(resolvedPolicy, mCurrentResolvedPolicy);
+        mCurrentResolvedPolicy = resolvedPolicy;
+
+        return policyChanged;
+    }
+
+    @NonNull
     LinkedHashMap<EnforcingAdmin, V> getPoliciesSetByAdmins() {
-        return mPoliciesSetByAdmins;
+        return new LinkedHashMap<>(mPoliciesSetByAdmins);
     }
 
     private boolean resolvePolicy() {
@@ -93,6 +157,13 @@ final class PolicyState<V> {
     @Nullable
     V getCurrentResolvedPolicy() {
         return mCurrentResolvedPolicy;
+    }
+
+    @Override
+    public String toString() {
+        return "PolicyState { mPolicyDefinition= " + mPolicyDefinition + ", mPoliciesSetByAdmins= "
+                + mPoliciesSetByAdmins + ", mCurrentResolvedPolicy= " + mCurrentResolvedPolicy
+                + " }";
     }
 
     void saveToXml(TypedXmlSerializer serializer) throws IOException {
@@ -119,10 +190,13 @@ final class PolicyState<V> {
 
     static <V> PolicyState<V> readFromXml(TypedXmlPullParser parser)
             throws IOException, XmlPullParserException {
+
         PolicyDefinition<V> policyDefinition = PolicyDefinition.readFromXml(parser);
-        LinkedHashMap<EnforcingAdmin, V> adminsPolicy = new LinkedHashMap<>();
+
         V currentResolvedPolicy = policyDefinition.readPolicyValueFromXml(
                 parser, ATTR_RESOLVED_POLICY);
+
+        LinkedHashMap<EnforcingAdmin, V> policiesSetByAdmins = new LinkedHashMap<>();
         int outerDepth = parser.getDepth();
         while (XmlUtils.nextElementWithin(parser, outerDepth)) {
             String tag = parser.getName();
@@ -134,12 +208,12 @@ final class PolicyState<V> {
                 if (XmlUtils.nextElementWithin(parser, adminPolicyDepth)
                         && parser.getName().equals(TAG_ENFORCING_ADMIN_ENTRY)) {
                     admin = EnforcingAdmin.readFromXml(parser);
-                    adminsPolicy.put(admin, value);
+                    policiesSetByAdmins.put(admin, value);
                 }
             } else {
                 Log.e(DevicePolicyEngine.TAG, "Unknown tag: " + tag);
             }
         }
-        return new PolicyState<V>(policyDefinition, adminsPolicy, currentResolvedPolicy);
+        return new PolicyState<V>(policyDefinition, policiesSetByAdmins, currentResolvedPolicy);
     }
 }

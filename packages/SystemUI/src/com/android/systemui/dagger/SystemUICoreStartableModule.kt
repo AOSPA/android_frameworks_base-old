@@ -32,6 +32,7 @@ import com.android.systemui.globalactions.GlobalActionsComponent
 import com.android.systemui.keyboard.KeyboardUI
 import com.android.systemui.keyguard.KeyguardViewMediator
 import com.android.systemui.log.SessionTracker
+import com.android.systemui.media.dialog.MediaOutputSwitcherDialogUI
 import com.android.systemui.media.RingtonePlayer
 import com.android.systemui.media.taptotransfer.MediaTttCommandLineHelper
 import com.android.systemui.media.taptotransfer.receiver.MediaTttChipControllerReceiver
@@ -41,8 +42,12 @@ import com.android.systemui.reardisplay.RearDisplayDialogController
 import com.android.systemui.recents.Recents
 import com.android.systemui.settings.dagger.MultiUserUtilsModule
 import com.android.systemui.shortcut.ShortcutKeyDispatcher
+import com.android.systemui.statusbar.notification.fsi.FsiChromeRepo
 import com.android.systemui.statusbar.notification.InstantAppNotifier
+import com.android.systemui.statusbar.notification.fsi.FsiChromeViewModelFactory
+import com.android.systemui.statusbar.notification.fsi.FsiChromeViewBinder
 import com.android.systemui.statusbar.phone.KeyguardLiftController
+import com.android.systemui.stylus.StylusUsiPowerStartable
 import com.android.systemui.temporarydisplay.chipbar.ChipbarCoordinator
 import com.android.systemui.theme.ThemeOverlayController
 import com.android.systemui.toast.ToastUI
@@ -78,6 +83,24 @@ abstract class SystemUICoreStartableModule {
     @IntoMap
     @ClassKey(ClipboardListener::class)
     abstract fun bindClipboardListener(sysui: ClipboardListener): CoreStartable
+
+    /** Inject into FsiChromeRepo.  */
+    @Binds
+    @IntoMap
+    @ClassKey(FsiChromeRepo::class)
+    abstract fun bindFSIChromeRepo(sysui: FsiChromeRepo): CoreStartable
+
+    /** Inject into FsiChromeWindowViewModel.  */
+    @Binds
+    @IntoMap
+    @ClassKey(FsiChromeViewModelFactory::class)
+    abstract fun bindFSIChromeWindowViewModel(sysui: FsiChromeViewModelFactory): CoreStartable
+
+    /** Inject into FsiChromeWindowBinder.  */
+    @Binds
+    @IntoMap
+    @ClassKey(FsiChromeViewBinder::class)
+    abstract fun bindFsiChromeWindowBinder(sysui: FsiChromeViewBinder): CoreStartable
 
     /** Inject into GarbageMonitor.Service.  */
     @Binds
@@ -196,6 +219,12 @@ abstract class SystemUICoreStartableModule {
     @ClassKey(ToastUI::class)
     abstract fun bindToastUI(service: ToastUI): CoreStartable
 
+    /** Inject into MediaOutputSwitcherDialogUI.  */
+    @Binds
+    @IntoMap
+    @ClassKey(MediaOutputSwitcherDialogUI::class)
+    abstract fun MediaOutputSwitcherDialogUI(sysui: MediaOutputSwitcherDialogUI): CoreStartable
+
     /** Inject into VolumeUI.  */
     @Binds
     @IntoMap
@@ -258,4 +287,10 @@ abstract class SystemUICoreStartableModule {
     @IntoMap
     @ClassKey(RearDisplayDialogController::class)
     abstract fun bindRearDisplayDialogController(sysui: RearDisplayDialogController): CoreStartable
+
+    /** Inject into StylusUsiPowerStartable) */
+    @Binds
+    @IntoMap
+    @ClassKey(StylusUsiPowerStartable::class)
+    abstract fun bindStylusUsiPowerStartable(sysui: StylusUsiPowerStartable): CoreStartable
 }

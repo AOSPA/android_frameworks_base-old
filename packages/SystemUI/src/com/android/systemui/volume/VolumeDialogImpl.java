@@ -109,15 +109,18 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.config.sysui.SystemUiDeviceConfigFlags;
 import com.android.internal.graphics.drawable.BackgroundBlurDrawable;
 import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.view.RotationPolicy;
 import com.android.settingslib.Utils;
+import com.android.systemui.Dumpable;
 import com.android.systemui.Prefs;
 import com.android.systemui.R;
 import com.android.systemui.animation.Interpolators;
+import com.android.systemui.dump.DumpManager;
 import com.android.systemui.media.dialog.MediaOutputDialogFactory;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.VolumeDialog;
@@ -146,7 +149,7 @@ import java.util.function.Consumer;
  *
  * Methods ending in "H" must be called on the (ui) handler.
  */
-public class VolumeDialogImpl implements VolumeDialog,
+public class VolumeDialogImpl implements VolumeDialog, Dumpable,
         ConfigurationController.ConfigurationListener,
         ViewTreeObserver.OnComputeInternalInsetsListener {
     private static final String TAG = Util.logTag(VolumeDialogImpl.class);
@@ -270,7 +273,10 @@ public class VolumeDialogImpl implements VolumeDialog,
     private boolean mAutomute = VolumePrefs.DEFAULT_ENABLE_AUTOMUTE;
     private boolean mSilentMode = VolumePrefs.DEFAULT_ENABLE_SILENT_MODE;
     private State mState;
+    @GuardedBy("mSafetyWarningLock")
     private SafetyWarningDialog mSafetyWarning;
+    @GuardedBy("mSafetyWarningLock")
+    private CsdWarningDialog mCsdDialog;
     private boolean mHovering = false;
     private final boolean mShowActiveStreamOnly;
     private boolean mConfigChanged = false;
@@ -285,6 +291,8 @@ public class VolumeDialogImpl implements VolumeDialog,
     private final InteractionJankMonitor mInteractionJankMonitor;
 
     private boolean mSeparateNotification;
+
+    private int mWindowGravity;
 
     @VisibleForTesting
     int mVolumeRingerIconDrawableId;
@@ -302,7 +310,8 @@ public class VolumeDialogImpl implements VolumeDialog,
             ActivityStarter activityStarter,
             InteractionJankMonitor interactionJankMonitor,
             DeviceConfigProxy deviceConfigProxy,
-            Executor executor) {
+            Executor executor,
+            DumpManager dumpManager) {
         mContext =
                 new ContextThemeWrapper(context, R.style.volume_dialog_theme);
         mController = volumeDialogController;
@@ -328,6 +337,8 @@ public class VolumeDialogImpl implements VolumeDialog,
         mUseBackgroundBlur =
             mContext.getResources().getBoolean(R.bool.config_volumeDialogUseBackgroundBlur);
         mInteractionJankMonitor = interactionJankMonitor;
+
+        dumpManager.registerDumpable("VolumeDialogImpl", this);
 
         if (mUseBackgroundBlur) {
             final int dialogRowsViewColorAboveBlur = mContext.getColor(
@@ -509,7 +520,12 @@ public class VolumeDialogImpl implements VolumeDialog,
         lp.format = PixelFormat.TRANSLUCENT;
         lp.setTitle(VolumeDialogImpl.class.getSimpleName());
         lp.windowAnimations = -1;
-        lp.gravity = mContext.getResources().getInteger(R.integer.volume_dialog_gravity);
+
+        mWindowGravity = Gravity.getAbsoluteGravity(
+                mContext.getResources().getInteger(R.integer.volume_dialog_gravity),
+                mContext.getResources().getConfiguration().getLayoutDirection());
+        lp.gravity = mWindowGravity;
+
         mWindow.setAttributes(lp);
         mWindow.setLayout(WRAP_CONTENT, WRAP_CONTENT);
 
@@ -520,7 +536,8 @@ public class VolumeDialogImpl implements VolumeDialog,
         mDialog.setOnShowListener(dialog -> {
             mDialogView.getViewTreeObserver().addOnComputeInternalInsetsListener(this);
             if (!shouldSlideInVolumeTray()) {
-                mDialogView.setTranslationX(mDialogView.getWidth() / 2.0f);
+                mDialogView.setTranslationX(
+                        (isWindowGravityLeft() ? -1 : 1) * mDialogView.getWidth() / 2.0f);
             }
             mDialogView.setAlpha(0);
             mDialogView.animate()
@@ -691,6 +708,10 @@ public class VolumeDialogImpl implements VolumeDialog,
         initODICaptionsH();
     }
 
+    private boolean isWindowGravityLeft() {
+        return (mWindowGravity & Gravity.LEFT) == Gravity.LEFT;
+    }
+
     private void initDimens() {
         mDialogWidth = mContext.getResources().getDimensionPixelSize(
                 R.dimen.volume_dialog_panel_width);
@@ -793,7 +814,10 @@ public class VolumeDialogImpl implements VolumeDialog,
         return null;
     }
 
-    public void dump(PrintWriter writer) {
+    /**
+     * Print dump info for debugging.
+     */
+    public void dump(PrintWriter writer, String[] unusedArgs) {
         writer.println(VolumeDialogImpl.class.getSimpleName() + " state:");
         writer.print("  mShowing: "); writer.println(mShowing);
         writer.print("  mActiveStream: "); writer.println(mActiveStream);
@@ -1456,6 +1480,23 @@ public class VolumeDialogImpl implements VolumeDialog,
                 AccessibilityManager.FLAG_CONTENT_CONTROLS);
     }
 
+    protected void scheduleCsdTimeoutH(int timeoutMs) {
+        mHandler.removeMessages(H.CSD_TIMEOUT);
+        mHandler.sendMessageDelayed(mHandler.obtainMessage(H.CSD_TIMEOUT,
+                Events.DISMISS_REASON_CSD_WARNING_TIMEOUT, 0), timeoutMs);
+        Log.i(TAG, "scheduleCsdTimeoutH " + timeoutMs + "ms " + Debug.getCaller());
+        mController.userActivity();
+    }
+
+    private void onCsdTimeoutH() {
+        synchronized (mSafetyWarningLock) {
+            if (mCsdDialog == null) {
+                return;
+            }
+            mCsdDialog.dismiss();
+        }
+    }
+
     protected void dismissH(int reason) {
         Trace.beginSection("VolumeDialogImpl#dismissH");
 
@@ -1481,17 +1522,20 @@ public class VolumeDialogImpl implements VolumeDialog,
                 .setDuration(mDialogHideAnimationDurationMs)
                 .setInterpolator(new SystemUIInterpolators.LogAccelerateInterpolator())
                 .withEndAction(() -> mHandler.postDelayed(() -> {
+                    mController.notifyVisible(false);
                     mDialog.dismiss();
                     tryToRemoveCaptionsTooltip();
                     mIsAnimatingDismiss = false;
 
                     hideRingerDrawer();
                 }, 50));
-        if (!shouldSlideInVolumeTray()) animator.translationX(mDialogView.getWidth() / 2.0f);
+        if (!shouldSlideInVolumeTray()) {
+            animator.translationX(
+                    (isWindowGravityLeft() ? -1 : 1) * mDialogView.getWidth() / 2.0f);
+        }
         animator.setListener(getJankListener(getDialogView(), TYPE_DISMISS,
                 mDialogHideAnimationDurationMs)).start();
         checkODICaptionsTooltip(true);
-        mController.notifyVisible(false);
         synchronized (mSafetyWarningLock) {
             if (mSafetyWarning != null) {
                 if (D.BUG) Log.d(TAG, "SafetyWarning dismissed");
@@ -2037,6 +2081,30 @@ public class VolumeDialogImpl implements VolumeDialog,
         rescheduleTimeoutH();
     }
 
+    private void showCsdWarningH(int csdWarning, int durationMs) {
+        synchronized (mSafetyWarningLock) {
+            if (mCsdDialog != null) {
+                return;
+            }
+            mCsdDialog = new CsdWarningDialog(csdWarning,
+                    mContext, mController.getAudioManager()) {
+                @Override
+                protected void cleanUp() {
+                    synchronized (mSafetyWarningLock) {
+                        mCsdDialog = null;
+                    }
+                    recheckH(null);
+                }
+            };
+            mCsdDialog.show();
+        }
+        recheckH(null);
+        if (durationMs > 0) {
+            scheduleCsdTimeoutH(durationMs);
+        }
+        rescheduleTimeoutH();
+    }
+
     private String getStreamLabelH(StreamState ss) {
         if (ss == null) {
             return "";
@@ -2216,6 +2284,11 @@ public class VolumeDialogImpl implements VolumeDialog,
         }
 
         @Override
+        public void onShowCsdWarning(int csdWarning, int durationMs) {
+            showCsdWarningH(csdWarning, durationMs);
+        }
+
+        @Override
         public void onAccessibilityModeChanged(Boolean showA11yStream) {
             mShowA11yStream = showA11yStream == null ? false : showA11yStream;
             VolumeRow activeRow = getActiveRow();
@@ -2242,6 +2315,7 @@ public class VolumeDialogImpl implements VolumeDialog,
         private static final int SET_STREAM_IMPORTANT = 5;
         private static final int RESCHEDULE_TIMEOUT = 6;
         private static final int STATE_CHANGED = 7;
+        private static final int CSD_TIMEOUT = 8;
 
         public H() {
             super(Looper.getMainLooper());
@@ -2258,6 +2332,7 @@ public class VolumeDialogImpl implements VolumeDialog,
                 case SET_STREAM_IMPORTANT: setStreamImportantH(msg.arg1, msg.arg2 != 0); break;
                 case RESCHEDULE_TIMEOUT: rescheduleTimeoutH(); break;
                 case STATE_CHANGED: onStateChangedH(mState); break;
+                case CSD_TIMEOUT: onCsdTimeoutH(); break;
             }
         }
     }

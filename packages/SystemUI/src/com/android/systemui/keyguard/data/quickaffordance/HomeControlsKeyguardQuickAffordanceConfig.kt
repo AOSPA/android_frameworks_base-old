@@ -81,10 +81,6 @@ constructor(
                 instructions =
                     listOf(
                         context.getString(
-                            R.string.keyguard_affordance_enablement_dialog_message,
-                            pickerName,
-                        ),
-                        context.getString(
                             R.string.keyguard_affordance_enablement_dialog_home_instruction_1
                         ),
                         context.getString(
@@ -94,7 +90,7 @@ constructor(
             )
         }
 
-        return KeyguardQuickAffordanceConfig.PickerScreenState.Default
+        return KeyguardQuickAffordanceConfig.PickerScreenState.Default()
     }
 
     override fun onTriggered(
@@ -130,6 +126,7 @@ constructor(
                             state(
                                 isFeatureEnabled = component.isEnabled(),
                                 hasFavorites = favorites?.isNotEmpty() == true,
+                                hasPanels = serviceInfos.any { it.panelActivity != null },
                                 hasServiceInfos = serviceInfos.isNotEmpty(),
                                 iconResourceId = component.getTileImageId(),
                                 visibility = component.getVisibility(),
@@ -148,13 +145,14 @@ constructor(
     private fun state(
         isFeatureEnabled: Boolean,
         hasFavorites: Boolean,
+        hasPanels: Boolean,
         hasServiceInfos: Boolean,
         visibility: ControlsComponent.Visibility,
         @DrawableRes iconResourceId: Int?,
     ): KeyguardQuickAffordanceConfig.LockScreenState {
         return if (
             isFeatureEnabled &&
-                hasFavorites &&
+                (hasFavorites || hasPanels) &&
                 hasServiceInfos &&
                 iconResourceId != null &&
                 visibility == ControlsComponent.Visibility.AVAILABLE

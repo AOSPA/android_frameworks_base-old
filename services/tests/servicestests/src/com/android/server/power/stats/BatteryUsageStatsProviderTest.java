@@ -78,9 +78,9 @@ public class BatteryUsageStatsProviderTest {
                 batteryUsageStats.getUidBatteryConsumers();
         final UidBatteryConsumer uidBatteryConsumer = uidBatteryConsumers.get(0);
         assertThat(uidBatteryConsumer.getTimeInStateMs(UidBatteryConsumer.STATE_FOREGROUND))
-                .isEqualTo(60 * MINUTE_IN_MS);
+                .isEqualTo(20 * MINUTE_IN_MS);
         assertThat(uidBatteryConsumer.getTimeInStateMs(UidBatteryConsumer.STATE_BACKGROUND))
-                .isEqualTo(10 * MINUTE_IN_MS);
+                .isEqualTo(40 * MINUTE_IN_MS);
         assertThat(uidBatteryConsumer.getConsumedPower(BatteryConsumer.POWER_COMPONENT_AUDIO))
                 .isWithin(PRECISION).of(2.0);
         assertThat(
@@ -121,40 +121,44 @@ public class BatteryUsageStatsProviderTest {
     private BatteryStatsImpl prepareBatteryStats() {
         BatteryStatsImpl batteryStats = mStatsRule.getBatteryStats();
 
+        mStatsRule.setTime(10 * MINUTE_IN_MS, 10 * MINUTE_IN_MS);
         synchronized (batteryStats) {
-            batteryStats.noteActivityResumedLocked(APP_UID,
-                    10 * MINUTE_IN_MS, 10 * MINUTE_IN_MS);
-        }
-        synchronized (batteryStats) {
-            batteryStats.noteUidProcessStateLocked(APP_UID,
-                    ActivityManager.PROCESS_STATE_TOP,
-                    10 * MINUTE_IN_MS, 10 * MINUTE_IN_MS);
-        }
-        synchronized (batteryStats) {
-            batteryStats.noteActivityPausedLocked(APP_UID,
-                    30 * MINUTE_IN_MS, 30 * MINUTE_IN_MS);
-        }
-        synchronized (batteryStats) {
-            batteryStats.noteUidProcessStateLocked(APP_UID,
-                    ActivityManager.PROCESS_STATE_SERVICE,
-                    30 * MINUTE_IN_MS, 30 * MINUTE_IN_MS);
-        }
-        synchronized (batteryStats) {
-            batteryStats.noteUidProcessStateLocked(APP_UID,
-                    ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE,
-                    40 * MINUTE_IN_MS, 40 * MINUTE_IN_MS);
-        }
-        synchronized (batteryStats) {
-            batteryStats.noteUidProcessStateLocked(APP_UID,
-                    ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE,
-                    50 * MINUTE_IN_MS, 50 * MINUTE_IN_MS);
-        }
-        synchronized (batteryStats) {
-            batteryStats.noteUidProcessStateLocked(APP_UID,
-                    ActivityManager.PROCESS_STATE_CACHED_EMPTY,
-                    80 * MINUTE_IN_MS, 80 * MINUTE_IN_MS);
+            batteryStats.noteActivityResumedLocked(APP_UID);
         }
 
+        mStatsRule.setTime(10 * MINUTE_IN_MS, 10 * MINUTE_IN_MS);
+        synchronized (batteryStats) {
+            batteryStats.noteUidProcessStateLocked(APP_UID, ActivityManager.PROCESS_STATE_TOP);
+        }
+        mStatsRule.setTime(30 * MINUTE_IN_MS, 30 * MINUTE_IN_MS);
+        synchronized (batteryStats) {
+            batteryStats.noteActivityPausedLocked(APP_UID);
+        }
+        mStatsRule.setTime(30 * MINUTE_IN_MS, 30 * MINUTE_IN_MS);
+        synchronized (batteryStats) {
+            batteryStats.noteUidProcessStateLocked(APP_UID,
+                    ActivityManager.PROCESS_STATE_SERVICE);
+        }
+        mStatsRule.setTime(40 * MINUTE_IN_MS, 40 * MINUTE_IN_MS);
+        synchronized (batteryStats) {
+            batteryStats.noteUidProcessStateLocked(APP_UID,
+                    ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE);
+        }
+        mStatsRule.setTime(50 * MINUTE_IN_MS, 50 * MINUTE_IN_MS);
+        synchronized (batteryStats) {
+            batteryStats.noteUidProcessStateLocked(APP_UID,
+                    ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE);
+        }
+        mStatsRule.setTime(60 * MINUTE_IN_MS, 60 * MINUTE_IN_MS);
+        synchronized (batteryStats) {
+            batteryStats.noteUidProcessStateLocked(APP_UID,
+                    ActivityManager.PROCESS_STATE_BOUND_TOP);
+        }
+        mStatsRule.setTime(70 * MINUTE_IN_MS, 70 * MINUTE_IN_MS);
+        synchronized (batteryStats) {
+            batteryStats.noteUidProcessStateLocked(APP_UID,
+                    ActivityManager.PROCESS_STATE_CACHED_EMPTY);
+        }
         synchronized (batteryStats) {
             batteryStats.noteFlashlightOnLocked(APP_UID, 1000, 1000);
         }
@@ -215,36 +219,37 @@ public class BatteryUsageStatsProviderTest {
 
         final BatteryStatsHistoryIterator iterator =
                 unparceled.iterateBatteryStatsHistory();
-        BatteryStats.HistoryItem item = new BatteryStats.HistoryItem();
+        BatteryStats.HistoryItem item;
 
-        assertThat(iterator.next(item)).isTrue();
+        assertThat(item = iterator.next()).isNotNull();
         assertHistoryItem(item,
                 BatteryStats.HistoryItem.CMD_RESET, BatteryStats.HistoryItem.EVENT_NONE,
                 null, 0, 3_600_000, 90, 1_000_000);
 
-        assertThat(iterator.next(item)).isTrue();
+        assertThat(item = iterator.next()).isNotNull();
         assertHistoryItem(item,
                 BatteryStats.HistoryItem.CMD_UPDATE, BatteryStats.HistoryItem.EVENT_NONE,
                 null, 0, 3_600_000, 90, 1_000_000);
 
-        assertThat(iterator.next(item)).isTrue();
+        assertThat(item = iterator.next()).isNotNull();
         assertHistoryItem(item,
                 BatteryStats.HistoryItem.CMD_UPDATE, BatteryStats.HistoryItem.EVENT_NONE,
                 null, 0, 3_600_000, 90, 2_000_000);
 
-        assertThat(iterator.next(item)).isTrue();
+        assertThat(item = iterator.next()).isNotNull();
         assertHistoryItem(item,
                 BatteryStats.HistoryItem.CMD_UPDATE,
                 BatteryStats.HistoryItem.EVENT_ALARM | BatteryStats.HistoryItem.EVENT_FLAG_START,
                 "foo", APP_UID, 3_600_000, 90, 3_000_000);
 
-        assertThat(iterator.next(item)).isTrue();
+        assertThat(item = iterator.next()).isNotNull();
         assertHistoryItem(item,
                 BatteryStats.HistoryItem.CMD_UPDATE,
                 BatteryStats.HistoryItem.EVENT_ALARM | BatteryStats.HistoryItem.EVENT_FLAG_FINISH,
                 "foo", APP_UID, 3_600_000, 90, 3_001_000);
 
-        assertThat(iterator.next(item)).isFalse();
+        assertThat(iterator.hasNext()).isFalse();
+        assertThat(iterator.next()).isNull();
     }
 
     @Test
@@ -300,16 +305,16 @@ public class BatteryUsageStatsProviderTest {
                 BatteryUsageStats.class);
 
         BatteryStatsHistoryIterator iterator = unparceled.iterateBatteryStatsHistory();
-        BatteryStats.HistoryItem item = new BatteryStats.HistoryItem();
+        BatteryStats.HistoryItem item;
 
-        assertThat(iterator.next(item)).isTrue();
+        assertThat(item = iterator.next()).isNotNull();
         assertThat(item.cmd).isEqualTo((int) BatteryStats.HistoryItem.CMD_RESET);
 
         int expectedUid = 1;
-        while (iterator.next(item)) {
+        while ((item = iterator.next()) != null) {
             while (item.cmd != BatteryStats.HistoryItem.CMD_UPDATE
                     || item.eventCode == BatteryStats.HistoryItem.EVENT_NONE) {
-                assertThat(iterator.next(item)).isTrue();
+                assertThat(item = iterator.next()).isNotNull();
             }
             int uid = item.eventTag.uid;
             assertThat(uid).isEqualTo(expectedUid++);

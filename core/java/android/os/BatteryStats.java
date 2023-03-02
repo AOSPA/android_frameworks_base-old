@@ -44,6 +44,7 @@ import android.util.LongSparseArray;
 import android.util.MutableBoolean;
 import android.util.Pair;
 import android.util.Printer;
+import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseDoubleArray;
 import android.util.SparseIntArray;
@@ -52,6 +53,7 @@ import android.util.proto.ProtoOutputStream;
 import android.view.Display;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.os.BatteryStatsHistoryIterator;
 
 import com.google.android.collect.Lists;
 
@@ -650,8 +652,11 @@ public abstract class BatteryStats {
             return Uid.PROCESS_STATE_NONEXISTENT;
         } else if (procState == ActivityManager.PROCESS_STATE_TOP) {
             return Uid.PROCESS_STATE_TOP;
-        } else if (ActivityManager.isForegroundService(procState)) {
-            // State when app has put itself in the foreground.
+        } else if (procState == ActivityManager.PROCESS_STATE_BOUND_TOP) {
+            return Uid.PROCESS_STATE_BACKGROUND;
+        } else if (procState == ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE) {
+            return Uid.PROCESS_STATE_FOREGROUND_SERVICE;
+        } else if (procState == ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE) {
             return Uid.PROCESS_STATE_FOREGROUND_SERVICE;
         } else if (procState <= ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND) {
             // Persistent and other foreground states go here.
@@ -1038,12 +1043,13 @@ public abstract class BatteryStats {
 
         /**
          * Returns the battery consumption (in microcoulombs) of bluetooth for this uid,
-         * derived from on device power measurement data.
+         * derived from {@link android.hardware.power.stats.EnergyConsumerType#BLUETOOTH} bucket
+         * provided by the PowerStats service.
          * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
          *
          * {@hide}
          */
-        public abstract long getBluetoothMeasuredBatteryConsumptionUC();
+        public abstract long getBluetoothEnergyConsumptionUC();
 
         /**
          * Returns the battery consumption (in microcoulombs) of the uid's bluetooth usage
@@ -1052,17 +1058,18 @@ public abstract class BatteryStats {
          *
          * {@hide}
          */
-        public abstract long getBluetoothMeasuredBatteryConsumptionUC(
+        public abstract long getBluetoothEnergyConsumptionUC(
                 @BatteryConsumer.ProcessState int processState);
 
         /**
          * Returns the battery consumption (in microcoulombs) of the uid's cpu usage, derived from
-         * on device power measurement data.
+         * derived from {@link android.hardware.power.stats.EnergyConsumerType#CPU} bucket
+         * provided by the PowerStats service.
          * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
          *
          * {@hide}
          */
-        public abstract long getCpuMeasuredBatteryConsumptionUC();
+        public abstract long getCpuEnergyConsumptionUC();
 
         /**
          * Returns the battery consumption (in microcoulombs) of the uid's cpu usage when in the
@@ -1071,26 +1078,28 @@ public abstract class BatteryStats {
          *
          * {@hide}
          */
-        public abstract long getCpuMeasuredBatteryConsumptionUC(
+        public abstract long getCpuEnergyConsumptionUC(
                 @BatteryConsumer.ProcessState int processState);
 
         /**
          * Returns the battery consumption (in microcoulombs) of the uid's GNSS usage, derived from
-         * on device power measurement data.
+         * derived from {@link android.hardware.power.stats.EnergyConsumerType#GNSS} bucket
+         * provided by the PowerStats service.
          * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
          *
          * {@hide}
          */
-        public abstract long getGnssMeasuredBatteryConsumptionUC();
+        public abstract long getGnssEnergyConsumptionUC();
 
         /**
          * Returns the battery consumption (in microcoulombs) of the uid's radio usage, derived from
-         * on device power measurement data.
+         * derived from {@link android.hardware.power.stats.EnergyConsumerType#MOBILE_RADIO}
+         * bucket provided by the PowerStats service.
          * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
          *
          * {@hide}
          */
-        public abstract long getMobileRadioMeasuredBatteryConsumptionUC();
+        public abstract long getMobileRadioEnergyConsumptionUC();
 
         /**
          * Returns the battery consumption (in microcoulombs) of the uid's radio usage when in the
@@ -1099,26 +1108,28 @@ public abstract class BatteryStats {
          *
          * {@hide}
          */
-        public abstract long getMobileRadioMeasuredBatteryConsumptionUC(
+        public abstract long getMobileRadioEnergyConsumptionUC(
                 @BatteryConsumer.ProcessState int processState);
 
         /**
          * Returns the battery consumption (in microcoulombs) of the screen while on and uid active,
-         * derived from on device power measurement data.
+         * derived from {@link android.hardware.power.stats.EnergyConsumerType#DISPLAY} bucket
+         * provided by the PowerStats service.
          * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
          *
          * {@hide}
          */
-        public abstract long getScreenOnMeasuredBatteryConsumptionUC();
+        public abstract long getScreenOnEnergyConsumptionUC();
 
         /**
          * Returns the battery consumption (in microcoulombs) of wifi for this uid,
-         * derived from on device power measurement data.
+         * derived from {@link android.hardware.power.stats.EnergyConsumerType#WIFI} bucket
+         * provided by the PowerStats service.
          * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
          *
          * {@hide}
          */
-        public abstract long getWifiMeasuredBatteryConsumptionUC();
+        public abstract long getWifiEnergyConsumptionUC();
 
         /**
          * Returns the battery consumption (in microcoulombs) of the uid's wifi usage when in the
@@ -1127,9 +1138,19 @@ public abstract class BatteryStats {
          *
          * {@hide}
          */
-        public abstract long getWifiMeasuredBatteryConsumptionUC(
+        public abstract long getWifiEnergyConsumptionUC(
                 @BatteryConsumer.ProcessState int processState);
 
+
+
+        /**
+         * Returns the battery consumption (in microcoulombs) of UID's camera usage, derived from
+         * on-device power measurement data.
+         * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
+         *
+         * {@hide}
+         */
+        public abstract long getCameraEnergyConsumptionUC();
 
         /**
          * Returns the battery consumption (in microcoulombs) used by this uid for each
@@ -1142,7 +1163,7 @@ public abstract class BatteryStats {
          *
          * {@hide}
          */
-        public abstract @Nullable long[] getCustomConsumerMeasuredBatteryConsumptionUC();
+        public abstract @Nullable long[] getCustomEnergyConsumerBatteryConsumptionUC();
 
         public static abstract class Sensor {
 
@@ -1771,7 +1792,7 @@ public abstract class BatteryStats {
     /**
      * Measured energy delta from the previous reading.
      */
-    public static final class MeasuredEnergyDetails {
+    public static final class EnergyConsumerDetails {
         /**
          * Description of the energy consumer, such as CPU, DISPLAY etc
          */
@@ -1981,8 +2002,8 @@ public abstract class BatteryStats {
         // Non-null when there is more detailed information at this step.
         public HistoryStepDetails stepDetails;
 
-        // Non-null when there is measured energy information
-        public MeasuredEnergyDetails measuredEnergyDetails;
+        // Non-null when there is energy consumer information
+        public EnergyConsumerDetails energyConsumerDetails;
 
         // Non-null when there is CPU usage information
         public CpuUsageDetails cpuUsageDetails;
@@ -2195,7 +2216,7 @@ public abstract class BatteryStats {
             eventCode = EVENT_NONE;
             eventTag = null;
             tagsFirstOccurrence = false;
-            measuredEnergyDetails = null;
+            energyConsumerDetails = null;
             cpuUsageDetails = null;
         }
 
@@ -2246,7 +2267,7 @@ public abstract class BatteryStats {
             }
             tagsFirstOccurrence = o.tagsFirstOccurrence;
             currentTime = o.currentTime;
-            measuredEnergyDetails = o.measuredEnergyDetails;
+            energyConsumerDetails = o.energyConsumerDetails;
             cpuUsageDetails = o.cpuUsageDetails;
         }
 
@@ -2395,9 +2416,6 @@ public abstract class BatteryStats {
 
     public abstract int getHistoryUsedSize();
 
-    @UnsupportedAppUsage
-    public abstract boolean startIteratingHistoryLocked();
-
     public abstract int getHistoryStringPoolSize();
 
     public abstract int getHistoryStringPoolBytes();
@@ -2406,10 +2424,11 @@ public abstract class BatteryStats {
 
     public abstract int getHistoryTagPoolUid(int index);
 
-    @UnsupportedAppUsage
-    public abstract boolean getNextHistoryLocked(HistoryItem out);
-
-    public abstract void finishIteratingHistoryLocked();
+    /**
+     * Returns a BatteryStatsHistoryIterator. Battery history will remain immutable until the
+     * {@link BatteryStatsHistoryIterator#close()} method is invoked.
+     */
+    public abstract BatteryStatsHistoryIterator iterateBatteryStatsHistory();
 
     /**
      * Returns the number of times the device has been started.
@@ -2855,7 +2874,7 @@ public abstract class BatteryStats {
      *
      * {@hide}
      */
-    public abstract long getBluetoothMeasuredBatteryConsumptionUC();
+    public abstract long getBluetoothEnergyConsumptionUC();
 
     /**
      * Returns the battery consumption (in microcoulombs) of the cpu, derived from on device power
@@ -2864,7 +2883,7 @@ public abstract class BatteryStats {
      *
      * {@hide}
      */
-    public abstract long getCpuMeasuredBatteryConsumptionUC();
+    public abstract long getCpuEnergyConsumptionUC();
 
     /**
      * Returns the battery consumption (in microcoulombs) of the GNSS, derived from on device power
@@ -2873,7 +2892,7 @@ public abstract class BatteryStats {
      *
      * {@hide}
      */
-    public abstract long getGnssMeasuredBatteryConsumptionUC();
+    public abstract long getGnssEnergyConsumptionUC();
 
     /**
      * Returns the battery consumption (in microcoulombs) of the radio, derived from on device power
@@ -2882,7 +2901,16 @@ public abstract class BatteryStats {
      *
      * {@hide}
      */
-    public abstract long getMobileRadioMeasuredBatteryConsumptionUC();
+    public abstract long getMobileRadioEnergyConsumptionUC();
+
+    /**
+     * Returns the battery consumption (in microcoulombs) of the phone calls, derived from on device
+     * power measurement data.
+     * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
+     *
+     * {@hide}
+     */
+    public abstract long getPhoneEnergyConsumptionUC();
 
     /**
      * Returns the battery consumption (in microcoulombs) of the screen while on, derived from on
@@ -2891,7 +2919,7 @@ public abstract class BatteryStats {
      *
      * {@hide}
      */
-    public abstract long getScreenOnMeasuredBatteryConsumptionUC();
+    public abstract long getScreenOnEnergyConsumptionUC();
 
     /**
      * Returns the battery consumption (in microcoulombs) of the screen in doze, derived from on
@@ -2900,7 +2928,7 @@ public abstract class BatteryStats {
      *
      * {@hide}
      */
-    public abstract long getScreenDozeMeasuredBatteryConsumptionUC();
+    public abstract long getScreenDozeEnergyConsumptionUC();
 
     /**
      * Returns the battery consumption (in microcoulombs) of wifi, derived from on
@@ -2909,7 +2937,16 @@ public abstract class BatteryStats {
      *
      * {@hide}
      */
-    public abstract long getWifiMeasuredBatteryConsumptionUC();
+    public abstract long getWifiEnergyConsumptionUC();
+
+    /**
+     * Returns the battery consumption (in microcoulombs) of camera, derived from on
+     * device power measurement data.
+     * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
+     *
+     * {@hide}
+     */
+    public abstract long getCameraEnergyConsumptionUC();
 
     /**
      * Returns the battery consumption (in microcoulombs) that each
@@ -2921,7 +2958,7 @@ public abstract class BatteryStats {
      *
      * {@hide}
      */
-    public abstract @Nullable long[] getCustomConsumerMeasuredBatteryConsumptionUC();
+    public abstract @Nullable long[] getCustomEnergyConsumerBatteryConsumptionUC();
 
     /**
      * Returns the names of all {@link android.hardware.power.stats.EnergyConsumer}'s
@@ -7085,19 +7122,19 @@ public abstract class BatteryStats {
                     }
                 }
                 boolean firstExtension = true;
-                if (rec.measuredEnergyDetails != null) {
+                if (rec.energyConsumerDetails != null) {
                     firstExtension = false;
                     if (!checkin) {
                         item.append(" ext=energy:");
-                        item.append(rec.measuredEnergyDetails);
+                        item.append(rec.energyConsumerDetails);
                     } else {
                         item.append(",XE");
-                        for (int i = 0; i < rec.measuredEnergyDetails.consumers.length; i++) {
-                            if (rec.measuredEnergyDetails.chargeUC[i] != POWER_DATA_UNAVAILABLE) {
+                        for (int i = 0; i < rec.energyConsumerDetails.consumers.length; i++) {
+                            if (rec.energyConsumerDetails.chargeUC[i] != POWER_DATA_UNAVAILABLE) {
                                 item.append(',');
-                                item.append(rec.measuredEnergyDetails.consumers[i].name);
+                                item.append(rec.energyConsumerDetails.consumers[i].name);
                                 item.append('=');
-                                item.append(rec.measuredEnergyDetails.chargeUC[i]);
+                                item.append(rec.energyConsumerDetails.chargeUC[i]);
                             }
                         }
                     }
@@ -7448,80 +7485,88 @@ public abstract class BatteryStats {
 
     private void dumpHistoryLocked(PrintWriter pw, int flags, long histStart, boolean checkin) {
         final HistoryPrinter hprinter = new HistoryPrinter();
-        final HistoryItem rec = new HistoryItem();
         long lastTime = -1;
         long baseTime = -1;
         boolean printed = false;
         HistoryEventTracker tracker = null;
-        while (getNextHistoryLocked(rec)) {
-            lastTime = rec.time;
-            if (baseTime < 0) {
-                baseTime = lastTime;
-            }
-            if (rec.time >= histStart) {
-                if (histStart >= 0 && !printed) {
-                    if (rec.cmd == HistoryItem.CMD_CURRENT_TIME
-                            || rec.cmd == HistoryItem.CMD_RESET
-                            || rec.cmd == HistoryItem.CMD_START
-                            || rec.cmd == HistoryItem.CMD_SHUTDOWN) {
-                        printed = true;
-                        hprinter.printNextItem(pw, rec, baseTime, checkin,
-                                (flags&DUMP_VERBOSE) != 0);
-                        rec.cmd = HistoryItem.CMD_UPDATE;
-                    } else if (rec.currentTime != 0) {
-                        printed = true;
-                        byte cmd = rec.cmd;
-                        rec.cmd = HistoryItem.CMD_CURRENT_TIME;
-                        hprinter.printNextItem(pw, rec, baseTime, checkin,
-                                (flags&DUMP_VERBOSE) != 0);
-                        rec.cmd = cmd;
+        try (BatteryStatsHistoryIterator iterator = iterateBatteryStatsHistory()) {
+            HistoryItem rec;
+            while ((rec = iterator.next()) != null) {
+                try {
+                    lastTime = rec.time;
+                    if (baseTime < 0) {
+                        baseTime = lastTime;
                     }
-                    if (tracker != null) {
-                        if (rec.cmd != HistoryItem.CMD_UPDATE) {
-                            hprinter.printNextItem(pw, rec, baseTime, checkin,
-                                    (flags&DUMP_VERBOSE) != 0);
-                            rec.cmd = HistoryItem.CMD_UPDATE;
-                        }
-                        int oldEventCode = rec.eventCode;
-                        HistoryTag oldEventTag = rec.eventTag;
-                        rec.eventTag = new HistoryTag();
-                        for (int i=0; i<HistoryItem.EVENT_COUNT; i++) {
-                            HashMap<String, SparseIntArray> active
-                                    = tracker.getStateForEvent(i);
-                            if (active == null) {
-                                continue;
+                    if (rec.time >= histStart) {
+                        if (histStart >= 0 && !printed) {
+                            if (rec.cmd == HistoryItem.CMD_CURRENT_TIME
+                                    || rec.cmd == HistoryItem.CMD_RESET
+                                    || rec.cmd == HistoryItem.CMD_START
+                                    || rec.cmd == HistoryItem.CMD_SHUTDOWN) {
+                                printed = true;
+                                hprinter.printNextItem(pw, rec, baseTime, checkin,
+                                        (flags & DUMP_VERBOSE) != 0);
+                                rec.cmd = HistoryItem.CMD_UPDATE;
+                            } else if (rec.currentTime != 0) {
+                                printed = true;
+                                byte cmd = rec.cmd;
+                                rec.cmd = HistoryItem.CMD_CURRENT_TIME;
+                                hprinter.printNextItem(pw, rec, baseTime, checkin,
+                                        (flags & DUMP_VERBOSE) != 0);
+                                rec.cmd = cmd;
                             }
-                            for (HashMap.Entry<String, SparseIntArray> ent
-                                    : active.entrySet()) {
-                                SparseIntArray uids = ent.getValue();
-                                for (int j=0; j<uids.size(); j++) {
-                                    rec.eventCode = i;
-                                    rec.eventTag.string = ent.getKey();
-                                    rec.eventTag.uid = uids.keyAt(j);
-                                    rec.eventTag.poolIdx = uids.valueAt(j);
+                            if (tracker != null) {
+                                if (rec.cmd != HistoryItem.CMD_UPDATE) {
                                     hprinter.printNextItem(pw, rec, baseTime, checkin,
-                                            (flags&DUMP_VERBOSE) != 0);
-                                    rec.wakeReasonTag = null;
-                                    rec.wakelockTag = null;
+                                            (flags & DUMP_VERBOSE) != 0);
+                                    rec.cmd = HistoryItem.CMD_UPDATE;
                                 }
+                                int oldEventCode = rec.eventCode;
+                                HistoryTag oldEventTag = rec.eventTag;
+                                rec.eventTag = new HistoryTag();
+                                for (int i = 0; i < HistoryItem.EVENT_COUNT; i++) {
+                                    Map<String, SparseIntArray> active =
+                                            tracker.getStateForEvent(i);
+                                    if (active == null) {
+                                        continue;
+                                    }
+                                    for (Map.Entry<String, SparseIntArray> ent :
+                                            active.entrySet()) {
+                                        SparseIntArray uids = ent.getValue();
+                                        for (int j = 0; j < uids.size(); j++) {
+                                            rec.eventCode = i;
+                                            rec.eventTag.string = ent.getKey();
+                                            rec.eventTag.uid = uids.keyAt(j);
+                                            rec.eventTag.poolIdx = uids.valueAt(j);
+                                            hprinter.printNextItem(pw, rec, baseTime, checkin,
+                                                    (flags & DUMP_VERBOSE) != 0);
+                                            rec.wakeReasonTag = null;
+                                            rec.wakelockTag = null;
+                                        }
+                                    }
+                                }
+                                rec.eventCode = oldEventCode;
+                                rec.eventTag = oldEventTag;
+                                tracker = null;
                             }
                         }
-                        rec.eventCode = oldEventCode;
-                        rec.eventTag = oldEventTag;
-                        tracker = null;
+                        hprinter.printNextItem(pw, rec, baseTime, checkin,
+                                (flags & DUMP_VERBOSE) != 0);
+                    } else if (false/* && rec.eventCode != HistoryItem.EVENT_NONE */) {
+                        // This is an attempt to aggregate the previous state and generate
+                        // fake events to reflect that state at the point where we start
+                        // printing real events.  It doesn't really work right, so is turned off.
+                        if (tracker == null) {
+                            tracker = new HistoryEventTracker();
+                        }
+                        tracker.updateState(rec.eventCode, rec.eventTag.string,
+                                rec.eventTag.uid, rec.eventTag.poolIdx);
                     }
+                } catch (Throwable t) {
+                    t.printStackTrace(pw);
+                    Slog.wtf(TAG, "Corrupted battery history", t);
+                    break;
                 }
-                hprinter.printNextItem(pw, rec, baseTime, checkin,
-                        (flags&DUMP_VERBOSE) != 0);
-            } else if (false && rec.eventCode != HistoryItem.EVENT_NONE) {
-                // This is an attempt to aggregate the previous state and generate
-                // fake events to reflect that state at the point where we start
-                // printing real events.  It doesn't really work right, so is turned off.
-                if (tracker == null) {
-                    tracker = new HistoryEventTracker();
-                }
-                tracker.updateState(rec.eventCode, rec.eventTag.string,
-                        rec.eventTag.uid, rec.eventTag.poolIdx);
             }
         }
         if (histStart >= 0) {
@@ -7592,25 +7637,19 @@ public abstract class BatteryStats {
         if ((flags&DUMP_HISTORY_ONLY) != 0 || !filtering) {
             final long historyTotalSize = getHistoryTotalSize();
             final long historyUsedSize = getHistoryUsedSize();
-            if (startIteratingHistoryLocked()) {
-                try {
-                    pw.print("Battery History (");
-                    pw.print((100*historyUsedSize)/historyTotalSize);
-                    pw.print("% used, ");
-                    printSizeValue(pw, historyUsedSize);
-                    pw.print(" used of ");
-                    printSizeValue(pw, historyTotalSize);
-                    pw.print(", ");
-                    pw.print(getHistoryStringPoolSize());
-                    pw.print(" strings using ");
-                    printSizeValue(pw, getHistoryStringPoolBytes());
-                    pw.println("):");
-                    dumpHistoryLocked(pw, flags, histStart, false);
-                    pw.println();
-                } finally {
-                    finishIteratingHistoryLocked();
-                }
-            }
+            pw.print("Battery History (");
+            pw.print((100 * historyUsedSize) / historyTotalSize);
+            pw.print("% used, ");
+            printSizeValue(pw, historyUsedSize);
+            pw.print(" used of ");
+            printSizeValue(pw, historyTotalSize);
+            pw.print(", ");
+            pw.print(getHistoryStringPoolSize());
+            pw.print(" strings using ");
+            printSizeValue(pw, getHistoryStringPoolBytes());
+            pw.println("):");
+            dumpHistoryLocked(pw, flags, histStart, false);
+            pw.println();
         }
 
         if (filtering && (flags&(DUMP_CHARGED_ONLY|DUMP_DAILY_ONLY)) == 0) {
@@ -7767,28 +7806,24 @@ public abstract class BatteryStats {
                 getEndPlatformVersion());
 
         if ((flags & (DUMP_INCLUDE_HISTORY | DUMP_HISTORY_ONLY)) != 0) {
-            if (startIteratingHistoryLocked()) {
-                try {
-                    for (int i=0; i<getHistoryStringPoolSize(); i++) {
-                        pw.print(BATTERY_STATS_CHECKIN_VERSION); pw.print(',');
-                        pw.print(HISTORY_STRING_POOL); pw.print(',');
-                        pw.print(i);
-                        pw.print(",");
-                        pw.print(getHistoryTagPoolUid(i));
-                        pw.print(",\"");
-                        String str = getHistoryTagPoolString(i);
-                        if (str != null) {
-                            str = str.replace("\\", "\\\\");
-                            str = str.replace("\"", "\\\"");
-                            pw.print(str);
-                        }
-                        pw.print("\"");
-                        pw.println();
-                    }
-                    dumpHistoryLocked(pw, flags, histStart, true);
-                } finally {
-                    finishIteratingHistoryLocked();
+            for (int i = 0; i < getHistoryStringPoolSize(); i++) {
+                pw.print(BATTERY_STATS_CHECKIN_VERSION);
+                pw.print(',');
+                pw.print(HISTORY_STRING_POOL);
+                pw.print(',');
+                pw.print(i);
+                pw.print(",");
+                pw.print(getHistoryTagPoolUid(i));
+                pw.print(",\"");
+                String str = getHistoryTagPoolString(i);
+                if (str != null) {
+                    str = str.replace("\\", "\\\\");
+                    str = str.replace("\"", "\\\"");
+                    pw.print(str);
                 }
+                pw.print("\"");
+                pw.println();
+                dumpHistoryLocked(pw, flags, histStart, true);
             }
         }
 
@@ -8328,17 +8363,12 @@ public abstract class BatteryStats {
     }
 
     private void dumpProtoHistoryLocked(ProtoOutputStream proto, int flags, long histStart) {
-        if (!startIteratingHistoryLocked()) {
-            return;
-        }
-
         proto.write(BatteryStatsServiceDumpHistoryProto.REPORT_VERSION, CHECKIN_VERSION);
         proto.write(BatteryStatsServiceDumpHistoryProto.PARCEL_VERSION, getParcelVersion());
         proto.write(BatteryStatsServiceDumpHistoryProto.START_PLATFORM_VERSION,
                 getStartPlatformVersion());
         proto.write(BatteryStatsServiceDumpHistoryProto.END_PLATFORM_VERSION,
                 getEndPlatformVersion());
-        try {
             long token;
             // History string pool (HISTORY_STRING_POOL)
             for (int i = 0; i < getHistoryStringPoolSize(); ++i) {
@@ -8350,14 +8380,15 @@ public abstract class BatteryStats {
                 proto.end(token);
             }
 
-            // History data (HISTORY_DATA)
-            final HistoryPrinter hprinter = new HistoryPrinter();
-            final HistoryItem rec = new HistoryItem();
-            long lastTime = -1;
-            long baseTime = -1;
-            boolean printed = false;
-            HistoryEventTracker tracker = null;
-            while (getNextHistoryLocked(rec)) {
+        // History data (HISTORY_DATA)
+        final HistoryPrinter hprinter = new HistoryPrinter();
+        long lastTime = -1;
+        long baseTime = -1;
+        boolean printed = false;
+        HistoryEventTracker tracker = null;
+        try (BatteryStatsHistoryIterator iterator = iterateBatteryStatsHistory()) {
+            HistoryItem rec;
+            while ((rec = iterator.next()) != null) {
                 lastTime = rec.time;
                 if (baseTime < 0) {
                     baseTime = lastTime;
@@ -8424,8 +8455,6 @@ public abstract class BatteryStats {
                 proto.write(BatteryStatsServiceDumpHistoryProto.CSV_LINES,
                         "NEXT: " + (lastTime + 1));
             }
-        } finally {
-            finishIteratingHistoryLocked();
         }
     }
 

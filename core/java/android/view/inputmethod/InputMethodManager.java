@@ -16,6 +16,7 @@
 
 package android.view.inputmethod;
 
+import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.view.inputmethod.InputConnection.CURSOR_UPDATE_IMMEDIATE;
 import static android.view.inputmethod.InputConnection.CURSOR_UPDATE_MONITOR;
 import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodClientsTraceProto.ClientSideProto.DISPLAY_ID;
@@ -42,6 +43,8 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresFeature;
 import android.annotation.RequiresPermission;
+import android.annotation.SuppressLint;
+import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
 import android.annotation.UiThread;
@@ -810,6 +813,7 @@ public final class InputMethodManager {
                 }
 
                 // ignore the result
+                Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "IMM.startInputOrWindowGainedFocus");
                 IInputMethodManagerGlobalInvoker.startInputOrWindowGainedFocus(
                         StartInputReason.WINDOW_FOCUS_GAIN_REPORT_ONLY, mClient,
                         viewForWindowFocus.getWindowToken(), startInputFlags, softInputMode,
@@ -818,6 +822,7 @@ public final class InputMethodManager {
                         null, null,
                         mCurRootView.mContext.getApplicationInfo().targetSdkVersion,
                         UserHandle.myUserId(), mImeDispatcher);
+                Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
             }
         }
 
@@ -1601,6 +1606,37 @@ public final class InputMethodManager {
     }
 
     /**
+     * Returns the {@link InputMethodInfo} of the currently selected input method (for the process's
+     * user).
+     *
+     * <p>On multi user environment, this API returns a result for the calling process user.</p>
+     */
+    @Nullable
+    public InputMethodInfo getCurrentInputMethodInfo() {
+        // We intentionally do not use UserHandle.getCallingUserId() here because for system
+        // services InputMethodManagerInternal.getCurrentInputMethodInfoForUser() should be used
+        // instead.
+        return IInputMethodManagerGlobalInvoker.getCurrentInputMethodInfoAsUser(
+                UserHandle.myUserId());
+    }
+
+    /**
+     * Returns the {@link InputMethodInfo} for currently selected input method for the given user.
+     *
+     * @param user user to query.
+     * @hide
+     */
+    @RequiresPermission(value = Manifest.permission.INTERACT_ACROSS_USERS_FULL)
+    @Nullable
+    @SystemApi
+    @SuppressLint("UserHandle")
+    public InputMethodInfo getCurrentInputMethodInfoAsUser(@NonNull UserHandle user) {
+        Objects.requireNonNull(user);
+        return IInputMethodManagerGlobalInvoker.getCurrentInputMethodInfoAsUser(
+                user.getIdentifier());
+    }
+
+    /**
      * Returns the list of enabled input methods.
      *
      * <p>On multi user environment, this API returns a result for the calling process user.</p>
@@ -2008,14 +2044,16 @@ public final class InputMethodManager {
      * {@link #RESULT_HIDDEN}.
      */
     public boolean showSoftInput(View view, int flags, ResultReceiver resultReceiver) {
-        return showSoftInput(view, flags, resultReceiver, SoftInputShowHideReason.SHOW_SOFT_INPUT);
+        return showSoftInput(view, null /* statsToken */, flags, resultReceiver,
+                SoftInputShowHideReason.SHOW_SOFT_INPUT);
     }
 
-    private boolean showSoftInput(View view, int flags, ResultReceiver resultReceiver,
-            @SoftInputShowHideReason int reason) {
-        final ImeTracker.Token statsToken = new ImeTracker.Token();
-        ImeTracker.get().onRequestShow(statsToken, ImeTracker.ORIGIN_CLIENT_SHOW_SOFT_INPUT,
-                reason);
+    private boolean showSoftInput(View view, @Nullable ImeTracker.Token statsToken, int flags,
+            ResultReceiver resultReceiver, @SoftInputShowHideReason int reason) {
+        if (statsToken == null) {
+            statsToken = ImeTracker.get().onRequestShow(null /* component */,
+                    Process.myUid(), ImeTracker.ORIGIN_CLIENT_SHOW_SOFT_INPUT, reason);
+        }
 
         ImeTracing.getInstance().triggerClientDump("InputMethodManager#showSoftInput", this,
                 null /* icProto */);
@@ -2063,8 +2101,8 @@ public final class InputMethodManager {
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 123768499)
     public void showSoftInputUnchecked(int flags, ResultReceiver resultReceiver) {
         synchronized (mH) {
-            final ImeTracker.Token statsToken = new ImeTracker.Token();
-            ImeTracker.get().onRequestShow(statsToken, ImeTracker.ORIGIN_CLIENT_SHOW_SOFT_INPUT,
+            final ImeTracker.Token statsToken = ImeTracker.get().onRequestShow(null /* component */,
+                    Process.myUid(), ImeTracker.ORIGIN_CLIENT_SHOW_SOFT_INPUT,
                     SoftInputShowHideReason.SHOW_SOFT_INPUT);
 
             Log.w(TAG, "showSoftInputUnchecked() is a hidden method, which will be"
@@ -2154,9 +2192,8 @@ public final class InputMethodManager {
 
     private boolean hideSoftInputFromWindow(IBinder windowToken, int flags,
             ResultReceiver resultReceiver, @SoftInputShowHideReason int reason) {
-        final ImeTracker.Token statsToken = new ImeTracker.Token();
-        ImeTracker.get().onRequestHide(statsToken, ImeTracker.ORIGIN_CLIENT_HIDE_SOFT_INPUT,
-                reason);
+        final ImeTracker.Token statsToken = ImeTracker.get().onRequestHide(null /* component */,
+                Process.myUid(), ImeTracker.ORIGIN_CLIENT_HIDE_SOFT_INPUT, reason);
 
         ImeTracing.getInstance().triggerClientDump("InputMethodManager#hideSoftInputFromWindow",
                 this, null /* icProto */);
@@ -2289,7 +2326,7 @@ public final class InputMethodManager {
                     hideSoftInputFromWindow(view.getWindowToken(), hideFlags, null,
                             SoftInputShowHideReason.HIDE_TOGGLE_SOFT_INPUT);
                 } else {
-                    showSoftInput(view, showFlags, null,
+                    showSoftInput(view, null /* statsToken */, showFlags, null /* resultReceiver */,
                             SoftInputShowHideReason.SHOW_TOGGLE_SOFT_INPUT);
                 }
             }
@@ -2466,6 +2503,7 @@ public final class InputMethodManager {
         final EditorInfo editorInfo = connectionPair.second;
         final Handler icHandler;
         InputBindResult res = null;
+        final boolean hasServedView;
         synchronized (mH) {
             // Now that we are locked again, validate that our state hasn't
             // changed.
@@ -2556,6 +2594,7 @@ public final class InputMethodManager {
             }
             final int targetUserId = editorInfo.targetInputMethodUser != null
                     ? editorInfo.targetInputMethodUser.getIdentifier() : UserHandle.myUserId();
+            Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "IMM.startInputOrWindowGainedFocus");
             res = IInputMethodManagerGlobalInvoker.startInputOrWindowGainedFocus(
                     startInputReason, mClient, windowGainingFocus, startInputFlags,
                     softInputMode, windowFlags, editorInfo, servedInputConnection,
@@ -2563,6 +2602,7 @@ public final class InputMethodManager {
                             : servedInputConnection.asIRemoteAccessibilityInputConnection(),
                     view.getContext().getApplicationInfo().targetSdkVersion, targetUserId,
                     mImeDispatcher);
+            Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
             if (DEBUG) Log.v(TAG, "Starting input: Bind result=" + res);
             if (res == null) {
                 Log.wtf(TAG, "startInputOrWindowGainedFocus must not return"
@@ -2597,6 +2637,7 @@ public final class InputMethodManager {
             switch (res.result) {
                 case InputBindResult.ResultCode.ERROR_NOT_IME_TARGET_WINDOW:
                     mRestartOnNextWindowFocus = true;
+                    mServedView = null;
                     break;
             }
             if (mCompletions != null) {
@@ -2604,10 +2645,11 @@ public final class InputMethodManager {
                     mCurBindState.mImeSession.displayCompletions(mCompletions);
                 }
             }
+            hasServedView = mServedView != null;
         }
 
         // Notify the app that the InputConnection is initialized and ready for use.
-        if (ic != null && res != null && res.method != null) {
+        if (ic != null && res != null && res.method != null && hasServedView) {
             if (DEBUG) {
                 Log.v(TAG, "Calling View.onInputConnectionOpened: view= " + view
                         + ", ic=" + ic + ", editorInfo=" + editorInfo + ", handler=" + icHandler);
@@ -2799,8 +2841,8 @@ public final class InputMethodManager {
 
     @UnsupportedAppUsage
     void closeCurrentInput() {
-        final ImeTracker.Token statsToken = new ImeTracker.Token();
-        ImeTracker.get().onRequestHide(statsToken, ImeTracker.ORIGIN_CLIENT_HIDE_SOFT_INPUT,
+        final ImeTracker.Token statsToken = ImeTracker.get().onRequestHide(null /* component */,
+                Process.myUid(), ImeTracker.ORIGIN_CLIENT_HIDE_SOFT_INPUT,
                 SoftInputShowHideReason.HIDE_SOFT_INPUT);
 
         synchronized (mH) {
@@ -2859,18 +2901,23 @@ public final class InputMethodManager {
      *
      * @param windowToken the window from which this request originates. If this doesn't match the
      *                    currently served view, the request is ignored and returns {@code false}.
+     * @param statsToken the token tracking the current IME show request or {@code null} otherwise.
      *
      * @return {@code true} if IME can (eventually) be shown, {@code false} otherwise.
      * @hide
      */
-    public boolean requestImeShow(IBinder windowToken) {
+    public boolean requestImeShow(IBinder windowToken, @Nullable ImeTracker.Token statsToken) {
         checkFocus();
         synchronized (mH) {
             final View servedView = getServedViewLocked();
             if (servedView == null || servedView.getWindowToken() != windowToken) {
+                ImeTracker.get().onFailed(statsToken, ImeTracker.PHASE_CLIENT_REQUEST_IME_SHOW);
                 return false;
             }
-            showSoftInput(servedView, 0 /* flags */, null /* resultReceiver */,
+
+            ImeTracker.get().onProgress(statsToken, ImeTracker.PHASE_CLIENT_REQUEST_IME_SHOW);
+
+            showSoftInput(servedView, statsToken, 0 /* flags */, null /* resultReceiver */,
                     SoftInputShowHideReason.SHOW_SOFT_INPUT_BY_INSETS_API);
             return true;
         }
@@ -2881,12 +2928,15 @@ public final class InputMethodManager {
      *
      * @param windowToken the window from which this request originates. If this doesn't match the
      *                    currently served view, the request is ignored.
+     * @param statsToken the token tracking the current IME show request or {@code null} otherwise.
      * @hide
      */
-    public void notifyImeHidden(IBinder windowToken) {
-        final ImeTracker.Token statsToken = new ImeTracker.Token();
-        ImeTracker.get().onRequestHide(statsToken, ImeTracker.ORIGIN_CLIENT_HIDE_SOFT_INPUT,
-                SoftInputShowHideReason.HIDE_SOFT_INPUT_BY_INSETS_API);
+    public void notifyImeHidden(IBinder windowToken, @Nullable ImeTracker.Token statsToken) {
+        if (statsToken == null) {
+            statsToken = ImeTracker.get().onRequestHide(null /* component */,
+                    Process.myUid(), ImeTracker.ORIGIN_CLIENT_HIDE_SOFT_INPUT,
+                    SoftInputShowHideReason.HIDE_SOFT_INPUT_BY_INSETS_API);
+        }
 
         ImeTracing.getInstance().triggerClientDump("InputMethodManager#notifyImeHidden", this,
                 null /* icProto */);
@@ -3549,6 +3599,18 @@ public final class InputMethodManager {
     @RequiresPermission(Manifest.permission.TEST_INPUT_METHOD)
     public boolean isInputMethodPickerShown() {
         return IInputMethodManagerGlobalInvoker.isInputMethodPickerShownForTest();
+    }
+
+    /**
+     * A test API for CTS to check whether there are any pending IME visibility requests.
+     *
+     * @return {@code true} iff there are pending IME visibility requests.
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(Manifest.permission.TEST_INPUT_METHOD)
+    public boolean hasPendingImeVisibilityRequests() {
+        return IInputMethodManagerGlobalInvoker.hasPendingImeVisibilityRequests();
     }
 
     /**

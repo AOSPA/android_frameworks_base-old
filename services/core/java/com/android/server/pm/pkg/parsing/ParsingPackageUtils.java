@@ -219,6 +219,7 @@ public class ParsingPackageUtils {
     public static final int PARSE_DEFAULT_INSTALL_LOCATION =
             PackageInfo.INSTALL_LOCATION_UNSPECIFIED;
     public static final int PARSE_DEFAULT_TARGET_SANDBOX = 1;
+    public static final boolean PARSE_DEFAULT_ALLOW_UPDATE_OWNERSHIP = true;
 
     /**
      * If set to true, we will only allow package files that exactly match the DTD. Otherwise, we
@@ -246,6 +247,9 @@ public class ParsingPackageUtils {
     private static final int MAX_NUM_COMPONENTS = 30000;
     private static final String MAX_NUM_COMPONENTS_ERR_MSG =
             "Total number of components has exceeded the maximum number: " + MAX_NUM_COMPONENTS;
+
+    /** The maximum permission name length. */
+    private static final int MAX_PERMISSION_NAME_LENGTH = 512;
 
     @IntDef(flag = true, prefix = { "PARSE_" }, value = {
             PARSE_CHATTY,
@@ -824,8 +828,8 @@ public class ParsingPackageUtils {
     }
 
     private static boolean hasTooManyComponents(ParsingPackage pkg) {
-        return pkg.getActivities().size() + pkg.getServices().size() + pkg.getProviders().size()
-                > MAX_NUM_COMPONENTS;
+        return (pkg.getActivities().size() + pkg.getServices().size() + pkg.getProviders().size()
+                + pkg.getReceivers().size()) > MAX_NUM_COMPONENTS;
     }
 
     /**
@@ -883,7 +887,9 @@ public class ParsingPackageUtils {
                 .setTargetSandboxVersion(anInteger(PARSE_DEFAULT_TARGET_SANDBOX,
                         R.styleable.AndroidManifest_targetSandboxVersion, sa))
                 /* Set the global "on SD card" flag */
-                .setExternalStorage((flags & PARSE_EXTERNAL_STORAGE) != 0);
+                .setExternalStorage((flags & PARSE_EXTERNAL_STORAGE) != 0)
+                .setAllowUpdateOwnership(bool(PARSE_DEFAULT_ALLOW_UPDATE_OWNERSHIP,
+                        R.styleable.AndroidManifest_allowUpdateOwnership, sa));
 
         boolean foundApp = false;
         final int depth = parser.getDepth();
@@ -1044,9 +1050,9 @@ public class ParsingPackageUtils {
         }
 
         return input.success(pkg
-                .setLeavingSharedUid(leaving)
+                .setLeavingSharedUser(leaving)
                 .setSharedUserId(str.intern())
-                .setSharedUserLabel(resId(R.styleable.AndroidManifest_sharedUserLabel, sa)));
+                .setSharedUserLabelRes(resId(R.styleable.AndroidManifest_sharedUserLabel, sa)));
     }
 
     private static ParseResult<ParsingPackage> parseKeySets(ParseInput input,
@@ -1260,6 +1266,11 @@ public class ParsingPackageUtils {
             // that may change.
             String name = sa.getNonResourceString(
                     R.styleable.AndroidManifestUsesPermission_name);
+            if (TextUtils.length(name) > MAX_PERMISSION_NAME_LENGTH) {
+                return input.error(INSTALL_PARSE_FAILED_MANIFEST_MALFORMED,
+                        "The name in the <uses-permission> is greater than "
+                                + MAX_PERMISSION_NAME_LENGTH);
+            }
 
             int minSdkVersion =  parseMinOrMaxSdkVersion(sa,
                     R.styleable.AndroidManifestUsesPermission_minSdkVersion,
@@ -1869,7 +1880,7 @@ public class ParsingPackageUtils {
                     return input.error("Empty class name in package " + packageName);
                 }
 
-                pkg.setClassName(outInfoName);
+                pkg.setApplicationClassName(outInfoName);
             }
 
             TypedValue labelValue = sa.peekValue(R.styleable.AndroidManifestApplication_label);
@@ -1939,7 +1950,7 @@ public class ParsingPackageUtils {
                         fullBackupContent = v.data == 0 ? -1 : 0;
                     }
 
-                    pkg.setFullBackupContent(fullBackupContent);
+                    pkg.setFullBackupContentRes(fullBackupContent);
                 }
                 if (DEBUG_BACKUP) {
                     Slog.v(TAG, "fullBackupContent=" + fullBackupContent + " for " + pkgName);
@@ -2247,7 +2258,7 @@ public class ParsingPackageUtils {
                 .setOnBackInvokedCallbackEnabled(bool(false, R.styleable.AndroidManifestApplication_enableOnBackInvokedCallback, sa))
                 // targetSdkVersion gated
                 .setAllowAudioPlaybackCapture(bool(targetSdk >= Build.VERSION_CODES.Q, R.styleable.AndroidManifestApplication_allowAudioPlaybackCapture, sa))
-                .setBaseHardwareAccelerated(bool(targetSdk >= Build.VERSION_CODES.ICE_CREAM_SANDWICH, R.styleable.AndroidManifestApplication_hardwareAccelerated, sa))
+                .setHardwareAccelerated(bool(targetSdk >= Build.VERSION_CODES.ICE_CREAM_SANDWICH, R.styleable.AndroidManifestApplication_hardwareAccelerated, sa))
                 .setRequestLegacyExternalStorage(bool(targetSdk < Build.VERSION_CODES.Q, R.styleable.AndroidManifestApplication_requestLegacyExternalStorage, sa))
                 .setUsesCleartextTraffic(bool(targetSdk < Build.VERSION_CODES.P, R.styleable.AndroidManifestApplication_usesCleartextTraffic, sa))
                 // Ints Default 0
@@ -2258,14 +2269,14 @@ public class ParsingPackageUtils {
                 .setMaxAspectRatio(aFloat(R.styleable.AndroidManifestApplication_maxAspectRatio, sa))
                 .setMinAspectRatio(aFloat(R.styleable.AndroidManifestApplication_minAspectRatio, sa))
                 // Resource ID
-                .setBanner(resId(R.styleable.AndroidManifestApplication_banner, sa))
+                .setBannerRes(resId(R.styleable.AndroidManifestApplication_banner, sa))
                 .setDescriptionRes(resId(R.styleable.AndroidManifestApplication_description, sa))
                 .setIconRes(resId(R.styleable.AndroidManifestApplication_icon, sa))
-                .setLogo(resId(R.styleable.AndroidManifestApplication_logo, sa))
+                .setLogoRes(resId(R.styleable.AndroidManifestApplication_logo, sa))
                 .setNetworkSecurityConfigRes(resId(R.styleable.AndroidManifestApplication_networkSecurityConfig, sa))
                 .setRoundIconRes(resId(R.styleable.AndroidManifestApplication_roundIcon, sa))
-                .setTheme(resId(R.styleable.AndroidManifestApplication_theme, sa))
-                .setDataExtractionRules(
+                .setThemeRes(resId(R.styleable.AndroidManifestApplication_theme, sa))
+                .setDataExtractionRulesRes(
                         resId(R.styleable.AndroidManifestApplication_dataExtractionRules, sa))
                 .setLocaleConfigRes(resId(R.styleable.AndroidManifestApplication_localeConfig, sa))
                 // Strings
@@ -2399,7 +2410,7 @@ public class ParsingPackageUtils {
             }
 
             return input.success(pkg.setStaticSharedLibraryName(lname.intern())
-                    .setStaticSharedLibVersion(
+                    .setStaticSharedLibraryVersion(
                             PackageInfo.composeLongVersionCode(versionMajor, version))
                     .setStaticSharedLibrary(true));
         } finally {
@@ -2694,7 +2705,7 @@ public class ParsingPackageUtils {
         // Build custom App Details activity info instead of parsing it from xml
         return input.success(ParsedActivity.makeAppDetailsActivity(packageName,
                 pkg.getProcessName(), pkg.getUiOptions(), taskAffinity,
-                pkg.isBaseHardwareAccelerated()));
+                pkg.isHardwareAccelerated()));
     }
 
     /**
@@ -2828,7 +2839,7 @@ public class ParsingPackageUtils {
                 return input.skip(message);
             }
 
-            return input.success(pkg.setOverlay(true)
+            return input.success(pkg.setResourceOverlay(true)
                     .setOverlayTarget(target)
                     .setOverlayPriority(priority)
                     .setOverlayTargetOverlayableName(

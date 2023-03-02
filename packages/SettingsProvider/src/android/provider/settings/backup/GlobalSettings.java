@@ -39,7 +39,7 @@ public class GlobalSettings {
      */
     public static final String[] SETTINGS_TO_BACKUP = {
         Settings.Global.APPLY_RAMPING_RINGER,
-        Settings.Global.BUGREPORT_IN_POWER_MENU,
+        Settings.Global.BUGREPORT_IN_POWER_MENU,                        // moved to secure
         Settings.Global.STAY_ON_WHILE_PLUGGED_IN,
         Settings.Global.APP_AUTO_RESTRICTION_ENABLED,
         Settings.Global.AUTO_TIME,
@@ -59,6 +59,7 @@ public class GlobalSettings {
         Settings.Global.ENABLE_AUTOMATIC_SYSTEM_SERVER_HEAP_DUMPS,
         Settings.Global.ENCODED_SURROUND_OUTPUT,
         Settings.Global.ENCODED_SURROUND_OUTPUT_ENABLED_FORMATS,
+        Settings.Global.LOW_POWER_MODE_REMINDER_ENABLED,
         Settings.Global.LOW_POWER_MODE_TRIGGER_LEVEL,
         Settings.Global.LOW_POWER_MODE_STICKY_AUTO_DISABLE_ENABLED,
         Settings.Global.LOW_POWER_MODE_STICKY_AUTO_DISABLE_LEVEL,
@@ -69,8 +70,8 @@ public class GlobalSettings {
         Settings.Global.ZEN_DURATION,
         Settings.Global.CHARGING_VIBRATION_ENABLED,
         Settings.Global.AWARE_ALLOWED,
-        Settings.Global.CUSTOM_BUGREPORT_HANDLER_APP,
-        Settings.Global.CUSTOM_BUGREPORT_HANDLER_USER,
+        Settings.Global.CUSTOM_BUGREPORT_HANDLER_APP,                   // moved to secure
+        Settings.Global.CUSTOM_BUGREPORT_HANDLER_USER,                  // moved to secure
         Settings.Global.DEVELOPMENT_SETTINGS_ENABLED,
         Settings.Global.USER_DISABLED_HDR_FORMATS,
         Settings.Global.ARE_USER_DISABLED_HDR_FORMATS_ALLOWED,
@@ -96,6 +97,7 @@ public class GlobalSettings {
         Settings.Global.Wearable.GESTURE_TOUCH_AND_HOLD_WATCH_FACE_ENABLED,
         Settings.Global.Wearable.BATTERY_SAVER_MODE,
         Settings.Global.Wearable.WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_MS,
-        Settings.Global.Wearable.WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_SET_BY_USER
+        Settings.Global.Wearable.WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_SET_BY_USER,
+        Settings.Global.Wearable.DYNAMIC_COLOR_THEME_ENABLED,
     };
 }

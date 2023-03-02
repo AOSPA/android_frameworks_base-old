@@ -31,46 +31,58 @@ import java.util.concurrent.Executor;
  * CancellationSignal, Executor, OutcomeReceiver)} operation.
  */
 public class ClearCredentialStateException extends Exception {
+    /**
+     * The error type value for when the given operation failed due to an unknown reason.
+     */
+    @NonNull
+    public static final String TYPE_UNKNOWN =
+            "android.credentials.ClearCredentialStateException.TYPE_UNKNOWN";
 
     @NonNull
-    public final String errorType;
+    private final String mType;
 
-    /**
-     * Constructs a {@link ClearCredentialStateException}.
-     *
-     * @throws IllegalArgumentException If errorType is empty.
-     */
-    public ClearCredentialStateException(@NonNull String errorType, @Nullable String message) {
-        this(errorType, message, null);
+    /** Returns the specific exception type. */
+    @NonNull
+    public String getType() {
+        return mType;
     }
 
     /**
      * Constructs a {@link ClearCredentialStateException}.
      *
-     * @throws IllegalArgumentException If errorType is empty.
+     * @throws IllegalArgumentException If type is empty.
+     */
+    public ClearCredentialStateException(@NonNull String type, @Nullable String message) {
+        this(type, message, null);
+    }
+
+    /**
+     * Constructs a {@link ClearCredentialStateException}.
+     *
+     * @throws IllegalArgumentException If type is empty.
      */
     public ClearCredentialStateException(
-            @NonNull String errorType, @Nullable String message, @Nullable Throwable cause) {
+            @NonNull String type, @Nullable String message, @Nullable Throwable cause) {
         super(message, cause);
-        this.errorType = Preconditions.checkStringNotEmpty(errorType,
-                "errorType must not be empty");
+        this.mType = Preconditions.checkStringNotEmpty(type,
+                "type must not be empty");
     }
 
     /**
      * Constructs a {@link ClearCredentialStateException}.
      *
-     * @throws IllegalArgumentException If errorType is empty.
+     * @throws IllegalArgumentException If type is empty.
      */
-    public ClearCredentialStateException(@NonNull String errorType, @Nullable Throwable cause) {
-        this(errorType, null, cause);
+    public ClearCredentialStateException(@NonNull String type, @Nullable Throwable cause) {
+        this(type, null, cause);
     }
 
     /**
      * Constructs a {@link ClearCredentialStateException}.
      *
-     * @throws IllegalArgumentException If errorType is empty.
+     * @throws IllegalArgumentException If type is empty.
      */
-    public ClearCredentialStateException(@NonNull String errorType) {
-        this(errorType, null, null);
+    public ClearCredentialStateException(@NonNull String type) {
+        this(type, null, null);
     }
 }

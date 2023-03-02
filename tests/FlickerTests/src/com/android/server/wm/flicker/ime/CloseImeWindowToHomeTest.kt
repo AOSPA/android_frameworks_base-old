@@ -41,7 +41,7 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-class CloseImeWindowToHomeTest(flicker: FlickerTest) : BaseTest(flicker) {
+open class CloseImeWindowToHomeTest(flicker: FlickerTest) : BaseTest(flicker) {
     private val testApp = ImeAppHelper(instrumentation)
 
     /** {@inheritDoc} */
@@ -104,11 +104,11 @@ class CloseImeWindowToHomeTest(flicker: FlickerTest) : BaseTest(flicker) {
     @IwTest(focusArea = "ime")
     override fun cujCompleted() {
         super.cujCompleted()
-        navBarLayerPositionAtStartAndEnd()
         imeLayerBecomesInvisible()
         imeAppWindowBecomesInvisible()
         imeWindowBecomesInvisible()
         imeLayerBecomesInvisible()
+        runAndIgnoreAssumptionViolation { navBarLayerPositionAtStartAndEnd() }
     }
 
     companion object {

@@ -22,6 +22,8 @@ import android.telephony.ims.aidl.IImsSmsListener;
 import android.telephony.ims.aidl.IImsCapabilityCallback;
 import android.telephony.ims.aidl.ISrvccStartedCallback;
 import android.telephony.ims.feature.CapabilityChangeRequest;
+import android.telephony.ims.MediaQualityStatus;
+import android.telephony.ims.MediaThreshold;
 import android.telephony.ims.RtpHeaderExtensionType;
 
 import android.telephony.ims.ImsCallProfile;
@@ -60,10 +62,14 @@ interface IImsMmTelFeature {
     oneway void notifySrvccCompleted();
     oneway void notifySrvccFailed();
     oneway void notifySrvccCanceled();
+    oneway void setMediaQualityThreshold(int mediaSessionType, in MediaThreshold threshold);
+    MediaQualityStatus queryMediaQualityStatus(int mediaSessionType);
+
     // SMS APIs
     void setSmsListener(IImsSmsListener l);
     oneway void sendSms(in int token, int messageRef, String format, String smsc, boolean retry,
             in byte[] pdu);
+    oneway void onMemoryAvailable(int token);
     oneway void acknowledgeSms(int token, int messageRef, int result);
     oneway void acknowledgeSmsWithPdu(int token, int messageRef, int result, in byte[] pdu);
     oneway void acknowledgeSmsReport(int token, int messageRef, int result);

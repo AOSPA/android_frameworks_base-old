@@ -46,8 +46,6 @@ import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.RemoteException;
 import android.os.SystemProperties;
-import android.os.UserHandle;
-import android.os.UserManager;
 import android.util.Pair;
 import android.util.Size;
 import android.view.DisplayInfo;
@@ -85,7 +83,7 @@ import com.android.wm.shell.pip.PipAnimationController;
 import com.android.wm.shell.pip.PipAppOpsListener;
 import com.android.wm.shell.pip.PipBoundsAlgorithm;
 import com.android.wm.shell.pip.PipBoundsState;
-import com.android.wm.shell.pip.PipKeepClearAlgorithm;
+import com.android.wm.shell.pip.PipKeepClearAlgorithmInterface;
 import com.android.wm.shell.pip.PipMediaController;
 import com.android.wm.shell.pip.PipParamsChangedForwarder;
 import com.android.wm.shell.pip.PipSnapAlgorithm;
@@ -137,7 +135,7 @@ public class PipController implements PipTransitionController.PipTransitionCallb
     private PipAppOpsListener mAppOpsListener;
     private PipMediaController mMediaController;
     private PipBoundsAlgorithm mPipBoundsAlgorithm;
-    private PipKeepClearAlgorithm mPipKeepClearAlgorithm;
+    private PipKeepClearAlgorithmInterface mPipKeepClearAlgorithm;
     private PipBoundsState mPipBoundsState;
     private PipMotionHelper mPipMotionHelper;
     private PipTouchHandler mTouchHandler;
@@ -207,7 +205,8 @@ public class PipController implements PipTransitionController.PipTransitionCallb
 
     private Consumer<Boolean> mOnIsInPipStateChangedListener;
 
-    private interface PipAnimationListener {
+    @VisibleForTesting
+    interface PipAnimationListener {
         /**
          * Notifies the listener that the Pip animation is started.
          */
@@ -379,7 +378,7 @@ public class PipController implements PipTransitionController.PipTransitionCallb
             PipAnimationController pipAnimationController,
             PipAppOpsListener pipAppOpsListener,
             PipBoundsAlgorithm pipBoundsAlgorithm,
-            PipKeepClearAlgorithm pipKeepClearAlgorithm,
+            PipKeepClearAlgorithmInterface pipKeepClearAlgorithm,
             PipBoundsState pipBoundsState,
             PipMotionHelper pipMotionHelper,
             PipMediaController pipMediaController,
@@ -418,7 +417,7 @@ public class PipController implements PipTransitionController.PipTransitionCallb
             PipAnimationController pipAnimationController,
             PipAppOpsListener pipAppOpsListener,
             PipBoundsAlgorithm pipBoundsAlgorithm,
-            PipKeepClearAlgorithm pipKeepClearAlgorithm,
+            PipKeepClearAlgorithmInterface pipKeepClearAlgorithm,
             @NonNull PipBoundsState pipBoundsState,
             PipMotionHelper pipMotionHelper,
             PipMediaController pipMediaController,
@@ -434,11 +433,7 @@ public class PipController implements PipTransitionController.PipTransitionCallb
             Optional<OneHandedController> oneHandedController,
             ShellExecutor mainExecutor
     ) {
-        // Ensure that we are the primary user's SystemUI.
-        final int processUser = UserManager.get(context).getProcessUserId();
-        if (processUser != UserHandle.USER_SYSTEM) {
-            throw new IllegalStateException("Non-primary Pip component not currently supported.");
-        }
+
 
         mContext = context;
         mShellCommandHandler = shellCommandHandler;
@@ -817,7 +812,7 @@ public class PipController implements PipTransitionController.PipTransitionCallb
     @Override
     public void onKeyguardVisibilityChanged(boolean visible, boolean occluded,
             boolean animatingDismiss) {
-        if (!mPipTaskOrganizer.isInPip()) {
+        if (!mPipTransitionState.hasEnteredPip()) {
             return;
         }
         if (visible) {
@@ -872,9 +867,15 @@ public class PipController implements PipTransitionController.PipTransitionCallb
                 animationType == PipAnimationController.ANIM_TYPE_BOUNDS);
     }
 
-    private void setPinnedStackAnimationListener(PipAnimationListener callback) {
+    @VisibleForTesting
+    void setPinnedStackAnimationListener(PipAnimationListener callback) {
         mPinnedStackAnimationRecentsCallback = callback;
         onPipResourceDimensionsChanged();
+    }
+
+    @VisibleForTesting
+    boolean hasPinnedStackAnimationListener() {
+        return mPinnedStackAnimationRecentsCallback != null;
     }
 
     private void onPipResourceDimensionsChanged() {
@@ -1166,6 +1167,8 @@ public class PipController implements PipTransitionController.PipTransitionCallb
         @Override
         public void invalidate() {
             mController = null;
+            // Unregister the listener to ensure any registered binder death recipients are unlinked
+            mListener.unregister();
         }
 
         @Override

@@ -17,10 +17,13 @@
 package android.view.inputmethod;
 
 import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.TestApi;
 import android.graphics.RectF;
 import android.inputmethodservice.InputMethodService;
+import android.os.Parcel;
+import android.os.Parcelable;
 import android.view.MotionEvent;
 
 import java.lang.annotation.Retention;
@@ -82,39 +85,68 @@ public abstract class HandwritingGesture {
     @IntDef({GRANULARITY_CHARACTER, GRANULARITY_WORD})
     @interface Granularity {}
 
-    /** Undefined gesture type. */
+    /**
+     * Undefined gesture type.
+     * @hide
+     */
+    @TestApi
     public static final int GESTURE_TYPE_NONE = 0x0000;
 
     /**
      * Gesture of type {@link SelectGesture} to select an area of text.
+     * @hide
      */
+    @TestApi
     public static final int GESTURE_TYPE_SELECT = 0x0001;
 
     /**
      * Gesture of type {@link InsertGesture} to insert text at a designated point.
+     * @hide
      */
+    @TestApi
     public static final int GESTURE_TYPE_INSERT = 1 << 1;
 
     /**
      * Gesture of type {@link DeleteGesture} to delete an area of text.
+     * @hide
      */
+    @TestApi
     public static final int GESTURE_TYPE_DELETE = 1 << 2;
 
-    /** Gesture of type {@link RemoveSpaceGesture} to remove whitespace from text. */
+    /**
+     * Gesture of type {@link RemoveSpaceGesture} to remove whitespace from text.
+     * @hide
+     */
+    @TestApi
     public static final int GESTURE_TYPE_REMOVE_SPACE = 1 << 3;
 
-    /** Gesture of type {@link JoinOrSplitGesture} to join or split text. */
+    /**
+     * Gesture of type {@link JoinOrSplitGesture} to join or split text.
+     * @hide
+     */
+    @TestApi
     public static final int GESTURE_TYPE_JOIN_OR_SPLIT = 1 << 4;
 
     /**
      * Gesture of type {@link SelectRangeGesture} to select range of text.
+     * @hide
      */
+    @TestApi
     public static final int GESTURE_TYPE_SELECT_RANGE = 1 << 5;
 
     /**
      * Gesture of type {@link DeleteRangeGesture} to delete range of text.
+     * @hide
      */
+    @TestApi
     public static final int GESTURE_TYPE_DELETE_RANGE = 1 << 6;
+
+    /**
+     * Gesture of type {@link InsertModeGesture} to begin an insert mode at a designated point.
+     * @hide
+     */
+    @TestApi
+    public static final int GESTURE_TYPE_INSERT_MODE = 1 << 7;
 
     /**
      * Type of gesture like {@link #GESTURE_TYPE_SELECT}, {@link #GESTURE_TYPE_INSERT},
@@ -125,6 +157,7 @@ public abstract class HandwritingGesture {
             GESTURE_TYPE_SELECT,
             GESTURE_TYPE_SELECT_RANGE,
             GESTURE_TYPE_INSERT,
+            GESTURE_TYPE_INSERT_MODE,
             GESTURE_TYPE_DELETE,
             GESTURE_TYPE_DELETE_RANGE,
             GESTURE_TYPE_REMOVE_SPACE,
@@ -143,6 +176,7 @@ public abstract class HandwritingGesture {
             GESTURE_TYPE_SELECT,
             GESTURE_TYPE_SELECT_RANGE,
             GESTURE_TYPE_INSERT,
+            GESTURE_TYPE_INSERT_MODE,
             GESTURE_TYPE_DELETE,
             GESTURE_TYPE_DELETE_RANGE,
             GESTURE_TYPE_REMOVE_SPACE,
@@ -159,7 +193,7 @@ public abstract class HandwritingGesture {
      * @hide
      */
     @TestApi
-    public @GestureType int getGestureType() {
+    public final @GestureType int getGestureType() {
         return mType;
     }
 
@@ -173,7 +207,59 @@ public abstract class HandwritingGesture {
      * example 2: join can fail if the gesture is drawn over text but there is no whitespace.
      */
     @Nullable
-    public String getFallbackText() {
+    public final String getFallbackText() {
         return mFallbackText;
+    }
+
+    /**
+     * Dump data into a byte array so that you can pass the data across process boundary.
+     *
+     * @return byte array data.
+     * @see #fromByteArray(byte[])
+     * @hide
+     */
+    @TestApi
+    @NonNull
+    public final byte[] toByteArray() {
+        if (!(this instanceof Parcelable)) {
+            throw new UnsupportedOperationException(getClass() + " is not Parcelable");
+        }
+        final Parcelable self = (Parcelable) this;
+        if ((self.describeContents() & Parcelable.CONTENTS_FILE_DESCRIPTOR) != 0) {
+            throw new UnsupportedOperationException("Gesture that contains FD is not supported");
+        }
+        Parcel parcel = null;
+        try {
+            parcel = Parcel.obtain();
+            ParcelableHandwritingGesture.of(this).writeToParcel(parcel, 0);
+            return parcel.marshall();
+        } finally {
+            if (parcel != null) {
+                parcel.recycle();
+            }
+        }
+    }
+
+    /**
+     * Create a new instance from byte array obtained from {@link #toByteArray()}.
+     *
+     * @param buffer byte array obtained from {@link #toByteArray()}
+     * @return A new instance of {@link HandwritingGesture} subclass.
+     * @hide
+     */
+    @TestApi
+    @NonNull
+    public static HandwritingGesture fromByteArray(@NonNull byte[] buffer) {
+        Parcel parcel = null;
+        try {
+            parcel = Parcel.obtain();
+            parcel.unmarshall(buffer, 0, buffer.length);
+            parcel.setDataPosition(0);
+            return ParcelableHandwritingGesture.CREATOR.createFromParcel(parcel).get();
+        } finally {
+            if (parcel != null) {
+                parcel.recycle();
+            }
+        }
     }
 }

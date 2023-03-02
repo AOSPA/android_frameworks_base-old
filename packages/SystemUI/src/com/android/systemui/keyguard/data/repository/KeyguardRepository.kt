@@ -29,6 +29,7 @@ import com.android.systemui.doze.DozeHost
 import com.android.systemui.doze.DozeMachine
 import com.android.systemui.doze.DozeTransitionCallback
 import com.android.systemui.doze.DozeTransitionListener
+import com.android.systemui.dreams.DreamOverlayCallbackController
 import com.android.systemui.keyguard.WakefulnessLifecycle
 import com.android.systemui.keyguard.shared.model.BiometricUnlockModel
 import com.android.systemui.keyguard.shared.model.BiometricUnlockSource
@@ -39,6 +40,7 @@ import com.android.systemui.keyguard.shared.model.WakefulnessModel
 import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.statusbar.phone.BiometricUnlockController
 import com.android.systemui.statusbar.phone.BiometricUnlockController.WakeAndUnlockMode
+import com.android.systemui.statusbar.phone.DozeParameters
 import com.android.systemui.statusbar.policy.KeyguardStateController
 import javax.inject.Inject
 import kotlinx.coroutines.channels.awaitClose
@@ -78,11 +80,17 @@ interface KeyguardRepository {
      */
     val isKeyguardShowing: Flow<Boolean>
 
+    /** Is an activity showing over the keyguard? */
+    val isKeyguardOccluded: Flow<Boolean>
+
     /** Observable for the signal that keyguard is about to go away. */
     val isKeyguardGoingAway: Flow<Boolean>
 
     /** Observable for whether the bouncer is showing. */
     val isBouncerShowing: Flow<Boolean>
+
+    /** Is the always-on display available to be used? */
+    val isAodAvailable: Flow<Boolean>
 
     /**
      * Observable for whether we are in doze state.
@@ -103,6 +111,9 @@ interface KeyguardRepository {
      * to be active, such as screensavers.
      */
     val isDreaming: Flow<Boolean>
+
+    /** Observable for whether the device is dreaming with an overlay, see [DreamOverlayService] */
+    val isDreamingWithOverlay: Flow<Boolean>
 
     /**
      * Observable for the amount of doze we are currently in.
@@ -175,7 +186,9 @@ constructor(
     private val keyguardStateController: KeyguardStateController,
     private val keyguardUpdateMonitor: KeyguardUpdateMonitor,
     private val dozeTransitionListener: DozeTransitionListener,
+    private val dozeParameters: DozeParameters,
     private val authController: AuthController,
+    private val dreamOverlayCallbackController: DreamOverlayCallbackController,
 ) : KeyguardRepository {
     private val _animateBottomAreaDozingTransitions = MutableStateFlow(false)
     override val animateBottomAreaDozingTransitions =
@@ -187,28 +200,80 @@ constructor(
     private val _clockPosition = MutableStateFlow(Position(0, 0))
     override val clockPosition = _clockPosition.asStateFlow()
 
-    override val isKeyguardShowing: Flow<Boolean> = conflatedCallbackFlow {
-        val callback =
-            object : KeyguardStateController.Callback {
-                override fun onKeyguardShowingChanged() {
-                    trySendWithFailureLogging(
-                        keyguardStateController.isShowing,
-                        TAG,
-                        "updated isKeyguardShowing"
-                    )
-                }
+    override val isKeyguardShowing: Flow<Boolean> =
+        conflatedCallbackFlow {
+                val callback =
+                    object : KeyguardStateController.Callback {
+                        override fun onKeyguardShowingChanged() {
+                            trySendWithFailureLogging(
+                                keyguardStateController.isShowing,
+                                TAG,
+                                "updated isKeyguardShowing"
+                            )
+                        }
+                    }
+
+                keyguardStateController.addCallback(callback)
+                // Adding the callback does not send an initial update.
+                trySendWithFailureLogging(
+                    keyguardStateController.isShowing,
+                    TAG,
+                    "initial isKeyguardShowing"
+                )
+
+                awaitClose { keyguardStateController.removeCallback(callback) }
             }
+            .distinctUntilChanged()
 
-        keyguardStateController.addCallback(callback)
-        // Adding the callback does not send an initial update.
-        trySendWithFailureLogging(
-            keyguardStateController.isShowing,
-            TAG,
-            "initial isKeyguardShowing"
-        )
+    override val isAodAvailable: Flow<Boolean> =
+        conflatedCallbackFlow {
+                val callback =
+                    object : DozeParameters.Callback {
+                        override fun onAlwaysOnChange() {
+                            trySendWithFailureLogging(
+                                dozeParameters.getAlwaysOn(),
+                                TAG,
+                                "updated isAodAvailable"
+                            )
+                        }
+                    }
 
-        awaitClose { keyguardStateController.removeCallback(callback) }
-    }
+                dozeParameters.addCallback(callback)
+                // Adding the callback does not send an initial update.
+                trySendWithFailureLogging(
+                    dozeParameters.getAlwaysOn(),
+                    TAG,
+                    "initial isAodAvailable"
+                )
+
+                awaitClose { dozeParameters.removeCallback(callback) }
+            }
+            .distinctUntilChanged()
+
+    override val isKeyguardOccluded: Flow<Boolean> =
+        conflatedCallbackFlow {
+                val callback =
+                    object : KeyguardStateController.Callback {
+                        override fun onKeyguardShowingChanged() {
+                            trySendWithFailureLogging(
+                                keyguardStateController.isOccluded,
+                                TAG,
+                                "updated isKeyguardOccluded"
+                            )
+                        }
+                    }
+
+                keyguardStateController.addCallback(callback)
+                // Adding the callback does not send an initial update.
+                trySendWithFailureLogging(
+                    keyguardStateController.isOccluded,
+                    TAG,
+                    "initial isKeyguardOccluded"
+                )
+
+                awaitClose { keyguardStateController.removeCallback(callback) }
+            }
+            .distinctUntilChanged()
 
     override val isKeyguardGoingAway: Flow<Boolean> = conflatedCallbackFlow {
         val callback =
@@ -272,6 +337,28 @@ constructor(
                 )
 
                 awaitClose { dozeHost.removeCallback(callback) }
+            }
+            .distinctUntilChanged()
+
+    override val isDreamingWithOverlay: Flow<Boolean> =
+        conflatedCallbackFlow {
+                val callback =
+                    object : DreamOverlayCallbackController.Callback {
+                        override fun onStartDream() {
+                            trySendWithFailureLogging(true, TAG, "updated isDreamingWithOverlay")
+                        }
+                        override fun onWakeUp() {
+                            trySendWithFailureLogging(false, TAG, "updated isDreamingWithOverlay")
+                        }
+                    }
+                dreamOverlayCallbackController.addCallback(callback)
+                trySendWithFailureLogging(
+                    dreamOverlayCallbackController.isDreaming,
+                    TAG,
+                    "initial isDreamingWithOverlay",
+                )
+
+                awaitClose { dreamOverlayCallbackController.removeCallback(callback) }
             }
             .distinctUntilChanged()
 

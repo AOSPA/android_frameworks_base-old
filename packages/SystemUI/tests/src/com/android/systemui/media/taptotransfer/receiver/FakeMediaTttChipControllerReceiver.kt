@@ -22,28 +22,32 @@ import android.os.PowerManager
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityManager
+import com.android.systemui.dump.DumpManager
 import com.android.systemui.media.taptotransfer.MediaTttFlags
 import com.android.systemui.media.taptotransfer.common.MediaTttLogger
 import com.android.systemui.statusbar.CommandQueue
 import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.util.concurrency.DelayableExecutor
+import com.android.systemui.util.time.SystemClock
 import com.android.systemui.util.view.ViewUtil
 import com.android.systemui.util.wakelock.WakeLock
 
 class FakeMediaTttChipControllerReceiver(
     commandQueue: CommandQueue,
     context: Context,
-    logger: MediaTttLogger,
+    logger: MediaTttLogger<ChipReceiverInfo>,
     windowManager: WindowManager,
     mainExecutor: DelayableExecutor,
     accessibilityManager: AccessibilityManager,
     configurationController: ConfigurationController,
+    dumpManager: DumpManager,
     powerManager: PowerManager,
     mainHandler: Handler,
     mediaTttFlags: MediaTttFlags,
     uiEventLogger: MediaTttReceiverUiEventLogger,
     viewUtil: ViewUtil,
     wakeLockBuilder: WakeLock.Builder,
+    systemClock: SystemClock,
 ) :
     MediaTttChipControllerReceiver(
         commandQueue,
@@ -53,14 +57,16 @@ class FakeMediaTttChipControllerReceiver(
         mainExecutor,
         accessibilityManager,
         configurationController,
+        dumpManager,
         powerManager,
         mainHandler,
         mediaTttFlags,
         uiEventLogger,
         viewUtil,
         wakeLockBuilder,
+        systemClock,
     ) {
-    override fun animateViewOut(view: ViewGroup, onAnimationEnd: Runnable) {
+    override fun animateViewOut(view: ViewGroup, removalReason: String?, onAnimationEnd: Runnable) {
         // Just bypass the animation in tests
         onAnimationEnd.run()
     }

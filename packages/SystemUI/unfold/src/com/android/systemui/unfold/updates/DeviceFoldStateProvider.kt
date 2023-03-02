@@ -31,6 +31,7 @@ import com.android.systemui.unfold.updates.hinge.FULLY_OPEN_DEGREES
 import com.android.systemui.unfold.updates.hinge.HingeAngleProvider
 import com.android.systemui.unfold.updates.screen.ScreenStatusProvider
 import com.android.systemui.unfold.util.CurrentActivityTypeProvider
+import com.android.systemui.unfold.util.UnfoldKeyguardVisibilityProvider
 import java.util.concurrent.Executor
 import javax.inject.Inject
 
@@ -42,6 +43,7 @@ constructor(
     private val screenStatusProvider: ScreenStatusProvider,
     private val foldProvider: FoldProvider,
     private val activityTypeProvider: CurrentActivityTypeProvider,
+    private val unfoldKeyguardVisibilityProvider: UnfoldKeyguardVisibilityProvider,
     private val rotationChangeProvider: RotationChangeProvider,
     @UnfoldMain private val mainExecutor: Executor,
     @UnfoldMain private val handler: Handler
@@ -77,6 +79,7 @@ constructor(
         screenStatusProvider.addCallback(screenListener)
         hingeAngleProvider.addCallback(hingeAngleListener)
         rotationChangeProvider.addCallback(rotationListener)
+        activityTypeProvider.init()
     }
 
     override fun stop() {
@@ -85,6 +88,7 @@ constructor(
         hingeAngleProvider.removeCallback(hingeAngleListener)
         hingeAngleProvider.stop()
         rotationChangeProvider.removeCallback(rotationListener)
+        activityTypeProvider.uninit()
     }
 
     override fun addCallback(listener: FoldUpdatesListener) {
@@ -113,19 +117,17 @@ constructor(
         }
 
         val isClosing = angle < lastHingeAngle
-        val closingThreshold = getClosingThreshold()
-        val closingThresholdMet = closingThreshold == null || angle < closingThreshold
         val isFullyOpened = FULLY_OPEN_DEGREES - angle < FULLY_OPEN_THRESHOLD_DEGREES
         val closingEventDispatched = lastFoldUpdate == FOLD_UPDATE_START_CLOSING
         val screenAvailableEventSent = isUnfoldHandled
 
         if (isClosing // hinge angle should be decreasing since last update
-                && closingThresholdMet // hinge angle is below certain threshold
                 && !closingEventDispatched  // we haven't sent closing event already
                 && !isFullyOpened // do not send closing event if we are in fully opened hinge
                                   // angle range as closing threshold could overlap this range
                 && screenAvailableEventSent // do not send closing event if we are still in
                                             // the process of turning on the inner display
+                && isClosingThresholdMet(angle) // hinge angle is below certain threshold.
         ) {
             notifyFoldUpdate(FOLD_UPDATE_START_CLOSING)
         }
@@ -144,6 +146,11 @@ constructor(
         outputListeners.forEach { it.onHingeAngleUpdate(angle) }
     }
 
+    private fun isClosingThresholdMet(currentAngle: Float) : Boolean {
+        val closingThreshold = getClosingThreshold()
+        return closingThreshold == null || currentAngle < closingThreshold
+    }
+
     /**
      * Fold animation should be started only after the threshold returned here.
      *
@@ -152,12 +159,13 @@ constructor(
      */
     private fun getClosingThreshold(): Int? {
         val isHomeActivity = activityTypeProvider.isHomeActivity ?: return null
+        val isKeyguardVisible = unfoldKeyguardVisibilityProvider.isKeyguardVisible == true
 
         if (DEBUG) {
-            Log.d(TAG, "isHomeActivity=$isHomeActivity")
+            Log.d(TAG, "isHomeActivity=$isHomeActivity, isOnKeyguard=$isKeyguardVisible")
         }
 
-        return if (isHomeActivity) {
+        return if (isHomeActivity || isKeyguardVisible) {
             null
         } else {
             START_CLOSING_ON_APPS_THRESHOLD_DEGREES
@@ -257,7 +265,7 @@ fun @receiver:FoldUpdate Int.name() =
     }
 
 private const val TAG = "DeviceFoldProvider"
-private const val DEBUG = false
+private val DEBUG = Log.isLoggable(TAG, Log.DEBUG)
 
 /** Threshold after which we consider the device fully unfolded. */
 @VisibleForTesting const val FULLY_OPEN_THRESHOLD_DEGREES = 15f

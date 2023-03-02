@@ -66,6 +66,7 @@ import android.provider.DocumentsContract;
 import android.provider.DocumentsProvider;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
+import android.service.chooser.ChooserAction;
 import android.telecom.PhoneAccount;
 import android.telecom.TelecomManager;
 import android.text.TextUtils;
@@ -1814,8 +1815,8 @@ public class Intent implements Parcelable, Cloneable {
      * Package manager install result code.  @hide because result codes are not
      * yet ready to be exposed.
      */
-    public static final String EXTRA_INSTALL_RESULT
-            = "android.intent.extra.INSTALL_RESULT";
+    @SystemApi
+    public static final String EXTRA_INSTALL_RESULT = "android.intent.extra.INSTALL_RESULT";
 
     /**
      * Activity Action: Launch application uninstaller.
@@ -1841,6 +1842,7 @@ public class Intent implements Parcelable, Cloneable {
      * Specify whether the package should be uninstalled for all users.
      * @hide because these should not be part of normal application flow.
      */
+    @SystemApi
     public static final String EXTRA_UNINSTALL_ALL_USERS
             = "android.intent.extra.UNINSTALL_ALL_USERS";
 
@@ -2421,6 +2423,30 @@ public class Intent implements Parcelable, Cloneable {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_SAFETY_CENTER =
             "android.intent.action.SAFETY_CENTER";
+
+    /**
+     * Activity action: Launch the UI to view recent updates that installed apps have made to their
+     * data sharing policy in their safety labels.
+     *
+     * <p>
+     * Input: Nothing.
+     * </p>
+     * <p>
+     * Output: Nothing.
+     * </p>
+     *
+     * <p class="note">
+     * This intent action requires the {@link android.Manifest.permission#GRANT_RUNTIME_PERMISSIONS}
+     * permission.
+     * </p>
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(Manifest.permission.GRANT_RUNTIME_PERMISSIONS)
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_REVIEW_APP_DATA_SHARING_UPDATES =
+            "android.intent.action.REVIEW_APP_DATA_SHARING_UPDATES";
 
     // ---------------------------------------------------------------------
     // ---------------------------------------------------------------------
@@ -3571,17 +3597,6 @@ public class Intent implements Parcelable, Cloneable {
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_MEDIA_BUTTON = "android.intent.action.MEDIA_BUTTON";
-
-    /**
-     * Broadcast action: Launch System output switcher. Includes a single extra field,
-     * {@link #EXTRA_PACKAGE_NAME}, which specifies the package name of the calling app
-     * so that the system can get the corresponding MediaSession for the output switcher.
-     *
-     * @see #EXTRA_PACKAGE_NAME
-     */
-    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
-    public static final String ACTION_SHOW_OUTPUT_SWITCHER =
-            "android.intent.action.SHOW_OUTPUT_SWITCHER";
 
     /**
      * Broadcast Action:  The "Camera Button" was pressed.  Includes a single
@@ -5814,6 +5829,24 @@ public class Intent implements Parcelable, Cloneable {
             = "android.intent.extra.CHOOSER_REFINEMENT_INTENT_SENDER";
 
     /**
+     * A Parcelable[] of {@link ChooserAction} objects to provide the Android Sharesheet with
+     * app-specific actions to be presented to the user when invoking {@link #ACTION_CHOOSER}.
+     */
+    public static final String EXTRA_CHOOSER_CUSTOM_ACTIONS =
+            "android.intent.extra.CHOOSER_CUSTOM_ACTIONS";
+
+    /**
+     * Optional argument to be used with {@link #ACTION_CHOOSER}.
+     * A {@link android.app.PendingIntent} to be sent when the user wants to do payload reselection
+     * in the sharesheet.
+     * A reselection action allows the user to return to the source app to change the content being
+     * shared.
+     * @hide
+     */
+    public static final String EXTRA_CHOOSER_PAYLOAD_RESELECTION_ACTION =
+            "android.intent.extra.CHOOSER_PAYLOAD_RESELECTION_ACTION";
+
+    /**
      * An {@code ArrayList} of {@code String} annotations describing content for
      * {@link #ACTION_CHOOSER}.
      *
@@ -6105,9 +6138,8 @@ public class Intent implements Parcelable, Cloneable {
     public static final String EXTRA_UID = "android.intent.extra.UID";
 
     /**
-     * @hide String array of package names.
+     * String array of package names.
      */
-    @SystemApi
     public static final String EXTRA_PACKAGES = "android.intent.extra.PACKAGES";
 
     /**
@@ -11569,7 +11601,7 @@ public class Intent implements Parcelable, Cloneable {
     private void toUriInner(StringBuilder uri, String scheme, String defAction,
             String defPackage, int flags) {
         if (scheme != null) {
-            uri.append("scheme=").append(scheme).append(';');
+            uri.append("scheme=").append(Uri.encode(scheme)).append(';');
         }
         if (mAction != null && !mAction.equals(defAction)) {
             uri.append("action=").append(Uri.encode(mAction)).append(';');

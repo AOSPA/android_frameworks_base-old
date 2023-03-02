@@ -57,7 +57,7 @@ import androidx.test.filters.SmallTest;
 
 import com.android.internal.os.BatteryStatsHistoryIterator;
 import com.android.internal.os.PowerProfile;
-import com.android.internal.power.MeasuredEnergyStats;
+import com.android.internal.power.EnergyConsumerStats;
 import com.android.server.power.stats.BatteryStatsImpl.DualTimer;
 
 import junit.framework.TestCase;
@@ -73,16 +73,8 @@ import java.util.function.IntConsumer;
 
 /**
  * Test various BatteryStatsImpl noteStart methods.
- *
- * Build/Install/Run: bit FrameworksCoreTests:BatteryStatsNoteTest
- *
- * Alternatively,
- * Build: m FrameworksCoreTests
- * Install: adb install -r \
- *      ${ANDROID_PRODUCT_OUT}/data/app/FrameworksCoreTests/FrameworksCoreTests.apk
- * Run: adb shell am instrument -e class BatteryStatsNoteTest -w \
- *      com.android.frameworks.coretests/androidx.test.runner.AndroidJUnitRunner
  */
+@SuppressWarnings("GuardedBy")
 public class BatteryStatsNoteTest extends TestCase {
     private static final String TAG = BatteryStatsNoteTest.class.getSimpleName();
 
@@ -271,11 +263,11 @@ public class BatteryStatsNoteTest extends TestCase {
         clocks.realtime = clocks.uptime = 220;
         bi.noteLongPartialWakelockFinish(name, historyName, ISOLATED_UID);
 
-        final BatteryStatsHistoryIterator iterator =  bi.createBatteryStatsHistoryIterator();
+        final BatteryStatsHistoryIterator iterator =  bi.iterateBatteryStatsHistory();
 
-        BatteryStats.HistoryItem item = new BatteryStats.HistoryItem();
+        BatteryStats.HistoryItem item;
 
-        while (iterator.next(item)) {
+        while ((item = iterator.next()) != null) {
             if (item.eventCode == HistoryItem.EVENT_LONG_WAKE_LOCK_START) break;
         }
         assertThat(item.eventCode).isEqualTo(HistoryItem.EVENT_LONG_WAKE_LOCK_START);
@@ -283,7 +275,7 @@ public class BatteryStatsNoteTest extends TestCase {
         assertThat(item.eventTag.string).isEqualTo(historyName);
         assertThat(item.eventTag.uid).isEqualTo(UID);
 
-        while (iterator.next(item)) {
+        while ((item = iterator.next()) != null) {
             if (item.eventCode == HistoryItem.EVENT_LONG_WAKE_LOCK_FINISH) break;
         }
         assertThat(item.eventCode).isEqualTo(HistoryItem.EVENT_LONG_WAKE_LOCK_FINISH);
@@ -327,11 +319,11 @@ public class BatteryStatsNoteTest extends TestCase {
         clocks.realtime = clocks.uptime = 220;
         bi.noteLongPartialWakelockFinish(name, historyName, ISOLATED_UID);
 
-        final BatteryStatsHistoryIterator iterator = bi.createBatteryStatsHistoryIterator();
+        final BatteryStatsHistoryIterator iterator = bi.iterateBatteryStatsHistory();
 
-        BatteryStats.HistoryItem item = new BatteryStats.HistoryItem();
+        BatteryStats.HistoryItem item;
 
-        while (iterator.next(item)) {
+        while ((item = iterator.next()) != null) {
             if (item.eventCode == HistoryItem.EVENT_LONG_WAKE_LOCK_START) break;
         }
         assertThat(item.eventCode).isEqualTo(HistoryItem.EVENT_LONG_WAKE_LOCK_START);
@@ -339,7 +331,7 @@ public class BatteryStatsNoteTest extends TestCase {
         assertThat(item.eventTag.string).isEqualTo(historyName);
         assertThat(item.eventTag.uid).isEqualTo(UID);
 
-        while (iterator.next(item)) {
+        while ((item = iterator.next()) != null) {
             if (item.eventCode == HistoryItem.EVENT_LONG_WAKE_LOCK_FINISH) break;
         }
         assertThat(item.eventCode).isEqualTo(HistoryItem.EVENT_LONG_WAKE_LOCK_FINISH);
@@ -359,6 +351,7 @@ public class BatteryStatsNoteTest extends TestCase {
         // map of ActivityManager process states and how long to simulate run time in each state
         Map<Integer, Integer> stateRuntimeMap = new HashMap<Integer, Integer>();
         stateRuntimeMap.put(ActivityManager.PROCESS_STATE_TOP, 1111);
+        stateRuntimeMap.put(ActivityManager.PROCESS_STATE_BOUND_TOP, 7382);
         stateRuntimeMap.put(ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE, 1234);
         stateRuntimeMap.put(ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE, 2468);
         stateRuntimeMap.put(ActivityManager.PROCESS_STATE_TOP_SLEEPING, 7531);
@@ -395,7 +388,8 @@ public class BatteryStatsNoteTest extends TestCase {
 
         actualRunTimeUs = uid.getProcessStateTime(BatteryStats.Uid.PROCESS_STATE_FOREGROUND_SERVICE,
                 elapsedTimeUs, STATS_SINCE_CHARGED);
-        expectedRunTimeMs = stateRuntimeMap.get(ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE);
+        expectedRunTimeMs = stateRuntimeMap.get(ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE)
+                + stateRuntimeMap.get(ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE);
         assertEquals(expectedRunTimeMs * 1000, actualRunTimeUs);
 
         actualRunTimeUs = uid.getProcessStateTime(BatteryStats.Uid.PROCESS_STATE_TOP_SLEEPING,
@@ -405,8 +399,7 @@ public class BatteryStatsNoteTest extends TestCase {
 
         actualRunTimeUs = uid.getProcessStateTime(BatteryStats.Uid.PROCESS_STATE_FOREGROUND,
                 elapsedTimeUs, STATS_SINCE_CHARGED);
-        expectedRunTimeMs = stateRuntimeMap.get(ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND)
-                + stateRuntimeMap.get(ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE);
+        expectedRunTimeMs = stateRuntimeMap.get(ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND);
         assertEquals(expectedRunTimeMs * 1000, actualRunTimeUs);
 
         actualRunTimeUs = uid.getProcessStateTime(BatteryStats.Uid.PROCESS_STATE_BACKGROUND,
@@ -414,7 +407,8 @@ public class BatteryStatsNoteTest extends TestCase {
         expectedRunTimeMs = stateRuntimeMap.get(ActivityManager.PROCESS_STATE_TRANSIENT_BACKGROUND)
                 + stateRuntimeMap.get(ActivityManager.PROCESS_STATE_BACKUP)
                 + stateRuntimeMap.get(ActivityManager.PROCESS_STATE_SERVICE)
-                + stateRuntimeMap.get(ActivityManager.PROCESS_STATE_RECEIVER);
+                + stateRuntimeMap.get(ActivityManager.PROCESS_STATE_RECEIVER)
+                + stateRuntimeMap.get(ActivityManager.PROCESS_STATE_BOUND_TOP);
         assertEquals(expectedRunTimeMs * 1000, actualRunTimeUs);
 
         actualRunTimeUs = uid.getProcessStateTime(BatteryStats.Uid.PROCESS_STATE_CACHED,
@@ -939,26 +933,27 @@ public class BatteryStatsNoteTest extends TestCase {
         clocks.realtime = clocks.uptime = 5000;
         bi.noteAlarmFinishLocked("foo", null, UID);
 
-        HistoryItem item = new HistoryItem();
-        assertTrue(bi.startIteratingHistoryLocked());
+        BatteryStatsHistoryIterator iterator = bi.iterateBatteryStatsHistory();
+        HistoryItem item;
 
-        assertTrue(bi.getNextHistoryLocked(item));
+        assertThat(item = iterator.next()).isNotNull();
         assertEquals(HistoryItem.EVENT_ALARM_START, item.eventCode);
         assertEquals("foo", item.eventTag.string);
         assertEquals(UID, item.eventTag.uid);
 
         // TODO(narayan): Figure out why this event is written to the history buffer. See
         // test below where it is being interspersed between multiple START events too.
-        assertTrue(bi.getNextHistoryLocked(item));
+        assertThat(item = iterator.next()).isNotNull();
         assertEquals(HistoryItem.EVENT_NONE, item.eventCode);
 
-        assertTrue(bi.getNextHistoryLocked(item));
+        assertThat(item = iterator.next()).isNotNull();
         assertEquals(HistoryItem.EVENT_ALARM_FINISH, item.eventCode);
         assertTrue(item.isDeltaData());
         assertEquals("foo", item.eventTag.string);
         assertEquals(UID, item.eventTag.uid);
 
-        assertFalse(bi.getNextHistoryLocked(item));
+        assertThat(iterator.hasNext()).isFalse();
+        assertThat(iterator.next()).isNull();
     }
 
     @SmallTest
@@ -978,28 +973,28 @@ public class BatteryStatsNoteTest extends TestCase {
         clocks.realtime = clocks.uptime = 5000;
         bi.noteAlarmFinishLocked("foo", ws, UID);
 
-        HistoryItem item = new HistoryItem();
-        assertTrue(bi.startIteratingHistoryLocked());
+        BatteryStatsHistoryIterator iterator = bi.iterateBatteryStatsHistory();
+        HistoryItem item;
 
-        assertTrue(bi.getNextHistoryLocked(item));
+        assertThat(item = iterator.next()).isNotNull();
         assertEquals(HistoryItem.EVENT_ALARM_START, item.eventCode);
         assertEquals("foo", item.eventTag.string);
         assertEquals(100, item.eventTag.uid);
 
-        assertTrue(bi.getNextHistoryLocked(item));
+        assertThat(item = iterator.next()).isNotNull();
         assertEquals(HistoryItem.EVENT_NONE, item.eventCode);
 
-        assertTrue(bi.getNextHistoryLocked(item));
+        assertThat(item = iterator.next()).isNotNull();
         assertEquals(HistoryItem.EVENT_ALARM_START, item.eventCode);
         assertEquals("foo", item.eventTag.string);
         assertEquals(500, item.eventTag.uid);
 
-        assertTrue(bi.getNextHistoryLocked(item));
+        assertThat(item = iterator.next()).isNotNull();
         assertEquals(HistoryItem.EVENT_ALARM_FINISH, item.eventCode);
         assertEquals("foo", item.eventTag.string);
         assertEquals(100, item.eventTag.uid);
 
-        assertTrue(bi.getNextHistoryLocked(item));
+        assertThat(item = iterator.next()).isNotNull();
         assertEquals(HistoryItem.EVENT_ALARM_FINISH, item.eventCode);
         assertEquals("foo", item.eventTag.string);
         assertEquals(500, item.eventTag.uid);
@@ -1149,7 +1144,7 @@ public class BatteryStatsNoteTest extends TestCase {
         // Case A: uid1 off, uid2 off, battery off, screen off
         bi.updateTimeBasesLocked(battery, screen[0], clocks.realtime * 1000, 0);
         bi.setOnBatteryInternal(battery);
-        bi.updateDisplayMeasuredEnergyStatsLocked(new long[]{500_000}, screen, clocks.realtime);
+        bi.updateDisplayEnergyConsumerStatsLocked(new long[]{500_000}, screen, clocks.realtime);
         checkMeasuredCharge("A", uid1, blame1, uid2, blame2, globalDoze, bi);
 
         // Case B: uid1 off, uid2 off, battery ON,  screen off
@@ -1158,24 +1153,24 @@ public class BatteryStatsNoteTest extends TestCase {
         bi.updateTimeBasesLocked(battery, screen[0], clocks.realtime * 1000, 0);
         bi.setOnBatteryInternal(battery);
         clocks.realtime += 19;
-        bi.updateDisplayMeasuredEnergyStatsLocked(new long[]{510_000}, screen, clocks.realtime);
+        bi.updateDisplayEnergyConsumerStatsLocked(new long[]{510_000}, screen, clocks.realtime);
         checkMeasuredCharge("B", uid1, blame1, uid2, blame2, globalDoze, bi);
 
         // Case C: uid1 ON,  uid2 off, battery on,  screen off
         clocks.realtime += 18;
         setFgState(uid1, true, bi);
         clocks.realtime += 18;
-        bi.updateDisplayMeasuredEnergyStatsLocked(new long[]{520_000}, screen, clocks.realtime);
+        bi.updateDisplayEnergyConsumerStatsLocked(new long[]{520_000}, screen, clocks.realtime);
         checkMeasuredCharge("C", uid1, blame1, uid2, blame2, globalDoze, bi);
 
         // Case D: uid1 on,  uid2 off, battery on,  screen ON
         clocks.realtime += 17;
         screen[0] = Display.STATE_ON;
-        bi.updateDisplayMeasuredEnergyStatsLocked(new long[]{521_000}, screen, clocks.realtime);
+        bi.updateDisplayEnergyConsumerStatsLocked(new long[]{521_000}, screen, clocks.realtime);
         blame1 += 0; // Screen had been off during the measurement period
         checkMeasuredCharge("D.1", uid1, blame1, uid2, blame2, globalDoze, bi);
         clocks.realtime += 101;
-        bi.updateDisplayMeasuredEnergyStatsLocked(new long[]{530_000}, screen, clocks.realtime);
+        bi.updateDisplayEnergyConsumerStatsLocked(new long[]{530_000}, screen, clocks.realtime);
         blame1 += 530_000;
         checkMeasuredCharge("D.2", uid1, blame1, uid2, blame2, globalDoze, bi);
 
@@ -1183,7 +1178,7 @@ public class BatteryStatsNoteTest extends TestCase {
         clocks.realtime += 20;
         setFgState(uid2, true, bi);
         clocks.realtime += 40;
-        bi.updateDisplayMeasuredEnergyStatsLocked(new long[]{540_000}, screen, clocks.realtime);
+        bi.updateDisplayEnergyConsumerStatsLocked(new long[]{540_000}, screen, clocks.realtime);
         // In the past 60ms, sum of fg is 20+40+40=100ms. uid1 is blamed for 60/100; uid2 for 40/100
         blame1 += 540_000 * (20 + 40) / (20 + 40 + 40);
         blame2 += 540_000 * (0 + 40) / (20 + 40 + 40);
@@ -1193,7 +1188,7 @@ public class BatteryStatsNoteTest extends TestCase {
         clocks.realtime += 40;
         setFgState(uid2, false, bi);
         clocks.realtime += 120;
-        bi.updateDisplayMeasuredEnergyStatsLocked(new long[]{550_000}, screen, clocks.realtime);
+        bi.updateDisplayEnergyConsumerStatsLocked(new long[]{550_000}, screen, clocks.realtime);
         // In the past 160ms, sum f fg is 200ms. uid1 is blamed for 40+120 of it; uid2 for 40 of it.
         blame1 += 550_000 * (40 + 120) / (40 + 40 + 120);
         blame2 += 550_000 * (40 + 0) / (40 + 40 + 120);
@@ -1202,14 +1197,14 @@ public class BatteryStatsNoteTest extends TestCase {
         // Case G: uid1 on,  uid2 off,  battery on, screen DOZE
         clocks.realtime += 5;
         screen[0] = Display.STATE_DOZE;
-        bi.updateDisplayMeasuredEnergyStatsLocked(new long[]{570_000}, screen, clocks.realtime);
+        bi.updateDisplayEnergyConsumerStatsLocked(new long[]{570_000}, screen, clocks.realtime);
         blame1 += 570_000; // All of this pre-doze time is blamed on uid1.
         checkMeasuredCharge("G", uid1, blame1, uid2, blame2, globalDoze, bi);
 
         // Case H: uid1 on,  uid2 off,  battery on, screen ON
         clocks.realtime += 6;
         screen[0] = Display.STATE_ON;
-        bi.updateDisplayMeasuredEnergyStatsLocked(new long[]{580_000}, screen, clocks.realtime);
+        bi.updateDisplayEnergyConsumerStatsLocked(new long[]{580_000}, screen, clocks.realtime);
         blame1 += 0; // The screen had been doze during the energy period
         globalDoze += 580_000;
         checkMeasuredCharge("H", uid1, blame1, uid2, blame2, globalDoze, bi);
@@ -1258,11 +1253,11 @@ public class BatteryStatsNoteTest extends TestCase {
 
         newChargesA.put(uid1, 20_000);
         // Implicit newChargesA.put(uid2, 0);
-        bi.updateCustomMeasuredEnergyStatsLocked(bucketA, 500_000, newChargesA);
+        bi.updateCustomEnergyConsumerStatsLocked(bucketA, 500_000, newChargesA);
 
         newChargesB.put(uid1, 60_000);
         // Implicit newChargesB.put(uid2, 0);
-        bi.updateCustomMeasuredEnergyStatsLocked(bucketB, 700_000, newChargesB);
+        bi.updateCustomEnergyConsumerStatsLocked(bucketB, 700_000, newChargesB);
 
         checkCustomBatteryConsumption(
                 "A", totalBlameA, totalBlameB, uid1, blame1A, blame1B, uid2, blame2A, blame2B, bi);
@@ -1273,12 +1268,12 @@ public class BatteryStatsNoteTest extends TestCase {
 
         newChargesA.put(uid1, 7_000); blame1A += 7_000;
         // Implicit newChargesA.put(uid2, 0); blame2A += 0;
-        bi.updateCustomMeasuredEnergyStatsLocked(bucketA, 310_000, newChargesA);
+        bi.updateCustomEnergyConsumerStatsLocked(bucketA, 310_000, newChargesA);
         totalBlameA += 310_000;
 
         newChargesB.put(uid1, 63_000); blame1B += 63_000;
         newChargesB.put(uid2, 15_000); blame2B += 15_000;
-        bi.updateCustomMeasuredEnergyStatsLocked(bucketB, 790_000, newChargesB);
+        bi.updateCustomEnergyConsumerStatsLocked(bucketB, 790_000, newChargesB);
         totalBlameB += 790_000;
 
         checkCustomBatteryConsumption(
@@ -1288,10 +1283,10 @@ public class BatteryStatsNoteTest extends TestCase {
         // ----- Case C: battery still on
         newChargesA.delete(uid1); blame1A += 0;
         newChargesA.put(uid2, 16_000); blame2A += 16_000;
-        bi.updateCustomMeasuredEnergyStatsLocked(bucketA, 560_000, newChargesA);
+        bi.updateCustomEnergyConsumerStatsLocked(bucketA, 560_000, newChargesA);
         totalBlameA += 560_000;
 
-        bi.updateCustomMeasuredEnergyStatsLocked(bucketB, 10_000, null);
+        bi.updateCustomEnergyConsumerStatsLocked(bucketB, 10_000, null);
         totalBlameB += 10_000;
 
         checkCustomBatteryConsumption(
@@ -1299,8 +1294,8 @@ public class BatteryStatsNoteTest extends TestCase {
 
 
         // ----- Case D: battery still on
-        bi.updateCustomMeasuredEnergyStatsLocked(bucketA, 0, newChargesA);
-        bi.updateCustomMeasuredEnergyStatsLocked(bucketB, 15_000, new SparseLongArray(1));
+        bi.updateCustomEnergyConsumerStatsLocked(bucketA, 0, newChargesA);
+        bi.updateCustomEnergyConsumerStatsLocked(bucketB, 15_000, new SparseLongArray(1));
         totalBlameB += 15_000;
         checkCustomBatteryConsumption(
                 "D", totalBlameA, totalBlameB, uid1, blame1A, blame1B, uid2, blame2A, blame2B, bi);
@@ -2152,19 +2147,19 @@ public class BatteryStatsNoteTest extends TestCase {
 
     private void checkMeasuredCharge(String caseName, int uid1, long blame1, int uid2, long blame2,
             long globalDoze, MockBatteryStatsImpl bi) {
-        final int bucket = MeasuredEnergyStats.POWER_BUCKET_SCREEN_ON;
+        final int bucket = EnergyConsumerStats.POWER_BUCKET_SCREEN_ON;
 
         assertEquals("Wrong uid1 blame for Case " + caseName, blame1,
-                bi.getUidStatsLocked(uid1).getMeasuredBatteryConsumptionUC(bucket));
+                bi.getUidStatsLocked(uid1).getEnergyConsumptionUC(bucket));
 
         assertEquals("Wrong uid2 blame for Case " + caseName, blame2,
-                bi.getUidStatsLocked(uid2).getMeasuredBatteryConsumptionUC(bucket));
+                bi.getUidStatsLocked(uid2).getEnergyConsumptionUC(bucket));
 
         assertEquals("Wrong total blame for Case " + caseName, blame1 + blame2,
-                bi.getScreenOnMeasuredBatteryConsumptionUC());
+                bi.getScreenOnEnergyConsumptionUC());
 
         assertEquals("Wrong doze for Case " + caseName, globalDoze,
-                bi.getScreenDozeMeasuredBatteryConsumptionUC());
+                bi.getScreenDozeEnergyConsumptionUC());
     }
 
     private void checkCustomBatteryConsumption(String caseName,
@@ -2173,11 +2168,11 @@ public class BatteryStatsNoteTest extends TestCase {
             int uid2, long blame2A, long blame2B,
             MockBatteryStatsImpl bi) {
 
-        final long[] actualTotal = bi.getCustomConsumerMeasuredBatteryConsumptionUC();
+        final long[] actualTotal = bi.getCustomEnergyConsumerBatteryConsumptionUC();
         final long[] actualUid1 =
-                bi.getUidStatsLocked(uid1).getCustomConsumerMeasuredBatteryConsumptionUC();
+                bi.getUidStatsLocked(uid1).getCustomEnergyConsumerBatteryConsumptionUC();
         final long[] actualUid2 =
-                bi.getUidStatsLocked(uid2).getCustomConsumerMeasuredBatteryConsumptionUC();
+                bi.getUidStatsLocked(uid2).getCustomEnergyConsumerBatteryConsumptionUC();
 
         assertNotNull(actualTotal);
         assertNotNull(actualUid1);

@@ -32,6 +32,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.content.om.OverlayConfig;
 import com.android.server.pm.dex.ArtManagerService;
 import com.android.server.pm.dex.DexManager;
+import com.android.server.pm.dex.DynamicCodeLogger;
 import com.android.server.pm.dex.ViewCompiler;
 import com.android.server.pm.parsing.PackageParser2;
 import com.android.server.pm.permission.LegacyPermissionManagerInternal;
@@ -49,6 +50,7 @@ public final class PackageManagerServiceTestParams {
     public int defParseFlags;
     public DefaultAppProvider defaultAppProvider;
     public DexManager dexManager;
+    public DynamicCodeLogger dynamicCodeLogger;
     public List<ScanPartition> dirsToScanAsSystem;
     public boolean factoryTest;
     public ArrayMap<String, FeatureInfo> availableFeatures;
@@ -61,7 +63,6 @@ public final class PackageManagerServiceTestParams {
     public InstantAppResolverConnection instantAppResolverConnection;
     public ComponentName instantAppResolverSettingsComponent;
     public boolean isPreNmr1Upgrade;
-    public boolean isPreNupgrade;
     public boolean isPreQupgrade;
     public boolean isUpgrade;
     public LegacyPermissionManagerInternal legacyPermissionManagerInternal;
@@ -105,7 +106,7 @@ public final class PackageManagerServiceTestParams {
     public boolean isEngBuild;
     public boolean isUserDebugBuild;
     public int sdkInt = Build.VERSION.SDK_INT;
-    public BackgroundDexOptService backgroundDexOptService;
+    public @Nullable BackgroundDexOptService backgroundDexOptService;
     public final String incrementalVersion = Build.VERSION.INCREMENTAL;
     public BroadcastHelper broadcastHelper;
     public AppDataHelper appDataHelper;

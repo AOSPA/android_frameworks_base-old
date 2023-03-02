@@ -116,7 +116,7 @@ public final class BluetoothDun implements BluetoothProfile {
     }
 
 
-    /*package*/ void close() {
+    public void close() {
         if (VDBG) log("close()");
         mServiceListener = null;
         IBluetoothManager mgr = mAdapter.getBluetoothManager();

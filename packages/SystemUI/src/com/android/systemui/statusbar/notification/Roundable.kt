@@ -252,6 +252,21 @@ interface Roundable {
     }
 
     /**
+     * Request the roundness 0f for a [SourceType].
+     *
+     * The top/bottom roundness of a [Roundable] can be defined by different [sourceType]. In case
+     * more origins require different roundness, for the same property, the maximum value will
+     * always be chosen.
+     *
+     * @param sourceType the source from which the request for roundness comes.
+     * @param animate true if it should animate to that value.
+     */
+    @JvmDefault
+    fun requestRoundnessReset(sourceType: SourceType, animate: Boolean) {
+        requestRoundness(top = 0f, bottom = 0f, sourceType = sourceType, animate = animate)
+    }
+
+    /**
      * Request the roundness 0f for a [SourceType]. Animate the roundness if the view is shown.
      *
      * The top/bottom roundness of a [Roundable] can be defined by different [sourceType]. In case
@@ -262,7 +277,7 @@ interface Roundable {
      */
     @JvmDefault
     fun requestRoundnessReset(sourceType: SourceType) {
-        requestRoundness(top = 0f, bottom = 0f, sourceType = sourceType)
+        requestRoundnessReset(sourceType = sourceType, animate = roundableState.targetView.isShown)
     }
 
     /** Apply the roundness changes, usually means invalidate the [RoundableState.targetView]. */
@@ -306,9 +321,12 @@ interface Roundable {
  */
 class RoundableState(
     internal val targetView: View,
-    roundable: Roundable,
-    internal val maxRadius: Float,
+    private val roundable: Roundable,
+    maxRadius: Float,
 ) {
+    internal var maxRadius = maxRadius
+        private set
+
     /** Animatable for top roundness */
     private val topAnimatable = topAnimatable(roundable)
 
@@ -354,6 +372,13 @@ class RoundableState(
         animated: Boolean,
     ) {
         PropertyAnimator.setProperty(targetView, bottomAnimatable, value, DURATION, animated)
+    }
+
+    fun setMaxRadius(radius: Float) {
+        if (maxRadius != radius) {
+            maxRadius = radius
+            roundable.applyRoundnessAndInvalidate()
+        }
     }
 
     fun debugString() = buildString {

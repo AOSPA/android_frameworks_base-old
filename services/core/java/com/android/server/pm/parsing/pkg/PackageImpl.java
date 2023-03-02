@@ -93,6 +93,7 @@ import libcore.util.EmptyArray;
 import java.io.File;
 import java.security.PublicKey;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -403,6 +404,15 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     private int mLocaleConfigRes;
 
     private List<AndroidPackageSplit> mSplits;
+
+    @NonNull
+    private String[] mUsesLibrariesSorted;
+    @NonNull
+    private String[] mUsesOptionalLibrariesSorted;
+    @NonNull
+    private String[] mUsesSdkLibrariesSorted;
+    @NonNull
+    private String[] mUsesStaticLibrariesSorted;
 
     @NonNull
     public static PackageImpl forParsing(@NonNull String packageName, @NonNull String baseCodePath,
@@ -717,7 +727,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public boolean areAttributionsUserVisible() {
+    public boolean isAttributionsUserVisible() {
         return getBoolean(Booleans.ATTRIBUTIONS_ARE_USER_VISIBLE);
     }
 
@@ -869,7 +879,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public int getBanner() {
+    public int getBannerRes() {
         return banner;
     }
 
@@ -897,7 +907,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
 
     @Nullable
     @Override
-    public String getClassName() {
+    public String getApplicationClassName() {
         return className;
     }
 
@@ -924,7 +934,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public int getDataExtractionRules() {
+    public int getDataExtractionRulesRes() {
         return dataExtractionRules;
     }
 
@@ -940,7 +950,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public int getFullBackupContent() {
+    public int getFullBackupContentRes() {
         return fullBackupContent;
     }
 
@@ -1006,7 +1016,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public int getLogo() {
+    public int getLogoRes() {
         return logo;
     }
 
@@ -1277,7 +1287,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public int getSharedUserLabel() {
+    public int getSharedUserLabelRes() {
         return sharedUserLabel;
     }
 
@@ -1330,7 +1340,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public long getStaticSharedLibVersion() {
+    public long getStaticSharedLibraryVersion() {
         return staticSharedLibVersion;
     }
 
@@ -1356,7 +1366,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public int getTheme() {
+    public int getThemeRes() {
         return theme;
     }
 
@@ -1379,6 +1389,19 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
 
     @NonNull
     @Override
+    public String[] getUsesLibrariesSorted() {
+        if (mUsesLibrariesSorted == null) {
+            // Note lazy-sorting here doesn't break immutability because it always
+            // return the same content. In the case of multi-threading, data race in accessing
+            // mUsesLibrariesSorted might result in unnecessary creation of sorted copies
+            // which is OK because the case is quite rare.
+            mUsesLibrariesSorted = sortLibraries(usesLibraries);
+        }
+        return mUsesLibrariesSorted;
+    }
+
+    @NonNull
+    @Override
     public List<String> getUsesNativeLibraries() {
         return usesNativeLibraries;
     }
@@ -1387,6 +1410,15 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     @Override
     public List<String> getUsesOptionalLibraries() {
         return usesOptionalLibraries;
+    }
+
+    @NonNull
+    @Override
+    public String[] getUsesOptionalLibrariesSorted() {
+        if (mUsesOptionalLibrariesSorted == null) {
+            mUsesOptionalLibrariesSorted = sortLibraries(usesOptionalLibraries);
+        }
+        return mUsesOptionalLibrariesSorted;
     }
 
     @NonNull
@@ -1405,6 +1437,15 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     @Override
     public List<String> getUsesSdkLibraries() { return usesSdkLibraries; }
 
+    @NonNull
+    @Override
+    public String[] getUsesSdkLibrariesSorted() {
+        if (mUsesSdkLibrariesSorted == null) {
+            mUsesSdkLibrariesSorted = sortLibraries(usesSdkLibraries);
+        }
+        return mUsesSdkLibrariesSorted;
+    }
+
     @Nullable
     @Override
     public String[][] getUsesSdkLibrariesCertDigests() { return usesSdkLibrariesCertDigests; }
@@ -1417,6 +1458,15 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     @Override
     public List<String> getUsesStaticLibraries() {
         return usesStaticLibraries;
+    }
+
+    @NonNull
+    @Override
+    public String[] getUsesStaticLibrariesSorted() {
+        if (mUsesStaticLibrariesSorted == null) {
+            mUsesStaticLibrariesSorted = sortLibraries(usesStaticLibraries);
+        }
+        return mUsesStaticLibrariesSorted;
     }
 
     @Nullable
@@ -1519,8 +1569,8 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public boolean isBaseHardwareAccelerated() {
-        return getBoolean(Booleans.BASE_HARDWARE_ACCELERATED);
+    public boolean isHardwareAccelerated() {
+        return getBoolean(Booleans.HARDWARE_ACCELERATED);
     }
 
     @Override
@@ -1609,7 +1659,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public boolean isLeavingSharedUid() {
+    public boolean isLeavingSharedUser() {
         return getBoolean(Booleans.LEAVING_SHARED_UID);
     }
 
@@ -1624,7 +1674,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public boolean isOverlay() {
+    public boolean isResourceOverlay() {
         return getBoolean(Booleans.OVERLAY);
     }
 
@@ -1760,6 +1810,11 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
+    public boolean isAllowUpdateOwnership() {
+        return getBoolean2(Booleans2.ALLOW_UPDATE_OWNERSHIP);
+    }
+
+    @Override
     public boolean isVmSafeMode() {
         return getBoolean(Booleans.VM_SAFE_MODE);
     }
@@ -1840,14 +1895,14 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public PackageImpl setBanner(int value) {
+    public PackageImpl setBannerRes(int value) {
         banner = value;
         return this;
     }
 
     @Override
-    public PackageImpl setBaseHardwareAccelerated(boolean value) {
-        return setBoolean(Booleans.BASE_HARDWARE_ACCELERATED, value);
+    public PackageImpl setHardwareAccelerated(boolean value) {
+        return setBoolean(Booleans.HARDWARE_ACCELERATED, value);
     }
 
     @Override
@@ -1874,7 +1929,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public PackageImpl setClassName(@Nullable String className) {
+    public PackageImpl setApplicationClassName(@Nullable String className) {
         this.className = className == null ? null : className.trim();
         return this;
     }
@@ -1903,7 +1958,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public PackageImpl setDataExtractionRules(int value) {
+    public PackageImpl setDataExtractionRulesRes(int value) {
         dataExtractionRules = value;
         return this;
     }
@@ -1940,7 +1995,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public PackageImpl setFullBackupContent(int value) {
+    public PackageImpl setFullBackupContentRes(int value) {
         fullBackupContent = value;
         return this;
     }
@@ -2022,7 +2077,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public PackageImpl setLeavingSharedUid(boolean value) {
+    public PackageImpl setLeavingSharedUser(boolean value) {
         return setBoolean(Booleans.LEAVING_SHARED_UID, value);
     }
 
@@ -2033,7 +2088,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public PackageImpl setLogo(int value) {
+    public PackageImpl setLogoRes(int value) {
         logo = value;
         return this;
     }
@@ -2117,7 +2172,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public PackageImpl setOverlay(boolean value) {
+    public PackageImpl setResourceOverlay(boolean value) {
         return setBoolean(Booleans.OVERLAY, value);
     }
 
@@ -2292,7 +2347,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public PackageImpl setSharedUserLabel(int value) {
+    public PackageImpl setSharedUserLabelRes(int value) {
         sharedUserLabel = value;
         return this;
     }
@@ -2318,7 +2373,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public PackageImpl setStaticSharedLibVersion(long value) {
+    public PackageImpl setStaticSharedLibraryVersion(long value) {
         staticSharedLibVersion = value;
         return this;
     }
@@ -2397,7 +2452,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public PackageImpl setTheme(int value) {
+    public PackageImpl setThemeRes(int value) {
         theme = value;
         return this;
     }
@@ -2460,6 +2515,11 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     public PackageImpl setZygotePreloadName(@Nullable String zygotePreloadName) {
         this.zygotePreloadName = zygotePreloadName;
         return this;
+    }
+
+    @Override
+    public PackageImpl setAllowUpdateOwnership(boolean value) {
+        return setBoolean2(Booleans2.ALLOW_UPDATE_OWNERSHIP, value);
     }
 
     @Override
@@ -2648,6 +2708,16 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
         assignDerivedFields2();
         makeImmutable();
         return this;
+    }
+
+    private static String[] sortLibraries(List<String> libraryNames) {
+        int size = libraryNames.size();
+        if (size == 0) {
+            return EmptyArray.STRING;
+        }
+        var arr = libraryNames.toArray(EmptyArray.STRING);
+        Arrays.sort(arr);
+        return arr;
     }
 
     private void assignDerivedFields2() {
@@ -3529,7 +3599,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     private static class Booleans {
         @LongDef({
                 EXTERNAL_STORAGE,
-                BASE_HARDWARE_ACCELERATED,
+                HARDWARE_ACCELERATED,
                 ALLOW_BACKUP,
                 KILL_AFTER_RESTORE,
                 RESTORE_ANY_VERSION,
@@ -3593,7 +3663,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
         public @interface Flags {}
 
         private static final long EXTERNAL_STORAGE = 1L;
-        private static final long BASE_HARDWARE_ACCELERATED = 1L << 1;
+        private static final long HARDWARE_ACCELERATED = 1L << 1;
         private static final long ALLOW_BACKUP = 1L << 2;
         private static final long KILL_AFTER_RESTORE = 1L << 3;
         private static final long RESTORE_ANY_VERSION = 1L << 4;
@@ -3666,5 +3736,6 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
 
         private static final long STUB = 1L;
         private static final long APEX = 1L << 1;
+        private static final long ALLOW_UPDATE_OWNERSHIP = 1L << 2;
     }
 }

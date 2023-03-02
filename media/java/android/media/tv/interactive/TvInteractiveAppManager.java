@@ -23,12 +23,15 @@ import android.annotation.Nullable;
 import android.annotation.SystemService;
 import android.content.Context;
 import android.graphics.Rect;
+import android.media.PlaybackParams;
+import android.media.tv.AdBuffer;
 import android.media.tv.AdRequest;
 import android.media.tv.AdResponse;
 import android.media.tv.BroadcastInfoRequest;
 import android.media.tv.BroadcastInfoResponse;
 import android.media.tv.TvContentRating;
 import android.media.tv.TvInputManager;
+import android.media.tv.TvRecordingInfo;
 import android.media.tv.TvTrackInfo;
 import android.net.Uri;
 import android.os.Bundle;
@@ -403,6 +406,21 @@ public final class TvInteractiveAppManager {
             }
 
             @Override
+            public void onTimeShiftCommandRequest(
+                    @TvInteractiveAppService.TimeShiftCommandType String cmdType,
+                    Bundle parameters,
+                    int seq) {
+                synchronized (mSessionCallbackRecordMap) {
+                    SessionCallbackRecord record = mSessionCallbackRecordMap.get(seq);
+                    if (record == null) {
+                        Log.e(TAG, "Callback not found for seq " + seq);
+                        return;
+                    }
+                    record.postTimeShiftCommandRequest(cmdType, parameters);
+                }
+            }
+
+            @Override
             public void onSetVideoBounds(Rect rect, int seq) {
                 synchronized (mSessionCallbackRecordMap) {
                     SessionCallbackRecord record = mSessionCallbackRecordMap.get(seq);
@@ -423,6 +441,18 @@ public final class TvInteractiveAppManager {
                         return;
                     }
                     record.postAdRequest(request);
+                }
+            }
+
+            @Override
+            public void onRequestCurrentVideoBounds(int seq) {
+                synchronized (mSessionCallbackRecordMap) {
+                    SessionCallbackRecord record = mSessionCallbackRecordMap.get(seq);
+                    if (record == null) {
+                        Log.e(TAG, "Callback not found for seq " + seq);
+                        return;
+                    }
+                    record.postRequestCurrentVideoBounds();
                 }
             }
 
@@ -511,6 +541,43 @@ public final class TvInteractiveAppManager {
             }
 
             @Override
+            public void onSetTvRecordingInfo(String recordingId, TvRecordingInfo recordingInfo,
+                    int seq) {
+                synchronized (mSessionCallbackRecordMap) {
+                    SessionCallbackRecord record = mSessionCallbackRecordMap.get(seq);
+                    if (record == null) {
+                        Log.e(TAG, "Callback not found for seq " + seq);
+                        return;
+                    }
+                    record.postSetTvRecordingInfo(recordingId, recordingInfo);
+                }
+            }
+
+            @Override
+            public void onRequestTvRecordingInfo(String recordingId, int seq) {
+                synchronized (mSessionCallbackRecordMap) {
+                    SessionCallbackRecord record = mSessionCallbackRecordMap.get(seq);
+                    if (record == null) {
+                        Log.e(TAG, "Callback not found for seq " + seq);
+                        return;
+                    }
+                    record.postRequestTvRecordingInfo(recordingId);
+                }
+            }
+
+            @Override
+            public void onRequestTvRecordingInfoList(int type, int seq) {
+                synchronized (mSessionCallbackRecordMap) {
+                    SessionCallbackRecord record = mSessionCallbackRecordMap.get(seq);
+                    if (record == null) {
+                        Log.e(TAG, "Callback not found for seq " + seq);
+                        return;
+                    }
+                    record.postRequestTvRecordingInfoList(type);
+                }
+            }
+
+            @Override
             public void onRequestSigning(
                     String id, String algorithm, String alias, byte[] data, int seq) {
                 synchronized (mSessionCallbackRecordMap) {
@@ -556,6 +623,18 @@ public final class TvInteractiveAppManager {
                         return;
                     }
                     record.postTeletextAppStateChanged(state);
+                }
+            }
+
+            @Override
+            public void onAdBuffer(AdBuffer buffer, int seq) {
+                synchronized (mSessionCallbackRecordMap) {
+                    SessionCallbackRecord record = mSessionCallbackRecordMap.get(seq);
+                    if (record == null) {
+                        Log.e(TAG, "Callback not found for seq " + seq);
+                        return;
+                    }
+                    record.postAdBuffer(buffer);
                 }
             }
         };
@@ -798,6 +877,24 @@ public final class TvInteractiveAppManager {
     }
 
     /**
+     * Returns a list of available app link information.
+     *
+     * <P>A package must declare its app link info in its manifest using meta-data tag, so the info
+     * can be detected by the system.
+     *
+     * @return List of {@link AppLinkInfo} for each package that deslares its app link information.
+     * @hide
+     */
+    @NonNull
+    public List<AppLinkInfo> getAppLinkInfoList() {
+        try {
+            return mService.getAppLinkInfoList(mUserId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Registers an Android application link info record which can be used to launch the specific
      * Android application by TV interactive App RTE.
      *
@@ -999,6 +1096,18 @@ public final class TvInteractiveAppManager {
             }
         }
 
+        void sendCurrentVideoBounds(@NonNull Rect bounds) {
+            if (mToken == null) {
+                Log.w(TAG, "The session has been already released");
+                return;
+            }
+            try {
+                mService.sendCurrentVideoBounds(mToken, bounds, mUserId);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
         void sendCurrentChannelUri(@Nullable Uri channelUri) {
             if (mToken == null) {
                 Log.w(TAG, "The session has been already released");
@@ -1059,6 +1168,30 @@ public final class TvInteractiveAppManager {
             }
         }
 
+        void sendTvRecordingInfo(@Nullable TvRecordingInfo recordingInfo) {
+            if (mToken == null) {
+                Log.w(TAG, "The session has been already released");
+                return;
+            }
+            try {
+                mService.sendTvRecordingInfo(mToken, recordingInfo, mUserId);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        void sendTvRecordingInfoList(@Nullable List<TvRecordingInfo> recordingInfoList) {
+            if (mToken == null) {
+                Log.w(TAG, "The session has been already released");
+                return;
+            }
+            try {
+                mService.sendTvRecordingInfoList(mToken, recordingInfoList, mUserId);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
         void notifyRecordingStarted(String recordingId) {
             if (mToken == null) {
                 Log.w(TAG, "The session has been already released");
@@ -1102,6 +1235,55 @@ public final class TvInteractiveAppManager {
             }
             try {
                 mService.notifyError(mToken, errMsg, params, mUserId);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        void notifyTimeShiftPlaybackParams(@NonNull PlaybackParams params) {
+            if (mToken == null) {
+                Log.w(TAG, "The session has been already released");
+                return;
+            }
+            try {
+                mService.notifyTimeShiftPlaybackParams(mToken, params, mUserId);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        void notifyTimeShiftStatusChanged(
+                @NonNull String inputId, @TvInputManager.TimeShiftStatus int status) {
+            if (mToken == null) {
+                Log.w(TAG, "The session has been already released");
+                return;
+            }
+            try {
+                mService.notifyTimeShiftStatusChanged(mToken, inputId, status, mUserId);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        void notifyTimeShiftStartPositionChanged(@NonNull String inputId, long timeMs) {
+            if (mToken == null) {
+                Log.w(TAG, "The session has been already released");
+                return;
+            }
+            try {
+                mService.notifyTimeShiftStartPositionChanged(mToken, inputId, timeMs, mUserId);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        void notifyTimeShiftCurrentPositionChanged(@NonNull String inputId, long timeMs) {
+            if (mToken == null) {
+                Log.w(TAG, "The session has been already released");
+                return;
+            }
+            try {
+                mService.notifyTimeShiftCurrentPositionChanged(mToken, inputId, timeMs, mUserId);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -1278,6 +1460,21 @@ public final class TvInteractiveAppManager {
         }
 
         /**
+         * Notifies the advertisement buffer is consumed.
+         */
+        public void notifyAdBufferConsumed(AdBuffer buffer) {
+            if (mToken == null) {
+                Log.w(TAG, "The session has been already released");
+                return;
+            }
+            try {
+                mService.notifyAdBufferConsumed(mToken, buffer, mUserId);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        /**
          * Releases this session.
          */
         public void release() {
@@ -1409,6 +1606,21 @@ public final class TvInteractiveAppManager {
             }
             try {
                 mService.notifySignalStrength(mToken, strength, mUserId);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        /**
+         * Notifies Interactive APP session when a new TV message is received.
+         */
+        public void notifyTvMessage(String type, Bundle data) {
+            if (mToken == null) {
+                Log.w(TAG, "The session has been already released");
+                return;
+            }
+            try {
+                mService.notifyTvMessage(mToken, type, data, mUserId);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -1690,11 +1902,31 @@ public final class TvInteractiveAppManager {
             });
         }
 
+        void postTimeShiftCommandRequest(
+                final @TvInteractiveAppService.TimeShiftCommandType String cmdType,
+                final Bundle parameters) {
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    mSessionCallback.onTimeShiftCommandRequest(mSession, cmdType, parameters);
+                }
+            });
+        }
+
         void postSetVideoBounds(Rect rect) {
             mHandler.post(new Runnable() {
                 @Override
                 public void run() {
                     mSessionCallback.onSetVideoBounds(mSession, rect);
+                }
+            });
+        }
+
+        void postRequestCurrentVideoBounds() {
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    mSessionCallback.onRequestCurrentVideoBounds(mSession);
                 }
             });
         }
@@ -1771,6 +2003,33 @@ public final class TvInteractiveAppManager {
             });
         }
 
+        void postRequestTvRecordingInfo(String recordingId) {
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    mSessionCallback.onRequestTvRecordingInfo(mSession, recordingId);
+                }
+            });
+        }
+
+        void postRequestTvRecordingInfoList(int type) {
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    mSessionCallback.onRequestTvRecordingInfoList(mSession, type);
+                }
+            });
+        }
+
+        void postSetTvRecordingInfo(String recordingId, TvRecordingInfo recordingInfo) {
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    mSessionCallback.onSetTvRecordingInfo(mSession, recordingId, recordingInfo);
+                }
+            });
+        }
+
         void postAdRequest(final AdRequest request) {
             mHandler.post(new Runnable() {
                 @Override
@@ -1805,6 +2064,17 @@ public final class TvInteractiveAppManager {
                 @Override
                 public void run() {
                     mSessionCallback.onTeletextAppStateChanged(mSession, state);
+                }
+            });
+        }
+
+        void postAdBuffer(AdBuffer buffer) {
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (mSession.getInputSession() != null) {
+                        mSession.getInputSession().notifyAdBuffer(buffer);
+                    }
                 }
             });
         }
@@ -1860,11 +2130,34 @@ public final class TvInteractiveAppManager {
         }
 
         /**
+         * This is called when {@link TvInteractiveAppService.Session#requestTimeShiftCommand} is
+         * called.
+         *
+         * @param session A {@link TvInteractiveAppManager.Session} associated with this callback.
+         * @param cmdType type of the time shift command.
+         * @param parameters parameters of the command.
+         */
+        public void onTimeShiftCommandRequest(
+                Session session,
+                @TvInteractiveAppService.TimeShiftCommandType String cmdType,
+                Bundle parameters) {
+        }
+
+        /**
          * This is called when {@link TvInteractiveAppService.Session#SetVideoBounds} is called.
          *
          * @param session A {@link TvInteractiveAppManager.Session} associated with this callback.
          */
         public void onSetVideoBounds(Session session, Rect rect) {
+        }
+
+        /**
+         * This is called when {@link TvInteractiveAppService.Session#RequestCurrentVideoBounds} is
+         * called.
+         *
+         * @param session A {@link TvInteractiveAppManager.Session} associated with this callback.
+         */
+        public void onRequestCurrentVideoBounds(Session session) {
         }
 
         /**
@@ -1930,6 +2223,40 @@ public final class TvInteractiveAppManager {
          * @param recordingId The recordingId of the recording to be stopped.
          */
         public void onRequestStopRecording(Session session, String recordingId) {
+        }
+
+        /**
+         * This is called when
+         * {@link TvInteractiveAppService.Session#setTvRecordingInfo(String, TvRecordingInfo)} is
+         * called.
+         *
+         * @param session A {@link TvInteractiveAppService.Session} associated with this callback.
+         * @param recordingId The recordingId of the recording which will have the info set.
+         * @param recordingInfo The recording info to set to the recording.
+         */
+        public void onSetTvRecordingInfo(Session session, String recordingId,
+                TvRecordingInfo recordingInfo) {
+        }
+
+        /**
+         * This is called when {@link TvInteractiveAppService.Session#requestTvRecordingInfo} is
+         * called.
+         *
+         * @param session A {@link TvInteractiveAppService.Session} associated with this callback.
+         * @param recordingId The recordingId of the recording to be stopped.
+         */
+        public void onRequestTvRecordingInfo(Session session, String recordingId) {
+        }
+
+        /**
+         * This is called when {@link TvInteractiveAppService.Session#requestTvRecordingInfoList} is
+         * called.
+         *
+         * @param session A {@link TvInteractiveAppService.Session} associated with this callback.
+         * @param type The type of recordings to return
+         */
+        public void onRequestTvRecordingInfoList(Session session,
+                @TvRecordingInfo.TvRecordingListType int type) {
         }
 
         /**

@@ -16,11 +16,14 @@
 
 package android.telecom;
 
+import android.annotation.CallbackExecutor;
+import android.annotation.NonNull;
 import android.annotation.SystemApi;
 import android.bluetooth.BluetoothDevice;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.OutcomeReceiver;
 import android.util.ArrayMap;
 
 import com.android.internal.annotations.GuardedBy;
@@ -29,7 +32,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * A unified virtual device providing a means of voice (and other) communication on a device.
@@ -143,6 +149,14 @@ public final class Phone {
     private final int mTargetSdkVersion;
 
     private final Object mLock = new Object();
+
+    // Future used to delay terminating the InCallService before the call disconnect tone
+    // finishes playing.
+    private static Map<String, CompletableFuture<Void>> sDisconnectedToneFutures = new ArrayMap<>();
+
+    // Timeout value to be used to ensure future completion for sDisconnectedToneFutures. This is
+    // set to 4 seconds to account for the exceptional case (TONE_CONGESTION).
+    private static final int DISCONNECTED_TONE_TIMEOUT = 4000;
 
     Phone(InCallAdapter adapter, String callingPackage, int targetSdkVersion) {
         mInCallAdapter = adapter;
@@ -378,6 +392,21 @@ public final class Phone {
     }
 
     /**
+     * Request audio routing to a specific CallEndpoint. When this request is honored, there will
+     * be change to the {@link #getCurrentCallEndpoint()}.
+     *
+     * @param endpoint The call endpoint to use.
+     * @param executor The executor of where the callback will execute.
+     * @param callback The callback to notify the result of the endpoint change.
+     * @hide
+     */
+    public void requestCallEndpointChange(@NonNull CallEndpoint endpoint,
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull OutcomeReceiver<Void, CallEndpointException> callback) {
+        mInCallAdapter.requestCallEndpointChange(endpoint, executor, callback);
+    }
+
+    /**
      * Turns the proximity sensor on. When this request is made, the proximity sensor will
      * become active, and the touch screen and display will be turned off when the user's face
      * is detected to be in close proximity to the screen. This operation is a no-op on devices
@@ -437,9 +466,45 @@ public final class Phone {
     }
 
     private void fireCallRemoved(Call call) {
-        for (Listener listener : mListeners) {
-            listener.onCallRemoved(this, call);
+        String callId = call.internalGetCallId();
+        CompletableFuture<Void> disconnectedToneFuture = initializeDisconnectedToneFuture(callId);
+        // delay the InCallService termination until after the disconnect tone finishes playing
+        disconnectedToneFuture.thenRunAsync(() -> {
+            for (Listener listener : mListeners) {
+                listener.onCallRemoved(this, call);
+            }
+            // clean up the future after
+            sDisconnectedToneFutures.remove(callId);
+        });
+    }
+
+    /**
+     * Initialize disconnect tone future to be used in delaying ICS termination.
+     *
+     * @return CompletableFuture to delay InCallService termination until after the disconnect tone
+     * finishes playing. A timeout of 4s is used to handle the use case when we play
+     * TONE_CONGESTION and to ensure completion so that we don't block the removal of the service.
+     */
+    private CompletableFuture<Void> initializeDisconnectedToneFuture(String callId) {
+        // create the future and map (sDisconnectedToneFutures) it to the corresponding call id
+        CompletableFuture<Void> disconnectedToneFuture = new CompletableFuture<Void>()
+                .completeOnTimeout(null, DISCONNECTED_TONE_TIMEOUT, TimeUnit.MILLISECONDS);
+        // we should not encounter duplicate insertions since call ids are unique
+        sDisconnectedToneFutures.put(callId, disconnectedToneFuture);
+        return disconnectedToneFuture;
+    }
+
+    /**
+     * Completes disconnected tone future with passed in result.
+     * @hide
+     * @return true if future was completed, false otherwise
+     */
+    public static boolean completeDisconnectedToneFuture(String callId) {
+        if (sDisconnectedToneFutures.containsKey(callId)) {
+            sDisconnectedToneFutures.get(callId).complete(null);
+            return true;
         }
+        return false;
     }
 
     private void fireCallAudioStateChanged(CallAudioState audioState) {

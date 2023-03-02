@@ -25,6 +25,8 @@ import static com.android.server.pm.PackageManagerService.TAG;
 import android.annotation.NonNull;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
+import android.app.ActivityManagerInternal;
+import android.app.IUnsafeIntentStrictModeCallback;
 import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.ContentResolver;
@@ -42,6 +44,7 @@ import android.content.pm.ProviderInfo;
 import android.content.pm.ResolveInfo;
 import android.os.Binder;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.Trace;
@@ -52,6 +55,8 @@ import android.util.Slog;
 
 import com.android.internal.app.ResolverActivity;
 import com.android.internal.util.ArrayUtils;
+import com.android.internal.util.FrameworkStatsLog;
+import com.android.server.LocalServices;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.compat.PlatformCompat;
 import com.android.server.pm.pkg.AndroidPackage;
@@ -83,6 +88,8 @@ final class ResolveIntentHelper {
     private final Supplier<ResolveInfo> mResolveInfoSupplier;
     @NonNull
     private final Supplier<ActivityInfo> mInstantAppInstallerActivitySupplier;
+    @NonNull
+    private final Handler mHandler;
 
     ResolveIntentHelper(@NonNull Context context,
             @NonNull PreferredActivityHelper preferredActivityHelper,
@@ -90,7 +97,8 @@ final class ResolveIntentHelper {
             @NonNull DomainVerificationManagerInternal domainVerificationManager,
             @NonNull UserNeedsBadgingCache userNeedsBadgingCache,
             @NonNull Supplier<ResolveInfo> resolveInfoSupplier,
-            @NonNull Supplier<ActivityInfo> instantAppInstallerActivitySupplier) {
+            @NonNull Supplier<ActivityInfo> instantAppInstallerActivitySupplier,
+            @NonNull Handler handler) {
         mContext = context;
         mPreferredActivityHelper = preferredActivityHelper;
         mPlatformCompat = platformCompat;
@@ -99,10 +107,12 @@ final class ResolveIntentHelper {
         mUserNeedsBadging = userNeedsBadgingCache;
         mResolveInfoSupplier = resolveInfoSupplier;
         mInstantAppInstallerActivitySupplier = instantAppInstallerActivitySupplier;
+        mHandler = handler;
     }
 
     private static void filterNonExportedComponents(Intent intent, int filterCallingUid,
-            List<ResolveInfo> query, PlatformCompat platformCompat, Computer computer) {
+            int callingPid, List<ResolveInfo> query, PlatformCompat platformCompat,
+            String resolvedType, Computer computer, Handler handler) {
         if (query == null
                 || intent.getPackage() != null
                 || intent.getComponent() != null
@@ -111,23 +121,39 @@ final class ResolveIntentHelper {
         }
         AndroidPackage caller = computer.getPackage(filterCallingUid);
         String callerPackage = caller == null ? "Not specified" : caller.getPackageName();
+        ActivityManagerInternal activityManagerInternal = LocalServices
+                .getService(ActivityManagerInternal.class);
+        final IUnsafeIntentStrictModeCallback callback = activityManagerInternal
+                .getRegisteredStrictModeCallback(callingPid);
         for (int i = query.size() - 1; i >= 0; i--) {
             if (!query.get(i).getComponentInfo().exported) {
-                if (!platformCompat.isChangeEnabledByUid(
+                boolean hasToBeExportedToMatch = platformCompat.isChangeEnabledByUid(
                         ActivityManagerService.IMPLICIT_INTENTS_ONLY_MATCH_EXPORTED_COMPONENTS,
-                        filterCallingUid)) {
-                    Slog.w(TAG, "Non-exported component not filtered out "
-                            + "(will be filtered out once the app targets U+)- intent: "
-                            + intent.getAction() + ", component: "
-                            + query.get(i).getComponentInfo()
-                            .getComponentName().flattenToShortString()
-                            + ", starter: " + callerPackage);
+                        filterCallingUid);
+                String[] categories = intent.getCategories() == null ? new String[0]
+                        : intent.getCategories().toArray(String[]::new);
+                FrameworkStatsLog.write(FrameworkStatsLog.UNSAFE_INTENT_EVENT_REPORTED,
+                        FrameworkStatsLog.UNSAFE_INTENT_EVENT_REPORTED__EVENT_TYPE__INTERNAL_NON_EXPORTED_COMPONENT_MATCH,
+                        filterCallingUid,
+                        query.get(i).getComponentInfo().getComponentName().flattenToShortString(),
+                        callerPackage,
+                        intent.getAction(),
+                        categories,
+                        resolvedType,
+                        intent.getScheme(),
+                        hasToBeExportedToMatch);
+                if (callback != null) {
+                    handler.post(() -> {
+                        try {
+                            callback.onImplicitIntentMatchedInternalComponent(intent.cloneFilter());
+                        } catch (RemoteException e) {
+                            activityManagerInternal.unregisterStrictModeCallback(callingPid);
+                        }
+                    });
+                }
+                if (!hasToBeExportedToMatch) {
                     return;
                 }
-                Slog.w(TAG, "Non-exported component filtered out - intent: "
-                        + intent.getAction() + ", component: "
-                        + query.get(i).getComponentInfo().getComponentName().flattenToShortString()
-                        + ", starter: " + callerPackage);
                 query.remove(i);
             }
         }
@@ -143,7 +169,7 @@ final class ResolveIntentHelper {
             @PackageManagerInternal.PrivateResolveFlags long privateResolveFlags, int userId,
             boolean resolveForStart, int filterCallingUid) {
         return resolveIntentInternal(computer, intent, resolvedType, flags,
-                privateResolveFlags, userId, resolveForStart, filterCallingUid, false);
+                privateResolveFlags, userId, resolveForStart, filterCallingUid, false, 0);
     }
 
     /**
@@ -155,7 +181,8 @@ final class ResolveIntentHelper {
     public ResolveInfo resolveIntentInternal(Computer computer, Intent intent, String resolvedType,
             @PackageManager.ResolveInfoFlagsBits long flags,
             @PackageManagerInternal.PrivateResolveFlags long privateResolveFlags, int userId,
-            boolean resolveForStart, int filterCallingUid, boolean exportedComponentsOnly) {
+            boolean resolveForStart, int filterCallingUid, boolean exportedComponentsOnly,
+            int callingPid) {
         try {
             Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "resolveIntent");
 
@@ -172,8 +199,8 @@ final class ResolveIntentHelper {
                     resolvedType, flags, privateResolveFlags, filterCallingUid, userId,
                     resolveForStart, true /*allowDynamicSplits*/);
             if (exportedComponentsOnly) {
-                filterNonExportedComponents(intent, filterCallingUid, query,
-                        mPlatformCompat, computer);
+                filterNonExportedComponents(intent, filterCallingUid, callingPid, query,
+                        mPlatformCompat, resolvedType, computer, mHandler);
             }
             Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
 
@@ -254,6 +281,7 @@ final class ResolveIntentHelper {
                 ri.handleAllWebDataURI = browserCount == n;
                 ri.activityInfo = new ActivityInfo(ri.activityInfo);
                 ri.activityInfo.labelRes = ResolverActivity.getLabelRes(intent.getAction());
+                if (ri.userHandle == null) ri.userHandle = UserHandle.of(userId);
                 // If all of the options come from the same package, show the application's
                 // label and icon instead of the generic resolver's.
                 // Some calls like Intent.resolveActivityInfo query the ResolveInfo from here

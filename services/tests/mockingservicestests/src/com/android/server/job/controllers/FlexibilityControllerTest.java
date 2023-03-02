@@ -195,7 +195,7 @@ public class FlexibilityControllerTest {
     private JobStatus createJobStatus(String testTag, JobInfo.Builder job) {
         JobInfo jobInfo = job.build();
         JobStatus js = JobStatus.createFromJobInfo(
-                jobInfo, 1000, SOURCE_PACKAGE, SOURCE_USER_ID, testTag);
+                jobInfo, 1000, SOURCE_PACKAGE, SOURCE_USER_ID, "FCTest", testTag);
         js.enqueueTime = FROZEN_TIME;
         return js;
     }
@@ -613,6 +613,14 @@ public class FlexibilityControllerTest {
         JobInfo.Builder jb = createJob(0);
         jb.setExpedited(true);
         JobStatus js = createJobStatus("testExceptions_Expedited", jb);
+        assertFalse(js.hasFlexibilityConstraint());
+    }
+
+    @Test
+    public void testExceptions_UserInitiated() {
+        JobInfo.Builder jb = createJob(0);
+        jb.setUserInitiated(true);
+        JobStatus js = createJobStatus("testExceptions_UserInitiated", jb);
         assertFalse(js.hasFlexibilityConstraint());
     }
 

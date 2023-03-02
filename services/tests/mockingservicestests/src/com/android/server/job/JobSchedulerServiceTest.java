@@ -68,6 +68,8 @@ import com.android.server.PowerAllowlistInternal;
 import com.android.server.SystemServiceManager;
 import com.android.server.job.controllers.ConnectivityController;
 import com.android.server.job.controllers.JobStatus;
+import com.android.server.job.controllers.QuotaController;
+import com.android.server.job.controllers.TareController;
 import com.android.server.pm.UserManagerInternal;
 import com.android.server.usage.AppStandbyInternal;
 
@@ -195,7 +197,7 @@ public class JobSchedulerServiceTest {
     private JobStatus createJobStatus(String testTag, JobInfo.Builder jobInfoBuilder,
             int callingUid) {
         return JobStatus.createFromJobInfo(
-                jobInfoBuilder.build(), callingUid, "com.android.test", 0, testTag);
+                jobInfoBuilder.build(), callingUid, "com.android.test", 0, "JSSTest", testTag);
     }
 
     private void grantRunLongJobsPermission(boolean grant) {
@@ -247,12 +249,13 @@ public class JobSchedulerServiceTest {
         when(ejHighDowngraded.shouldTreatAsExpeditedJob()).thenReturn(false);
         when(jobHigh.shouldTreatAsExpeditedJob()).thenReturn(false);
         when(jobDef.shouldTreatAsExpeditedJob()).thenReturn(false);
-        when(jobUI.shouldTreatAsUserInitiated()).thenReturn(true);
-        when(jobUIDT.shouldTreatAsUserInitiated()).thenReturn(true);
+        when(jobUI.shouldTreatAsUserInitiatedJob()).thenReturn(true);
+        when(jobUIDT.shouldTreatAsUserInitiatedJob()).thenReturn(true);
 
         ConnectivityController connectivityController = mService.getConnectivityController();
         spyOn(connectivityController);
-        mService.mConstants.RUNTIME_MIN_DATA_TRANSFER_GUARANTEE_MS = 10 * MINUTE_IN_MILLIS;
+        mService.mConstants.RUNTIME_MIN_GUARANTEE_MS = 10 * MINUTE_IN_MILLIS;
+        mService.mConstants.RUNTIME_MIN_DATA_TRANSFER_GUARANTEE_MS = 15 * MINUTE_IN_MILLIS;
         mService.mConstants.RUNTIME_DATA_TRANSFER_LIMIT_MS = 60 * MINUTE_IN_MILLIS;
         mService.mConstants.RUNTIME_MIN_USER_INITIATED_DATA_TRANSFER_GUARANTEE_BUFFER_FACTOR = 1.5f;
         mService.mConstants.RUNTIME_MIN_USER_INITIATED_DATA_TRANSFER_GUARANTEE_MS = HOUR_IN_MILLIS;
@@ -271,7 +274,7 @@ public class JobSchedulerServiceTest {
         assertEquals(mService.mConstants.RUNTIME_MIN_GUARANTEE_MS,
                 mService.getMinJobExecutionGuaranteeMs(jobDef));
         grantRunLongJobsPermission(false); // Without permission
-        assertEquals(mService.mConstants.RUNTIME_MIN_GUARANTEE_MS,
+        assertEquals(mService.mConstants.RUNTIME_MIN_DATA_TRANSFER_GUARANTEE_MS,
                 mService.getMinJobExecutionGuaranteeMs(jobDT));
         grantRunLongJobsPermission(true); // With permission
         doReturn(ConnectivityController.UNKNOWN_TIME)
@@ -291,12 +294,16 @@ public class JobSchedulerServiceTest {
         assertEquals(mService.mConstants.RUNTIME_MIN_DATA_TRANSFER_GUARANTEE_MS,
                 mService.getMinJobExecutionGuaranteeMs(jobDT));
         // UserInitiated
+        grantRunLongJobsPermission(false);
+        // Permission isn't granted, so it should just be treated as a regular data transfer job.
+        assertEquals(mService.mConstants.RUNTIME_MIN_DATA_TRANSFER_GUARANTEE_MS,
+                mService.getMinJobExecutionGuaranteeMs(jobUIDT));
+        // Permission isn't granted, so it should just be treated as a regular job.
+        assertEquals(mService.mConstants.RUNTIME_MIN_GUARANTEE_MS,
+                mService.getMinJobExecutionGuaranteeMs(jobUI));
+        grantRunLongJobsPermission(true); // With permission
         assertEquals(mService.mConstants.RUNTIME_MIN_USER_INITIATED_GUARANTEE_MS,
                 mService.getMinJobExecutionGuaranteeMs(jobUI));
-        grantRunLongJobsPermission(false);
-        assertEquals(mService.mConstants.RUNTIME_MIN_USER_INITIATED_GUARANTEE_MS,
-                mService.getMinJobExecutionGuaranteeMs(jobUIDT));
-        grantRunLongJobsPermission(true); // With permission
         doReturn(ConnectivityController.UNKNOWN_TIME)
                 .when(connectivityController).getEstimatedTransferTimeMs(any());
         assertEquals(mService.mConstants.RUNTIME_MIN_USER_INITIATED_DATA_TRANSFER_GUARANTEE_MS,
@@ -309,7 +316,8 @@ public class JobSchedulerServiceTest {
                 .when(connectivityController).getEstimatedTransferTimeMs(any());
         assertEquals(
                 (long) (mService.mConstants.RUNTIME_MIN_USER_INITIATED_DATA_TRANSFER_GUARANTEE_MS
-                        * 2 * 1.5),
+                        * 2 * mService.mConstants
+                                .RUNTIME_MIN_USER_INITIATED_DATA_TRANSFER_GUARANTEE_BUFFER_FACTOR),
                 mService.getMinJobExecutionGuaranteeMs(jobUIDT));
         doReturn(mService.mConstants.RUNTIME_USER_INITIATED_DATA_TRANSFER_LIMIT_MS * 2)
                 .when(connectivityController).getEstimatedTransferTimeMs(any());
@@ -333,16 +341,31 @@ public class JobSchedulerServiceTest {
         spyOn(jobUI);
         spyOn(jobUIDT);
 
-        when(jobUI.shouldTreatAsUserInitiated()).thenReturn(true);
-        when(jobUIDT.shouldTreatAsUserInitiated()).thenReturn(true);
+        when(jobUI.shouldTreatAsUserInitiatedJob()).thenReturn(true);
+        when(jobUIDT.shouldTreatAsUserInitiatedJob()).thenReturn(true);
+
+        QuotaController quotaController = mService.getQuotaController();
+        spyOn(quotaController);
+        TareController tareController = mService.getTareController();
+        spyOn(tareController);
+        doReturn(mService.mConstants.RUNTIME_FREE_QUOTA_MAX_LIMIT_MS)
+                .when(quotaController).getMaxJobExecutionTimeMsLocked(any());
+        doReturn(mService.mConstants.RUNTIME_FREE_QUOTA_MAX_LIMIT_MS)
+                .when(quotaController).getMaxJobExecutionTimeMsLocked(any());
 
         grantRunLongJobsPermission(true);
-
         assertEquals(mService.mConstants.RUNTIME_DATA_TRANSFER_LIMIT_MS,
                 mService.getMaxJobExecutionTimeMs(jobDT));
         assertEquals(mService.mConstants.RUNTIME_USER_INITIATED_LIMIT_MS,
                 mService.getMaxJobExecutionTimeMs(jobUI));
         assertEquals(mService.mConstants.RUNTIME_USER_INITIATED_DATA_TRANSFER_LIMIT_MS,
+                mService.getMaxJobExecutionTimeMs(jobUIDT));
+        grantRunLongJobsPermission(false);
+        assertEquals(mService.mConstants.RUNTIME_DATA_TRANSFER_LIMIT_MS,
+                mService.getMaxJobExecutionTimeMs(jobDT));
+        assertEquals(mService.mConstants.RUNTIME_FREE_QUOTA_MAX_LIMIT_MS,
+                mService.getMaxJobExecutionTimeMs(jobUI));
+        assertEquals(mService.mConstants.RUNTIME_FREE_QUOTA_MAX_LIMIT_MS,
                 mService.getMaxJobExecutionTimeMs(jobUIDT));
     }
 
@@ -1098,7 +1121,7 @@ public class JobSchedulerServiceTest {
                     i < 300 ? JobScheduler.RESULT_SUCCESS : JobScheduler.RESULT_FAILURE;
             assertEquals("Got unexpected result for schedule #" + (i + 1),
                     expected,
-                    mService.scheduleAsPackage(job, null, 10123, null, 0, ""));
+                    mService.scheduleAsPackage(job, null, 10123, null, 0, "JSSTest", ""));
         }
     }
 
@@ -1119,7 +1142,7 @@ public class JobSchedulerServiceTest {
         for (int i = 0; i < 500; ++i) {
             assertEquals("Got unexpected result for schedule #" + (i + 1),
                     JobScheduler.RESULT_SUCCESS,
-                    mService.scheduleAsPackage(job, null, 10123, null, 0, ""));
+                    mService.scheduleAsPackage(job, null, 10123, null, 0, "JSSTest", ""));
         }
     }
 
@@ -1140,7 +1163,8 @@ public class JobSchedulerServiceTest {
         for (int i = 0; i < 500; ++i) {
             assertEquals("Got unexpected result for schedule #" + (i + 1),
                     JobScheduler.RESULT_SUCCESS,
-                    mService.scheduleAsPackage(job, null, 10123, "proxied.package", 0, ""));
+                    mService.scheduleAsPackage(job, null, 10123, "proxied.package", 0, "JSSTest",
+                            ""));
         }
     }
 
@@ -1164,7 +1188,7 @@ public class JobSchedulerServiceTest {
             assertEquals("Got unexpected result for schedule #" + (i + 1),
                     expected,
                     mService.scheduleAsPackage(job, null, 10123, job.getService().getPackageName(),
-                            0, ""));
+                            0, "JSSTest", ""));
         }
     }
 }

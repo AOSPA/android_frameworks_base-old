@@ -72,6 +72,7 @@ import android.os.Trace;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.service.voice.IMicrophoneHotwordDetectionVoiceInteractionCallback;
+import android.service.voice.IVisualQueryDetectionVoiceInteractionCallback;
 import android.service.voice.IVoiceInteractionSession;
 import android.service.voice.VoiceInteractionManagerInternal;
 import android.service.voice.VoiceInteractionService;
@@ -330,6 +331,12 @@ public class VoiceInteractionManagerService extends SystemService {
         @GuardedBy("this")
         private boolean mTemporarilyDisabled;
 
+        /** The start value of showSessionId */
+        private static final int SHOW_SESSION_START_ID = 0;
+
+        @GuardedBy("this")
+        private int mShowSessionId = SHOW_SESSION_START_ID;
+
         private final boolean mEnableService;
         // TODO(b/226201975): remove reference once RoleService supports pre-created users
         private final RoleObserver mRoleObserver;
@@ -346,6 +353,24 @@ public class VoiceInteractionManagerService extends SystemService {
                     Slog.d(TAG, "switchImplementation for user stop.");
                     switchImplementationIfNeededLocked(true);
                 }
+            }
+        }
+
+        int getNextShowSessionId() {
+            synchronized (this) {
+                // Reset the showSessionId to SHOW_SESSION_START_ID to avoid the value exceeds
+                // Integer.MAX_VALUE
+                if (mShowSessionId == Integer.MAX_VALUE - 1) {
+                    mShowSessionId = SHOW_SESSION_START_ID;
+                }
+                mShowSessionId++;
+                return mShowSessionId;
+            }
+        }
+
+        int getShowSessionId() {
+            synchronized (this) {
+                return mShowSessionId;
             }
         }
 
@@ -1245,14 +1270,15 @@ public class VoiceInteractionManagerService extends SystemService {
         @Override
         public void updateState(
                 @Nullable PersistableBundle options,
-                @Nullable SharedMemory sharedMemory) {
+                @Nullable SharedMemory sharedMemory,
+                @NonNull IBinder token) {
             super.updateState_enforcePermission();
 
             synchronized (this) {
                 enforceIsCurrentVoiceInteractionService();
 
                 Binder.withCleanCallingIdentity(
-                        () -> mImpl.updateStateLocked(options, sharedMemory));
+                        () -> mImpl.updateStateLocked(options, sharedMemory, token));
             }
         }
 
@@ -1262,6 +1288,7 @@ public class VoiceInteractionManagerService extends SystemService {
                 @NonNull Identity voiceInteractorIdentity,
                 @Nullable PersistableBundle options,
                 @Nullable SharedMemory sharedMemory,
+                @NonNull IBinder token,
                 IHotwordRecognitionStatusCallback callback,
                 int detectorType) {
             super.initAndVerifyDetector_enforcePermission();
@@ -1274,7 +1301,20 @@ public class VoiceInteractionManagerService extends SystemService {
 
                 Binder.withCleanCallingIdentity(
                         () -> mImpl.initAndVerifyDetectorLocked(voiceInteractorIdentity, options,
-                                sharedMemory, callback, detectorType));
+                                sharedMemory, token, callback, detectorType));
+            }
+        }
+
+        @Override
+        public void destroyDetector(@NonNull IBinder token) {
+            synchronized (this) {
+                if (mImpl == null) {
+                    Slog.w(TAG, "destroyDetector without running voice interaction service");
+                    return;
+                }
+
+                Binder.withCleanCallingIdentity(
+                        () -> mImpl.destroyDetectorLocked(token));
             }
         }
 
@@ -1292,6 +1332,46 @@ public class VoiceInteractionManagerService extends SystemService {
                 final long caller = Binder.clearCallingIdentity();
                 try {
                     mImpl.shutdownHotwordDetectionServiceLocked();
+                } finally {
+                    Binder.restoreCallingIdentity(caller);
+                }
+            }
+        }
+
+        @Override
+        public void startPerceiving(
+                IVisualQueryDetectionVoiceInteractionCallback callback)
+                throws RemoteException {
+            enforceCallingPermission(Manifest.permission.RECORD_AUDIO);
+            enforceCallingPermission(Manifest.permission.CAMERA);
+            synchronized (this) {
+                enforceIsCurrentVoiceInteractionService();
+
+                if (mImpl == null) {
+                    Slog.w(TAG, "startPerceiving without running voice interaction service");
+                    return;
+                }
+                final long caller = Binder.clearCallingIdentity();
+                try {
+                    mImpl.startPerceivingLocked(callback);
+                } finally {
+                    Binder.restoreCallingIdentity(caller);
+                }
+            }
+        }
+
+        @Override
+        public void stopPerceiving() throws RemoteException {
+            synchronized (this) {
+                enforceIsCurrentVoiceInteractionService();
+
+                if (mImpl == null) {
+                    Slog.w(TAG, "stopPerceiving without running voice interaction service");
+                    return;
+                }
+                final long caller = Binder.clearCallingIdentity();
+                try {
+                    mImpl.stopPerceivingLocked();
                 } finally {
                     Binder.restoreCallingIdentity(caller);
                 }
@@ -1326,6 +1406,7 @@ public class VoiceInteractionManagerService extends SystemService {
                 ParcelFileDescriptor audioStream,
                 AudioFormat audioFormat,
                 PersistableBundle options,
+                @NonNull IBinder token,
                 IMicrophoneHotwordDetectionVoiceInteractionCallback callback)
                 throws RemoteException {
             synchronized (this) {
@@ -1338,8 +1419,8 @@ public class VoiceInteractionManagerService extends SystemService {
                 }
                 final long caller = Binder.clearCallingIdentity();
                 try {
-                    mImpl.startListeningFromExternalSourceLocked(
-                            audioStream, audioFormat, options, callback);
+                    mImpl.startListeningFromExternalSourceLocked(audioStream, audioFormat, options,
+                            token, callback);
                 } finally {
                     Binder.restoreCallingIdentity(caller);
                 }

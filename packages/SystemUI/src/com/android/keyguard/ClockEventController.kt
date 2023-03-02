@@ -15,6 +15,7 @@
  */
 package com.android.keyguard
 
+import android.app.WallpaperManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -37,9 +38,11 @@ import com.android.systemui.keyguard.domain.interactor.KeyguardInteractor
 import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor
 import com.android.systemui.keyguard.shared.model.TransitionState
 import com.android.systemui.lifecycle.repeatWhenAttached
-import com.android.systemui.log.dagger.KeyguardClockLog
+import com.android.systemui.log.dagger.KeyguardSmallClockLog
+import com.android.systemui.log.dagger.KeyguardLargeClockLog
 import com.android.systemui.plugins.ClockController
 import com.android.systemui.plugins.log.LogBuffer
+import com.android.systemui.plugins.log.LogLevel.DEBUG
 import com.android.systemui.shared.regionsampling.RegionSampler
 import com.android.systemui.statusbar.policy.BatteryController
 import com.android.systemui.statusbar.policy.BatteryController.BatteryStateChangeCallback
@@ -72,16 +75,18 @@ open class ClockEventController @Inject constructor(
     private val context: Context,
     @Main private val mainExecutor: Executor,
     @Background private val bgExecutor: Executor,
-    @KeyguardClockLog private val logBuffer: LogBuffer?,
+    @KeyguardSmallClockLog private val smallLogBuffer: LogBuffer?,
+    @KeyguardLargeClockLog private val largeLogBuffer: LogBuffer?,
     private val featureFlags: FeatureFlags
 ) {
     var clock: ClockController? = null
         set(value) {
             field = value
             if (value != null) {
-                if (logBuffer != null) {
-                    value.setLogBuffer(logBuffer)
-                }
+                smallLogBuffer?.log(TAG, DEBUG, {}, { "New Clock" })
+                value.smallClock.logBuffer = smallLogBuffer
+                largeLogBuffer?.log(TAG, DEBUG, {}, { "New Clock" })
+                value.largeClock.logBuffer = largeLogBuffer
 
                 value.initialize(resources, dozeAmount, 0f)
                 updateRegionSamplers(value)
@@ -100,9 +105,13 @@ open class ClockEventController @Inject constructor(
     private val regionSamplingEnabled = featureFlags.isEnabled(REGION_SAMPLING)
 
     private fun updateColors() {
+
         if (regionSamplingEnabled && smallRegionSampler != null && largeRegionSampler != null) {
-            smallClockIsDark = smallRegionSampler!!.currentRegionDarkness().isDark
-            largeClockIsDark = largeRegionSampler!!.currentRegionDarkness().isDark
+            val wallpaperManager = WallpaperManager.getInstance(context)
+            if (!wallpaperManager.lockScreenWallpaperExists()) {
+                smallClockIsDark = smallRegionSampler!!.currentRegionDarkness().isDark
+                largeClockIsDark = largeRegionSampler!!.currentRegionDarkness().isDark
+            }
         } else {
             val isLightTheme = TypedValue()
             context.theme.resolveAttribute(android.R.attr.isLightTheme, isLightTheme, true)
@@ -319,5 +328,9 @@ open class ClockEventController @Inject constructor(
                 isDozing = localIsDozing
             }
         }
+    }
+
+    companion object {
+        private val TAG = ClockEventController::class.simpleName!!
     }
 }

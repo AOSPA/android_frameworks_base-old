@@ -203,7 +203,7 @@ public final class BluetoothDeviceGroup implements BluetoothProfile {
      * Application should call this method as soon as it is done with
      * Group operations.
      */
-    /*package*/ void close() {
+    public void close() {
         if (VDBG) log("close()");
 
         mAppRegistered = false;

@@ -53,7 +53,6 @@ import com.android.internal.content.InstallLocationUtils;
 import com.android.internal.content.NativeLibraryHelper;
 import com.android.internal.util.Preconditions;
 import com.android.server.pm.parsing.PackageParser2;
-import com.android.server.pm.pkg.AndroidPackage;
 
 import libcore.io.IoUtils;
 
@@ -98,7 +97,7 @@ class InstallingSession {
     final boolean mIsInherit;
     final int mSessionId;
     final int mRequireUserAction;
-    final boolean mKeepApplicationEnabledSetting;
+    final boolean mApplicationEnabledSettingPersistent;
 
     // For move install
     InstallingSession(OriginInfo originInfo, MoveInfo moveInfo, IPackageInstallObserver2 observer,
@@ -131,7 +130,7 @@ class InstallingSession {
         mIsInherit = false;
         mSessionId = -1;
         mRequireUserAction = USER_ACTION_UNSPECIFIED;
-        mKeepApplicationEnabledSetting = false;
+        mApplicationEnabledSettingPersistent = false;
     }
 
     InstallingSession(int sessionId, File stagedDir, IPackageInstallObserver2 observer,
@@ -165,7 +164,7 @@ class InstallingSession {
         mIsInherit = sessionParams.mode == MODE_INHERIT_EXISTING;
         mSessionId = sessionId;
         mRequireUserAction = sessionParams.requireUserAction;
-        mKeepApplicationEnabledSetting = sessionParams.keepApplicationEnabledSetting;
+        mApplicationEnabledSettingPersistent = sessionParams.applicationEnabledSettingPersistent;
     }
 
     @Override
@@ -197,12 +196,13 @@ class InstallingSession {
         }
         // Override with defaults if needed.
         Computer snapshot = mPm.snapshotComputer();
-        AndroidPackage installedPkg = snapshot.getPackage(packageName);
+        var installedPkgState = snapshot.getPackageStateInternal(packageName);
+        var installedPkg = installedPkgState == null ? null : installedPkgState.getAndroidPackage();
         if (installedPkg != null) {
             // Currently installed package which the new package is attempting to replace
             recommendedInstallLocation = InstallLocationUtils.installLocationPolicy(
                     installLocation, recommendedInstallLocation, mInstallFlags,
-                    installedPkg.isSystem(), installedPkg.isExternalStorage());
+                    installedPkgState.isSystem(), installedPkg.isExternalStorage());
         }
 
         final boolean onInt = (mInstallFlags & PackageManager.INSTALL_INTERNAL) != 0;
@@ -609,6 +609,7 @@ class InstallingSession {
                 // processApkInstallRequests() fails. Need a way to keep info stored in apexd
                 // and PMS in sync in the face of install failures.
                 request.setApexInfo(apexInfo);
+                request.setApexModuleName(apexInfo.moduleName);
                 mPm.mHandler.post(() -> processApkInstallRequests(true, requests));
                 return;
             }

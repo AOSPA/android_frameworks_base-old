@@ -16,8 +16,15 @@
 
 package com.android.server.permission.access
 
+import android.os.Handler
+import android.os.Looper
+import android.os.Message
+import android.os.SystemClock
+import android.os.UserHandle
 import android.util.AtomicFile
 import android.util.Log
+import com.android.internal.annotations.GuardedBy
+import com.android.internal.os.BackgroundThread
 import com.android.modules.utils.BinaryXmlPullParser
 import com.android.modules.utils.BinaryXmlSerializer
 import com.android.server.permission.access.collection.* // ktlint-disable no-wildcard-imports
@@ -32,25 +39,38 @@ import java.io.FileNotFoundException
 class AccessPersistence(
     private val policy: AccessPolicy
 ) {
+    private val scheduleLock = Any()
+    @GuardedBy("scheduleLock")
+    private val pendingMutationTimesMillis = IntLongMap()
+    @GuardedBy("scheduleLock")
+    private val pendingStates = IntMap<AccessState>()
+    @GuardedBy("scheduleLock")
+    private lateinit var writeHandler: WriteHandler
+
+    private val writeLock = Any()
+
+    fun initialize() {
+        writeHandler = WriteHandler(BackgroundThread.getHandler().looper)
+    }
+
     fun read(state: AccessState) {
-        readSystemState(state.systemState)
-        val userStates = state.userStates
+        readSystemState(state)
         state.systemState.userIds.forEachIndexed { _, userId ->
-            readUserState(userId, userStates[userId])
+            readUserState(state, userId)
         }
     }
 
-    private fun readSystemState(systemState: SystemState) {
+    private fun readSystemState(state: AccessState) {
         systemFile.parse {
             // This is the canonical way to call an extension function in a different class.
             // TODO(b/259469752): Use context receiver for this when it becomes stable.
-            with(policy) { parseSystemState(systemState) }
+            with(policy) { parseSystemState(state) }
         }
     }
 
-    private fun readUserState(userId: Int, userState: UserState) {
+    private fun readUserState(state: AccessState, userId: Int) {
         getUserFile(userId).parse {
-            with(policy) { parseUserState(userId, userState) }
+            with(policy) { parseUserState(state, userId) }
         }
     }
 
@@ -65,30 +85,70 @@ class AccessPersistence(
     }
 
     fun write(state: AccessState) {
-        writeState(state.systemState, ::writeSystemState)
+        state.systemState.write(state, UserHandle.USER_ALL)
         state.userStates.forEachIndexed { _, userId, userState ->
-            writeState(userState) { writeUserState(userId, it) }
+            userState.write(state, userId)
         }
     }
 
-    private inline fun <T : WritableState> writeState(state: T, write: (T) -> Unit) {
-        when (val writeMode = state.writeMode) {
+    private fun WritableState.write(state: AccessState, userId: Int) {
+        when (val writeMode = writeMode) {
             WriteMode.NONE -> {}
-            WriteMode.SYNC -> write(state)
-            WriteMode.ASYNC -> TODO()
+            WriteMode.SYNC -> {
+                synchronized(scheduleLock) { pendingStates[userId] = state }
+                writePendingState(userId)
+            }
+            WriteMode.ASYNC -> {
+                synchronized(scheduleLock) {
+                    writeHandler.removeMessages(userId)
+                    pendingStates[userId] = state
+                    // SystemClock.uptimeMillis() is used in Handler.sendMessageDelayed().
+                    val currentTimeMillis = SystemClock.uptimeMillis()
+                    val pendingMutationTimeMillis =
+                        pendingMutationTimesMillis.getOrPut(userId) { currentTimeMillis }
+                    val currentDelayMillis = currentTimeMillis - pendingMutationTimeMillis
+                    val message = writeHandler.obtainMessage(userId)
+                    if (currentDelayMillis > MAX_WRITE_DELAY_MILLIS) {
+                        message.sendToTarget()
+                    } else {
+                        val newDelayMillis = WRITE_DELAY_TIME_MILLIS
+                            .coerceAtMost(MAX_WRITE_DELAY_MILLIS - currentDelayMillis)
+                        writeHandler.sendMessageDelayed(message, newDelayMillis)
+                    }
+                }
+            }
             else -> error(writeMode)
         }
     }
 
-    private fun writeSystemState(systemState: SystemState) {
-        systemFile.serialize {
-            with(policy) { serializeSystemState(systemState) }
+    private fun writePendingState(userId: Int) {
+        synchronized(writeLock) {
+            val state: AccessState?
+            synchronized(scheduleLock) {
+                pendingMutationTimesMillis -= userId
+                state = pendingStates.removeReturnOld(userId)
+                writeHandler.removeMessages(userId)
+            }
+            if (state == null) {
+                return
+            }
+            if (userId == UserHandle.USER_ALL) {
+                writeSystemState(state)
+            } else {
+                writeUserState(state, userId)
+            }
         }
     }
 
-    private fun writeUserState(userId: Int, userState: UserState) {
+    private fun writeSystemState(state: AccessState) {
+        systemFile.serialize {
+            with(policy) { serializeSystemState(state) }
+        }
+    }
+
+    private fun writeUserState(state: AccessState, userId: Int) {
         getUserFile(userId).serialize {
-            with(policy) { serializeUserState(userId, userState) }
+            with(policy) { serializeUserState(state, userId) }
         }
     }
 
@@ -110,5 +170,25 @@ class AccessPersistence(
         private val LOG_TAG = AccessPersistence::class.java.simpleName
 
         private const val FILE_NAME = "access.abx"
+
+        private const val WRITE_DELAY_TIME_MILLIS = 1000L
+        private const val MAX_WRITE_DELAY_MILLIS = 2000L
+    }
+
+    private inner class WriteHandler(looper: Looper) : Handler(looper) {
+        fun writeAtTime(userId: Int, timeMillis: Long) {
+            removeMessages(userId)
+            val message = obtainMessage(userId)
+            sendMessageDelayed(message, timeMillis)
+        }
+
+        fun cancelWrite(userId: Int) {
+            removeMessages(userId)
+        }
+
+        override fun handleMessage(message: Message) {
+            val userId = message.what
+            writePendingState(userId)
+        }
     }
 }

@@ -79,12 +79,30 @@ public interface StatusBarIconController {
 
     /** Refresh the state of an IconManager by recreating the views */
     void refreshIconGroup(IconManager iconManager);
-    /** */
+
+    /**
+     * Adds or updates an icon for a given slot for a **tile service icon**.
+     *
+     * TODO(b/265307726): Merge with {@link #setIcon(String, StatusBarIcon)} or make this method
+     *   much more clearly distinct from that method.
+     */
     void setExternalIcon(String slot);
-    /** */
+
+    /**
+     * Adds or updates an icon for the given slot for **internal system icons**.
+     *
+     * TODO(b/265307726): Rename to `setInternalIcon`, or merge this appropriately with the
+     * {@link #setIcon(String, StatusBarIcon)} method.
+     */
     void setIcon(String slot, int resourceId, CharSequence contentDescription);
-    /** */
+
+    /**
+     * Adds or updates an icon for the given slot for an **externally-provided icon**.
+     *
+     * TODO(b/265307726): Rename to `setExternalIcon` or something similar.
+     */
     void setIcon(String slot, StatusBarIcon icon);
+
     /** */
     void setWifiIcon(String slot, WifiIconState state);
 
@@ -133,8 +151,16 @@ public interface StatusBarIconController {
      * TAG_PRIMARY to refer to the first icon at a given slot.
      */
     void removeIcon(String slot, int tag);
+
     /** */
     void removeAllIconsForSlot(String slot);
+
+    /**
+     * Removes all the icons for the given slot.
+     *
+     * Only use this for icons that have come from **an external process**.
+     */
+    void removeAllIconsForExternalSlot(String slot);
 
     // TODO: See if we can rename this tunable name.
     String ICON_HIDE_LIST = "icon_blacklist";
@@ -359,6 +385,7 @@ public interface StatusBarIconController {
         // Whether or not these icons show up in dumpsys
         protected boolean mShouldLog = false;
         private StatusBarIconController mController;
+        private final StatusBarLocation mLocation;
 
         // Enables SystemUI demo mode to take effect in this group
         protected boolean mDemoable = true;
@@ -381,11 +408,12 @@ public interface StatusBarIconController {
             mContext = group.getContext();
             mIconSize = mContext.getResources().getDimensionPixelSize(
                     com.android.internal.R.dimen.status_bar_icon_size);
+            mLocation = location;
 
             if (statusBarPipelineFlags.runNewMobileIconsBackend()) {
                 // This starts the flow for the new pipeline, and will notify us of changes if
                 // {@link StatusBarPipelineFlags#useNewMobileIcons} is also true.
-                mMobileIconsViewModel = mobileUiAdapter.createMobileIconsViewModel();
+                mMobileIconsViewModel = mobileUiAdapter.getMobileIconsViewModel();
                 MobileIconsBinder.bind(mGroup, mMobileIconsViewModel);
             } else {
                 mMobileIconsViewModel = null;
@@ -394,7 +422,7 @@ public interface StatusBarIconController {
             if (statusBarPipelineFlags.runNewWifiIconBackend()) {
                 // This starts the flow for the new pipeline, and will notify us of changes if
                 // {@link StatusBarPipelineFlags#useNewWifiIcon} is also true.
-                mWifiViewModel = wifiUiAdapter.bindGroup(mGroup, location);
+                mWifiViewModel = wifiUiAdapter.bindGroup(mGroup, mLocation);
             } else {
                 mWifiViewModel = null;
             }
@@ -495,6 +523,11 @@ public interface StatusBarIconController {
 
             ModernStatusBarWifiView view = onCreateModernStatusBarWifiView(slot);
             mGroup.addView(view, index, onCreateLayoutParams());
+
+            if (mIsInDemoMode) {
+                mDemoStatusIcons.addModernWifiView(mWifiViewModel);
+            }
+
             return view;
         }
 
@@ -569,7 +602,7 @@ public interface StatusBarIconController {
                     .constructAndBind(
                             mobileContext,
                             slot,
-                            mMobileIconsViewModel.viewModelForSub(subId)
+                            mMobileIconsViewModel.viewModelForSub(subId, mLocation)
                         );
         }
 
@@ -686,6 +719,9 @@ public interface StatusBarIconController {
             mIsInDemoMode = true;
             if (mDemoStatusIcons == null) {
                 mDemoStatusIcons = createDemoStatusIcons();
+                if (mStatusBarPipelineFlags.useNewWifiIcon()) {
+                    mDemoStatusIcons.addModernWifiView(mWifiViewModel);
+                }
             }
             mDemoStatusIcons.onDemoModeStarted();
         }
@@ -705,7 +741,12 @@ public interface StatusBarIconController {
         }
 
         protected DemoStatusIcons createDemoStatusIcons() {
-            return new DemoStatusIcons((LinearLayout) mGroup, mMobileIconsViewModel, mIconSize);
+            return new DemoStatusIcons(
+                    (LinearLayout) mGroup,
+                    mMobileIconsViewModel,
+                    mLocation,
+                    mIconSize
+            );
         }
     }
 }

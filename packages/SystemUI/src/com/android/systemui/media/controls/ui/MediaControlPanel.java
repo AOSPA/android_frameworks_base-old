@@ -23,6 +23,7 @@ import static com.android.systemui.media.controls.models.recommendation.Smartspa
 import android.animation.Animator;
 import android.animation.AnimatorInflater;
 import android.animation.AnimatorSet;
+import android.app.BroadcastOptions;
 import android.app.PendingIntent;
 import android.app.WallpaperColors;
 import android.app.smartspace.SmartspaceAction;
@@ -50,7 +51,6 @@ import android.os.Process;
 import android.os.Trace;
 import android.text.TextUtils;
 import android.util.Log;
-import android.util.Pair;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -68,6 +68,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.graphics.ColorUtils;
 import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.logging.InstanceId;
+import com.android.internal.widget.CachingIconView;
 import com.android.settingslib.widget.AdaptiveIcon;
 import com.android.systemui.ActivityIntentHelper;
 import com.android.systemui.R;
@@ -111,7 +112,10 @@ import com.android.systemui.surfaceeffects.turbulencenoise.TurbulenceNoiseAnimat
 import com.android.systemui.surfaceeffects.turbulencenoise.TurbulenceNoiseController;
 import com.android.systemui.util.ColorUtilKt;
 import com.android.systemui.util.animation.TransitionLayout;
+import com.android.systemui.util.concurrency.DelayableExecutor;
 import com.android.systemui.util.time.SystemClock;
+
+import dagger.Lazy;
 
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -120,7 +124,7 @@ import java.util.concurrent.Executor;
 
 import javax.inject.Inject;
 
-import dagger.Lazy;
+import kotlin.Triple;
 import kotlin.Unit;
 
 /**
@@ -166,10 +170,13 @@ public class MediaControlPanel {
             R.id.action1
     );
 
+    // Time in millis for playing turbulence noise that is played after a touch ripple.
+    @VisibleForTesting static final long TURBULENCE_NOISE_PLAY_DURATION = 7500L;
+
     private final SeekBarViewModel mSeekBarViewModel;
     private SeekBarObserver mSeekBarObserver;
     protected final Executor mBackgroundExecutor;
-    private final Executor mMainExecutor;
+    private final DelayableExecutor mMainExecutor;
     private final ActivityStarter mActivityStarter;
     private final BroadcastSender mBroadcastSender;
 
@@ -222,8 +229,10 @@ public class MediaControlPanel {
     private String mSwitchBroadcastApp;
     private MultiRippleController mMultiRippleController;
     private TurbulenceNoiseController mTurbulenceNoiseController;
-    private FeatureFlags mFeatureFlags;
-    private TurbulenceNoiseAnimationConfig mTurbulenceNoiseAnimationConfig = null;
+    private final FeatureFlags mFeatureFlags;
+    private TurbulenceNoiseAnimationConfig mTurbulenceNoiseAnimationConfig;
+    @VisibleForTesting
+    MultiRippleController.Companion.RipplesFinishedListener mRipplesFinishedListener;
 
     /**
      * Initialize a new control panel
@@ -237,7 +246,7 @@ public class MediaControlPanel {
     public MediaControlPanel(
             Context context,
             @Background Executor backgroundExecutor,
-            @Main Executor mainExecutor,
+            @Main DelayableExecutor mainExecutor,
             ActivityStarter activityStarter,
             BroadcastSender broadcastSender,
             MediaViewController mediaViewController,
@@ -396,23 +405,28 @@ public class MediaControlPanel {
 
         TextView titleText = mMediaViewHolder.getTitleText();
         TextView artistText = mMediaViewHolder.getArtistText();
+        CachingIconView explicitIndicator = mMediaViewHolder.getExplicitIndicator();
         AnimatorSet enter = loadAnimator(R.anim.media_metadata_enter,
-                Interpolators.EMPHASIZED_DECELERATE, titleText, artistText);
+                Interpolators.EMPHASIZED_DECELERATE, titleText, artistText, explicitIndicator);
         AnimatorSet exit = loadAnimator(R.anim.media_metadata_exit,
-                Interpolators.EMPHASIZED_ACCELERATE, titleText, artistText);
+                Interpolators.EMPHASIZED_ACCELERATE, titleText, artistText, explicitIndicator);
 
         MultiRippleView multiRippleView = vh.getMultiRippleView();
         mMultiRippleController = new MultiRippleController(multiRippleView);
         mTurbulenceNoiseController = new TurbulenceNoiseController(vh.getTurbulenceNoiseView());
-        multiRippleView.addRipplesFinishedListener(
-                () -> {
-                    if (mTurbulenceNoiseAnimationConfig == null) {
-                        mTurbulenceNoiseAnimationConfig = createLingeringNoiseAnimation();
-                    }
-                    // Color will be correctly updated in ColorSchemeTransition.
-                    mTurbulenceNoiseController.play(mTurbulenceNoiseAnimationConfig);
+        if (mFeatureFlags.isEnabled(Flags.UMO_TURBULENCE_NOISE)) {
+            mRipplesFinishedListener = () -> {
+                if (mTurbulenceNoiseAnimationConfig == null) {
+                    mTurbulenceNoiseAnimationConfig = createTurbulenceNoiseAnimation();
                 }
-        );
+                // Color will be correctly updated in ColorSchemeTransition.
+                mTurbulenceNoiseController.play(mTurbulenceNoiseAnimationConfig);
+                mMainExecutor.executeDelayed(
+                        mTurbulenceNoiseController::finish, TURBULENCE_NOISE_PLAY_DURATION);
+            };
+            mMultiRippleController.addRipplesFinishedListener(mRipplesFinishedListener);
+        }
+
         mColorSchemeTransition = new ColorSchemeTransition(
                 mContext, mMediaViewHolder, mMultiRippleController, mTurbulenceNoiseController);
         mMetadataAnimationHandler = new MetadataAnimationHandler(exit, enter);
@@ -621,7 +635,9 @@ public class MediaControlPanel {
                                         device.getIntent().getIntent(), true);
                             } else {
                                 try {
-                                    device.getIntent().send();
+                                    BroadcastOptions options = BroadcastOptions.makeBasic();
+                                    options.setInteractive(true);
+                                    device.getIntent().send(options.toBundle());
                                 } catch (PendingIntent.CanceledException e) {
                                     Log.e(TAG, "Device pending intent was canceled");
                                 }
@@ -660,11 +676,15 @@ public class MediaControlPanel {
     private boolean bindSongMetadata(MediaData data) {
         TextView titleText = mMediaViewHolder.getTitleText();
         TextView artistText = mMediaViewHolder.getArtistText();
+        ConstraintSet expandedSet = mMediaViewController.getExpandedLayout();
+        ConstraintSet collapsedSet = mMediaViewController.getCollapsedLayout();
         return mMetadataAnimationHandler.setNext(
-            Pair.create(data.getSong(), data.getArtist()),
+            new Triple(data.getSong(), data.getArtist(), data.isExplicit()),
             () -> {
                 titleText.setText(data.getSong());
                 artistText.setText(data.getArtist());
+                setVisibleAndAlpha(expandedSet, R.id.media_explicit_indicator, data.isExplicit());
+                setVisibleAndAlpha(collapsedSet, R.id.media_explicit_indicator, data.isExplicit());
 
                 // refreshState is required here to resize the text views (and prevent ellipsis)
                 mMediaViewController.refreshState();
@@ -1052,7 +1072,7 @@ public class MediaControlPanel {
         );
     }
 
-    private TurbulenceNoiseAnimationConfig createLingeringNoiseAnimation() {
+    private TurbulenceNoiseAnimationConfig createTurbulenceNoiseAnimation() {
         return new TurbulenceNoiseAnimationConfig(
                 TurbulenceNoiseAnimationConfig.DEFAULT_NOISE_GRID_COUNT,
                 TurbulenceNoiseAnimationConfig.DEFAULT_LUMINOSITY_MULTIPLIER,
@@ -1066,7 +1086,11 @@ public class MediaControlPanel {
                 TurbulenceNoiseAnimationConfig.DEFAULT_OPACITY,
                 /* width= */ mMediaViewHolder.getMultiRippleView().getWidth(),
                 /* height= */ mMediaViewHolder.getMultiRippleView().getHeight(),
-                TurbulenceNoiseAnimationConfig.DEFAULT_NOISE_DURATION_IN_MILLIS,
+                TurbulenceNoiseAnimationConfig.DEFAULT_MAX_DURATION_IN_MILLIS,
+                /* easeInDuration= */
+                TurbulenceNoiseAnimationConfig.DEFAULT_EASING_DURATION_IN_MILLIS,
+                /* easeOutDuration= */
+                TurbulenceNoiseAnimationConfig.DEFAULT_EASING_DURATION_IN_MILLIS,
                 this.getContext().getResources().getDisplayMetrics().density,
                 BlendMode.PLUS,
                 /* onAnimationEnd= */ null

@@ -147,6 +147,14 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content" />
 
+    <!-- Explicit Indicator -->
+    <com.android.internal.widget.CachingIconView
+        android:id="@+id/media_explicit_indicator"
+        android:layout_width="@dimen/qs_media_explicit_indicator_icon_size"
+        android:layout_height="@dimen/qs_media_explicit_indicator_icon_size"
+        android:src="@drawable/ic_media_explicit_indicator"
+        />
+
     <!-- Artist name -->
     <TextView
         android:id="@+id/header_artist"
@@ -186,7 +194,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:barrierDirection="end"
         app:constraint_referenced_ids="actionPrev,media_scrubbing_elapsed_time,media_progress_bar,actionNext,media_scrubbing_total_time,action0,action1,action2,action3,action4"
-        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintRight_toRightOf="@id/actionPlayPause"
         />
 
     <!-- This barrier is used in expanded view to constrain the bottom row of actions -->

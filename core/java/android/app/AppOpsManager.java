@@ -1439,9 +1439,18 @@ public class AppOpsManager {
     public static final int OP_SYSTEM_EXEMPT_FROM_FGS_STOP_BUTTON =
             AppProtoEnums.APP_OP_SYSTEM_EXEMPT_FROM_FGS_STOP_BUTTON;
 
+    /**
+     * Allows an application to capture bugreport directly without consent dialog when using the
+     * bugreporting API on userdebug/eng build.
+     *
+     * @hide
+     */
+    public static final int OP_CAPTURE_CONSENTLESS_BUGREPORT_ON_USERDEBUG_BUILD =
+            AppProtoEnums.APP_OP_CAPTURE_CONSENTLESS_BUGREPORT_ON_USERDEBUG_BUILD;
+
     /** @hide */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    public static final int _NUM_OP = 131;
+    public static final int _NUM_OP = 132;
 
     /** Access to coarse location information. */
     public static final String OPSTR_COARSE_LOCATION = "android:coarse_location";
@@ -2011,6 +2020,16 @@ public class AppOpsManager {
     public static final String OPSTR_SYSTEM_EXEMPT_FROM_FGS_STOP_BUTTON =
             "android:system_exempt_from_fgs_stop_button";
 
+    /**
+     * Allows an application to capture bugreport directly without consent dialog when using the
+     * bugreporting API on userdebug/eng build.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String OPSTR_CAPTURE_CONSENTLESS_BUGREPORT_ON_USERDEBUG_BUILD =
+            "android:capture_consentless_bugreport_on_userdebug_build";
+
     /** {@link #sAppOpsToNote} not initialized yet for this op */
     private static final byte SHOULD_COLLECT_NOTE_OP_NOT_INITIALIZED = 0;
     /** Should not collect noting of this app-op in {@link #sAppOpsToNote} */
@@ -2108,6 +2127,7 @@ public class AppOpsManager {
             OP_RUN_LONG_JOBS,
             OP_READ_MEDIA_VISUAL_USER_SELECTED,
             OP_FOREGROUND_SERVICE_SPECIAL_USE,
+            OP_CAPTURE_CONSENTLESS_BUGREPORT_ON_USERDEBUG_BUILD,
     };
 
     static final AppOpInfo[] sAppOpInfos = new AppOpInfo[]{
@@ -2489,7 +2509,7 @@ public class AppOpsManager {
                 "RECEIVE_EXPLICIT_USER_INTERACTION_AUDIO").setDefaultMode(
                 AppOpsManager.MODE_ALLOWED).build(),
         new AppOpInfo.Builder(OP_RUN_LONG_JOBS, OPSTR_RUN_LONG_JOBS, "RUN_LONG_JOBS")
-                .setPermission(Manifest.permission.RUN_LONG_JOBS).build(),
+                .setDefaultMode(AppOpsManager.MODE_ALLOWED).build(),
             new AppOpInfo.Builder(OP_READ_MEDIA_VISUAL_USER_SELECTED,
                     OPSTR_READ_MEDIA_VISUAL_USER_SELECTED, "READ_MEDIA_VISUAL_USER_SELECTED")
                     .setPermission(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
@@ -2515,7 +2535,13 @@ public class AppOpsManager {
                 .build(),
         new AppOpInfo.Builder(OP_SYSTEM_EXEMPT_FROM_FGS_STOP_BUTTON,
                 OPSTR_SYSTEM_EXEMPT_FROM_FGS_STOP_BUTTON,
-                "SYSTEM_EXEMPT_FROM_FGS_STOP_BUTTON").build()
+                "SYSTEM_EXEMPT_FROM_FGS_STOP_BUTTON").build(),
+        new AppOpInfo.Builder(
+                OP_CAPTURE_CONSENTLESS_BUGREPORT_ON_USERDEBUG_BUILD,
+                OPSTR_CAPTURE_CONSENTLESS_BUGREPORT_ON_USERDEBUG_BUILD,
+                "CAPTURE_CONSENTLESS_BUGREPORT_ON_USERDEBUG_BUILD")
+                .setPermission(Manifest.permission.CAPTURE_CONSENTLESS_BUGREPORT_ON_USERDEBUG_BUILD)
+                .build()
     };
 
     // The number of longs needed to form a full bitmask of app ops
@@ -6844,22 +6870,52 @@ public class AppOpsManager {
     }
 
     /**
-     * Callback for notification of an op being noted.
+     * Callback for notification of an app-op being noted.
      *
      * @hide
      */
+    @SystemApi
     public interface OnOpNotedListener {
         /**
-         * Called when an op was noted.
-         * @param code The op code.
+         * Called when an app-op is noted.
+         *
+         * @param op The operation that was noted.
          * @param uid The UID performing the operation.
          * @param packageName The package performing the operation.
          * @param attributionTag The attribution tag performing the operation.
          * @param flags The flags of this op
          * @param result The result of the note.
          */
-        void onOpNoted(int code, int uid, String packageName, String attributionTag,
-                @OpFlags int flags, @Mode int result);
+        void onOpNoted(@NonNull String op, int uid, @NonNull String packageName,
+                @Nullable String attributionTag, @OpFlags int flags, @Mode int result);
+    }
+
+    /**
+     * Callback for notification of an app-op being noted to be used within platform code.
+     *
+     * This allows being notified using raw op codes instead of string op names.
+     *
+     * @hide
+     */
+    public interface OnOpNotedInternalListener extends OnOpNotedListener {
+        /**
+         * Called when an app-op is noted.
+         *
+         * @param code The code of the operation that was noted.
+         * @param uid The UID performing the operation.
+         * @param packageName The package performing the operation.
+         * @param attributionTag The attribution tag performing the operation.
+         * @param flags The flags of this op
+         * @param result The result of the note.
+         */
+        void onOpNoted(int code, int uid, @NonNull String packageName,
+                @Nullable String attributionTag, @OpFlags int flags, @Mode int result);
+
+        @Override
+        default void onOpNoted(@NonNull String op, int uid, @NonNull String packageName,
+                @Nullable String attributionTag, @OpFlags int flags, @Mode int result) {
+            onOpNoted(strOpToOp(op), uid, packageName, attributionTag, flags, result);
+        }
     }
 
     /**
@@ -7654,10 +7710,39 @@ public class AppOpsManager {
      * @param ops The ops to watch.
      * @param callback Where to report changes.
      *
-     * @see #startWatchingActive(int[], OnOpActiveChangedListener)
-     * @see #startWatchingStarted(int[], OnOpStartedListener)
      * @see #stopWatchingNoted(OnOpNotedListener)
      * @see #noteOp(String, int, String, String, String)
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(value=Manifest.permission.WATCH_APPOPS, conditional=true)
+    public void startWatchingNoted(@NonNull String[] ops, @NonNull OnOpNotedListener callback) {
+        final int[] intOps = new int[ops.length];
+        for (int i = 0; i < ops.length; i++) {
+            intOps[i] = strOpToOp(ops[i]);
+        }
+        startWatchingNoted(intOps, callback);
+    }
+
+    /**
+     * Start watching for noted app ops. An app op may be immediate or long running.
+     * Immediate ops are noted while long running ones are started and stopped. This
+     * method allows registering a listener to be notified when an app op is noted. If
+     * an op is being noted by any package you will get a callback. To change the
+     * watched ops for a registered callback you need to unregister and register it again.
+     *
+     * <p> If you don't hold the {@link android.Manifest.permission#WATCH_APPOPS} permission
+     * you can watch changes only for your UID.
+     *
+     * This allows observing noted ops by their raw op codes instead of string op names.
+     *
+     * @param ops The ops to watch.
+     * @param callback Where to report changes.
+     *
+     * @see #startWatchingActive(int[], OnOpActiveChangedListener)
+     * @see #startWatchingStarted(int[], OnOpStartedListener)
+     * @see #startWatchingNoted(String[], OnOpNotedListener)
      *
      * @hide
      */
@@ -7673,7 +7758,10 @@ public class AppOpsManager {
                 @Override
                 public void opNoted(int op, int uid, String packageName, String attributionTag,
                         int flags, int mode) {
-                    callback.onOpNoted(op, uid, packageName, attributionTag, flags, mode);
+                    if (sAppOpInfos[op].name != null) {
+                        callback.onOpNoted(sAppOpInfos[op].name, uid, packageName, attributionTag,
+                                flags, mode);
+                    }
                 }
             };
             mNotedWatchers.put(callback, cb);
@@ -7689,11 +7777,12 @@ public class AppOpsManager {
      * Stop watching for noted app ops. An app op may be immediate or long running.
      * Unregistering a non-registered callback has no effect.
      *
-     * @see #startWatchingNoted(int[], OnOpNotedListener)
+     * @see #startWatchingNoted(String[], OnOpNotedListener)
      * @see #noteOp(String, int, String, String, String)
      *
      * @hide
      */
+    @SystemApi
     public void stopWatchingNoted(@NonNull OnOpNotedListener callback) {
         synchronized (mNotedWatchers) {
             final IAppOpsNotedCallback cb = mNotedWatchers.remove(callback);

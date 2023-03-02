@@ -87,12 +87,15 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
+import java.util.stream.Collectors;
 
 import javax.inject.Inject;
 
@@ -121,6 +124,7 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
     @VisibleForTesting
     final List<MediaDevice> mMediaDevices = new CopyOnWriteArrayList<>();
     final List<MediaDevice> mCachedMediaDevices = new CopyOnWriteArrayList<>();
+    private final List<MediaItem> mMediaItemList = new CopyOnWriteArrayList<>();
     private final AudioManager mAudioManager;
     private final PowerExemptionManager mPowerExemptionManager;
     private final KeyguardManager mKeyGuardManager;
@@ -212,6 +216,7 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
         synchronized (mMediaDevicesLock) {
             mCachedMediaDevices.clear();
             mMediaDevices.clear();
+            mMediaItemList.clear();
         }
         mNearbyDeviceInfoMap.clear();
         if (mNearbyMediaDevicesManager != null) {
@@ -262,6 +267,7 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
         synchronized (mMediaDevicesLock) {
             mCachedMediaDevices.clear();
             mMediaDevices.clear();
+            mMediaItemList.clear();
         }
         if (mNearbyMediaDevicesManager != null) {
             mNearbyMediaDevicesManager.unregisterNearbyDevicesCallback(this);
@@ -271,7 +277,9 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
 
     @Override
     public void onDeviceListUpdate(List<MediaDevice> devices) {
-        if (mMediaDevices.isEmpty() || !mIsRefreshing) {
+        boolean isListEmpty =
+                isAdvancedLayoutSupported() ? mMediaItemList.isEmpty() : mMediaDevices.isEmpty();
+        if (isListEmpty || !mIsRefreshing) {
             buildMediaDevices(devices);
             mCallback.onDeviceListChanged();
         } else {
@@ -287,7 +295,11 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
     public void onSelectedDeviceStateChanged(MediaDevice device,
             @LocalMediaManager.MediaDeviceState int state) {
         mCallback.onRouteChanged();
-        mMetricLogger.logOutputSuccess(device.toString(), new ArrayList<>(mMediaDevices));
+        if (isAdvancedLayoutSupported()) {
+            mMetricLogger.logOutputItemSuccess(device.toString(), new ArrayList<>(mMediaItemList));
+        } else {
+            mMetricLogger.logOutputSuccess(device.toString(), new ArrayList<>(mMediaDevices));
+        }
     }
 
     @Override
@@ -298,7 +310,11 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
     @Override
     public void onRequestFailed(int reason) {
         mCallback.onRouteChanged();
-        mMetricLogger.logOutputFailure(new ArrayList<>(mMediaDevices), reason);
+        if (isAdvancedLayoutSupported()) {
+            mMetricLogger.logOutputItemFailure(new ArrayList<>(mMediaItemList), reason);
+        } else {
+            mMetricLogger.logOutputFailure(new ArrayList<>(mMediaDevices), reason);
+        }
     }
 
     /**
@@ -318,6 +334,7 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
         try {
             synchronized (mMediaDevicesLock) {
                 mMediaDevices.removeIf(MediaDevice::isMutingExpectedDevice);
+                mMediaItemList.removeIf((MediaItem::isMutingExpectedDevice));
             }
             mAudioManager.cancelMuteAwaitConnection(mAudioManager.getMutingExpectedDevice());
         } catch (Exception e) {
@@ -476,20 +493,20 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
         ColorScheme mCurrentColorScheme = new ColorScheme(wallpaperColors,
                 isDarkTheme);
         if (isDarkTheme) {
-            mColorItemContent = mCurrentColorScheme.getAccent1().get(2); // A1-100
-            mColorSeekbarProgress = mCurrentColorScheme.getAccent2().get(7); // A2-600
-            mColorButtonBackground = mCurrentColorScheme.getAccent1().get(4); // A1-300
-            mColorItemBackground = mCurrentColorScheme.getNeutral2().get(9); // N2-800
-            mColorConnectedItemBackground = mCurrentColorScheme.getAccent2().get(9); // A2-800
-            mColorPositiveButtonText = mCurrentColorScheme.getAccent2().get(9); // A2-800
-            mColorDialogBackground = mCurrentColorScheme.getNeutral1().get(10); // N1-900
+            mColorItemContent = mCurrentColorScheme.getAccent1().getS100(); // A1-100
+            mColorSeekbarProgress = mCurrentColorScheme.getAccent2().getS600(); // A2-600
+            mColorButtonBackground = mCurrentColorScheme.getAccent1().getS300(); // A1-300
+            mColorItemBackground = mCurrentColorScheme.getNeutral2().getS800(); // N2-800
+            mColorConnectedItemBackground = mCurrentColorScheme.getAccent2().getS800(); // A2-800
+            mColorPositiveButtonText = mCurrentColorScheme.getAccent2().getS800(); // A2-800
+            mColorDialogBackground = mCurrentColorScheme.getNeutral1().getS900(); // N1-900
         } else {
-            mColorItemContent = mCurrentColorScheme.getAccent1().get(9); // A1-800
-            mColorSeekbarProgress = mCurrentColorScheme.getAccent1().get(4); // A1-300
-            mColorButtonBackground = mCurrentColorScheme.getAccent1().get(7); // A1-600
-            mColorItemBackground = mCurrentColorScheme.getAccent2().get(1); // A2-50
-            mColorConnectedItemBackground = mCurrentColorScheme.getAccent1().get(2); // A1-100
-            mColorPositiveButtonText = mCurrentColorScheme.getNeutral1().get(1); // N1-50
+            mColorItemContent = mCurrentColorScheme.getAccent1().getS800(); // A1-800
+            mColorSeekbarProgress = mCurrentColorScheme.getAccent1().getS300(); // A1-300
+            mColorButtonBackground = mCurrentColorScheme.getAccent1().getS600(); // A1-600
+            mColorItemBackground = mCurrentColorScheme.getAccent2().getS50(); // A2-50
+            mColorConnectedItemBackground = mCurrentColorScheme.getAccent1().getS100(); // A1-100
+            mColorPositiveButtonText = mCurrentColorScheme.getNeutral1().getS50(); // N1-50
             mColorDialogBackground = mCurrentColorScheme.getBackgroundColor();
         }
     }
@@ -547,6 +564,14 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
     }
 
     private void buildMediaDevices(List<MediaDevice> devices) {
+        if (isAdvancedLayoutSupported()) {
+            buildMediaItems(devices);
+        } else {
+            buildDefaultMediaDevices(devices);
+        }
+    }
+
+    private void buildDefaultMediaDevices(List<MediaDevice> devices) {
         synchronized (mMediaDevicesLock) {
             attachRangeInfo(devices);
             Collections.sort(devices, Comparator.naturalOrder());
@@ -603,6 +628,103 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
         }
     }
 
+    private void buildMediaItems(List<MediaDevice> devices) {
+        synchronized (mMediaDevicesLock) {
+            if (!isRouteProcessSupported() || (isRouteProcessSupported()
+                    && !mLocalMediaManager.isPreferenceRouteListingExist())) {
+                attachRangeInfo(devices);
+                Collections.sort(devices, Comparator.naturalOrder());
+            }
+            // For the first time building list, to make sure the top device is the connected
+            // device.
+            boolean needToHandleMutingExpectedDevice =
+                    hasMutingExpectedDevice() && !isCurrentConnectedDeviceRemote();
+            final MediaDevice connectedMediaDevice =
+                    needToHandleMutingExpectedDevice ? null
+                            : getCurrentConnectedMediaDevice();
+            if (mMediaItemList.isEmpty()) {
+                if (connectedMediaDevice == null) {
+                    if (DEBUG) {
+                        Log.d(TAG, "No connected media device or muting expected device exist.");
+                    }
+                    categorizeMediaItems(null, devices, needToHandleMutingExpectedDevice);
+                    return;
+                }
+                // selected device exist
+                categorizeMediaItems(connectedMediaDevice, devices, false);
+                return;
+            }
+            // To keep the same list order
+            final List<MediaDevice> targetMediaDevices = new ArrayList<>();
+            final Map<Integer, MediaItem> dividerItems = new HashMap<>();
+            for (MediaItem originalMediaItem : mMediaItemList) {
+                for (MediaDevice newDevice : devices) {
+                    if (originalMediaItem.getMediaDevice().isPresent()
+                            && TextUtils.equals(originalMediaItem.getMediaDevice().get().getId(),
+                            newDevice.getId())) {
+                        targetMediaDevices.add(newDevice);
+                        break;
+                    }
+                }
+                if (originalMediaItem.getMediaItemType()
+                        == MediaItem.MediaItemType.TYPE_GROUP_DIVIDER) {
+                    dividerItems.put(mMediaItemList.indexOf(originalMediaItem), originalMediaItem);
+                }
+            }
+            if (targetMediaDevices.size() != devices.size()) {
+                devices.removeAll(targetMediaDevices);
+                targetMediaDevices.addAll(devices);
+            }
+            mMediaItemList.clear();
+            mMediaItemList.addAll(
+                    targetMediaDevices.stream().map(MediaItem::new).collect(Collectors.toList()));
+            dividerItems.forEach((key, item) -> {
+                mMediaItemList.add(key, item);
+            });
+            mMediaItemList.add(new MediaItem());
+        }
+    }
+
+    private void categorizeMediaItems(MediaDevice connectedMediaDevice, List<MediaDevice> devices,
+            boolean needToHandleMutingExpectedDevice) {
+        synchronized (mMediaDevicesLock) {
+            Set<String> selectedDevicesIds = getSelectedMediaDevice().stream().map(
+                    MediaDevice::getId).collect(Collectors.toSet());
+            if (connectedMediaDevice != null) {
+                selectedDevicesIds.add(connectedMediaDevice.getId());
+            }
+            boolean suggestedDeviceAdded = false;
+            boolean displayGroupAdded = false;
+            for (MediaDevice device : devices) {
+                if (needToHandleMutingExpectedDevice && device.isMutingExpectedDevice()) {
+                    mMediaItemList.add(0, new MediaItem(device));
+                } else if (!needToHandleMutingExpectedDevice && selectedDevicesIds.contains(
+                        device.getId())) {
+                    mMediaItemList.add(0, new MediaItem(device));
+                } else {
+                    if (device.isSuggestedDevice() && !suggestedDeviceAdded) {
+                        attachGroupDivider(mContext.getString(
+                                R.string.media_output_group_title_suggested_device));
+                        suggestedDeviceAdded = true;
+                    } else if (!device.isSuggestedDevice() && !displayGroupAdded) {
+                        attachGroupDivider(mContext.getString(
+                                R.string.media_output_group_title_speakers_and_displays));
+                        displayGroupAdded = true;
+                    }
+                    mMediaItemList.add(new MediaItem(device));
+                }
+            }
+            mMediaItemList.add(new MediaItem());
+        }
+    }
+
+    private void attachGroupDivider(String title) {
+        synchronized (mMediaDevicesLock) {
+            mMediaItemList.add(
+                    new MediaItem(title, MediaItem.MediaItemType.TYPE_GROUP_DIVIDER));
+        }
+    }
+
     private void attachRangeInfo(List<MediaDevice> devices) {
         for (MediaDevice mediaDevice : devices) {
             if (mNearbyDeviceInfoMap.containsKey(mediaDevice.getId())) {
@@ -620,6 +742,14 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
 
     public boolean isAdvancedLayoutSupported() {
         return mFeatureFlags.isEnabled(Flags.OUTPUT_SWITCHER_ADVANCED_LAYOUT);
+    }
+
+    public boolean isRouteProcessSupported() {
+        return mFeatureFlags.isEnabled(Flags.OUTPUT_SWITCHER_ROUTES_PROCESSING);
+    }
+
+    public boolean isSubStatusSupported() {
+        return mFeatureFlags.isEnabled(Flags.OUTPUT_SWITCHER_DEVICE_STATUS);
     }
 
     List<MediaDevice> getGroupMediaDevices() {
@@ -668,6 +798,10 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
 
     Collection<MediaDevice> getMediaDevices() {
         return mMediaDevices;
+    }
+
+    public List<MediaItem> getMediaItemList() {
+        return mMediaItemList;
     }
 
     MediaDevice getCurrentConnectedMediaDevice() {
@@ -749,9 +883,19 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
 
     boolean isAnyDeviceTransferring() {
         synchronized (mMediaDevicesLock) {
-            for (MediaDevice device : mMediaDevices) {
-                if (device.getState() == LocalMediaManager.MediaDeviceState.STATE_CONNECTING) {
-                    return true;
+            if (isAdvancedLayoutSupported()) {
+                for (MediaItem mediaItem : mMediaItemList) {
+                    if (mediaItem.getMediaDevice().isPresent()
+                            && mediaItem.getMediaDevice().get().getState()
+                            == LocalMediaManager.MediaDeviceState.STATE_CONNECTING) {
+                        return true;
+                    }
+                }
+            } else {
+                for (MediaDevice device : mMediaDevices) {
+                    if (device.getState() == LocalMediaManager.MediaDeviceState.STATE_CONNECTING) {
+                        return true;
+                    }
                 }
             }
         }

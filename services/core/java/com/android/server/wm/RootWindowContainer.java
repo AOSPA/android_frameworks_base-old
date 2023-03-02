@@ -358,25 +358,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 return false;
             }
 
-            if (matchingCandidate(task)) {
-                return true;
-            }
-
-            // Looking for the embedded tasks (if any)
-            return !task.isLeafTaskFragment() && task.forAllLeafTaskFragments(
-                    this::matchingCandidate);
-        }
-
-        boolean matchingCandidate(TaskFragment taskFragment) {
-            final Task task = taskFragment.asTask();
-            if (task == null) {
-                return false;
-            }
-
             // Overlays should not be considered as the task's logical top activity.
-            // Activities of the tasks that embedded from this one should not be used.
-            final ActivityRecord r = task.getTopNonFinishingActivity(false /* includeOverlays */,
-                    false /* includingEmbeddedTask */);
+            final ActivityRecord r = task.getTopNonFinishingActivity(false /* includeOverlays */);
 
             if (r == null || r.finishing || r.mUserId != userId
                     || r.launchMode == ActivityInfo.LAUNCH_SINGLE_INSTANCE) {
@@ -426,7 +409,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             } else if (!isDocument && !taskIsDocument
                     && mIdealRecord == null && mCandidateRecord == null
                     && task.rootAffinity != null) {
-                if (task.rootAffinity.equals(mTaskAffinity)) {
+                if (task.rootAffinity.equals(mTaskAffinity)
+                        && task.isSameRequiredDisplayCategory(mInfo)) {
                     ProtoLog.d(WM_DEBUG_TASKS, "Found matching affinity candidate!");
                     // It is possible for multiple tasks to have the same root affinity especially
                     // if they are in separate root tasks. We save off this candidate, but keep
@@ -466,10 +450,14 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         mDisplayOffTokenAcquirer = mService.new SleepTokenAcquirerImpl(DISPLAY_OFF_SLEEP_TOKEN_TAG);
     }
 
+    /**
+     * Updates the children's focused window and the top focused display if needed.
+     */
     boolean updateFocusedWindowLocked(int mode, boolean updateInputWindows) {
         mTopFocusedAppByProcess.clear();
         boolean changed = false;
         int topFocusedDisplayId = INVALID_DISPLAY;
+        // Go through the children in z-order starting at the top-most
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             final DisplayContent dc = mChildren.get(i);
             changed |= dc.updateFocusedWindowLocked(mode, updateInputWindows, topFocusedDisplayId);
@@ -1502,7 +1490,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 final String resolvedType =
                         homeIntent.resolveTypeIfNeeded(mService.mContext.getContentResolver());
                 final ResolveInfo info = mTaskSupervisor.resolveIntent(homeIntent, resolvedType,
-                        userId, flags, Binder.getCallingUid());
+                        userId, flags, Binder.getCallingUid(), Binder.getCallingPid());
                 if (info != null) {
                     aInfo = info.activityInfo;
                 }
@@ -2116,7 +2104,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 // Record the snapshot now, it will be later fetched for content-pip animation.
                 // We do this early in the process to make sure the right snapshot is used for
                 // entering content-pip animation.
-                mWindowManager.mTaskSnapshotController.recordTaskSnapshot(
+                mWindowManager.mTaskSnapshotController.recordSnapshot(
                         task, false /* allowSnapshotHome */);
                 rootTask.setBounds(r.pictureInPictureArgs.getSourceRectHint());
             }

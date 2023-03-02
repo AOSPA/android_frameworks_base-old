@@ -159,6 +159,8 @@ interface IPackageManager {
      */
     ParceledListSlice getInstalledPackages(long flags, in int userId);
 
+    String getAppMetadataPath(String packageName, int userId);
+
     /**
      * This implements getPackagesHoldingPermissions via a "last returned row"
      * mechanism that is not exposed in the API. This is to get around the IPC
@@ -211,6 +213,8 @@ interface IPackageManager {
 
     @UnsupportedAppUsage
     void setInstallerPackageName(in String targetPackage, in String installerPackageName);
+
+    void relinquishUpdateOwnership(in String targetPackage);
 
     void setApplicationCategoryHint(String packageName, int categoryHint, String callerPackageName);
 
@@ -271,6 +275,8 @@ interface IPackageManager {
     void addPersistentPreferredActivity(in IntentFilter filter, in ComponentName activity, int userId);
 
     void clearPackagePersistentPreferredActivities(String packageName, int userId);
+
+    void clearPersistentPreferredActivity(in IntentFilter filter, int userId);
 
     void addCrossProfileIntentFilter(in IntentFilter intentFilter, String ownerPackage,
             int sourceUserId, int targetUserId, int flags);
@@ -566,25 +572,7 @@ interface IPackageManager {
     boolean performDexOptSecondary(String packageName,
             String targetCompilerFilter, boolean force);
 
-    /**
-     * Ask the package manager to dump profiles associated with a package.
-     *
-     * @param packageName The name of the package to dump.
-     * @param dumpClassesAndMethods If false, pass {@code --dump-only} to profman to dump the
-     *   profile in a human readable form intended for debugging. If true, pass
-     *   {@code --dump-classes-and-methods} to profman to dump a sorted list of classes and methods
-     *   in a human readable form that is valid input for {@code profman --create-profile-from}.
-     */
-    void dumpProfiles(String packageName, boolean dumpClassesAndMethods);
-
     void forceDexOpt(String packageName);
-
-    /**
-     * Reconcile the information we have about the secondary dex files belonging to
-     * {@code packagName} and the actual dex files. For all dex files that were
-     * deleted, update the internal records and delete the generated oat files.
-     */
-    void reconcileSecondaryDexFiles(String packageName);
 
     int getMoveStatus(int moveId);
 
@@ -797,5 +785,5 @@ interface IPackageManager {
 
     void setKeepUninstalledPackages(in List<String> packageList);
 
-    boolean canPackageQuery(String sourcePackageName, String targetPackageName, int userId);
+    boolean[] canPackageQuery(String sourcePackageName, in String[] targetPackageNames, int userId);
 }

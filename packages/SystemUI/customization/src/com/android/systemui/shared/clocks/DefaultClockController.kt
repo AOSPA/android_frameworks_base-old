@@ -20,6 +20,7 @@ import android.graphics.Rect
 import android.icu.text.NumberFormat
 import android.util.TypedValue
 import android.view.LayoutInflater
+import android.view.View
 import android.widget.FrameLayout
 import androidx.annotation.VisibleForTesting
 import com.android.systemui.customization.R
@@ -87,13 +88,6 @@ class DefaultClockController(
         events.onTimeTick()
     }
 
-    override fun setLogBuffer(logBuffer: LogBuffer) {
-        smallClock.view.tag = "smallClockView"
-        largeClock.view.tag = "largeClockView"
-        smallClock.view.logBuffer = logBuffer
-        largeClock.view.logBuffer = logBuffer
-    }
-
     open inner class DefaultClockFaceController(
         override val view: AnimatableClockView,
     ) : ClockFaceController {
@@ -102,6 +96,12 @@ class DefaultClockController(
         private var currentColor = Color.MAGENTA
         private var isRegionDark = false
         protected var targetRegion: Rect? = null
+
+        override var logBuffer: LogBuffer?
+            get() = view.logBuffer
+            set(value) {
+                view.logBuffer = value
+            }
 
         init {
             view.setColors(currentColor, currentColor)
@@ -151,9 +151,15 @@ class DefaultClockController(
         view: AnimatableClockView,
     ) : DefaultClockFaceController(view) {
         override fun recomputePadding(targetRegion: Rect?) {
-            // Ignore Target Region until top padding fixed in aod
+            // We center the view within the targetRegion instead of within the parent
+            // view by computing the difference and adding that to the padding.
+            val parent = view.parent
+            val yDiff =
+                if (targetRegion != null && parent is View && parent.isLaidOut())
+                    targetRegion.centerY() - parent.height / 2f
+                else 0f
             val lp = view.getLayoutParams() as FrameLayout.LayoutParams
-            lp.topMargin = (-0.5f * view.bottom).toInt()
+            lp.topMargin = (-0.5f * view.bottom + yDiff).toInt()
             view.setLayoutParams(lp)
         }
 

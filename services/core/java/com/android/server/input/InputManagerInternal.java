@@ -171,4 +171,52 @@ public abstract class InputManagerInternal {
      * {@see Light.LIGHT_TYPE_KEYBOARD_BACKLIGHT}
      */
     public abstract void decrementKeyboardBacklight(int deviceId);
+
+    /**
+     * Add a runtime association between the input port and device type. Input ports are expected to
+     * be unique.
+     * @param inputPort The port of the input device.
+     * @param type The type of the device. E.g. "touchNavigation".
+     */
+    public abstract void setTypeAssociation(@NonNull String inputPort, @NonNull String type);
+
+    /**
+     * Removes a runtime association between the input device and type.
+     *
+     * @param inputPort The port of the input device.
+     */
+    public abstract void unsetTypeAssociation(@NonNull String inputPort);
+
+    /**
+     * Add a mapping from the input port and a keyboard layout, by unique id. Input
+     * ports are expected to be unique.
+     *
+     * @param inputPort   The port of the input device.
+     * @param languageTag the language of the input device as an IETF
+     *                    <a href="https://tools.ietf.org/html/bcp47">BCP-47</a>
+     *                    conformant tag.
+     * @param layoutType  the layout type such as "qwerty" or "azerty".
+     */
+    public abstract void addKeyboardLayoutAssociation(@NonNull String inputPort,
+            @NonNull String languageTag, @NonNull String layoutType);
+
+    /**
+     * Removes the mapping from input port to the keyboard layout identifier.
+     *
+     * @param inputPort The port of the input device.
+     */
+    public abstract void removeKeyboardLayoutAssociation(@NonNull String inputPort);
+
+    /**
+     * Set whether stylus button reporting through motion events should be enabled.
+     *
+     * @param enabled When true, stylus buttons will not be reported through motion events.
+     */
+    public abstract void setStylusButtonMotionEventsEnabled(boolean enabled);
+
+    /**
+     * Notify whether any user activity occurred. This includes any input activity on any
+     * display, external peripherals, fingerprint sensor, etc.
+     */
+    public abstract void notifyUserActivity();
 }

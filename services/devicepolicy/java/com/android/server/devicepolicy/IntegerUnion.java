@@ -36,4 +36,9 @@ final class IntegerUnion extends ResolutionMechanism<Integer> {
         }
         return unionOfPolicies;
     }
+
+    @Override
+    public String toString() {
+        return "IntegerUnion {}";
+    }
 }

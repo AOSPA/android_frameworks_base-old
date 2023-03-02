@@ -104,10 +104,11 @@ public class PackageInfoUtils {
     @Nullable
     public static PackageInfo generate(AndroidPackage pkg, int[] gids,
             @PackageManager.PackageInfoFlagsBits long flags, long firstInstallTime,
-            long lastUpdateTime, Set<String> grantedPermissions, PackageUserStateInternal state,
-            @UserIdInt int userId, @NonNull PackageStateInternal pkgSetting) {
+            long lastUpdateTime, Set<String> installedPermissions, Set<String> grantedPermissions,
+            PackageUserStateInternal state, @UserIdInt int userId,
+            @NonNull PackageStateInternal pkgSetting) {
         return generateWithComponents(pkg, gids, flags, firstInstallTime, lastUpdateTime,
-                grantedPermissions, state, userId, pkgSetting);
+                installedPermissions, grantedPermissions, state, userId, pkgSetting);
     }
 
     /**
@@ -115,8 +116,9 @@ public class PackageInfoUtils {
      */
     private static PackageInfo generateWithComponents(AndroidPackage pkg, int[] gids,
             @PackageManager.PackageInfoFlagsBits long flags, long firstInstallTime,
-            long lastUpdateTime, Set<String> grantedPermissions, PackageUserStateInternal state,
-            @UserIdInt int userId, @NonNull PackageStateInternal pkgSetting) {
+            long lastUpdateTime, Set<String> installedPermissions, Set<String> grantedPermissions,
+            PackageUserStateInternal state, @UserIdInt int userId,
+            @NonNull PackageStateInternal pkgSetting) {
         ApplicationInfo applicationInfo = generateApplicationInfo(pkg, flags, state, userId,
                 pkgSetting);
         if (applicationInfo == null) {
@@ -131,7 +133,7 @@ public class PackageInfoUtils {
         info.splitRevisionCodes = pkg.getSplitRevisionCodes();
         info.versionName = pkg.getVersionName();
         info.sharedUserId = pkg.getSharedUserId();
-        info.sharedUserLabel = pkg.getSharedUserLabel();
+        info.sharedUserLabel = pkg.getSharedUserLabelRes();
         info.applicationInfo = applicationInfo;
         info.installLocation = pkg.getInstallLocation();
         if ((info.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0
@@ -174,8 +176,12 @@ public class PackageInfoUtils {
             if (size > 0) {
                 info.permissions = new PermissionInfo[size];
                 for (int i = 0; i < size; i++) {
-                    info.permissions[i] = generatePermissionInfo(pkg.getPermissions().get(i),
-                            flags);
+                    final var permission = pkg.getPermissions().get(i);
+                    final var permissionInfo = generatePermissionInfo(permission, flags);
+                    if (installedPermissions.contains(permission.getName())) {
+                        permissionInfo.flags |= PermissionInfo.FLAG_INSTALLED;
+                    }
+                    info.permissions[i] = permissionInfo;
                 }
             }
             final List<ParsedUsesPermission> usesPermissions = pkg.getUsesPermissions();
@@ -218,7 +224,7 @@ public class PackageInfoUtils {
                     }
                 }
             }
-            if (pkg.areAttributionsUserVisible()) {
+            if (pkg.isAttributionsUserVisible()) {
                 info.applicationInfo.privateFlagsExt
                         |= ApplicationInfo.PRIVATE_FLAG_EXT_ATTRIBUTIONS_ARE_USER_VISIBLE;
             } else {
@@ -274,7 +280,7 @@ public class PackageInfoUtils {
                 final ActivityInfo[] res = new ActivityInfo[N];
                 for (int i = 0; i < N; i++) {
                     final ParsedActivity a = pkg.getActivities().get(i);
-                    if (ComponentParseUtils.isMatch(state, pkg.isSystem(), pkg.isEnabled(), a,
+                    if (ComponentParseUtils.isMatch(state, pkgSetting.isSystem(), pkg.isEnabled(), a,
                             flags)) {
                         if (PackageManager.APP_DETAILS_ACTIVITY_CLASS_NAME.equals(
                                 a.getName())) {
@@ -294,7 +300,7 @@ public class PackageInfoUtils {
                 final ActivityInfo[] res = new ActivityInfo[size];
                 for (int i = 0; i < size; i++) {
                     final ParsedActivity a = pkg.getReceivers().get(i);
-                    if (ComponentParseUtils.isMatch(state, pkg.isSystem(), pkg.isEnabled(), a,
+                    if (ComponentParseUtils.isMatch(state, pkgSetting.isSystem(), pkg.isEnabled(), a,
                             flags)) {
                         res[num++] = generateActivityInfo(pkg, a, flags, state, applicationInfo,
                                 userId, pkgSetting);
@@ -310,7 +316,7 @@ public class PackageInfoUtils {
                 final ServiceInfo[] res = new ServiceInfo[size];
                 for (int i = 0; i < size; i++) {
                     final ParsedService s = pkg.getServices().get(i);
-                    if (ComponentParseUtils.isMatch(state, pkg.isSystem(), pkg.isEnabled(), s,
+                    if (ComponentParseUtils.isMatch(state, pkgSetting.isSystem(), pkg.isEnabled(), s,
                             flags)) {
                         res[num++] = generateServiceInfo(pkg, s, flags, state, applicationInfo,
                                 userId, pkgSetting);
@@ -327,7 +333,7 @@ public class PackageInfoUtils {
                 for (int i = 0; i < size; i++) {
                     final ParsedProvider pr = pkg.getProviders()
                             .get(i);
-                    if (ComponentParseUtils.isMatch(state, pkg.isSystem(), pkg.isEnabled(), pr,
+                    if (ComponentParseUtils.isMatch(state, pkgSetting.isSystem(), pkg.isEnabled(), pr,
                             flags)) {
                         res[num++] = generateProviderInfo(pkg, pr, flags, state, applicationInfo,
                                 userId, pkgSetting);
@@ -425,7 +431,7 @@ public class PackageInfoUtils {
         }
 
         if (!checkUseInstalledOrHidden(pkg, pkgSetting, state, flags)
-                || !AndroidPackageUtils.isMatchForSystemOnly(pkg, flags)) {
+                || !AndroidPackageUtils.isMatchForSystemOnly(pkgSetting, flags)) {
             return null;
         }
 
@@ -793,7 +799,7 @@ public class PackageInfoUtils {
         // If available for the target user, or trying to match uninstalled packages and it's
         // a system app.
         return PackageUserStateUtils.isAvailable(state, flags)
-                || (pkg.isSystem()
+                || (pkgSetting.isSystem()
                 && ((flags & PackageManager.MATCH_KNOWN_PACKAGES) != 0
                 || (flags & PackageManager.MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS) != 0));
     }
@@ -869,7 +875,7 @@ public class PackageInfoUtils {
     public static int appInfoFlags(AndroidPackage pkg, @Nullable PackageStateInternal pkgSetting) {
         // @formatter:off
         int pkgWithoutStateFlags = flag(pkg.isExternalStorage(), ApplicationInfo.FLAG_EXTERNAL_STORAGE)
-                | flag(pkg.isBaseHardwareAccelerated(), ApplicationInfo.FLAG_HARDWARE_ACCELERATED)
+                | flag(pkg.isHardwareAccelerated(), ApplicationInfo.FLAG_HARDWARE_ACCELERATED)
                 | flag(pkg.isAllowBackup(), ApplicationInfo.FLAG_ALLOW_BACKUP)
                 | flag(pkg.isKillAfterRestore(), ApplicationInfo.FLAG_KILL_AFTER_RESTORE)
                 | flag(pkg.isRestoreAnyVersion(), ApplicationInfo.FLAG_RESTORE_ANY_VERSION)
@@ -893,7 +899,7 @@ public class PackageInfoUtils {
                 | flag(pkg.isSupportsExtraLargeScreens(), ApplicationInfo.FLAG_SUPPORTS_XLARGE_SCREENS)
                 | flag(pkg.isResizeable(), ApplicationInfo.FLAG_RESIZEABLE_FOR_SCREENS)
                 | flag(pkg.isAnyDensity(), ApplicationInfo.FLAG_SUPPORTS_SCREEN_DENSITIES)
-                | flag(pkg.isSystem(), ApplicationInfo.FLAG_SYSTEM)
+                | flag(AndroidPackageUtils.isSystem(pkg), ApplicationInfo.FLAG_SYSTEM)
                 | flag(pkg.isFactoryTest(), ApplicationInfo.FLAG_FACTORY_TEST);
 
         return appInfoFlags(pkgWithoutStateFlags, pkgSetting);
@@ -906,7 +912,7 @@ public class PackageInfoUtils {
         // @formatter:off
         int flags = pkgWithoutStateFlags;
         if (pkgSetting != null) {
-            flags |= flag(pkgSetting.getTransientState().isUpdatedSystemApp(), ApplicationInfo.FLAG_UPDATED_SYSTEM_APP);
+            flags |= flag(pkgSetting.isUpdatedSystemApp(), ApplicationInfo.FLAG_UPDATED_SYSTEM_APP);
         }
         return flags;
         // @formatter:on
@@ -917,7 +923,7 @@ public class PackageInfoUtils {
             @Nullable PackageStateInternal pkgSetting) {
         // @formatter:off
         int pkgWithoutStateFlags = flag(pkg.isStaticSharedLibrary(), ApplicationInfo.PRIVATE_FLAG_STATIC_SHARED_LIBRARY)
-                | flag(pkg.isOverlay(), ApplicationInfo.PRIVATE_FLAG_IS_RESOURCE_OVERLAY)
+                | flag(pkg.isResourceOverlay(), ApplicationInfo.PRIVATE_FLAG_IS_RESOURCE_OVERLAY)
                 | flag(pkg.isIsolatedSplitLoading(), ApplicationInfo.PRIVATE_FLAG_ISOLATED_SPLIT_LOADING)
                 | flag(pkg.isHasDomainUrls(), ApplicationInfo.PRIVATE_FLAG_HAS_DOMAIN_URLS)
                 | flag(pkg.isProfileableByShell(), ApplicationInfo.PRIVATE_FLAG_PROFILEABLE_BY_SHELL)
@@ -934,12 +940,12 @@ public class PackageInfoUtils {
                 | flag(pkg.isCantSaveState(), ApplicationInfo.PRIVATE_FLAG_CANT_SAVE_STATE)
                 | flag(pkg.isResizeableActivityViaSdkVersion(), ApplicationInfo.PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION)
                 | flag(pkg.isAllowNativeHeapPointerTagging(), ApplicationInfo.PRIVATE_FLAG_ALLOW_NATIVE_HEAP_POINTER_TAGGING)
-                | flag(pkg.isSystemExt(), ApplicationInfo.PRIVATE_FLAG_SYSTEM_EXT)
-                | flag(pkg.isPrivileged(), ApplicationInfo.PRIVATE_FLAG_PRIVILEGED)
-                | flag(pkg.isOem(), ApplicationInfo.PRIVATE_FLAG_OEM)
-                | flag(pkg.isVendor(), ApplicationInfo.PRIVATE_FLAG_VENDOR)
-                | flag(pkg.isProduct(), ApplicationInfo.PRIVATE_FLAG_PRODUCT)
-                | flag(pkg.isOdm(), ApplicationInfo.PRIVATE_FLAG_ODM)
+                | flag(AndroidPackageUtils.isSystemExt(pkg), ApplicationInfo.PRIVATE_FLAG_SYSTEM_EXT)
+                | flag(AndroidPackageUtils.isPrivileged(pkg), ApplicationInfo.PRIVATE_FLAG_PRIVILEGED)
+                | flag(AndroidPackageUtils.isOem(pkg), ApplicationInfo.PRIVATE_FLAG_OEM)
+                | flag(AndroidPackageUtils.isVendor(pkg), ApplicationInfo.PRIVATE_FLAG_VENDOR)
+                | flag(AndroidPackageUtils.isProduct(pkg), ApplicationInfo.PRIVATE_FLAG_PRODUCT)
+                | flag(AndroidPackageUtils.isOdm(pkg), ApplicationInfo.PRIVATE_FLAG_ODM)
                 | flag(pkg.isSignedWithPlatformKey(), ApplicationInfo.PRIVATE_FLAG_SIGNED_WITH_PLATFORM_KEY);
 
         Boolean resizeableActivity = pkg.getResizeableActivity();
@@ -972,7 +978,7 @@ public class PackageInfoUtils {
         // @formatter:off
         int pkgWithoutStateFlags = flag(pkg.isProfileable(), ApplicationInfo.PRIVATE_FLAG_EXT_PROFILEABLE)
                 | flag(pkg.hasRequestForegroundServiceExemption(), ApplicationInfo.PRIVATE_FLAG_EXT_REQUEST_FOREGROUND_SERVICE_EXEMPTION)
-                | flag(pkg.areAttributionsUserVisible(), ApplicationInfo.PRIVATE_FLAG_EXT_ATTRIBUTIONS_ARE_USER_VISIBLE)
+                | flag(pkg.isAttributionsUserVisible(), ApplicationInfo.PRIVATE_FLAG_EXT_ATTRIBUTIONS_ARE_USER_VISIBLE)
                 | flag(pkg.isOnBackInvokedCallbackEnabled(), ApplicationInfo.PRIVATE_FLAG_EXT_ENABLE_ON_BACK_INVOKED_CALLBACK)
                 | flag(isAllowlistedForHiddenApis, ApplicationInfo.PRIVATE_FLAG_EXT_ALLOWLISTED_FOR_HIDDEN_APIS);
         return appInfoPrivateFlagsExt(pkgWithoutStateFlags, pkgSetting);

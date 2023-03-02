@@ -45,6 +45,7 @@ import com.android.systemui.R;
 import com.android.systemui.animation.Interpolators;
 import com.android.systemui.battery.BatteryMeterViewController;
 import com.android.systemui.dagger.qualifiers.Main;
+import com.android.systemui.plugins.log.LogLevel;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.shade.NotificationPanelViewController;
 import com.android.systemui.statusbar.CommandQueue;
@@ -76,6 +77,7 @@ import javax.inject.Inject;
 
 /** View Controller for {@link com.android.systemui.statusbar.phone.KeyguardStatusBarView}. */
 public class KeyguardStatusBarViewController extends ViewController<KeyguardStatusBarView> {
+    private static final String TAG = "KeyguardStatusBarViewController";
     private static final AnimationProperties KEYGUARD_HUN_PROPERTIES =
             new AnimationProperties().setDuration(StackStateAnimator.ANIMATION_DURATION_STANDARD);
 
@@ -422,7 +424,7 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
 
     /** Animate the keyguard status bar in. */
     public void animateKeyguardStatusBarIn() {
-        mLogger.d("animating status bar in");
+        mLogger.log(TAG, LogLevel.DEBUG, "animating status bar in");
         if (mDisableStateTracker.isDisabled()) {
             // If our view is disabled, don't allow us to animate in.
             return;
@@ -438,7 +440,7 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
 
     /** Animate the keyguard status bar out. */
     public void animateKeyguardStatusBarOut(long startDelay, long duration) {
-        mLogger.d("animating status bar out");
+        mLogger.log(TAG, LogLevel.DEBUG, "animating status bar out");
         ValueAnimator anim = ValueAnimator.ofFloat(mView.getAlpha(), 0f);
         anim.addUpdateListener(mAnimatorUpdateListener);
         anim.setStartDelay(startDelay);
@@ -475,9 +477,6 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
             newAlpha = Math.min(getKeyguardContentsAlpha(), alphaQsExpansion)
                     * mKeyguardStatusBarAnimateAlpha
                     * (1.0f - mKeyguardHeadsUpShowingAmount);
-            if (newAlpha != mView.getAlpha() && (newAlpha == 0 || newAlpha == 1)) {
-                mLogger.logStatusBarCalculatedAlpha(newAlpha);
-            }
         }
 
         boolean hideForBypass =
@@ -499,10 +498,6 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
     public void updateViewState(float alpha, int visibility) {
         if (mDisableStateTracker.isDisabled()) {
             visibility = View.INVISIBLE;
-        }
-        if (visibility != mView.getVisibility()) {
-            mLogger.logStatusBarAlphaVisibility(visibility, alpha,
-                    StatusBarState.toString(mStatusBarState));
         }
         mView.setAlpha(alpha);
         mView.setVisibility(visibility);
@@ -608,10 +603,6 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
      * @param alpha a value between 0 and 1. -1 if the value is to be reset/ignored.
      */
     public void setAlpha(float alpha) {
-        if (mExplicitAlpha != alpha && (mExplicitAlpha == -1 || alpha == -1)) {
-            // logged if value changed to ignored or from ignored
-            mLogger.logStatusBarExplicitAlpha(alpha);
-        }
         mExplicitAlpha = alpha;
         updateViewState();
     }

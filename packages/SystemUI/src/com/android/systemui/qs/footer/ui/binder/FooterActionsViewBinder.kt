@@ -219,9 +219,9 @@ object FooterActionsViewBinder {
             // Small button with the number only.
             foregroundServicesWithTextView.isVisible = false
 
-            foregroundServicesWithNumberView.visibility = View.VISIBLE
+            foregroundServicesWithNumberView.isVisible = true
             foregroundServicesWithNumberView.setOnClickListener {
-                foregroundServices.onClick(Expandable.fromView(foregroundServicesWithTextView))
+                foregroundServices.onClick(Expandable.fromView(foregroundServicesWithNumberView))
             }
             foregroundServicesWithNumberHolder.number.text = foregroundServicesCount.toString()
             foregroundServicesWithNumberHolder.number.contentDescription = foregroundServices.text
@@ -237,7 +237,13 @@ object FooterActionsViewBinder {
             return
         }
 
-        buttonView.setBackgroundResource(model.background)
+        val backgroundResource =
+            when (model.backgroundColor) {
+                R.attr.offStateColor -> R.drawable.qs_footer_action_circle
+                com.android.internal.R.attr.colorAccent -> R.drawable.qs_footer_action_circle_color
+                else -> error("Unsupported icon background resource ${model.backgroundColor}")
+            }
+        buttonView.setBackgroundResource(backgroundResource)
         buttonView.setOnClickListener { model.onClick(Expandable.fromView(buttonView)) }
 
         val icon = model.icon

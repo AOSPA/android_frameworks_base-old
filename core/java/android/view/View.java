@@ -141,6 +141,7 @@ import android.view.accessibility.AccessibilityWindowInfo;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.view.animation.Transformation;
+import android.view.autofill.AutofillFeatureFlags;
 import android.view.autofill.AutofillId;
 import android.view.autofill.AutofillManager;
 import android.view.autofill.AutofillValue;
@@ -3662,6 +3663,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Indicates that the view enables auto handwriting initiation.
      */
     private static final int PFLAG4_AUTO_HANDWRITING_ENABLED = 0x000010000;
+
+    /**
+     * Indicates that the view is important for Credential Manager.
+     */
+    private static final int PFLAG4_IMPORTANT_FOR_CREDENTIAL_MANAGER = 0x000020000;
+
     /* End of masks for mPrivateFlags4 */
 
     /** @hide */
@@ -6130,6 +6137,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                         setImportantForContentCapture(a.getInt(attr,
                                 IMPORTANT_FOR_CONTENT_CAPTURE_AUTO));
                     }
+                    break;
+                case R.styleable.View_isCredential:
+                    if (a.peekValue(attr) != null) {
+                        setIsCredential(a.getBoolean(attr, false));
+                    }
+                    break;
                 case R.styleable.View_defaultFocusHighlightEnabled:
                     if (a.peekValue(attr) != null) {
                         setDefaultFocusHighlightEnabled(a.getBoolean(attr, true));
@@ -10231,10 +10244,41 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         return mContext.getSystemService(AutofillManager.class);
     }
 
+    /**
+     * Check whether current activity / package is in denylist.If it's in the denylist,
+     * then the views marked as not important for autofill are not eligible for autofill.
+     */
+    final boolean isActivityDeniedForAutofillForUnimportantView() {
+        final AutofillManager afm = getAutofillManager();
+        // keep behavior same with denylist feature not enabled
+        if (afm == null) return true;
+        return afm.isActivityDeniedForAutofillForUnimportantView();
+    }
+
+    /**
+     * Check whether current view matches autofillable heuristics
+     */
+    final boolean isMatchingAutofillableHeuristics() {
+        final AutofillManager afm = getAutofillManager();
+        // keep default behavior
+        if (afm == null) return false;
+        return afm.isMatchingAutofillableHeuristics(this);
+    }
+
     private boolean isAutofillable() {
         if (getAutofillType() == AUTOFILL_TYPE_NONE) return false;
 
+        // Disable triggering autofill if the view is integrated with CredentialManager.
+        if (AutofillFeatureFlags.shouldIgnoreCredentialViews()
+                && isCredential()) return false;
+
         if (!isImportantForAutofill()) {
+            // If view matches heuristics and is not denied, it will be treated same as view that's
+            // important for autofill
+            if (isMatchingAutofillableHeuristics()
+                    && !isActivityDeniedForAutofillForUnimportantView()) {
+                return getAutofillViewId() > LAST_APP_AUTOFILL_ID;
+            }
             // View is not important for "regular" autofill, so we must check if Augmented Autofill
             // is enabled for the activity
             final AutofillOptions options = mContext.getAutofillOptions();
@@ -21606,6 +21650,17 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         return Math.max(vis1, vis2);
     }
 
+    private boolean mShouldFakeFocus = false;
+
+    /**
+     * Fake send a focus event after attaching to window.
+     * See {@link android.view.ViewRootImpl#dispatchCompatFakeFocus()} for details.
+     * @hide
+     */
+    public void fakeFocusAfterAttachingToWindow() {
+        mShouldFakeFocus = true;
+    }
+
     /**
      * @param info the {@link android.view.View.AttachInfo} to associated with
      *        this view
@@ -21674,6 +21729,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         notifyEnterOrExitForAutoFillIfNeeded(true);
         notifyAppearedOrDisappearedForContentCaptureIfNeeded(true);
+
+        if (mShouldFakeFocus) {
+            getViewRootImpl().dispatchCompatFakeFocus();
+            mShouldFakeFocus = false;
+        }
     }
 
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
@@ -25768,6 +25828,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @param selected true if the view must be selected, false otherwise
      */
     public void setSelected(boolean selected) {
+        setSelected(selected, true);
+    }
+
+    void setSelected(boolean selected, boolean sendAccessibilityEvent) {
         //noinspection DoubleNegation
         if (((mPrivateFlags & PFLAG_SELECTED) != 0) != selected) {
             mPrivateFlags = (mPrivateFlags & ~PFLAG_SELECTED) | (selected ? PFLAG_SELECTED : 0);
@@ -25775,11 +25839,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             invalidate(true);
             refreshDrawableState();
             dispatchSetSelected(selected);
-            if (selected) {
-                sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_SELECTED);
-            } else {
-                notifyViewAccessibilityStateChangedIfNeeded(
-                        AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED);
+            if (sendAccessibilityEvent) {
+                if (selected) {
+                    sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_SELECTED);
+                } else {
+                    notifyViewAccessibilityStateChangedIfNeeded(
+                            AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED);
+                }
             }
         }
     }
@@ -31846,6 +31912,37 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         } else {
             mPrivateFlags4 &= ~PFLAG4_DETACHED;
         }
+    }
+
+    /**
+     * Gets the mode for determining whether this view is a credential.
+     *
+     * <p>See {@link #isCredential()}.
+     *
+     * @param isCredential Whether the view is a credential.
+     *
+     * @attr ref android.R.styleable#View_isCredential
+     */
+    public void setIsCredential(boolean isCredential) {
+        if (isCredential) {
+            mPrivateFlags4 |= PFLAG4_IMPORTANT_FOR_CREDENTIAL_MANAGER;
+        } else {
+            mPrivateFlags4 &= ~PFLAG4_IMPORTANT_FOR_CREDENTIAL_MANAGER;
+        }
+    }
+
+    /**
+     * Gets the mode for determining whether this view is a credential.
+     *
+     * <p>See {@link #setIsCredential(boolean)}.
+     *
+     * @return false by default, or value passed to {@link #setIsCredential(boolean)}.
+     *
+     * @attr ref android.R.styleable#View_isCredential
+     */
+    public boolean isCredential() {
+        return ((mPrivateFlags4 & PFLAG4_IMPORTANT_FOR_CREDENTIAL_MANAGER)
+                == PFLAG4_IMPORTANT_FOR_CREDENTIAL_MANAGER);
     }
 
     /**

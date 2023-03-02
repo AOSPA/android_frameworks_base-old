@@ -20,15 +20,20 @@ import android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID
 import android.telephony.TelephonyDisplayInfo
 import android.telephony.TelephonyManager
 import com.android.settingslib.SignalIcon
+import com.android.settingslib.mobile.MobileMappings
 import com.android.settingslib.mobile.TelephonyIcons
+import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectivityModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.SubscriptionModel
 import com.android.systemui.statusbar.pipeline.mobile.util.MobileMappingsProxy
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 
 // TODO(b/261632894): remove this in favor of the real impl or DemoMobileConnectionsRepository
-class FakeMobileConnectionsRepository(mobileMappings: MobileMappingsProxy) :
-    MobileConnectionsRepository {
+class FakeMobileConnectionsRepository(
+    mobileMappings: MobileMappingsProxy,
+    val tableLogBuffer: TableLogBuffer,
+) : MobileConnectionsRepository {
     val GSM_KEY = mobileMappings.toIconKey(GSM)
     val LTE_KEY = mobileMappings.toIconKey(LTE)
     val UMTS_KEY = mobileMappings.toIconKey(UMTS)
@@ -52,6 +57,7 @@ class FakeMobileConnectionsRepository(mobileMappings: MobileMappingsProxy) :
 
     private val _activeMobileDataSubscriptionId = MutableStateFlow(INVALID_SUBSCRIPTION_ID)
     override val activeMobileDataSubscriptionId = _activeMobileDataSubscriptionId
+    override val activeSubChangedInGroupEvent: MutableSharedFlow<Unit> = MutableSharedFlow()
 
     private val _defaultDataSubId = MutableStateFlow(INVALID_SUBSCRIPTION_ID)
     override val defaultDataSubId = _defaultDataSubId
@@ -62,11 +68,13 @@ class FakeMobileConnectionsRepository(mobileMappings: MobileMappingsProxy) :
     private val subIdRepos = mutableMapOf<Int, MobileConnectionRepository>()
     override fun getRepoForSubId(subId: Int): MobileConnectionRepository {
         return subIdRepos[subId]
-            ?: FakeMobileConnectionRepository(subId).also { subIdRepos[subId] = it }
+            ?: FakeMobileConnectionRepository(subId, tableLogBuffer).also { subIdRepos[subId] = it }
     }
 
     private val _globalMobileDataSettingChangedEvent = MutableStateFlow(Unit)
     override val globalMobileDataSettingChangedEvent = _globalMobileDataSettingChangedEvent
+
+    override val defaultDataSubRatConfig = MutableStateFlow(MobileMappings.Config())
 
     private val _defaultMobileIconMapping = MutableStateFlow(TEST_MAPPING)
     override val defaultMobileIconMapping = _defaultMobileIconMapping

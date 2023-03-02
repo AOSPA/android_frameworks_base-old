@@ -29,7 +29,7 @@ public class SecureSettings {
      */
     @UnsupportedAppUsage
     public static final String[] SETTINGS_TO_BACKUP = {
-        Settings.Secure.BUGREPORT_IN_POWER_MENU,                            // moved to global
+        Settings.Secure.BUGREPORT_IN_POWER_MENU,
         Settings.Secure.ALLOW_MOCK_LOCATION,
         Settings.Secure.USB_MASS_STORAGE_ENABLED,                           // moved to global
         Settings.Secure.ACCESSIBILITY_DISPLAY_INVERSION_ENABLED,
@@ -123,7 +123,7 @@ public class SecureSettings {
         Settings.Secure.FINGERPRINT_SIDE_FPS_BP_POWER_WINDOW,
         Settings.Secure.FINGERPRINT_SIDE_FPS_ENROLL_TAP_WINDOW,
         Settings.Secure.FINGERPRINT_SIDE_FPS_AUTH_DOWNTIME,
-        Settings.Secure.SFPS_REQUIRE_SCREEN_ON_TO_AUTH_ENABLED,
+        Settings.Secure.SFPS_PERFORMANT_AUTH_ENABLED,
         Settings.Secure.ACTIVE_UNLOCK_ON_WAKE,
         Settings.Secure.ACTIVE_UNLOCK_ON_UNLOCK_INTENT,
         Settings.Secure.ACTIVE_UNLOCK_ON_BIOMETRIC_FAIL,
@@ -146,6 +146,7 @@ public class SecureSettings {
         Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_FACE,
         Settings.Secure.LOCK_SCREEN_SHOW_NOTIFICATIONS,
         Settings.Secure.LOCK_SCREEN_SHOW_SILENT_NOTIFICATIONS,
+        Settings.Secure.LOCK_SCREEN_SHOW_ONLY_UNSEEN_NOTIFICATIONS,
         Settings.Secure.SHOW_NOTIFICATION_SNOOZE,
         Settings.Secure.NOTIFICATION_HISTORY_ENABLED,
         Settings.Secure.ZEN_DURATION,
@@ -168,6 +169,11 @@ public class SecureSettings {
         Settings.Secure.BACK_GESTURE_INSET_SCALE_LEFT,
         Settings.Secure.BACK_GESTURE_INSET_SCALE_RIGHT,
         Settings.Secure.NAVIGATION_MODE,
+        Settings.Secure.TRACKPAD_GESTURE_BACK_ENABLED,
+        Settings.Secure.TRACKPAD_GESTURE_HOME_ENABLED,
+        Settings.Secure.TRACKPAD_GESTURE_OVERVIEW_ENABLED,
+        Settings.Secure.TRACKPAD_GESTURE_NOTIFICATION_ENABLED,
+        Settings.Secure.TRACKPAD_GESTURE_QUICK_SWITCH_ENABLED,
         Settings.Secure.SKIP_GESTURE_COUNT,
         Settings.Secure.SKIP_TOUCH_COUNT,
         Settings.Secure.SILENCE_ALARMS_GESTURE_COUNT,
@@ -219,6 +225,8 @@ public class SecureSettings {
         Settings.Secure.ASSIST_LONG_PRESS_HOME_ENABLED,
         Settings.Secure.BLUETOOTH_LE_BROADCAST_PROGRAM_INFO,
         Settings.Secure.BLUETOOTH_LE_BROADCAST_CODE,
-        Settings.Secure.BLUETOOTH_LE_BROADCAST_APP_SOURCE_NAME
+        Settings.Secure.BLUETOOTH_LE_BROADCAST_APP_SOURCE_NAME,
+        Settings.Secure.CUSTOM_BUGREPORT_HANDLER_APP,
+        Settings.Secure.CUSTOM_BUGREPORT_HANDLER_USER
     };
 }

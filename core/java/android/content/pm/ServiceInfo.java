@@ -79,6 +79,20 @@ public class ServiceInfo extends ComponentInfo
     public static final int FLAG_USE_APP_ZYGOTE = 0x0008;
 
     /**
+     * Bit in {@link #flags}: If set, and this is an {@link android.R.attr#isolatedProcess}
+     * service, the service is allowed to be bound in a shared isolated process with other
+     * isolated services. Note that these other isolated services can also belong to other
+     * apps from different vendors.
+     *
+     * Shared isolated processes are created when using the
+     * {@link android.content.Context#BIND_SHARED_ISOLATED_PROCESS) during service binding.
+     *
+     * Note that when this flag is used, the {@link android.R.attr#process} attribute is
+     * ignored when the process is bound into a shared isolated process by a client.
+     */
+    public static final int FLAG_ALLOW_SHARED_ISOLATED_PROCESS = 0x0010;
+
+    /**
      * Bit in {@link #flags} indicating if the service is visible to ephemeral applications.
      * @hide
      */
@@ -119,20 +133,15 @@ public class ServiceInfo extends ComponentInfo
      * Data(photo, file, account) upload/download, backup/restore, import/export, fetch,
      * transfer over network between device and cloud.
      *
-     * <p>Apps targeting API level {@link android.os.Build.VERSION_CODES#UPSIDE_DOWN_CAKE} and
-     * later should NOT use this type:
-     * calling {@link android.app.Service#startForeground(int, android.app.Notification, int)} with
-     * this type on devices running {@link android.os.Build.VERSION_CODES#UPSIDE_DOWN_CAKE} is still
-     * allowed, but calling it with this type on devices running future platform releases may get a
-     * {@link android.app.InvalidForegroundServiceTypeException}.</p>
-     *
-     * @deprecated Use {@link android.app.job.JobInfo.Builder} data transfer APIs instead.
+     * <p class="note">
+     * Use the {@link android.app.job.JobInfo.Builder#setDataTransfer} API for data transfers
+     * that can be deferred until conditions are ideal for the app or device.
+     * </p>
      */
     @RequiresPermission(
             value = Manifest.permission.FOREGROUND_SERVICE_DATA_SYNC,
             conditional = true
     )
-    @Deprecated
     public static final int FOREGROUND_SERVICE_TYPE_DATA_SYNC = 1 << 0;
 
     /**
@@ -205,12 +214,15 @@ public class ServiceInfo extends ComponentInfo
      * {@link android.os.Build.VERSION_CODES#UPSIDE_DOWN_CAKE} and later, will require permission
      * {@link android.Manifest.permission#FOREGROUND_SERVICE_CONNECTED_DEVICE} and one of the
      * following permissions:
+     * {@link android.Manifest.permission#BLUETOOTH_ADVERTISE},
      * {@link android.Manifest.permission#BLUETOOTH_CONNECT},
+     * {@link android.Manifest.permission#BLUETOOTH_SCAN},
      * {@link android.Manifest.permission#CHANGE_NETWORK_STATE},
      * {@link android.Manifest.permission#CHANGE_WIFI_STATE},
      * {@link android.Manifest.permission#CHANGE_WIFI_MULTICAST_STATE},
      * {@link android.Manifest.permission#NFC},
      * {@link android.Manifest.permission#TRANSMIT_IR},
+     * {@link android.Manifest.permission#UWB_RANGING},
      * or has been granted the access to one of the attached USB devices/accessories.
      */
     @RequiresPermission(
@@ -218,12 +230,15 @@ public class ServiceInfo extends ComponentInfo
                 Manifest.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE,
             },
             anyOf = {
+                Manifest.permission.BLUETOOTH_ADVERTISE,
                 Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.BLUETOOTH_SCAN,
                 Manifest.permission.CHANGE_NETWORK_STATE,
                 Manifest.permission.CHANGE_WIFI_STATE,
                 Manifest.permission.CHANGE_WIFI_MULTICAST_STATE,
                 Manifest.permission.NFC,
                 Manifest.permission.TRANSMIT_IR,
+                Manifest.permission.UWB_RANGING,
             },
             conditional = true
     )
@@ -308,9 +323,7 @@ public class ServiceInfo extends ComponentInfo
      * permissions:
      * {@link android.Manifest.permission#ACTIVITY_RECOGNITION},
      * {@link android.Manifest.permission#BODY_SENSORS},
-     * {@link android.Manifest.permission#HIGH_SAMPLING_RATE_SENSORS},
-     * or one of the {@code "android.permission.health.*"} permissions defined in the
-     * {@link android.healthconnect.HealthPermissions}.
+     * {@link android.Manifest.permission#HIGH_SAMPLING_RATE_SENSORS}.
      */
     @RequiresPermission(
             allOf = {
@@ -320,8 +333,7 @@ public class ServiceInfo extends ComponentInfo
                 Manifest.permission.ACTIVITY_RECOGNITION,
                 Manifest.permission.BODY_SENSORS,
                 Manifest.permission.HIGH_SAMPLING_RATE_SENSORS,
-            },
-            conditional = true
+            }
     )
     public static final int FOREGROUND_SERVICE_TYPE_HEALTH = 1 << 8;
 
@@ -414,6 +426,8 @@ public class ServiceInfo extends ComponentInfo
      * the {@link android.R.attr#foregroundServiceType} attribute.
      * The file management use case which manages files/directories, often involving file I/O
      * across the file system.
+     *
+     * @hide
      */
     @RequiresPermission(
             value = Manifest.permission.FOREGROUND_SERVICE_FILE_MANAGEMENT

@@ -41,8 +41,6 @@ class WallpaperWindowToken extends WindowToken {
 
     private static final String TAG = TAG_WITH_CLASS_NAME ? "WallpaperWindowToken" : TAG_WM;
 
-    private boolean mVisibleRequested = false;
-
     WallpaperWindowToken(WindowManagerService service, IBinder token, boolean explicit,
             DisplayContent dc, boolean ownerCanManageAppTokens) {
         this(service, token, explicit, dc, ownerCanManageAppTokens, null /* options */);
@@ -102,7 +100,7 @@ class WallpaperWindowToken extends WindowToken {
     }
 
     /** Returns {@code true} if visibility is changed. */
-    boolean updateWallpaperWindows(boolean visible) {
+    void updateWallpaperWindows(boolean visible) {
         boolean changed = false;
         if (mVisibleRequested != visible) {
             ProtoLog.d(WM_DEBUG_WALLPAPER, "Wallpaper token %s visible=%b",
@@ -119,7 +117,6 @@ class WallpaperWindowToken extends WindowToken {
                     linkFixedRotationTransform(wallpaperTarget.mToken);
                 }
             }
-            return changed;
         }
 
         final WindowState wallpaperTarget =
@@ -145,7 +142,6 @@ class WallpaperWindowToken extends WindowToken {
         }
 
         setVisible(visible);
-        return changed;
     }
 
     private void setVisible(boolean visible) {
@@ -221,15 +217,17 @@ class WallpaperWindowToken extends WindowToken {
         return false;
     }
 
-    void setVisibleRequested(boolean visible) {
-        if (mVisibleRequested == visible) return;
-        mVisibleRequested = visible;
+    @Override
+    protected boolean setVisibleRequested(boolean visible) {
+        if (!super.setVisibleRequested(visible)) return false;
         setInsetsFrozen(!visible);
+        return true;
     }
 
     @Override
-    boolean isVisibleRequested() {
-        return mVisibleRequested;
+    protected boolean onChildVisibleRequestedChanged(@Nullable WindowContainer child) {
+        // Wallpaper manages visibleRequested directly (it's not determined by children)
+        return false;
     }
 
     @Override

@@ -34,6 +34,7 @@ import androidx.test.filters.SmallTest
 import com.android.internal.logging.testing.UiEventLoggerFake
 import com.android.systemui.R
 import com.android.systemui.SysuiTestCase
+import com.android.systemui.dump.DumpManager
 import com.android.systemui.media.taptotransfer.MediaTttFlags
 import com.android.systemui.media.taptotransfer.common.MediaTttLogger
 import com.android.systemui.statusbar.CommandQueue
@@ -67,11 +68,13 @@ class MediaTttChipControllerReceiverTest : SysuiTestCase() {
     @Mock
     private lateinit var applicationInfo: ApplicationInfo
     @Mock
-    private lateinit var logger: MediaTttLogger
+    private lateinit var logger: MediaTttLogger<ChipReceiverInfo>
     @Mock
     private lateinit var accessibilityManager: AccessibilityManager
     @Mock
     private lateinit var configurationController: ConfigurationController
+    @Mock
+    private lateinit var dumpManager: DumpManager
     @Mock
     private lateinit var mediaTttFlags: MediaTttFlags
     @Mock
@@ -95,6 +98,7 @@ class MediaTttChipControllerReceiverTest : SysuiTestCase() {
     fun setUp() {
         MockitoAnnotations.initMocks(this)
         whenever(mediaTttFlags.isMediaTttEnabled()).thenReturn(true)
+        whenever(mediaTttFlags.isMediaTttReceiverSuccessRippleEnabled()).thenReturn(true)
 
         fakeAppIconDrawable = context.getDrawable(R.drawable.ic_cake)!!
         whenever(packageManager.getApplicationIcon(PACKAGE_NAME)).thenReturn(fakeAppIconDrawable)
@@ -122,12 +126,14 @@ class MediaTttChipControllerReceiverTest : SysuiTestCase() {
             fakeExecutor,
             accessibilityManager,
             configurationController,
+            dumpManager,
             powerManager,
             Handler.getMain(),
             mediaTttFlags,
             receiverUiEventLogger,
             viewUtil,
             fakeWakeLockBuilder,
+            fakeClock,
         )
         controllerReceiver.start()
 
@@ -149,12 +155,14 @@ class MediaTttChipControllerReceiverTest : SysuiTestCase() {
             FakeExecutor(FakeSystemClock()),
             accessibilityManager,
             configurationController,
+            dumpManager,
             powerManager,
             Handler.getMain(),
             mediaTttFlags,
             receiverUiEventLogger,
             viewUtil,
             fakeWakeLockBuilder,
+            fakeClock,
         )
         controllerReceiver.start()
 
@@ -193,6 +201,36 @@ class MediaTttChipControllerReceiverTest : SysuiTestCase() {
     }
 
     @Test
+    fun commandQueueCallback_transferToReceiverSucceeded_noChipShown() {
+        commandQueueCallback.updateMediaTapToTransferReceiverDisplay(
+                StatusBarManager.MEDIA_TRANSFER_RECEIVER_STATE_TRANSFER_TO_RECEIVER_SUCCEEDED,
+                routeInfo,
+                null,
+                null
+        )
+
+        verify(windowManager, never()).addView(any(), any())
+        assertThat(uiEventLoggerFake.eventId(0)).isEqualTo(
+                MediaTttReceiverUiEvents.MEDIA_TTT_RECEIVER_TRANSFER_TO_RECEIVER_SUCCEEDED.id
+        )
+    }
+
+    @Test
+    fun commandQueueCallback_transferToReceiverFailed_noChipShown() {
+        commandQueueCallback.updateMediaTapToTransferReceiverDisplay(
+                StatusBarManager.MEDIA_TRANSFER_RECEIVER_STATE_TRANSFER_TO_RECEIVER_FAILED,
+                routeInfo,
+                null,
+                null
+        )
+
+        verify(windowManager, never()).addView(any(), any())
+        assertThat(uiEventLoggerFake.eventId(0)).isEqualTo(
+                MediaTttReceiverUiEvents.MEDIA_TTT_RECEIVER_TRANSFER_TO_RECEIVER_FAILED.id
+        )
+    }
+
+    @Test
     fun commandQueueCallback_closeThenFar_chipShownThenHidden() {
         commandQueueCallback.updateMediaTapToTransferReceiverDisplay(
             StatusBarManager.MEDIA_TRANSFER_RECEIVER_STATE_CLOSE_TO_SENDER,
@@ -203,6 +241,48 @@ class MediaTttChipControllerReceiverTest : SysuiTestCase() {
 
         commandQueueCallback.updateMediaTapToTransferReceiverDisplay(
             StatusBarManager.MEDIA_TRANSFER_RECEIVER_STATE_FAR_FROM_SENDER,
+            routeInfo,
+            null,
+            null
+        )
+
+        val viewCaptor = ArgumentCaptor.forClass(View::class.java)
+        verify(windowManager).addView(viewCaptor.capture(), any())
+        verify(windowManager).removeView(viewCaptor.value)
+    }
+
+    @Test
+    fun commandQueueCallback_closeThenSucceeded_chipShownThenHidden() {
+        commandQueueCallback.updateMediaTapToTransferReceiverDisplay(
+            StatusBarManager.MEDIA_TRANSFER_RECEIVER_STATE_CLOSE_TO_SENDER,
+            routeInfo,
+            null,
+            null
+        )
+
+        commandQueueCallback.updateMediaTapToTransferReceiverDisplay(
+            StatusBarManager.MEDIA_TRANSFER_RECEIVER_STATE_TRANSFER_TO_RECEIVER_SUCCEEDED,
+            routeInfo,
+            null,
+            null
+        )
+
+        val viewCaptor = ArgumentCaptor.forClass(View::class.java)
+        verify(windowManager).addView(viewCaptor.capture(), any())
+        verify(windowManager).removeView(viewCaptor.value)
+    }
+
+    @Test
+    fun commandQueueCallback_closeThenFailed_chipShownThenHidden() {
+        commandQueueCallback.updateMediaTapToTransferReceiverDisplay(
+            StatusBarManager.MEDIA_TRANSFER_RECEIVER_STATE_CLOSE_TO_SENDER,
+            routeInfo,
+            null,
+            null
+        )
+
+        commandQueueCallback.updateMediaTapToTransferReceiverDisplay(
+            StatusBarManager.MEDIA_TRANSFER_RECEIVER_STATE_TRANSFER_TO_RECEIVER_FAILED,
             routeInfo,
             null,
             null

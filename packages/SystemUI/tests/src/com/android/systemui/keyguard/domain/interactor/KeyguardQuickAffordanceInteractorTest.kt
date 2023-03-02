@@ -20,9 +20,12 @@ package com.android.systemui.keyguard.domain.interactor
 import android.os.UserHandle
 import androidx.test.filters.SmallTest
 import com.android.internal.widget.LockPatternUtils
+import com.android.systemui.R
 import com.android.systemui.SysuiTestCase
+import com.android.systemui.animation.DialogLaunchAnimator
 import com.android.systemui.common.shared.model.ContentDescription
 import com.android.systemui.common.shared.model.Icon
+import com.android.systemui.coroutines.collectLastValue
 import com.android.systemui.flags.FakeFeatureFlags
 import com.android.systemui.flags.Flags
 import com.android.systemui.keyguard.data.quickaffordance.BuiltInKeyguardQuickAffordanceKeys
@@ -43,20 +46,17 @@ import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.settings.UserFileManager
 import com.android.systemui.settings.UserTracker
 import com.android.systemui.shared.keyguard.shared.model.KeyguardQuickAffordanceSlots
+import com.android.systemui.statusbar.CommandQueue
 import com.android.systemui.statusbar.policy.KeyguardStateController
 import com.android.systemui.util.FakeSharedPreferences
 import com.android.systemui.util.mockito.mock
 import com.android.systemui.util.mockito.whenever
 import com.android.systemui.util.settings.FakeSettings
 import com.google.common.truth.Truth.assertThat
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.runBlockingTest
-import kotlinx.coroutines.yield
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -75,9 +75,12 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
     @Mock private lateinit var keyguardStateController: KeyguardStateController
     @Mock private lateinit var userTracker: UserTracker
     @Mock private lateinit var activityStarter: ActivityStarter
+    @Mock private lateinit var launchAnimator: DialogLaunchAnimator
+    @Mock private lateinit var commandQueue: CommandQueue
 
     private lateinit var underTest: KeyguardQuickAffordanceInteractor
 
+    private lateinit var testScope: TestScope
     private lateinit var repository: FakeKeyguardRepository
     private lateinit var homeControls: FakeKeyguardQuickAffordanceConfig
     private lateinit var quickAccessWallet: FakeKeyguardQuickAffordanceConfig
@@ -99,7 +102,8 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
             )
         qrCodeScanner =
             FakeKeyguardQuickAffordanceConfig(BuiltInKeyguardQuickAffordanceKeys.QR_CODE_SCANNER)
-        val scope = CoroutineScope(IMMEDIATE)
+        val testDispatcher = StandardTestDispatcher()
+        testScope = TestScope(testDispatcher)
 
         val localUserSelectionManager =
             KeyguardQuickAffordanceLocalUserSelectionManager(
@@ -120,7 +124,7 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
             )
         val remoteUserSelectionManager =
             KeyguardQuickAffordanceRemoteUserSelectionManager(
-                scope = scope,
+                scope = testScope.backgroundScope,
                 userTracker = userTracker,
                 clientFactory = FakeKeyguardQuickAffordanceProviderClientFactory(userTracker),
                 userHandle = UserHandle.SYSTEM,
@@ -128,14 +132,14 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
         val quickAffordanceRepository =
             KeyguardQuickAffordanceRepository(
                 appContext = context,
-                scope = scope,
+                scope = testScope.backgroundScope,
                 localUserSelectionManager = localUserSelectionManager,
                 remoteUserSelectionManager = remoteUserSelectionManager,
                 userTracker = userTracker,
                 legacySettingSyncer =
                     KeyguardQuickAffordanceLegacySettingSyncer(
-                        scope = scope,
-                        backgroundDispatcher = IMMEDIATE,
+                        scope = testScope.backgroundScope,
+                        backgroundDispatcher = testDispatcher,
                         secureSettings = FakeSettings(),
                         selectionsManager = localUserSelectionManager,
                     ),
@@ -150,7 +154,8 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
 
         underTest =
             KeyguardQuickAffordanceInteractor(
-                keyguardInteractor = KeyguardInteractor(repository = repository),
+                keyguardInteractor =
+                    KeyguardInteractor(repository = repository, commandQueue = commandQueue),
                 registry =
                     FakeKeyguardQuickAffordanceRegistry(
                         mapOf(
@@ -171,92 +176,81 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
                 activityStarter = activityStarter,
                 featureFlags = featureFlags,
                 repository = { quickAffordanceRepository },
+                launchAnimator = launchAnimator,
             )
     }
 
     @Test
-    fun `quickAffordance - bottom start affordance is visible`() = runBlockingTest {
-        val configKey = BuiltInKeyguardQuickAffordanceKeys.HOME_CONTROLS
-        homeControls.setState(
-            KeyguardQuickAffordanceConfig.LockScreenState.Visible(
-                icon = ICON,
-                activationState = ActivationState.Active,
+    fun `quickAffordance - bottom start affordance is visible`() =
+        testScope.runTest {
+            val configKey = BuiltInKeyguardQuickAffordanceKeys.HOME_CONTROLS
+            homeControls.setState(
+                KeyguardQuickAffordanceConfig.LockScreenState.Visible(
+                    icon = ICON,
+                    activationState = ActivationState.Active,
+                )
             )
-        )
 
-        var latest: KeyguardQuickAffordanceModel? = null
-        val job =
-            underTest
-                .quickAffordance(KeyguardQuickAffordancePosition.BOTTOM_START)
-                .onEach { latest = it }
-                .launchIn(this)
-        // The interactor has an onStart { emit(Hidden) } to cover for upstream configs that don't
-        // produce an initial value. We yield to give the coroutine time to emit the first real
-        // value from our config.
-        yield()
+            val collectedValue =
+                collectLastValue(
+                    underTest.quickAffordance(KeyguardQuickAffordancePosition.BOTTOM_START)
+                )
 
-        assertThat(latest).isInstanceOf(KeyguardQuickAffordanceModel.Visible::class.java)
-        val visibleModel = latest as KeyguardQuickAffordanceModel.Visible
-        assertThat(visibleModel.configKey).isEqualTo(configKey)
-        assertThat(visibleModel.icon).isEqualTo(ICON)
-        assertThat(visibleModel.icon.contentDescription)
-            .isEqualTo(ContentDescription.Resource(res = CONTENT_DESCRIPTION_RESOURCE_ID))
-        assertThat(visibleModel.activationState).isEqualTo(ActivationState.Active)
-        job.cancel()
-    }
+            assertThat(collectedValue())
+                .isInstanceOf(KeyguardQuickAffordanceModel.Visible::class.java)
+            val visibleModel = collectedValue() as KeyguardQuickAffordanceModel.Visible
+            assertThat(visibleModel.configKey).isEqualTo(configKey)
+            assertThat(visibleModel.icon).isEqualTo(ICON)
+            assertThat(visibleModel.icon.contentDescription)
+                .isEqualTo(ContentDescription.Resource(res = CONTENT_DESCRIPTION_RESOURCE_ID))
+            assertThat(visibleModel.activationState).isEqualTo(ActivationState.Active)
+        }
 
     @Test
-    fun `quickAffordance - bottom end affordance is visible`() = runBlockingTest {
-        val configKey = BuiltInKeyguardQuickAffordanceKeys.QUICK_ACCESS_WALLET
-        quickAccessWallet.setState(
-            KeyguardQuickAffordanceConfig.LockScreenState.Visible(
-                icon = ICON,
+    fun `quickAffordance - bottom end affordance is visible`() =
+        testScope.runTest {
+            val configKey = BuiltInKeyguardQuickAffordanceKeys.QUICK_ACCESS_WALLET
+            quickAccessWallet.setState(
+                KeyguardQuickAffordanceConfig.LockScreenState.Visible(
+                    icon = ICON,
+                )
             )
-        )
 
-        var latest: KeyguardQuickAffordanceModel? = null
-        val job =
-            underTest
-                .quickAffordance(KeyguardQuickAffordancePosition.BOTTOM_END)
-                .onEach { latest = it }
-                .launchIn(this)
-        // The interactor has an onStart { emit(Hidden) } to cover for upstream configs that don't
-        // produce an initial value. We yield to give the coroutine time to emit the first real
-        // value from our config.
-        yield()
+            val collectedValue =
+                collectLastValue(
+                    underTest.quickAffordance(KeyguardQuickAffordancePosition.BOTTOM_END)
+                )
 
-        assertThat(latest).isInstanceOf(KeyguardQuickAffordanceModel.Visible::class.java)
-        val visibleModel = latest as KeyguardQuickAffordanceModel.Visible
-        assertThat(visibleModel.configKey).isEqualTo(configKey)
-        assertThat(visibleModel.icon).isEqualTo(ICON)
-        assertThat(visibleModel.icon.contentDescription)
-            .isEqualTo(ContentDescription.Resource(res = CONTENT_DESCRIPTION_RESOURCE_ID))
-        assertThat(visibleModel.activationState).isEqualTo(ActivationState.NotSupported)
-        job.cancel()
-    }
+            assertThat(collectedValue())
+                .isInstanceOf(KeyguardQuickAffordanceModel.Visible::class.java)
+            val visibleModel = collectedValue() as KeyguardQuickAffordanceModel.Visible
+            assertThat(visibleModel.configKey).isEqualTo(configKey)
+            assertThat(visibleModel.icon).isEqualTo(ICON)
+            assertThat(visibleModel.icon.contentDescription)
+                .isEqualTo(ContentDescription.Resource(res = CONTENT_DESCRIPTION_RESOURCE_ID))
+            assertThat(visibleModel.activationState).isEqualTo(ActivationState.NotSupported)
+        }
 
     @Test
-    fun `quickAffordance - bottom start affordance hidden while dozing`() = runBlockingTest {
-        repository.setDozing(true)
-        homeControls.setState(
-            KeyguardQuickAffordanceConfig.LockScreenState.Visible(
-                icon = ICON,
+    fun `quickAffordance - bottom start affordance hidden while dozing`() =
+        testScope.runTest {
+            repository.setDozing(true)
+            homeControls.setState(
+                KeyguardQuickAffordanceConfig.LockScreenState.Visible(
+                    icon = ICON,
+                )
             )
-        )
 
-        var latest: KeyguardQuickAffordanceModel? = null
-        val job =
-            underTest
-                .quickAffordance(KeyguardQuickAffordancePosition.BOTTOM_START)
-                .onEach { latest = it }
-                .launchIn(this)
-        assertThat(latest).isEqualTo(KeyguardQuickAffordanceModel.Hidden)
-        job.cancel()
-    }
+            val collectedValue =
+                collectLastValue(
+                    underTest.quickAffordance(KeyguardQuickAffordancePosition.BOTTOM_START)
+                )
+            assertThat(collectedValue()).isEqualTo(KeyguardQuickAffordanceModel.Hidden)
+        }
 
     @Test
     fun `quickAffordance - bottom start affordance hidden when lockscreen is not showing`() =
-        runBlockingTest {
+        testScope.runTest {
             repository.setKeyguardShowing(false)
             homeControls.setState(
                 KeyguardQuickAffordanceConfig.LockScreenState.Visible(
@@ -264,19 +258,50 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
                 )
             )
 
-            var latest: KeyguardQuickAffordanceModel? = null
-            val job =
-                underTest
-                    .quickAffordance(KeyguardQuickAffordancePosition.BOTTOM_START)
-                    .onEach { latest = it }
-                    .launchIn(this)
-            assertThat(latest).isEqualTo(KeyguardQuickAffordanceModel.Hidden)
-            job.cancel()
+            val collectedValue =
+                collectLastValue(
+                    underTest.quickAffordance(KeyguardQuickAffordancePosition.BOTTOM_START)
+                )
+            assertThat(collectedValue()).isEqualTo(KeyguardQuickAffordanceModel.Hidden)
+        }
+
+    @Test
+    fun `quickAffordanceAlwaysVisible - even when lock screen not showing and dozing`() =
+        testScope.runTest {
+            repository.setKeyguardShowing(false)
+            repository.setDozing(true)
+            val configKey = BuiltInKeyguardQuickAffordanceKeys.HOME_CONTROLS
+            homeControls.setState(
+                KeyguardQuickAffordanceConfig.LockScreenState.Visible(
+                    icon = ICON,
+                    activationState = ActivationState.Active,
+                )
+            )
+
+            val collectedValue =
+                collectLastValue(
+                    underTest.quickAffordanceAlwaysVisible(
+                        KeyguardQuickAffordancePosition.BOTTOM_START
+                    )
+                )
+            assertThat(collectedValue())
+                .isInstanceOf(KeyguardQuickAffordanceModel.Visible::class.java)
+            val visibleModel = collectedValue() as KeyguardQuickAffordanceModel.Visible
+            assertThat(visibleModel.configKey).isEqualTo(configKey)
+            assertThat(visibleModel.icon).isEqualTo(ICON)
+            assertThat(visibleModel.icon.contentDescription)
+                .isEqualTo(ContentDescription.Resource(res = CONTENT_DESCRIPTION_RESOURCE_ID))
+            assertThat(visibleModel.activationState).isEqualTo(ActivationState.Active)
         }
 
     @Test
     fun select() =
-        runBlocking(IMMEDIATE) {
+        testScope.runTest {
+            overrideResource(
+                R.array.config_keyguardQuickAffordanceDefaults,
+                arrayOf<String>(),
+            )
+
             featureFlags.set(Flags.CUSTOMIZABLE_LOCK_SCREEN_QUICK_AFFORDANCES, true)
             homeControls.setState(
                 KeyguardQuickAffordanceConfig.LockScreenState.Visible(icon = ICON)
@@ -296,23 +321,18 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
                     )
                 )
 
-            var startConfig: KeyguardQuickAffordanceModel? = null
-            val job1 =
-                underTest
-                    .quickAffordance(KeyguardQuickAffordancePosition.BOTTOM_START)
-                    .onEach { startConfig = it }
-                    .launchIn(this)
-            var endConfig: KeyguardQuickAffordanceModel? = null
-            val job2 =
-                underTest
-                    .quickAffordance(KeyguardQuickAffordancePosition.BOTTOM_END)
-                    .onEach { endConfig = it }
-                    .launchIn(this)
+            val startConfig =
+                collectLastValue(
+                    underTest.quickAffordance(KeyguardQuickAffordancePosition.BOTTOM_START)
+                )
+            val endConfig =
+                collectLastValue(
+                    underTest.quickAffordance(KeyguardQuickAffordancePosition.BOTTOM_END)
+                )
 
             underTest.select(KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_START, homeControls.key)
-            yield()
-            yield()
-            assertThat(startConfig)
+
+            assertThat(startConfig())
                 .isEqualTo(
                     KeyguardQuickAffordanceModel.Visible(
                         configKey =
@@ -322,7 +342,7 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
                         activationState = ActivationState.NotSupported,
                     )
                 )
-            assertThat(endConfig)
+            assertThat(endConfig())
                 .isEqualTo(
                     KeyguardQuickAffordanceModel.Hidden,
                 )
@@ -345,9 +365,8 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
                 KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_START,
                 quickAccessWallet.key
             )
-            yield()
-            yield()
-            assertThat(startConfig)
+
+            assertThat(startConfig())
                 .isEqualTo(
                     KeyguardQuickAffordanceModel.Visible(
                         configKey =
@@ -357,7 +376,7 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
                         activationState = ActivationState.NotSupported,
                     )
                 )
-            assertThat(endConfig)
+            assertThat(endConfig())
                 .isEqualTo(
                     KeyguardQuickAffordanceModel.Hidden,
                 )
@@ -377,9 +396,8 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
                 )
 
             underTest.select(KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_END, qrCodeScanner.key)
-            yield()
-            yield()
-            assertThat(startConfig)
+
+            assertThat(startConfig())
                 .isEqualTo(
                     KeyguardQuickAffordanceModel.Visible(
                         configKey =
@@ -389,7 +407,7 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
                         activationState = ActivationState.NotSupported,
                     )
                 )
-            assertThat(endConfig)
+            assertThat(endConfig())
                 .isEqualTo(
                     KeyguardQuickAffordanceModel.Visible(
                         configKey =
@@ -420,14 +438,11 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
                             ),
                     )
                 )
-
-            job1.cancel()
-            job2.cancel()
         }
 
     @Test
     fun `unselect - one`() =
-        runBlocking(IMMEDIATE) {
+        testScope.runTest {
             featureFlags.set(Flags.CUSTOMIZABLE_LOCK_SCREEN_QUICK_AFFORDANCES, true)
             homeControls.setState(
                 KeyguardQuickAffordanceConfig.LockScreenState.Visible(icon = ICON)
@@ -439,34 +454,23 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
                 KeyguardQuickAffordanceConfig.LockScreenState.Visible(icon = ICON)
             )
 
-            var startConfig: KeyguardQuickAffordanceModel? = null
-            val job1 =
-                underTest
-                    .quickAffordance(KeyguardQuickAffordancePosition.BOTTOM_START)
-                    .onEach { startConfig = it }
-                    .launchIn(this)
-            var endConfig: KeyguardQuickAffordanceModel? = null
-            val job2 =
-                underTest
-                    .quickAffordance(KeyguardQuickAffordancePosition.BOTTOM_END)
-                    .onEach { endConfig = it }
-                    .launchIn(this)
+            val startConfig =
+                collectLastValue(
+                    underTest.quickAffordance(KeyguardQuickAffordancePosition.BOTTOM_START)
+                )
+            val endConfig =
+                collectLastValue(
+                    underTest.quickAffordance(KeyguardQuickAffordancePosition.BOTTOM_END)
+                )
             underTest.select(KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_START, homeControls.key)
-            yield()
-            yield()
             underTest.select(KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_END, quickAccessWallet.key)
-            yield()
-            yield()
-
             underTest.unselect(KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_START, homeControls.key)
-            yield()
-            yield()
 
-            assertThat(startConfig)
+            assertThat(startConfig())
                 .isEqualTo(
                     KeyguardQuickAffordanceModel.Hidden,
                 )
-            assertThat(endConfig)
+            assertThat(endConfig())
                 .isEqualTo(
                     KeyguardQuickAffordanceModel.Visible(
                         configKey =
@@ -495,14 +499,12 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
                 KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_END,
                 quickAccessWallet.key
             )
-            yield()
-            yield()
 
-            assertThat(startConfig)
+            assertThat(startConfig())
                 .isEqualTo(
                     KeyguardQuickAffordanceModel.Hidden,
                 )
-            assertThat(endConfig)
+            assertThat(endConfig())
                 .isEqualTo(
                     KeyguardQuickAffordanceModel.Hidden,
                 )
@@ -513,14 +515,11 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
                         KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_END to emptyList(),
                     )
                 )
-
-            job1.cancel()
-            job2.cancel()
         }
 
     @Test
     fun `unselect - all`() =
-        runBlocking(IMMEDIATE) {
+        testScope.runTest {
             featureFlags.set(Flags.CUSTOMIZABLE_LOCK_SCREEN_QUICK_AFFORDANCES, true)
             homeControls.setState(
                 KeyguardQuickAffordanceConfig.LockScreenState.Visible(icon = ICON)
@@ -533,15 +532,8 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
             )
 
             underTest.select(KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_START, homeControls.key)
-            yield()
-            yield()
             underTest.select(KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_END, quickAccessWallet.key)
-            yield()
-            yield()
-
             underTest.unselect(KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_START, null)
-            yield()
-            yield()
 
             assertThat(underTest.getSelections())
                 .isEqualTo(
@@ -562,8 +554,6 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
                 KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_END,
                 null,
             )
-            yield()
-            yield()
 
             assertThat(underTest.getSelections())
                 .isEqualTo(
@@ -584,6 +574,5 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
                 )
         }
         private const val CONTENT_DESCRIPTION_RESOURCE_ID = 1337
-        private val IMMEDIATE = Dispatchers.Main.immediate
     }
 }

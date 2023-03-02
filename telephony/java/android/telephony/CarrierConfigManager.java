@@ -17,6 +17,7 @@
 package android.telephony;
 
 import android.Manifest;
+import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -44,6 +45,7 @@ import android.telephony.gba.UaSecurityProtocolIdentifier;
 import android.telephony.ims.ImsReasonInfo;
 import android.telephony.ims.ImsRegistrationAttributes;
 import android.telephony.ims.ImsSsData;
+import android.telephony.ims.MediaQualityStatus;
 import android.telephony.ims.RcsUceAdapter;
 import android.telephony.ims.feature.MmTelFeature;
 import android.telephony.ims.feature.RcsFeature;
@@ -52,6 +54,7 @@ import com.android.internal.telephony.ICarrierConfigLoader;
 import com.android.telephony.Rlog;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -1851,8 +1854,6 @@ public class CarrierConfigManager {
      * Instead, each sim carrier should have a single country code, apply per carrier based iso
      * code as an override. The overridden value can be read from
      * {@link TelephonyManager#getSimCountryIso()} and {@link SubscriptionInfo#getCountryIso()}
-     *
-     * @hide
      */
     public static final String KEY_SIM_COUNTRY_ISO_OVERRIDE_STRING =
             "sim_country_iso_override_string";
@@ -3060,6 +3061,39 @@ public class CarrierConfigManager {
             "5g_nr_sssinr_thresholds_int_array";
 
     /**
+     * An interval in dB for {@link SignalThresholdInfo#SIGNAL_MEASUREMENT_TYPE_SSRSRP} measurement
+     * type defining the required magnitude change between reports.
+     *
+     * <p>The default value is 2 and the minimum allowed value is 0. If no value or negative value
+     * is set, the default value 2 is used.
+     * @hide
+     */
+    public static final String
+            KEY_NGRAN_SSRSRP_HYSTERESIS_DB_INT = "ngran_ssrsrp_hysteresis_db_int";
+
+    /**
+     * An interval in dB for {@link SignalThresholdInfo#SIGNAL_MEASUREMENT_TYPE_SSRSRQ} measurement
+     * type defining the required magnitude change between reports.
+     *
+     * <p>The default value is 2 and the minimum allowed value is 0. If no value or negative value
+     * is set, the default value 2 is used.
+     *@hide
+     */
+    public static final String
+            KEY_NGRAN_SSRSRQ_HYSTERESIS_DB_INT = "ngran_ssrsrq_hysteresis_db_int";
+
+    /**
+     * An interval in dB for {@link SignalThresholdInfo#SIGNAL_MEASUREMENT_TYPE_SSSINR} measurement
+     * type defining the required magnitude change between reports.
+     *
+     * <p>The default value is 2 and the minimum allowed value is 0. If no value or negative value
+     * is set, the default value 2 is used.
+     * @hide
+     */
+    public static final String
+            KEY_NGRAN_SSSINR_HYSTERESIS_DB_INT = "ngran_sssinr_hysteresis_db_int";
+
+    /**
      * Bit-field integer to determine whether to use SS reference signal received power (SSRSRP),
      * SS reference signal received quality (SSRSRQ), or/and SS signal-to-noise and interference
      * ratio (SSSINR) for the number of 5G NR signal bars and signal criteria reporting enabling.
@@ -3396,6 +3430,38 @@ public class CarrierConfigManager {
             "lte_rssnr_thresholds_int_array";
 
     /**
+     * An interval in dB for {@link SignalThresholdInfo#SIGNAL_MEASUREMENT_TYPE_RSRP} measurement
+     * type defining the required magnitude change between reports.
+     *
+     * <p>The default value is 2 and the minimum allowed value is 0. If no value or negative value
+     * is set, the default value 2 is used.
+     * @hide
+     */
+    public static final String
+            KEY_EUTRAN_RSRP_HYSTERESIS_DB_INT = "eutran_rsrp_hysteresis_db_int";
+
+    /**
+     * An interval in dB for {@link SignalThresholdInfo#SIGNAL_MEASUREMENT_TYPE_RSRQ} measurement
+     * type defining the required magnitude change between reports.
+     *
+     * <p>The default value is 2 and the minimum allowed value is 0. If no value or negative value
+     * is set, the default value 2 is used.
+     * @hide
+     */
+    public static final String KEY_EUTRAN_RSRQ_HYSTERESIS_DB_INT = "eutran_rsrq_hysteresis_db_int";
+
+    /**
+     * An interval in dB for {@link SignalThresholdInfo#SIGNAL_MEASUREMENT_TYPE_RSSNR} measurement
+     * type defining the required magnitude change between reports.
+     *
+     * <p>The default value is 2 and the minimum allowed value is 0. If no value or negative value
+     * is set, the default value 2 is used.
+     * @hide
+     */
+    public static final String
+            KEY_EUTRAN_RSSNR_HYSTERESIS_DB_INT = "eutran_rssnr_hysteresis_db_int";
+
+    /**
      * Decides when clients try to bind to iwlan network service, which package name will
      * the binding intent go to.
      * @hide
@@ -3470,6 +3536,26 @@ public class CarrierConfigManager {
      */
     public static final String KEY_WCDMA_ECNO_THRESHOLDS_INT_ARRAY =
             "wcdma_ecno_thresholds_int_array";
+
+    /**
+     * An interval in dB for {@link SignalThresholdInfo#SIGNAL_MEASUREMENT_TYPE_RSCP} measurement
+     * type defining the required magnitude change between reports.
+     *
+     * <p>The default value is 2 and the minimum allowed value is 0. If no value or negative value
+     * is set, the default value 2 is used.
+     * @hide
+     */
+    public static final String KEY_UTRAN_RSCP_HYSTERESIS_DB_INT = "utran_rscp_hysteresis_db_int";
+
+    /**
+     * An interval in dB for {@link SignalThresholdInfo#SIGNAL_MEASUREMENT_TYPE_ECNO} measurement
+     * type defining the required magnitude change between reports.
+     *
+     * <p>The default value is 2 and the minimum allowed value is 0. If no value or negative value
+     * is set, the default value 2 is used.
+     * @hide
+     */
+    public static final String KEY_UTRAN_ECNO_HYSTERESIS_DB_INT = "utran_ecno_hysteresis_db_int";
 
     /**
      * The default measurement to use for signal strength reporting. If this is not specified, the
@@ -4450,6 +4536,18 @@ public class CarrierConfigManager {
      */
     public static final String KEY_DATA_SWITCH_VALIDATION_TIMEOUT_LONG =
             "data_switch_validation_timeout_long";
+
+    /**
+     * The minimum timeout of UDP port 4500 NAT / firewall entries on the Internet PDN of this
+     * carrier network. This will be used by Android platform VPNs to tune IPsec NAT keepalive
+     * interval. If this value is too low to provide uninterrupted inbound connectivity, then
+     * Android system VPNs may indicate to applications that the VPN cannot support long-lived
+     * TCP connections.
+     * @hide
+     */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public static final String KEY_MIN_UDP_PORT_4500_NAT_TIMEOUT_SEC_INT =
+            "min_udp_port_4500_nat_timeout_sec_int";
 
     /**
      * Specifies whether the system should prefix the EAP method to the anonymous identity.
@@ -6332,6 +6430,50 @@ public class CarrierConfigManager {
         public static final String KEY_DTMFNB_PAYLOAD_TYPE_INT_ARRAY  =
                 KEY_PREFIX + "dtmfnb_payload_type_int_array";
 
+        /**
+         * This indicates the threshold for RTP packet loss rate in percentage. If measured packet
+         * loss rate crosses this, a callback with {@link MediaQualityStatus} will be invoked to
+         * listeners.
+         * See {@link android.telephony.TelephonyCallback.MediaQualityStatusChangedListener}
+         *
+         * <p/>
+         * Valid threshold range : 0 ~ 100
+         *
+         * @hide
+         */
+        public static final String KEY_VOICE_RTP_PACKET_LOSS_RATE_THRESHOLD_INT =
+                KEY_PREFIX + "rtp_packet_loss_rate_threshold_int";
+
+
+        /**
+         * This indicates the threshold for RTP jitter value in milliseconds (RFC3550). If measured
+         * jitter value crosses this, a callback with {@link MediaQualityStatus} will be invoked
+         * to listeners.
+         * See {@link android.telephony.TelephonyCallback.MediaQualityStatusChangedListener}
+         *
+         * <p/>
+         * Valid threshold range : 0 ~ 10000
+         *
+         * @hide
+         */
+        public static final String KEY_VOICE_RTP_JITTER_THRESHOLD_MILLIS_INT =
+                KEY_PREFIX + "rtp_jitter_threshold_millis_int";
+
+        /**
+         * This indicates the threshold for RTP inactivity time in milliseconds. If measured
+         * inactivity timer crosses this, a callback with {@link MediaQualityStatus} will be invoked
+         * to listeners.
+         * See {@link android.telephony.TelephonyCallback.MediaQualityStatusChangedListener}
+         *
+         * <p/>
+         * Valid threshold range : 0 ~ 60000
+         *
+         * @hide
+         */
+        public static final String KEY_VOICE_RTP_INACTIVITY_TIME_THRESHOLD_MILLIS_LONG =
+                KEY_PREFIX + "rtp_inactivity_time_threshold_millis_long";
+
+
         /** @hide */
         @IntDef({
             BANDWIDTH_EFFICIENT,
@@ -6818,6 +6960,9 @@ public class CarrierConfigManager {
             defaults.putInt(KEY_AUDIO_AS_BANDWIDTH_KBPS_INT, 41);
             defaults.putInt(KEY_AUDIO_RS_BANDWIDTH_BPS_INT, 600);
             defaults.putInt(KEY_AUDIO_RR_BANDWIDTH_BPS_INT, 2000);
+            defaults.putInt(KEY_VOICE_RTP_PACKET_LOSS_RATE_THRESHOLD_INT, 40);
+            defaults.putInt(KEY_VOICE_RTP_JITTER_THRESHOLD_MILLIS_INT, 120);
+            defaults.putLong(KEY_VOICE_RTP_INACTIVITY_TIME_THRESHOLD_MILLIS_LONG, 5000);
 
             defaults.putIntArray(
                     KEY_AUDIO_INACTIVITY_CALL_END_REASONS_INT_ARRAY,
@@ -6973,12 +7118,124 @@ public class CarrierConfigManager {
         public static final String KEY_SMS_OVER_IMS_SUPPORTED_RATS_INT_ARRAY =
                 KEY_PREFIX + "sms_over_ims_supported_rats_int_array";
 
+        /**
+         * Maximum Retry Count for Failure, If the Retry Count exceeds this value,
+         * it must display to User Interface as sending failed
+         */
+        public static final String KEY_SMS_MAX_RETRY_COUNT_INT =
+                KEY_PREFIX + "sms_max_retry_count_int";
+
+        /**
+         * Maximum Retry Count for SMS over IMS on Failure, If the Retry Count exceeds this value,
+         * and if the retry count is less than KEY_SMS_MAX_RETRY_COUNT_INT
+         * sending SMS should fallback to CS
+         */
+        public static final String KEY_SMS_MAX_RETRY_COUNT_OVER_IMS_INT =
+                KEY_PREFIX + "sms_max_retry_count_over_ims_int";
+
+        /**
+         * Delay Timer Value in milliseconds
+         * Retry SMS over IMS after this Timer expires
+         */
+        public static final String KEY_SMS_OVER_IMS_SEND_RETRY_DELAY_MILLIS_INT =
+                KEY_PREFIX + "sms_over_ims_send_retry_delay_millis_int";
+
+        /**
+         * TR1 Timer Value in milliseconds,
+         * Waits for RP-Ack from network for MO SMS.
+         */
+        public static final String KEY_SMS_TR1_TIMER_MILLIS_INT =
+                KEY_PREFIX + "sms_tr1_timer_millis_int";
+
+        /**
+         * TR2 Timer Value in milliseconds,
+         * Waits for RP-Ack from Transfer Layer for MT SMS.
+         */
+        public static final String KEY_SMS_TR2_TIMER_MILLIS_INT =
+                KEY_PREFIX + "sms_tr2_timer_millis_int";
+
+        /**
+         * SMS RP-Cause Values for which SMS should be retried over IMS
+         *
+         * <p>Possible values are,
+         * {@link SmsManager#SMS_RP_CAUSE_UNALLOCATED_NUMBER}
+         * {@link SmsManager#SMS_RP_CAUSE_OPERATOR_DETERMINED_BARRING}
+         * {@link SmsManager#SMS_RP_CAUSE_CALL_BARRING}
+         * {@link SmsManager#SMS_RP_CAUSE_RESERVED}
+         * {@link SmsManager#SMS_RP_CAUSE_SHORT_MESSAGE_TRANSFER_REJECTED}
+         * {@link SmsManager#SMS_RP_CAUSE_DESTINATION_OUT_OF_ORDER}
+         * {@link SmsManager#SMS_RP_CAUSE_UNIDENTIFIED_SUBSCRIBER}
+         * {@link SmsManager#SMS_RP_CAUSE_FACILITY_REJECTED}
+         * {@link SmsManager#SMS_RP_CAUSE_UNKNOWN_SUBSCRIBER}
+         * {@link SmsManager#SMS_RP_CAUSE_NETWORK_OUT_OF_ORDER}
+         * {@link SmsManager#SMS_RP_CAUSE_TEMPORARY_FAILURE}
+         * {@link SmsManager#SMS_RP_CAUSE_CONGESTION}
+         * {@link SmsManager#SMS_RP_CAUSE_RESOURCES_UNAVAILABLE}
+         * {@link SmsManager#SMS_RP_CAUSE_FACILITY_NOT_SUBSCRIBED}
+         * {@link SmsManager#SMS_RP_CAUSE_FACILITY_NOT_IMPLEMENTED}
+         * {@link SmsManager#SMS_RP_CAUSE_INVALID_MESSAGE_REFERENCE_VALUE}
+         * {@link SmsManager#SMS_RP_CAUSE_SEMANTICALLY_INCORRECT_MESSAGE}
+         * {@link SmsManager#SMS_RP_CAUSE_INVALID_MANDATORY_INFORMATION}
+         * {@link SmsManager#SMS_RP_CAUSE_MESSAGE_TYPE_NON_EXISTENT}
+         * {@link SmsManager#SMS_RP_CAUSE_MESSAGE_INCOMPATIBLE_WITH_PROTOCOL_STATE}
+         * {@link SmsManager#SMS_RP_CAUSE_INFORMATION_ELEMENT_NON_EXISTENT}
+         * {@link SmsManager#SMS_RP_CAUSE_PROTOCOL_ERROR}
+         * {@link SmsManager#SMS_RP_CAUSE_INTERWORKING_UNSPECIFIED
+         */
+        public static final String KEY_SMS_RP_CAUSE_VALUES_TO_RETRY_OVER_IMS_INT_ARRAY =
+                KEY_PREFIX + "sms_rp_cause_values_to_retry_over_ims_int_array";
+
+        /**
+         * SMS RP-Cause Values for which Sending SMS should fallback
+         */
+        public static final String KEY_SMS_RP_CAUSE_VALUES_TO_FALLBACK_INT_ARRAY =
+                KEY_PREFIX + "sms_rp_cause_values_to_fallback_int_array";
+
         private static PersistableBundle getDefaults() {
             PersistableBundle defaults = new PersistableBundle();
             defaults.putBoolean(KEY_SMS_OVER_IMS_SUPPORTED_BOOL, true);
             defaults.putBoolean(KEY_SMS_CSFB_RETRY_ON_FAILURE_BOOL, true);
 
             defaults.putInt(KEY_SMS_OVER_IMS_FORMAT_INT, SMS_FORMAT_3GPP);
+
+            defaults.putInt(KEY_SMS_MAX_RETRY_COUNT_INT, 3);
+            defaults.putInt(KEY_SMS_MAX_RETRY_COUNT_OVER_IMS_INT, 3);
+            defaults.putInt(KEY_SMS_OVER_IMS_SEND_RETRY_DELAY_MILLIS_INT,
+                    2000);
+            defaults.putInt(KEY_SMS_TR1_TIMER_MILLIS_INT, 130000);
+            defaults.putInt(KEY_SMS_TR2_TIMER_MILLIS_INT, 15000);
+
+            defaults.putIntArray(
+                    KEY_SMS_RP_CAUSE_VALUES_TO_RETRY_OVER_IMS_INT_ARRAY,
+                    new int[] {
+                        SmsManager.SMS_RP_CAUSE_TEMPORARY_FAILURE
+                    });
+            defaults.putIntArray(
+                    KEY_SMS_RP_CAUSE_VALUES_TO_FALLBACK_INT_ARRAY,
+                    new int[] {
+                        SmsManager.SMS_RP_CAUSE_UNALLOCATED_NUMBER,
+                        SmsManager.SMS_RP_CAUSE_OPERATOR_DETERMINED_BARRING,
+                        SmsManager.SMS_RP_CAUSE_CALL_BARRING,
+                        SmsManager.SMS_RP_CAUSE_RESERVED,
+                        SmsManager.SMS_RP_CAUSE_SHORT_MESSAGE_TRANSFER_REJECTED,
+                        SmsManager.SMS_RP_CAUSE_DESTINATION_OUT_OF_ORDER,
+                        SmsManager.SMS_RP_CAUSE_UNIDENTIFIED_SUBSCRIBER,
+                        SmsManager.SMS_RP_CAUSE_FACILITY_REJECTED,
+                        SmsManager.SMS_RP_CAUSE_UNKNOWN_SUBSCRIBER,
+                        SmsManager.SMS_RP_CAUSE_NETWORK_OUT_OF_ORDER,
+                        SmsManager.SMS_RP_CAUSE_CONGESTION,
+                        SmsManager.SMS_RP_CAUSE_RESOURCES_UNAVAILABLE,
+                        SmsManager.SMS_RP_CAUSE_FACILITY_NOT_SUBSCRIBED,
+                        SmsManager.SMS_RP_CAUSE_FACILITY_NOT_IMPLEMENTED,
+                        SmsManager.SMS_RP_CAUSE_INVALID_MESSAGE_REFERENCE_VALUE,
+                        SmsManager.SMS_RP_CAUSE_SEMANTICALLY_INCORRECT_MESSAGE,
+                        SmsManager.SMS_RP_CAUSE_INVALID_MANDATORY_INFORMATION,
+                        SmsManager.SMS_RP_CAUSE_MESSAGE_TYPE_NON_EXISTENT,
+                        SmsManager.SMS_RP_CAUSE_MESSAGE_INCOMPATIBLE_WITH_PROTOCOL_STATE,
+                        SmsManager.SMS_RP_CAUSE_INFORMATION_ELEMENT_NON_EXISTENT,
+                        SmsManager.SMS_RP_CAUSE_PROTOCOL_ERROR,
+                        SmsManager.SMS_RP_CAUSE_INTERWORKING_UNSPECIFIED
+                    });
 
             defaults.putIntArray(
                     KEY_SMS_OVER_IMS_SUPPORTED_RATS_INT_ARRAY,
@@ -8589,6 +8846,14 @@ public class CarrierConfigManager {
         public static final String KEY_SUPPORTS_EAP_AKA_FAST_REAUTH_BOOL =
                 KEY_PREFIX + "supports_eap_aka_fast_reauth_bool";
 
+        /**
+         * Type of IP preference used to prioritize ePDG servers. Possible values are
+         * {@link #EPDG_ADDRESS_IPV4_PREFERRED}, {@link #EPDG_ADDRESS_IPV6_PREFERRED},
+         * {@link #EPDG_ADDRESS_IPV4_ONLY}
+         */
+        public static final String KEY_EPDG_ADDRESS_IP_TYPE_PREFERENCE_INT =
+                KEY_PREFIX + "epdg_address_ip_type_preference_int";
+
         /** @hide */
         @IntDef({AUTHENTICATION_METHOD_EAP_ONLY, AUTHENTICATION_METHOD_CERT})
         public @interface AuthenticationMethodType {}
@@ -8652,6 +8917,39 @@ public class CarrierConfigManager {
          *     Exchange Protocol Version 2 (IKEv2)</a>
          */
         public static final int ID_TYPE_KEY_ID = 11;
+
+        /** @hide */
+        @IntDef({
+                EPDG_ADDRESS_IPV4_PREFERRED,
+                EPDG_ADDRESS_IPV6_PREFERRED,
+                EPDG_ADDRESS_IPV4_ONLY,
+                EPDG_ADDRESS_IPV6_ONLY,
+                EPDG_ADDRESS_SYSTEM_PREFERRED
+        })
+        public @interface EpdgAddressIpPreference {}
+
+        /** Prioritize IPv4 ePDG addresses. */
+        public static final int EPDG_ADDRESS_IPV4_PREFERRED = 0;
+
+        /** Prioritize IPv6 ePDG addresses */
+        public static final int EPDG_ADDRESS_IPV6_PREFERRED = 1;
+
+        /** Use IPv4 ePDG addresses only. */
+        public static final int EPDG_ADDRESS_IPV4_ONLY = 2;
+
+        /** Use IPv6 ePDG addresses only.
+         * @hide
+         */
+        public static final int EPDG_ADDRESS_IPV6_ONLY = 3;
+
+        /** Follow the priority from DNS resolution results, which are sorted by using RFC6724
+         * algorithm.
+         *
+         * @see <a href="https://tools.ietf.org/html/rfc6724#section-6">RFC 6724, Default Address
+         *     Selection for Internet Protocol Version 6 (IPv6)</a>
+         * @hide
+         */
+        public static final int EPDG_ADDRESS_SYSTEM_PREFERRED = 4;
 
         private Iwlan() {}
 
@@ -8736,7 +9034,7 @@ public class CarrierConfigManager {
             defaults.putInt(KEY_EPDG_PCO_ID_IPV6_INT, 0);
             defaults.putInt(KEY_EPDG_PCO_ID_IPV4_INT, 0);
             defaults.putBoolean(KEY_SUPPORTS_EAP_AKA_FAST_REAUTH_BOOL, false);
-
+            defaults.putInt(KEY_EPDG_ADDRESS_IP_TYPE_PREFERENCE_INT, EPDG_ADDRESS_IPV4_PREFERRED);
             return defaults;
         }
     }
@@ -8754,6 +9052,16 @@ public class CarrierConfigManager {
      */
     public static final String KEY_GSM_RSSI_THRESHOLDS_INT_ARRAY =
             "gsm_rssi_thresholds_int_array";
+
+    /**
+     * An interval in dB for {@link SignalThresholdInfo#SIGNAL_MEASUREMENT_TYPE_RSSI} measurement
+     * type defining the required magnitude change between reports.
+     *
+     * <p>The default value is 2 and the minimum allowed value is 0. If no value or negative value
+     * is set, the default value 2 is used.
+     * @hide
+     */
+    public static final String KEY_GERAN_RSSI_HYSTERESIS_DB_INT = "geran_rssi_hysteresis_db_int";
 
     /**
      * Determines whether Wireless Priority Service call is supported over IMS.
@@ -9116,7 +9424,7 @@ public class CarrierConfigManager {
 
     /**
      * A list of premium capabilities the carrier supports. Applications can prompt users to
-     * purchase these premium capabilities from their carrier for a network boost.
+     * purchase these premium capabilities from their carrier for a performance boost.
      * Valid values are any of {@link TelephonyManager.PremiumCapability}.
      *
      * This is empty by default, indicating that no premium capabilities are supported.
@@ -9128,12 +9436,12 @@ public class CarrierConfigManager {
             "supported_premium_capabilities_int_array";
 
     /**
-     * The amount of time in milliseconds the notification for a network boost via
+     * The amount of time in milliseconds the notification for a performance boost via
      * premium capabilities will be visible to the user after
      * {@link TelephonyManager#purchasePremiumCapability(int, Executor, Consumer)}
      * requests user action to purchase the boost from the carrier. Once the timeout expires,
-     * the booster notification will be automatically dismissed and the request will fail with
-     * {@link TelephonyManager#PURCHASE_PREMIUM_CAPABILITY_RESULT_TIMEOUT}.
+     * the performance boost notification will be automatically dismissed and the request will fail
+     * with {@link TelephonyManager#PURCHASE_PREMIUM_CAPABILITY_RESULT_TIMEOUT}.
      *
      * The default value is 30 minutes.
      */
@@ -9141,11 +9449,11 @@ public class CarrierConfigManager {
             "premium_capability_notification_display_timeout_millis_long";
 
     /**
-     * The amount of time in milliseconds that the notification for a network boost via
+     * The amount of time in milliseconds that the notification for a performance boost via
      * premium capabilities should be blocked when
      * {@link TelephonyManager#purchasePremiumCapability(int, Executor, Consumer)}
      * returns a failure due to user action or timeout.
-     * The maximum number of network boost notifications to show the user are defined in
+     * The maximum number of performance boost notifications to show the user are defined in
      * {@link #KEY_PREMIUM_CAPABILITY_MAXIMUM_DAILY_NOTIFICATION_COUNT_INT} and
      * {@link #KEY_PREMIUM_CAPABILITY_MAXIMUM_MONTHLY_NOTIFICATION_COUNT_INT}.
      *
@@ -9159,7 +9467,7 @@ public class CarrierConfigManager {
             "premium_capability_notification_backoff_hysteresis_time_millis_long";
 
     /**
-     * The maximum number of times in a day that we display the notification for a network boost
+     * The maximum number of times in a day that we display the notification for a performance boost
      * via premium capabilities when
      * {@link TelephonyManager#purchasePremiumCapability(int, Executor, Consumer)}
      * returns a failure due to user action or timeout.
@@ -9173,8 +9481,8 @@ public class CarrierConfigManager {
             "premium_capability_maximum_daily_notification_count_int";
 
     /**
-     * The maximum number of times in a month that we display the notification for a network boost
-     * via premium capabilities when
+     * The maximum number of times in a month that we display the notification for a performance
+     * boost via premium capabilities when
      * {@link TelephonyManager#purchasePremiumCapability(int, Executor, Consumer)}
      * returns a failure due to user action or timeout.
      *
@@ -9217,7 +9525,7 @@ public class CarrierConfigManager {
             "premium_capability_network_setup_time_millis_long";
 
     /**
-     * The URL to redirect to when the user clicks on the notification for a network boost via
+     * The URL to redirect to when the user clicks on the notification for a performance boost via
      * premium capabilities after applications call
      * {@link TelephonyManager#purchasePremiumCapability(int, Executor, Consumer)}.
      * If the URL is empty or invalid, the purchase request will return
@@ -9391,6 +9699,13 @@ public class CarrierConfigManager {
      */
     public static final String KEY_NR_ULTRA_WIDEBAND_ICON_SA_BAND_ARRAY =
             "5g_ultra_wideband_icon_sa_band_array";
+
+    /**
+     * Determines if CS SMS is allowed in C_IWLAN-only mode. True is allowed. False is disallowed.
+     *
+     * @hide
+     */
+    public static final String KEY_CS_SMS_IN_CIWLAN_ONLY_MODE = "cs_sms_in_ciwlan_only_mode";
 
     /** The default value for every variable. */
     private final static PersistableBundle sDefaults;
@@ -9857,6 +10172,15 @@ public class CarrierConfigManager {
                     15, /* SIGNAL_STRENGTH_GOOD */
                     30  /* SIGNAL_STRENGTH_GREAT */
                 });
+        sDefaults.putInt(KEY_GERAN_RSSI_HYSTERESIS_DB_INT, 2);
+        sDefaults.putInt(KEY_UTRAN_RSCP_HYSTERESIS_DB_INT, 2);
+        sDefaults.putInt(KEY_EUTRAN_RSRP_HYSTERESIS_DB_INT, 2);
+        sDefaults.putInt(KEY_EUTRAN_RSRQ_HYSTERESIS_DB_INT, 2);
+        sDefaults.putInt(KEY_EUTRAN_RSSNR_HYSTERESIS_DB_INT, 2);
+        sDefaults.putInt(KEY_NGRAN_SSRSRP_HYSTERESIS_DB_INT, 2);
+        sDefaults.putInt(KEY_NGRAN_SSRSRQ_HYSTERESIS_DB_INT, 2);
+        sDefaults.putInt(KEY_NGRAN_SSSINR_HYSTERESIS_DB_INT, 2);
+        sDefaults.putInt(KEY_UTRAN_ECNO_HYSTERESIS_DB_INT, 2);
         sDefaults.putInt(KEY_PARAMETERS_USE_FOR_5G_NR_SIGNAL_BAR_INT,
                 CellSignalStrengthNr.USE_SSRSRP);
         sDefaults.putBoolean(KEY_SIGNAL_STRENGTH_NR_NSA_USE_LTE_AS_PRIMARY_BOOL, true);
@@ -9984,6 +10308,7 @@ public class CarrierConfigManager {
         sDefaults.putStringArray(KEY_MMI_TWO_DIGIT_NUMBER_PATTERN_STRING_ARRAY, new String[0]);
         sDefaults.putInt(KEY_PARAMETERS_USED_FOR_LTE_SIGNAL_BAR_INT,
                 CellSignalStrengthLte.USE_RSRP);
+        sDefaults.putInt(KEY_MIN_UDP_PORT_4500_NAT_TIMEOUT_SEC_INT, 300);
         // Default wifi configurations.
         sDefaults.putAll(Wifi.getDefaults());
         sDefaults.putBoolean(ENABLE_EAP_METHOD_PREFIX_BOOL, false);
@@ -10012,6 +10337,7 @@ public class CarrierConfigManager {
         sDefaults.putIntArray(KEY_NR_ULTRA_WIDEBAND_ICON_SA_BAND_ARRAY, new int[]{});
         sDefaults.putInt(KEY_NR_ULTRA_WIDEBAND_ICON_SA_BAND_MODE, Integer.MAX_VALUE);
         sDefaults.putIntArray(KEY_NR_ULTRA_WIDEBAND_ICON_NSA_BAND_ARRAY, new int[]{});
+        sDefaults.putBoolean(KEY_CS_SMS_IN_CIWLAN_ONLY_MODE, false);
 
         // Do not modify the priority unless you know what you are doing. This will have significant
         // impacts on the order of data network setup.
@@ -10180,10 +10506,13 @@ public class CarrierConfigManager {
      * @param subId the subscription ID, normally obtained from {@link SubscriptionManager}.
      * @return A {@link PersistableBundle} containing the config for the given subId, or default
      *         values for an invalid subId.
+     *
+     * @deprecated Use {@link #getConfigForSubId(int, String...)} instead.
      */
     @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
     @RequiresPermission(Manifest.permission.READ_PHONE_STATE)
     @Nullable
+    @Deprecated
     public PersistableBundle getConfigForSubId(int subId) {
         try {
             ICarrierConfigLoader loader = getICarrierConfigLoader();
@@ -10199,6 +10528,59 @@ public class CarrierConfigManager {
                     + ex.toString());
         }
         return null;
+    }
+
+    /**
+     * Gets the configuration values of the specified keys for a particular subscription.
+     *
+     * <p>If an invalid subId is used, the returned configuration will contain default values for
+     * the specified keys. If the value for the key can't be found, the returned configuration will
+     * filter the key out.
+     *
+     * <p>After using this method to get the configuration bundle,
+     * {@link #isConfigForIdentifiedCarrier(PersistableBundle)} should be called to confirm whether
+     * any carrier specific configuration has been applied.
+     *
+     * <p>Note that on success, the key/value for {@link #KEY_CARRIER_CONFIG_VERSION_STRING} and
+     * {@link #KEY_CARRIER_CONFIG_APPLIED_BOOL} are always in the returned bundle, no matter if they
+     * were explicitly requested.
+     *
+     * <p>Requires Permission:
+     * {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}, or the calling app
+     * has carrier privileges on the specified subscription (see
+     * {@link TelephonyManager#hasCarrierPrivileges()}).
+     *
+     * @param subId The subscription ID on which the carrier config should be retrieved.
+     * @param keys  The carrier config keys to retrieve values.
+     * @return A {@link PersistableBundle} with key/value mapping for the specified configuration
+     * on success, or an empty (but never null) bundle on failure (for example, when the calling app
+     * has no permission).
+     */
+    @RequiresPermission(anyOf = {
+            Manifest.permission.READ_PHONE_STATE,
+            "carrier privileges",
+    })
+    @NonNull
+    public PersistableBundle getConfigForSubId(int subId, @NonNull String... keys) {
+        Objects.requireNonNull(keys, "Config keys should be non-null");
+        for (String key : keys) {
+            Objects.requireNonNull(key, "Config key should be non-null");
+        }
+
+        try {
+            ICarrierConfigLoader loader = getICarrierConfigLoader();
+            if (loader == null) {
+                Rlog.w(TAG, "Error getting config for subId " + subId
+                        + " ICarrierConfigLoader is null");
+                throw new IllegalStateException("Carrier config loader is not available.");
+            }
+            return loader.getConfigSubsetForSubIdWithFeature(subId, mContext.getOpPackageName(),
+                    mContext.getAttributionTag(), keys);
+        } catch (RemoteException ex) {
+            Rlog.e(TAG, "Error getting config for subId " + subId + ": " + ex);
+            ex.rethrowAsRuntimeException();
+        }
+        return new PersistableBundle();
     }
 
     /**
@@ -10275,12 +10657,49 @@ public class CarrierConfigManager {
      * has carrier privileges (see {@link TelephonyManager#hasCarrierPrivileges()}).
      *
      * @see #getConfigForSubId
+     * @see #getConfig(String...)
+     * @deprecated use {@link #getConfig(String...)} instead.
      */
     @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
     @RequiresPermission(Manifest.permission.READ_PHONE_STATE)
     @Nullable
+    @Deprecated
     public PersistableBundle getConfig() {
         return getConfigForSubId(SubscriptionManager.getDefaultSubscriptionId());
+    }
+
+    /**
+     * Gets the configuration values of the specified config keys applied for the default
+     * subscription.
+     *
+     * <p>If the value for the key can't be found, the returned bundle will filter the key out.
+     *
+     * <p>After using this method to get the configuration bundle, {@link
+     * #isConfigForIdentifiedCarrier(PersistableBundle)} should be called to confirm whether any
+     * carrier specific configuration has been applied.
+     *
+     * <p>Note that on success, the key/value for {@link #KEY_CARRIER_CONFIG_VERSION_STRING} and
+     * {@link #KEY_CARRIER_CONFIG_APPLIED_BOOL} are always in the returned bundle, no matter if
+     * they were explicitly requested.
+     *
+     * <p>Requires Permission:
+     * {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}, or the calling app
+     * has carrier privileges for the default subscription (see
+     * {@link TelephonyManager#hasCarrierPrivileges()}).
+     *
+     * @param keys The config keys to retrieve values
+     * @return A {@link PersistableBundle} with key/value mapping for the specified carrier
+     * configs on success, or an empty (but never null) bundle on failure.
+     * @see #getConfigForSubId(int, String...)
+     * @see SubscriptionManager#getDefaultSubscriptionId()
+     */
+    @RequiresPermission(anyOf = {
+            Manifest.permission.READ_PHONE_STATE,
+            "carrier privileges",
+    })
+    @NonNull
+    public PersistableBundle getConfig(@NonNull String... keys) {
+        return getConfigForSubId(SubscriptionManager.getDefaultSubscriptionId(), keys);
     }
 
     /**
@@ -10468,5 +10887,86 @@ public class CarrierConfigManager {
         } else if (value instanceof PersistableBundle) {
             configs.putPersistableBundle(key, (PersistableBundle) value);
         }
+    }
+
+    /**
+     * Listener interface to get a notification when the carrier configurations have changed.
+     *
+     * Use this listener to receive timely updates when the carrier configuration changes. System
+     * components should prefer this listener over {@link #ACTION_CARRIER_CONFIG_CHANGED}
+     * whenever possible.
+     *
+     * To register the listener, call
+     * {@link #registerCarrierConfigChangeListener(Executor, CarrierConfigChangeListener)}.
+     * To unregister, call
+     * {@link #unregisterCarrierConfigChangeListener(CarrierConfigChangeListener)}.
+     *
+     * Note that on registration, registrants will NOT receive a notification on last carrier config
+     * change. Only carrier configs change AFTER the registration will be sent to registrants. And
+     * unlike {@link #ACTION_CARRIER_CONFIG_CHANGED}, notification wouldn't send when the device is
+     * unlocked. Registrants only receive the notification when there has been real carrier config
+     * changes.
+     *
+     * @see #registerCarrierConfigChangeListener(Executor, CarrierConfigChangeListener)
+     * @see #unregisterCarrierConfigChangeListener(CarrierConfigChangeListener)
+     * @see #ACTION_CARRIER_CONFIG_CHANGED
+     * @see #getConfig(String...)
+     * @see #getConfigForSubId(int, String...)
+     */
+    public interface CarrierConfigChangeListener {
+        /**
+         * Called when carrier configurations have changed.
+         *
+         * @param logicalSlotIndex  The logical SIM slot index on which to monitor and get
+         *                          notification. It is guaranteed to be valid.
+         * @param subscriptionId    The subscription on the SIM slot. May be
+         *                          {@link SubscriptionManager#INVALID_SUBSCRIPTION_ID}.
+         * @param carrierId         The optional carrier Id, may be
+         *                          {@link TelephonyManager#UNKNOWN_CARRIER_ID}.
+         *                          See {@link TelephonyManager#getSimCarrierId()}.
+         * @param specificCarrierId The optional fine-grained carrierId, may be {@link
+         *                          TelephonyManager#UNKNOWN_CARRIER_ID}. A specific carrierId may
+         *                          be different from the carrierId above in a MVNO scenario. See
+         *                          detail in {@link TelephonyManager#getSimSpecificCarrierId()}.
+         */
+        void onCarrierConfigChanged(int logicalSlotIndex, int subscriptionId, int carrierId,
+                int specificCarrierId);
+    }
+
+    /**
+     * Register a {@link CarrierConfigChangeListener} to get a notification when carrier
+     * configurations have changed.
+     *
+     * @param executor The executor on which the listener will be called.
+     * @param listener The CarrierConfigChangeListener called when carrier configs has changed.
+     */
+    public void registerCarrierConfigChangeListener(@NonNull @CallbackExecutor Executor executor,
+            @NonNull CarrierConfigChangeListener listener) {
+        Objects.requireNonNull(executor, "Executor should be non-null.");
+        Objects.requireNonNull(listener, "Listener should be non-null.");
+
+        TelephonyRegistryManager trm = mContext.getSystemService(TelephonyRegistryManager.class);
+        if (trm == null) {
+            throw new IllegalStateException("Telephony registry service is null");
+        }
+        trm.addCarrierConfigChangedListener(executor, listener);
+    }
+
+    /**
+     * Unregister the {@link CarrierConfigChangeListener} to stop notification on carrier
+     * configurations change.
+     *
+     * @param listener The CarrierConfigChangeListener which was registered with method
+     * {@link #registerCarrierConfigChangeListener(Executor, CarrierConfigChangeListener)}.
+     */
+    public void unregisterCarrierConfigChangeListener(
+            @NonNull CarrierConfigChangeListener listener) {
+        Objects.requireNonNull(listener, "Listener should be non-null.");
+
+        TelephonyRegistryManager trm = mContext.getSystemService(TelephonyRegistryManager.class);
+        if (trm == null) {
+            throw new IllegalStateException("Telephony registry service is null");
+        }
+        trm.removeCarrierConfigChangedListener(listener);
     }
 }

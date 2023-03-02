@@ -4,6 +4,9 @@ import android.content.pm.ApplicationInfo
 import android.icu.text.CollationKey
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import com.android.settingslib.spa.widget.ui.SpinnerOption
+import com.android.settingslib.spaprivileged.template.app.AppListItem
+import com.android.settingslib.spaprivileged.template.app.AppListItemModel
 import kotlinx.coroutines.flow.Flow
 
 data class AppEntry<T : AppRecord>(
@@ -21,7 +24,7 @@ interface AppListModel<T : AppRecord> {
      *
      * Default no spinner will be shown.
      */
-    fun getSpinnerOptions(): List<String> = emptyList()
+    fun getSpinnerOptions(recordList: List<T>): List<SpinnerOption> = emptyList()
 
     /**
      * Loads the extra info for the App List, and generates the [AppRecord] List.
@@ -40,8 +43,10 @@ interface AppListModel<T : AppRecord> {
      * This function is called when the App List's loading is finished and displayed to the user.
      *
      * Could do some pre-cache here.
+     *
+     * @return true to enable pre-fetching app labels.
      */
-    suspend fun onFirstLoaded(recordList: List<T>) {}
+    suspend fun onFirstLoaded(recordList: List<T>) = false
 
     /**
      * Gets the comparator to sort the App List.
@@ -69,4 +74,9 @@ interface AppListModel<T : AppRecord> {
      */
     @Composable
     fun getSummary(option: Int, record: T): State<String>? = null
+
+    @Composable
+    fun AppListItemModel<T>.AppItem() {
+        AppListItem {}
+    }
 }

@@ -56,7 +56,6 @@ import android.content.pm.ServiceInfo.ForegroundServiceType;
 import android.hardware.usb.UsbAccessory;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
-import android.healthconnect.HealthConnectManager;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.permission.PermissionCheckerManager;
@@ -73,7 +72,6 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * This class enforces the policies around the foreground service types.
@@ -119,14 +117,10 @@ public abstract class ForegroundServiceTypePolicy {
      * The FGS type enforcement:
      * deprecating the {@link android.content.pm.ServiceInfo#FOREGROUND_SERVICE_TYPE_DATA_SYNC}.
      *
-     * <p>Starting a FGS with this type from apps with targetSdkVersion
-     * {@link android.os.Build.VERSION_CODES#UPSIDE_DOWN_CAKE} or later will
-     * result in a warning in the log.</p>
-     *
      * @hide
      */
     @ChangeId
-    @EnabledAfter(targetSdkVersion = android.os.Build.VERSION_CODES.TIRAMISU)
+    @Disabled
     @Overridable
     public static final long FGS_TYPE_DATA_SYNC_DEPRECATION_CHANGE_ID = 255039210L;
 
@@ -134,13 +128,8 @@ public abstract class ForegroundServiceTypePolicy {
      * The FGS type enforcement:
      * disabling the {@link android.content.pm.ServiceInfo#FOREGROUND_SERVICE_TYPE_DATA_SYNC}.
      *
-     * <p>Starting a FGS with this type from apps with targetSdkVersion
-     * {@link android.os.Build.VERSION_CODES#UPSIDE_DOWN_CAKE} or later will
-     * result in an exception.</p>
-     *
      * @hide
      */
-    // TODO (b/254661666): Change to @EnabledSince(U) in next OS release
     @ChangeId
     @Disabled
     @Overridable
@@ -270,12 +259,15 @@ public abstract class ForegroundServiceTypePolicy {
                 new RegularPermission(Manifest.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE)
             }, true),
             new ForegroundServiceTypePermissions(new ForegroundServiceTypePermission[] {
+                new RegularPermission(Manifest.permission.BLUETOOTH_ADVERTISE),
                 new RegularPermission(Manifest.permission.BLUETOOTH_CONNECT),
+                new RegularPermission(Manifest.permission.BLUETOOTH_SCAN),
                 new RegularPermission(Manifest.permission.CHANGE_NETWORK_STATE),
                 new RegularPermission(Manifest.permission.CHANGE_WIFI_STATE),
                 new RegularPermission(Manifest.permission.CHANGE_WIFI_MULTICAST_STATE),
                 new RegularPermission(Manifest.permission.NFC),
                 new RegularPermission(Manifest.permission.TRANSMIT_IR),
+                new RegularPermission(Manifest.permission.UWB_RANGING),
                 new UsbDevicePermission(),
                 new UsbAccessoryPermission(),
             }, false)
@@ -991,45 +983,6 @@ public abstract class ForegroundServiceTypePolicy {
                 }
             }
             return PERMISSION_DENIED;
-        }
-    }
-
-    static class HealthConnectPermission extends RegularPermission {
-        private @Nullable String[] mPermissionNames;
-
-        HealthConnectPermission() {
-            super("Health Connect");
-        }
-
-        @Override
-        @SuppressLint("AndroidFrameworkRequiresPermission")
-        @PackageManager.PermissionResult
-        public int checkPermission(@NonNull Context context, int callerUid, int callerPid,
-                String packageName, boolean allowWhileInUse) {
-            final String[] perms = getPermissions(context);
-            for (String perm : perms) {
-                if (checkPermission(context, perm, callerUid, callerPid,
-                        packageName, allowWhileInUse) == PERMISSION_GRANTED) {
-                    return PERMISSION_GRANTED;
-                }
-            }
-            return PERMISSION_DENIED;
-        }
-
-        @Override
-        void addToList(@NonNull Context context, @NonNull ArrayList<String> list) {
-            final String[] perms = getPermissions(context);
-            for (String perm : perms) {
-                list.add(perm);
-            }
-        }
-
-        private @NonNull String[] getPermissions(@NonNull Context context) {
-            if (mPermissionNames != null) {
-                return mPermissionNames;
-            }
-            final Set<String> healthPerms = HealthConnectManager.getHealthPermissions(context);
-            return mPermissionNames = healthPerms.toArray(new String[healthPerms.size()]);
         }
     }
 

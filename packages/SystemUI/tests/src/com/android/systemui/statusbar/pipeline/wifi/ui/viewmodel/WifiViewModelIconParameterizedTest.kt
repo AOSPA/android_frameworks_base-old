@@ -206,7 +206,8 @@ internal class WifiViewModelIconParameterizedTest(private val testCase: TestCase
                 // Enabled = false => no networks shown
                 TestCase(
                     enabled = false,
-                    network = WifiNetworkModel.CarrierMerged,
+                    network =
+                        WifiNetworkModel.CarrierMerged(NETWORK_ID, subscriptionId = 1, level = 1),
                     expected = null,
                 ),
                 TestCase(
@@ -228,7 +229,8 @@ internal class WifiViewModelIconParameterizedTest(private val testCase: TestCase
                 // forceHidden = true => no networks shown
                 TestCase(
                     forceHidden = true,
-                    network = WifiNetworkModel.CarrierMerged,
+                    network =
+                        WifiNetworkModel.CarrierMerged(NETWORK_ID, subscriptionId = 1, level = 1),
                     expected = null,
                 ),
                 TestCase(
@@ -369,13 +371,20 @@ internal class WifiViewModelIconParameterizedTest(private val testCase: TestCase
 
                 // network = CarrierMerged => not shown
                 TestCase(
-                    network = WifiNetworkModel.CarrierMerged,
+                    network =
+                        WifiNetworkModel.CarrierMerged(NETWORK_ID, subscriptionId = 1, level = 1),
                     expected = null,
                 ),
 
                 // network = Inactive => not shown
                 TestCase(
                     network = WifiNetworkModel.Inactive,
+                    expected = null,
+                ),
+
+                // network = Unavailable => not shown
+                TestCase(
+                    network = WifiNetworkModel.Unavailable,
                     expected = null,
                 ),
 
@@ -396,12 +405,6 @@ internal class WifiViewModelIconParameterizedTest(private val testCase: TestCase
                             },
                             description = "Full internet level 4 icon",
                         ),
-                ),
-
-                // network has null level => not shown
-                TestCase(
-                    network = WifiNetworkModel.Active(NETWORK_ID, isValidated = true, level = null),
-                    expected = null,
                 ),
             )
     }

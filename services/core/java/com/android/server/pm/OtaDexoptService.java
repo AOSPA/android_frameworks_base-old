@@ -37,6 +37,7 @@ import android.util.Slog;
 import com.android.internal.logging.MetricsLogger;
 import com.android.server.LocalServices;
 import com.android.server.pm.Installer.InstallerException;
+import com.android.server.pm.Installer.LegacyDexoptDisabledException;
 import com.android.server.pm.dex.DexoptOptions;
 import com.android.server.pm.parsing.pkg.AndroidPackageUtils;
 import com.android.server.pm.pkg.AndroidPackage;
@@ -188,7 +189,7 @@ public class OtaDexoptService extends IOtaDexopt.Stub {
                             + pkgSetting.getTransientState()
                             .getLatestForegroundPackageUseTimeInMills());
                 }
-            } catch (Exception ignored) {
+            } catch (RuntimeException ignored) {
             }
         }
     }
@@ -352,13 +353,17 @@ public class OtaDexoptService extends IOtaDexopt.Stub {
         PackageDexOptimizer optimizer = new OTADexoptPackageDexOptimizer(
                 collectingInstaller, mPackageManagerService.mInstallLock, mContext);
 
-        optimizer.performDexOpt(pkg, pkgSetting,
-                null /* ISAs */,
-                null /* CompilerStats.PackageStats */,
-                mPackageManagerService.getDexManager().getPackageUseInfoOrDefault(
-                        pkg.getPackageName()),
-                new DexoptOptions(pkg.getPackageName(), compilationReason,
-                        DexoptOptions.DEXOPT_BOOT_COMPLETE));
+        // TODO(b/251903639): Allow this use of legacy dexopt code even when ART Service is enabled.
+        try {
+            optimizer.performDexOpt(pkg, pkgSetting, null /* ISAs */,
+                    null /* CompilerStats.PackageStats */,
+                    mPackageManagerService.getDexManager().getPackageUseInfoOrDefault(
+                            pkg.getPackageName()),
+                    new DexoptOptions(pkg.getPackageName(), compilationReason,
+                            DexoptOptions.DEXOPT_BOOT_COMPLETE));
+        } catch (LegacyDexoptDisabledException e) {
+            throw new RuntimeException(e);
+        }
 
         return commands;
     }

@@ -37,6 +37,7 @@ import android.os.Build;
 import android.os.Process;
 import android.os.UserHandle;
 import android.text.TextUtils;
+import android.util.EventLog;
 import android.util.Log;
 import android.util.LogPrinter;
 import android.util.PrintStreamPrinter;
@@ -387,6 +388,11 @@ final class PreferredActivityHelper {
             throw new SecurityException(
                     "addPersistentPreferredActivity can only be run by the system");
         }
+        if (!filter.checkDataPathAndSchemeSpecificParts()) {
+            EventLog.writeEvent(0x534e4554, "246749702", callingUid);
+            throw new IllegalArgumentException("Invalid intent data paths or scheme specific parts"
+                    + " in the filter.");
+        }
         if (filter.countActions() == 0) {
             Slog.w(TAG, "Cannot set a preferred activity with no filter actions");
             return;
@@ -417,6 +423,23 @@ final class PreferredActivityHelper {
         boolean changed = false;
         synchronized (mPm.mLock) {
             changed = mPm.mSettings.clearPackagePersistentPreferredActivities(packageName, userId);
+        }
+        if (changed) {
+            updateDefaultHomeNotLocked(mPm.snapshotComputer(), userId);
+            mPm.postPreferredActivityChangedBroadcast(userId);
+            mPm.scheduleWritePackageRestrictions(userId);
+        }
+    }
+
+    public void clearPersistentPreferredActivity(IntentFilter filter, int userId) {
+        int callingUid = Binder.getCallingUid();
+        if (callingUid != Process.SYSTEM_UID) {
+            throw new SecurityException(
+                    "clearPersistentPreferredActivity can only be run by the system");
+        }
+        boolean changed = false;
+        synchronized (mPm.mLock) {
+            changed = mPm.mSettings.clearPersistentPreferredActivity(filter, userId);
         }
         if (changed) {
             updateDefaultHomeNotLocked(mPm.snapshotComputer(), userId);

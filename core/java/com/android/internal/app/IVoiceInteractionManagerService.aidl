@@ -27,6 +27,7 @@ import android.os.ParcelFileDescriptor;
 import android.os.PersistableBundle;
 import android.os.RemoteCallback;
 import android.os.SharedMemory;
+import android.service.voice.IVisualQueryDetectionVoiceInteractionCallback;
 import android.service.voice.IMicrophoneHotwordDetectionVoiceInteractionCallback;
 import android.service.voice.IVoiceInteractionService;
 import android.service.voice.IVoiceInteractionSession;
@@ -252,11 +253,13 @@ interface IVoiceInteractionManagerService {
      * @param sharedMemory The unrestricted data blob to provide to the
      * {@link HotwordDetectionService}. Use this to provide the hotword models data or other
      * such data to the trusted process.
+     * @param token Use this to identify which detector calls this method.
      */
     @EnforcePermission("MANAGE_HOTWORD_DETECTION")
     void updateState(
             in PersistableBundle options,
-            in SharedMemory sharedMemory);
+            in SharedMemory sharedMemory,
+            in IBinder token);
 
     /**
      * Set configuration and pass read-only data to hotword detection service when creating
@@ -272,6 +275,7 @@ interface IVoiceInteractionManagerService {
      * @param sharedMemory The unrestricted data blob to provide to the
      * {@link HotwordDetectionService}. Use this to provide the hotword models data or other
      * such data to the trusted process.
+     * @param token Use this to identify which detector calls this method.
      * @param callback Use this to report {@link HotwordDetectionService} status.
      * @param detectorType Indicate which detector is used.
      */
@@ -280,13 +284,25 @@ interface IVoiceInteractionManagerService {
             in Identity originatorIdentity,
             in PersistableBundle options,
             in SharedMemory sharedMemory,
+            in IBinder token,
             in IHotwordRecognitionStatusCallback callback,
             int detectorType);
+
+    /**
+     * Destroy the detector callback.
+     *
+     * @param token Indicate which callback will be destroyed.
+     */
+    void destroyDetector(in IBinder token);
 
     /**
      * Requests to shutdown hotword detection service.
      */
     void shutdownHotwordDetectionService();
+
+    void startPerceiving(in IVisualQueryDetectionVoiceInteractionCallback callback);
+
+    void stopPerceiving();
 
     void startListeningFromMic(
         in AudioFormat audioFormat,
@@ -298,6 +314,7 @@ interface IVoiceInteractionManagerService {
         in ParcelFileDescriptor audioStream,
         in AudioFormat audioFormat,
         in PersistableBundle options,
+        in IBinder token,
         in IMicrophoneHotwordDetectionVoiceInteractionCallback callback);
 
     /**

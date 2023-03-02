@@ -36,6 +36,8 @@ import android.app.job.JobScheduler;
 import android.app.role.RoleManager;
 import android.app.smartspace.SmartspaceManager;
 import android.app.trust.TrustManager;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothManager;
 import android.content.ClipboardManager;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -70,6 +72,7 @@ import android.os.BatteryStats;
 import android.os.PowerExemptionManager;
 import android.os.PowerManager;
 import android.os.ServiceManager;
+import android.os.SystemUpdateManager;
 import android.os.UserManager;
 import android.os.Vibrator;
 import android.os.storage.StorageManager;
@@ -91,6 +94,9 @@ import android.view.WindowManagerGlobal;
 import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.CaptioningManager;
 import android.view.inputmethod.InputMethodManager;
+import android.view.textclassifier.TextClassificationManager;
+
+import androidx.core.app.NotificationManagerCompat;
 
 import com.android.internal.app.IBatteryStats;
 import com.android.internal.appwidget.IAppWidgetService;
@@ -133,6 +139,12 @@ public class FrameworkServicesModule {
     @Singleton
     static AlarmManager provideAlarmManager(Context context) {
         return context.getSystemService(AlarmManager.class);
+    }
+
+    @Provides
+    @Singleton
+    static Optional<SystemUpdateManager> provideSystemUpdateManager(Context context) {
+        return Optional.ofNullable(context.getSystemService(SystemUpdateManager.class));
     }
 
     /** */
@@ -394,6 +406,12 @@ public class FrameworkServicesModule {
         return context.getSystemService(NotificationManager.class);
     }
 
+    @Provides
+    @Singleton
+    static NotificationManagerCompat provideNotificationManagerCompat(Context context) {
+        return NotificationManagerCompat.from(context);
+    }
+
     /** */
     @Provides
     @Singleton
@@ -615,5 +633,24 @@ public class FrameworkServicesModule {
     @Singleton
     static CameraManager provideCameraManager(Context context) {
         return context.getSystemService(CameraManager.class);
+    }
+
+    @Provides
+    @Singleton
+    static BluetoothManager provideBluetoothManager(Context context) {
+        return context.getSystemService(BluetoothManager.class);
+    }
+
+    @Provides
+    @Singleton
+    @Nullable
+    static BluetoothAdapter provideBluetoothAdapter(BluetoothManager bluetoothManager) {
+        return bluetoothManager.getAdapter();
+    }
+
+    @Provides
+    @Singleton
+    static TextClassificationManager provideTextClassificationManager(Context context) {
+        return context.getSystemService(TextClassificationManager.class);
     }
 }

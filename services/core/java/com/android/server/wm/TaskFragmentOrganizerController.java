@@ -49,6 +49,7 @@ import android.view.WindowManager;
 import android.window.ITaskFragmentOrganizer;
 import android.window.ITaskFragmentOrganizerController;
 import android.window.TaskFragmentInfo;
+import android.window.TaskFragmentOperation;
 import android.window.TaskFragmentParentInfo;
 import android.window.TaskFragmentTransaction;
 import android.window.WindowContainerTransaction;
@@ -297,7 +298,7 @@ public class TaskFragmentOrganizerController extends ITaskFragmentOrganizerContr
         @NonNull
         TaskFragmentTransaction.Change prepareTaskFragmentError(
                 @Nullable IBinder errorCallbackToken, @Nullable TaskFragment taskFragment,
-                int opType, @NonNull Throwable exception) {
+                @TaskFragmentOperation.OperationType int opType, @NonNull Throwable exception) {
             ProtoLog.v(WM_DEBUG_WINDOW_ORGANIZER,
                     "Sending TaskFragment error exception=%s", exception.toString());
             final TaskFragmentInfo info =
@@ -540,9 +541,12 @@ public class TaskFragmentOrganizerController extends ITaskFragmentOrganizerContr
         synchronized (mGlobalLock) {
             final TaskFragmentOrganizerState organizerState =
                     mTaskFragmentOrganizerState.get(organizer.asBinder());
-            return organizerState != null
-                    ? organizerState.mRemoteAnimationDefinition
-                    : null;
+            if (organizerState == null) {
+                Slog.e(TAG, "TaskFragmentOrganizer has been unregistered or died when trying"
+                        + " to play animation on its organized windows.");
+                return null;
+            }
+            return organizerState.mRemoteAnimationDefinition;
         }
     }
 
@@ -553,6 +557,9 @@ public class TaskFragmentOrganizerController extends ITaskFragmentOrganizerContr
 
     void onTaskFragmentAppeared(@NonNull ITaskFragmentOrganizer organizer,
             @NonNull TaskFragment taskFragment) {
+        if (taskFragment.mTaskFragmentVanishedSent) {
+            return;
+        }
         if (taskFragment.getTask() == null) {
             Slog.w(TAG, "onTaskFragmentAppeared failed because it is not attached tf="
                     + taskFragment);
@@ -574,6 +581,9 @@ public class TaskFragmentOrganizerController extends ITaskFragmentOrganizerContr
 
     void onTaskFragmentInfoChanged(@NonNull ITaskFragmentOrganizer organizer,
             @NonNull TaskFragment taskFragment) {
+        if (taskFragment.mTaskFragmentVanishedSent) {
+            return;
+        }
         validateAndGetState(organizer);
         if (!taskFragment.mTaskFragmentAppearedSent) {
             // Skip if TaskFragment still not appeared.
@@ -586,10 +596,6 @@ public class TaskFragmentOrganizerController extends ITaskFragmentOrganizerContr
                     .setTaskFragment(taskFragment)
                     .build();
         } else {
-            if (pendingEvent.mEventType == PendingTaskFragmentEvent.EVENT_VANISHED) {
-                // Skipped the info changed event if vanished event is pending.
-                return;
-            }
             // Remove and add for re-ordering.
             removePendingEvent(pendingEvent);
             // Reset the defer time when TaskFragment is changed, so that it can check again if
@@ -602,6 +608,10 @@ public class TaskFragmentOrganizerController extends ITaskFragmentOrganizerContr
 
     void onTaskFragmentVanished(@NonNull ITaskFragmentOrganizer organizer,
             @NonNull TaskFragment taskFragment) {
+        if (taskFragment.mTaskFragmentVanishedSent) {
+            return;
+        }
+        taskFragment.mTaskFragmentVanishedSent = true;
         final TaskFragmentOrganizerState state = validateAndGetState(organizer);
         final List<PendingTaskFragmentEvent> pendingEvents = mPendingTaskFragmentEvents
                 .get(organizer.asBinder());
@@ -617,20 +627,18 @@ public class TaskFragmentOrganizerController extends ITaskFragmentOrganizerContr
                 .setTaskFragment(taskFragment)
                 .build());
         state.removeTaskFragment(taskFragment);
+        // Make sure the vanished event will be dispatched if there are no other changes.
+        mAtmService.mWindowManager.mWindowPlacerLocked.requestTraversal();
     }
 
     void onTaskFragmentError(@NonNull ITaskFragmentOrganizer organizer,
             @Nullable IBinder errorCallbackToken, @Nullable TaskFragment taskFragment,
-            int opType, @NonNull Throwable exception) {
-        validateAndGetState(organizer);
-        Slog.w(TAG, "onTaskFragmentError ", exception);
-        final PendingTaskFragmentEvent vanishedEvent = taskFragment != null
-                ? getPendingTaskFragmentEvent(taskFragment, PendingTaskFragmentEvent.EVENT_VANISHED)
-                : null;
-        if (vanishedEvent != null) {
-            // No need to notify if the TaskFragment has been removed.
+            @TaskFragmentOperation.OperationType int opType, @NonNull Throwable exception) {
+        if (taskFragment != null && taskFragment.mTaskFragmentVanishedSent) {
             return;
         }
+        validateAndGetState(organizer);
+        Slog.w(TAG, "onTaskFragmentError ", exception);
         addPendingEvent(new PendingTaskFragmentEvent.Builder(
                 PendingTaskFragmentEvent.EVENT_ERROR, organizer)
                 .setErrorCallbackToken(errorCallbackToken)
@@ -799,6 +807,7 @@ public class TaskFragmentOrganizerController extends ITaskFragmentOrganizerContr
         // Set when the event is deferred due to the host task is invisible. The defer time will
         // be the last active time of the host task.
         private long mDeferTime;
+        @TaskFragmentOperation.OperationType
         private int mOpType;
 
         private PendingTaskFragmentEvent(@EventType int eventType,
@@ -808,7 +817,7 @@ public class TaskFragmentOrganizerController extends ITaskFragmentOrganizerContr
                 @Nullable Throwable exception,
                 @Nullable ActivityRecord activity,
                 @Nullable Task task,
-                int opType) {
+                @TaskFragmentOperation.OperationType int opType) {
             mEventType = eventType;
             mTaskFragmentOrg = taskFragmentOrg;
             mTaskFragment = taskFragment;
@@ -849,6 +858,7 @@ public class TaskFragmentOrganizerController extends ITaskFragmentOrganizerContr
             private ActivityRecord mActivity;
             @Nullable
             private Task mTask;
+            @TaskFragmentOperation.OperationType
             private int mOpType;
 
             Builder(@EventType int eventType, @NonNull ITaskFragmentOrganizer taskFragmentOrg) {
@@ -881,7 +891,7 @@ public class TaskFragmentOrganizerController extends ITaskFragmentOrganizerContr
                 return this;
             }
 
-            Builder setOpType(int opType) {
+            Builder setOpType(@TaskFragmentOperation.OperationType int opType) {
                 mOpType = opType;
                 return this;
             }

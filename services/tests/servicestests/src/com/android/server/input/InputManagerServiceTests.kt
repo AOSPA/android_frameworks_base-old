@@ -16,6 +16,7 @@
 
 package com.android.server.input
 
+
 import android.content.Context
 import android.content.ContextWrapper
 import android.hardware.display.DisplayViewport
@@ -25,8 +26,7 @@ import android.platform.test.annotations.Presubmit
 import android.view.Display
 import android.view.PointerIcon
 import androidx.test.InstrumentationRegistry
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
+import com.google.common.truth.Truth.assertThat
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -36,6 +36,7 @@ import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.ArgumentMatchers.eq
 import org.mockito.Mock
+import org.mockito.Mockito.`when`
 import org.mockito.Mockito.clearInvocations
 import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.never
@@ -43,8 +44,9 @@ import org.mockito.Mockito.spy
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoMoreInteractions
-import org.mockito.Mockito.`when`
 import org.mockito.junit.MockitoJUnit
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * Tests for {@link InputManagerService}.
@@ -285,6 +287,40 @@ class InputManagerServiceTests {
 
         verify(native).setPointerIconType(eq(PointerIcon.TYPE_NULL))
         verify(native).setPointerAcceleration(eq(5f))
+    }
+
+    @Test
+    fun setDeviceTypeAssociation_setsDeviceTypeAssociation() {
+        val inputPort = "inputPort"
+        val type = "type"
+
+        localService.setTypeAssociation(inputPort, type)
+
+        assertThat(service.getDeviceTypeAssociations()).asList().containsExactly(inputPort, type)
+            .inOrder()
+    }
+
+    @Test
+    fun setAndUnsetDeviceTypeAssociation_deviceTypeAssociationIsMissing() {
+        val inputPort = "inputPort"
+        val type = "type"
+
+        localService.setTypeAssociation(inputPort, type)
+        localService.unsetTypeAssociation(inputPort)
+
+        assertTrue(service.getDeviceTypeAssociations().isEmpty())
+    }
+
+    @Test
+    fun testAddAndRemoveVirtualmKeyboardLayoutAssociation() {
+        val inputPort = "input port"
+        val languageTag = "language"
+        val layoutType = "layoutType"
+        localService.addKeyboardLayoutAssociation(inputPort, languageTag, layoutType)
+        verify(native).changeKeyboardLayoutAssociation()
+
+        localService.removeKeyboardLayoutAssociation(inputPort)
+        verify(native, times(2)).changeKeyboardLayoutAssociation()
     }
 
     private fun setVirtualMousePointerDisplayIdAndVerify(overrideDisplayId: Int) {

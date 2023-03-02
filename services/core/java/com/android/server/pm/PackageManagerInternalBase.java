@@ -48,7 +48,6 @@ import android.util.ArraySet;
 import android.util.SparseArray;
 
 import com.android.server.pm.dex.DexManager;
-import com.android.server.pm.dex.DynamicCodeLogger;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
 import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageStateInternal;
@@ -354,7 +353,7 @@ abstract class PackageManagerInternalBase extends PackageManagerInternal {
     @Override
     @Deprecated
     public final void setOwnerProtectedPackages(
-            @UserIdInt int userId, @NonNull List<String> packageNames) {
+            @UserIdInt int userId, @Nullable List<String> packageNames) {
         getProtectedPackages().setOwnerProtectedPackages(userId, packageNames);
     }
 
@@ -473,10 +472,10 @@ abstract class PackageManagerInternalBase extends PackageManagerInternal {
     public final ResolveInfo resolveIntentExported(Intent intent, String resolvedType,
             @PackageManager.ResolveInfoFlagsBits long flags,
             @PackageManagerInternal.PrivateResolveFlags long privateResolveFlags, int userId,
-            boolean resolveForStart, int filterCallingUid) {
+            boolean resolveForStart, int filterCallingUid, int callingPid) {
         return getResolveIntentHelper().resolveIntentInternal(snapshot(),
                 intent, resolvedType, flags, privateResolveFlags, userId, resolveForStart,
-                filterCallingUid, true);
+                filterCallingUid, true, callingPid);
     }
 
     @Override
@@ -766,11 +765,5 @@ abstract class PackageManagerInternalBase extends PackageManagerInternal {
     @Deprecated
     public final void shutdown() {
         mService.shutdown();
-    }
-
-    @Override
-    @Deprecated
-    public final DynamicCodeLogger getDynamicCodeLogger() {
-        return getDexManager().getDynamicCodeLogger();
     }
 }

@@ -111,7 +111,7 @@ public class TaskSnapshotWindow {
         final SurfaceControl surfaceControl = new SurfaceControl();
         final ClientWindowFrames tmpFrames = new ClientWindowFrames();
 
-        final InsetsSourceControl[] tmpControls = new InsetsSourceControl[0];
+        final InsetsSourceControl.Array tmpControls = new InsetsSourceControl.Array();
         final MergedConfiguration tmpMergedConfiguration = new MergedConfiguration();
 
         final TaskDescription taskDescription;
@@ -239,7 +239,7 @@ public class TaskSnapshotWindow {
         public void resized(ClientWindowFrames frames, boolean reportDraw,
                 MergedConfiguration mergedConfiguration, InsetsState insetsState,
                 boolean forceLayout, boolean alwaysConsumeSystemBars, int displayId, int seqId,
-                int resizeMode) {
+                boolean dragResizing) {
             final TaskSnapshotWindow snapshot = mOuter.get();
             if (snapshot == null) {
                 return;

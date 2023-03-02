@@ -661,10 +661,26 @@ public class MediaPlayer extends PlayerBase
      * Doing so frees any resources you have previously acquired.
      */
     public MediaPlayer() {
-        this(AudioSystem.AUDIO_SESSION_ALLOCATE);
+        this(/*context=*/null, AudioSystem.AUDIO_SESSION_ALLOCATE);
     }
 
-    private MediaPlayer(int sessionId) {
+
+    /**
+     * Default constructor with context.
+     *
+     *  <p>Consider using one of the create() methods for synchronously instantiating a
+     *  MediaPlayer from a Uri or resource.
+     *
+     * @param context non-null context. This context will be used to pull information,
+     *  such as {@link android.content.AttributionSource} and device specific session ids, which
+     *  will be associated with the {@link MediaPlayer}.
+     *  However, the context itself will not be retained by the MediaPlayer.
+     */
+    public MediaPlayer(@NonNull Context context) {
+        this(Objects.requireNonNull(context), AudioSystem.AUDIO_SESSION_ALLOCATE);
+    }
+
+    private MediaPlayer(Context context, int sessionId) {
         super(new AudioAttributes.Builder().build(),
                 AudioPlaybackConfiguration.PLAYER_TYPE_JAM_MEDIAPLAYER);
 
@@ -680,7 +696,9 @@ public class MediaPlayer extends PlayerBase
         mTimeProvider = new TimeProvider(this);
         mOpenSubtitleSources = new Vector<InputStream>();
 
-        AttributionSource attributionSource = AttributionSource.myAttributionSource();
+        AttributionSource attributionSource =
+                context == null ? AttributionSource.myAttributionSource()
+                        : context.getAttributionSource();
         // set the package name to empty if it was null
         if (attributionSource.getPackageName() == null) {
             attributionSource = attributionSource.withPackageName("");
@@ -690,10 +708,10 @@ public class MediaPlayer extends PlayerBase
          * It's easier to create it here than in C++.
          */
         try (ScopedParcelState attributionSourceState = attributionSource.asScopedParcelState()) {
-            native_setup(new WeakReference<MediaPlayer>(this), attributionSourceState.getParcel());
+            native_setup(new WeakReference<>(this), attributionSourceState.getParcel(),
+                    resolvePlaybackSessionId(context, sessionId));
         }
-
-        baseRegisterPlayer(sessionId);
+        baseRegisterPlayer(getAudioSessionId());
     }
 
     private Parcel createPlayerIIdParcel() {
@@ -932,11 +950,10 @@ public class MediaPlayer extends PlayerBase
             AudioAttributes audioAttributes, int audioSessionId) {
 
         try {
-            MediaPlayer mp = new MediaPlayer(audioSessionId);
+            MediaPlayer mp = new MediaPlayer(context, audioSessionId);
             final AudioAttributes aa = audioAttributes != null ? audioAttributes :
                 new AudioAttributes.Builder().build();
             mp.setAudioAttributes(aa);
-            mp.native_setAudioSessionId(audioSessionId);
             mp.setDataSource(context, uri);
             if (holder != null) {
                 mp.setDisplay(holder);
@@ -998,13 +1015,11 @@ public class MediaPlayer extends PlayerBase
             AssetFileDescriptor afd = context.getResources().openRawResourceFd(resid);
             if (afd == null) return null;
 
-            MediaPlayer mp = new MediaPlayer(audioSessionId);
+            MediaPlayer mp = new MediaPlayer(context, audioSessionId);
 
             final AudioAttributes aa = audioAttributes != null ? audioAttributes :
                 new AudioAttributes.Builder().build();
             mp.setAudioAttributes(aa);
-            mp.native_setAudioSessionId(audioSessionId);
-
             mp.setDataSource(afd.getFileDescriptor(), afd.getStartOffset(), afd.getLength());
             afd.close();
             mp.prepare();
@@ -2402,6 +2417,9 @@ public class MediaPlayer extends PlayerBase
      * However, it is possible to force this player to be part of an already existing audio session
      * by calling this method.
      * This method must be called before one of the overloaded <code> setDataSource </code> methods.
+     * Note that session id set using this method will override device-specific audio session id,
+     * if the {@link MediaPlayer} was instantiated using device-specific {@link Context} -
+     * see {@link MediaPlayer#MediaPlayer(Context)}.
      * @throws IllegalStateException if it is called in an invalid state
      */
     public void setAudioSessionId(int sessionId)
@@ -2499,7 +2517,7 @@ public class MediaPlayer extends PlayerBase
 
     private static native final void native_init();
     private native void native_setup(Object mediaplayerThis,
-            @NonNull Parcel attributionSource);
+            @NonNull Parcel attributionSource, int audioSessionId);
     private native final void native_finalize();
 
     /**

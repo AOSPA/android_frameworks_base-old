@@ -62,6 +62,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Storage for the lock settings service.
@@ -532,11 +533,6 @@ class LockSettingsStorage {
         if (userId == USER_FRP) {
             return null;
         }
-
-        if (LockPatternUtils.LEGACY_LOCK_PATTERN_ENABLED.equals(key)) {
-            key = Settings.Secure.LOCK_PATTERN_ENABLED;
-        }
-
         return readKeyValue(key, defaultValue, userId);
     }
 
@@ -587,7 +583,7 @@ class LockSettingsStorage {
         static final int VERSION_1_HEADER_SIZE = 1 + 1 + 4 + 4;
 
         public static final int TYPE_NONE = 0;
-        public static final int TYPE_SP = 1;
+        public static final int TYPE_SP_GATEKEEPER = 1;
         public static final int TYPE_SP_WEAVER = 2;
 
         public static final PersistentData NONE = new PersistentData(TYPE_NONE,
@@ -886,12 +882,15 @@ class LockSettingsStorage {
                 if (!(obj instanceof CacheKey))
                     return false;
                 CacheKey o = (CacheKey) obj;
-                return userId == o.userId && type == o.type && key.equals(o.key);
+                return userId == o.userId && type == o.type && Objects.equals(key, o.key);
             }
 
             @Override
             public int hashCode() {
-                return key.hashCode() ^ userId ^ type;
+                int hashCode = Objects.hashCode(key);
+                hashCode = 31 * hashCode + userId;
+                hashCode = 31 * hashCode + type;
+                return hashCode;
             }
         }
     }

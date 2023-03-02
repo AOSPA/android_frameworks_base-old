@@ -34,8 +34,7 @@
         android:label="@string/app_name"
         android:directBootAware="true"
         android:usesCleartextTraffic="true"
-        android:icon="@mipmap/ic_launcher_android"
-        android:debuggable="true">
+        android:icon="@mipmap/ic_launcher_android">
         <receiver android:name="com.android.carrierdefaultapp.CarrierDefaultBroadcastReceiver"
             android:exported="true">
             <intent-filter>
@@ -77,6 +76,7 @@
         <receiver android:name="com.android.carrierdefaultapp.SlicePurchaseBroadcastReceiver"
                   android:exported="true">
             <intent-filter>
+                <action android:name="android.intent.action.LOCALE_CHANGED" />
                 <action android:name="com.android.phone.slice.action.START_SLICE_PURCHASE_APP" />
                 <action android:name="com.android.phone.slice.action.SLICE_PURCHASE_APP_RESPONSE_TIMEOUT" />
                 <action android:name="com.android.phone.slice.action.NOTIFICATION_CANCELED" />

@@ -120,6 +120,8 @@ static struct {
     jmethodID getExcludedDeviceNames;
     jmethodID getInputPortAssociations;
     jmethodID getInputUniqueIdAssociations;
+    jmethodID getDeviceTypeAssociations;
+    jmethodID getKeyboardLayoutAssociations;
     jmethodID getKeyRepeatTimeout;
     jmethodID getKeyRepeatDelay;
     jmethodID getHoverTapTimeout;
@@ -300,6 +302,7 @@ public:
     void setCustomPointerIcon(const SpriteIcon& icon);
     void setMotionClassifierEnabled(bool enabled);
     std::optional<std::string> getBluetoothAddress(int32_t deviceId);
+    void setStylusButtonMotionEventsEnabled(bool enabled);
 
     /* --- InputReaderPolicyInterface implementation --- */
 
@@ -403,6 +406,9 @@ private:
 
         // Associated Pointer controller display.
         int32_t pointerDisplayId{ADISPLAY_ID_DEFAULT};
+
+        // True if stylus button reporting through motion events is enabled.
+        bool stylusButtonMotionEventsEnabled{true};
     } mLocked GUARDED_BY(mLock);
 
     std::atomic<bool> mInteractive;
@@ -411,6 +417,10 @@ private:
     void ensureSpriteControllerLocked();
     sp<SurfaceControl> getParentSurfaceForPointers(int displayId);
     static bool checkAndClearExceptionFromCallback(JNIEnv* env, const char* methodName);
+    template <typename T>
+    std::unordered_map<std::string, T> readMapFromInterleavedJavaArray(
+            jmethodID method, const char* methodName,
+            std::function<T(std::string)> opOnValue = [](auto&& v) { return std::move(v); });
 
     static inline JNIEnv* jniEnv() { return AndroidRuntime::getJNIEnv(); }
 };
@@ -583,21 +593,25 @@ void NativeInputManager::getReaderConfiguration(InputReaderConfiguration* outCon
         }
         env->DeleteLocalRef(portAssociations);
     }
-    outConfig->uniqueIdAssociations.clear();
-    jobjectArray uniqueIdAssociations = jobjectArray(
-            env->CallObjectMethod(mServiceObj, gServiceClassInfo.getInputUniqueIdAssociations));
-    if (!checkAndClearExceptionFromCallback(env, "getInputUniqueIdAssociations") &&
-        uniqueIdAssociations) {
-        jsize length = env->GetArrayLength(uniqueIdAssociations);
-        for (jsize i = 0; i < length / 2; i++) {
-            std::string inputDeviceUniqueId =
-                    getStringElementFromJavaArray(env, uniqueIdAssociations, 2 * i);
-            std::string displayUniqueId =
-                    getStringElementFromJavaArray(env, uniqueIdAssociations, 2 * i + 1);
-            outConfig->uniqueIdAssociations.insert({inputDeviceUniqueId, displayUniqueId});
-        }
-        env->DeleteLocalRef(uniqueIdAssociations);
-    }
+
+    outConfig->uniqueIdAssociations =
+            readMapFromInterleavedJavaArray<std::string>(gServiceClassInfo
+                                                                 .getInputUniqueIdAssociations,
+                                                         "getInputUniqueIdAssociations");
+
+    outConfig->deviceTypeAssociations =
+            readMapFromInterleavedJavaArray<std::string>(gServiceClassInfo
+                                                                 .getDeviceTypeAssociations,
+                                                         "getDeviceTypeAssociations");
+    outConfig->keyboardLayoutAssociations = readMapFromInterleavedJavaArray<
+            KeyboardLayoutInfo>(gServiceClassInfo.getKeyboardLayoutAssociations,
+                                "getKeyboardLayoutAssociations", [](auto&& layoutIdentifier) {
+                                    size_t commaPos = layoutIdentifier.find(',');
+                                    std::string languageTag = layoutIdentifier.substr(0, commaPos);
+                                    std::string layoutType = layoutIdentifier.substr(commaPos + 1);
+                                    return KeyboardLayoutInfo(std::move(languageTag),
+                                                              std::move(layoutType));
+                                });
 
     jint hoverTapTimeout = env->CallIntMethod(mServiceObj,
             gServiceClassInfo.getHoverTapTimeout);
@@ -644,7 +658,28 @@ void NativeInputManager::getReaderConfiguration(InputReaderConfiguration* outCon
         outConfig->defaultPointerDisplayId = mLocked.pointerDisplayId;
 
         outConfig->disabledDevices = mLocked.disabledInputDevices;
+
+        outConfig->stylusButtonMotionEventsEnabled = mLocked.stylusButtonMotionEventsEnabled;
     } // release lock
+}
+
+template <typename T>
+std::unordered_map<std::string, T> NativeInputManager::readMapFromInterleavedJavaArray(
+        jmethodID method, const char* methodName, std::function<T(std::string)> opOnValue) {
+    JNIEnv* env = jniEnv();
+    jobjectArray javaArray = jobjectArray(env->CallObjectMethod(mServiceObj, method));
+    std::unordered_map<std::string, T> map;
+    if (!checkAndClearExceptionFromCallback(env, methodName) && javaArray) {
+        jsize length = env->GetArrayLength(javaArray);
+        for (jsize i = 0; i < length / 2; i++) {
+            std::string key = getStringElementFromJavaArray(env, javaArray, 2 * i);
+            T value =
+                    opOnValue(std::move(getStringElementFromJavaArray(env, javaArray, 2 * i + 1)));
+            map.insert({key, value});
+        }
+    }
+    env->DeleteLocalRef(javaArray);
+    return map;
 }
 
 std::shared_ptr<PointerControllerInterface> NativeInputManager::obtainPointerController(
@@ -1495,6 +1530,21 @@ std::optional<std::string> NativeInputManager::getBluetoothAddress(int32_t devic
     return mInputManager->getReader().getBluetoothAddress(deviceId);
 }
 
+void NativeInputManager::setStylusButtonMotionEventsEnabled(bool enabled) {
+    { // acquire lock
+        AutoMutex _l(mLock);
+
+        if (mLocked.stylusButtonMotionEventsEnabled == enabled) {
+            return;
+        }
+
+        mLocked.stylusButtonMotionEventsEnabled = enabled;
+    } // release lock
+
+    mInputManager->getReader().requestRefreshConfiguration(
+            InputReaderConfiguration::CHANGE_STYLUS_BUTTON_REPORTING);
+}
+
 bool NativeInputManager::isPerDisplayTouchModeEnabled() {
     JNIEnv* env = jniEnv();
     jboolean enabled =
@@ -2237,6 +2287,18 @@ static void nativeChangeUniqueIdAssociation(JNIEnv* env, jobject nativeImplObj) 
             InputReaderConfiguration::CHANGE_DISPLAY_INFO);
 }
 
+static void nativeChangeTypeAssociation(JNIEnv* env, jobject nativeImplObj) {
+    NativeInputManager* im = getNativeInputManager(env, nativeImplObj);
+    im->getInputManager()->getReader().requestRefreshConfiguration(
+            InputReaderConfiguration::CHANGE_DEVICE_TYPE);
+}
+
+static void changeKeyboardLayoutAssociation(JNIEnv* env, jobject nativeImplObj) {
+    NativeInputManager* im = getNativeInputManager(env, nativeImplObj);
+    im->getInputManager()->getReader().requestRefreshConfiguration(
+            InputReaderConfiguration::CHANGE_KEYBOARD_LAYOUT_ASSOCIATION);
+}
+
 static void nativeSetMotionClassifierEnabled(JNIEnv* env, jobject nativeImplObj, jboolean enabled) {
     NativeInputManager* im = getNativeInputManager(env, nativeImplObj);
 
@@ -2352,6 +2414,12 @@ static jstring nativeGetBluetoothAddress(JNIEnv* env, jobject nativeImplObj, jin
     return address ? env->NewStringUTF(address->c_str()) : nullptr;
 }
 
+static void nativeSetStylusButtonMotionEventsEnabled(JNIEnv* env, jobject nativeImplObj,
+                                                     jboolean enabled) {
+    NativeInputManager* im = getNativeInputManager(env, nativeImplObj);
+    im->setStylusButtonMotionEventsEnabled(enabled);
+}
+
 // ----------------------------------------------------------------------------
 
 static const JNINativeMethod gInputManagerMethods[] = {
@@ -2425,6 +2493,8 @@ static const JNINativeMethod gInputManagerMethods[] = {
         {"canDispatchToDisplay", "(II)Z", (void*)nativeCanDispatchToDisplay},
         {"notifyPortAssociationsChanged", "()V", (void*)nativeNotifyPortAssociationsChanged},
         {"changeUniqueIdAssociation", "()V", (void*)nativeChangeUniqueIdAssociation},
+        {"changeTypeAssociation", "()V", (void*)nativeChangeTypeAssociation},
+        {"changeKeyboardLayoutAssociation", "()V", (void*)changeKeyboardLayoutAssociation},
         {"setDisplayEligibilityForPointerCapture", "(IZ)V",
          (void*)nativeSetDisplayEligibilityForPointerCapture},
         {"setMotionClassifierEnabled", "(Z)V", (void*)nativeSetMotionClassifierEnabled},
@@ -2436,6 +2506,8 @@ static const JNINativeMethod gInputManagerMethods[] = {
         {"cancelCurrentTouch", "()V", (void*)nativeCancelCurrentTouch},
         {"setPointerDisplayId", "(I)V", (void*)nativeSetPointerDisplayId},
         {"getBluetoothAddress", "(I)Ljava/lang/String;", (void*)nativeGetBluetoothAddress},
+        {"setStylusButtonMotionEventsEnabled", "(Z)V",
+         (void*)nativeSetStylusButtonMotionEventsEnabled},
 };
 
 #define FIND_CLASS(var, className) \
@@ -2545,6 +2617,12 @@ int register_android_server_InputManager(JNIEnv* env) {
 
     GET_METHOD_ID(gServiceClassInfo.getInputUniqueIdAssociations, clazz,
                   "getInputUniqueIdAssociations", "()[Ljava/lang/String;");
+
+    GET_METHOD_ID(gServiceClassInfo.getDeviceTypeAssociations, clazz, "getDeviceTypeAssociations",
+                  "()[Ljava/lang/String;");
+
+    GET_METHOD_ID(gServiceClassInfo.getKeyboardLayoutAssociations, clazz,
+                  "getKeyboardLayoutAssociations", "()[Ljava/lang/String;");
 
     GET_METHOD_ID(gServiceClassInfo.getKeyRepeatTimeout, clazz,
             "getKeyRepeatTimeout", "()I");

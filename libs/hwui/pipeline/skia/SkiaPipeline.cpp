@@ -36,6 +36,7 @@
 #include <SkStream.h>
 #include <SkString.h>
 #include <SkTypeface.h>
+#include "include/gpu/GpuTypes.h" // from Skia
 #include <android-base/properties.h>
 #include <unistd.h>
 
@@ -187,7 +188,7 @@ bool SkiaPipeline::createOrUpdateLayer(RenderNode* node, const DamageAccumulator
         SkSurfaceProps props(0, kUnknown_SkPixelGeometry);
         SkASSERT(mRenderThread.getGrContext() != nullptr);
         node->setLayerSurface(SkSurface::MakeRenderTarget(mRenderThread.getGrContext(),
-                                                          SkBudgeted::kYes, info, 0,
+                                                          skgpu::Budgeted::kYes, info, 0,
                                                           this->getSurfaceOrigin(), &props));
         if (node->getLayerSurface()) {
             // update the transform in window of the layer to reset its origin wrt light source
@@ -602,6 +603,31 @@ void SkiaPipeline::dumpResourceCacheUsage() const {
                 bytes * (1.0f / (1024.0f * 1024.0f)), maxBytes * (1.0f / (1024.0f * 1024.0f)));
 
     ALOGD("%s", log.c_str());
+}
+
+void SkiaPipeline::setHardwareBuffer(AHardwareBuffer* buffer) {
+    if (mHardwareBuffer) {
+        AHardwareBuffer_release(mHardwareBuffer);
+        mHardwareBuffer = nullptr;
+    }
+
+    if (buffer) {
+        AHardwareBuffer_acquire(buffer);
+        mHardwareBuffer = buffer;
+    }
+}
+
+sk_sp<SkSurface> SkiaPipeline::getBufferSkSurface(
+        const renderthread::HardwareBufferRenderParams& bufferParams) {
+    auto bufferColorSpace = bufferParams.getColorSpace();
+    if (mBufferSurface == nullptr || mBufferColorSpace == nullptr ||
+        !SkColorSpace::Equals(mBufferColorSpace.get(), bufferColorSpace.get())) {
+        mBufferSurface = SkSurface::MakeFromAHardwareBuffer(
+                mRenderThread.getGrContext(), mHardwareBuffer, kTopLeft_GrSurfaceOrigin,
+                bufferColorSpace, nullptr, true);
+        mBufferColorSpace = bufferColorSpace;
+    }
+    return mBufferSurface;
 }
 
 void SkiaPipeline::setSurfaceColorProperties(ColorMode colorMode) {

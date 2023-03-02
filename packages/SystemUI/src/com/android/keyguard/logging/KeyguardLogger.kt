@@ -18,68 +18,44 @@ package com.android.keyguard.logging
 
 import com.android.systemui.log.dagger.KeyguardLog
 import com.android.systemui.plugins.log.LogBuffer
-import com.android.systemui.plugins.log.LogLevel.DEBUG
-import com.android.systemui.plugins.log.LogLevel.ERROR
-import com.android.systemui.plugins.log.LogLevel.INFO
-import com.android.systemui.plugins.log.LogLevel.VERBOSE
-import com.android.systemui.plugins.log.LogLevel.WARNING
+import com.android.systemui.plugins.log.LogLevel
 import com.google.errorprone.annotations.CompileTimeConstant
 import javax.inject.Inject
 
-private const val TAG = "KeyguardLog"
+private const val BIO_TAG = "KeyguardLog"
 
 /**
  * Generic logger for keyguard that's wrapping [LogBuffer]. This class should be used for adding
  * temporary logs or logs for smaller classes when creating whole new [LogBuffer] wrapper might be
  * an overkill.
  */
-class KeyguardLogger @Inject constructor(@KeyguardLog private val buffer: LogBuffer) {
-    fun d(@CompileTimeConstant msg: String) = buffer.log(TAG, DEBUG, msg)
+class KeyguardLogger
+@Inject
+constructor(
+    @KeyguardLog val buffer: LogBuffer,
+) {
+    @JvmOverloads
+    fun log(
+        tag: String,
+        level: LogLevel,
+        @CompileTimeConstant msg: String,
+        ex: Throwable? = null,
+    ) = buffer.log(tag, level, msg, ex)
 
-    fun e(@CompileTimeConstant msg: String) = buffer.log(TAG, ERROR, msg)
-
-    fun v(@CompileTimeConstant msg: String) = buffer.log(TAG, VERBOSE, msg)
-
-    fun w(@CompileTimeConstant msg: String) = buffer.log(TAG, WARNING, msg)
-
-    fun logException(ex: Exception, @CompileTimeConstant logMsg: String) {
-        buffer.log(TAG, ERROR, {}, { logMsg }, exception = ex)
-    }
-
-    fun v(msg: String, arg: Any) {
-        buffer.log(TAG, VERBOSE, { str1 = arg.toString() }, { "$msg: $str1" })
-    }
-
-    fun i(msg: String, arg: Any) {
-        buffer.log(TAG, INFO, { str1 = arg.toString() }, { "$msg: $str1" })
-    }
-
-    // TODO: remove after b/237743330 is fixed
-    fun logStatusBarCalculatedAlpha(alpha: Float) {
-        buffer.log(TAG, DEBUG, { double1 = alpha.toDouble() }, { "Calculated new alpha: $double1" })
-    }
-
-    // TODO: remove after b/237743330 is fixed
-    fun logStatusBarExplicitAlpha(alpha: Float) {
+    fun log(
+        tag: String,
+        level: LogLevel,
+        @CompileTimeConstant msg: String,
+        arg: Any,
+    ) {
         buffer.log(
-            TAG,
-            DEBUG,
-            { double1 = alpha.toDouble() },
-            { "new mExplicitAlpha value: $double1" }
-        )
-    }
-
-    // TODO: remove after b/237743330 is fixed
-    fun logStatusBarAlphaVisibility(visibility: Int, alpha: Float, state: String) {
-        buffer.log(
-            TAG,
-            DEBUG,
+            tag,
+            level,
             {
-                int1 = visibility
-                double1 = alpha.toDouble()
-                str1 = state
+                str1 = msg
+                str2 = arg.toString()
             },
-            { "changing visibility to $int1 with alpha $double1 in state: $str1" }
+            { "$str1: $str2" }
         )
     }
 
@@ -90,8 +66,8 @@ class KeyguardLogger @Inject constructor(@KeyguardLog private val buffer: LogBuf
         msg: String? = null
     ) {
         buffer.log(
-            TAG,
-            DEBUG,
+            BIO_TAG,
+            LogLevel.DEBUG,
             {
                 str1 = context
                 str2 = "$msgId"

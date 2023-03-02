@@ -383,7 +383,7 @@ public class QuotaControllerTest {
     private JobStatus createJobStatus(String testTag, String packageName, int callingUid,
             JobInfo jobInfo) {
         JobStatus js = JobStatus.createFromJobInfo(
-                jobInfo, callingUid, packageName, SOURCE_USER_ID, testTag);
+                jobInfo, callingUid, packageName, SOURCE_USER_ID, "QCTest", testTag);
         js.serviceProcessName = "testProcess";
         // Make sure tests aren't passing just because the default bucket is likely ACTIVE.
         js.setStandbyBucket(FREQUENT_INDEX);
@@ -2159,6 +2159,31 @@ public class QuotaControllerTest {
                         i < 5,
                         mQuotaController.isWithinQuotaLocked(0, "com.android.test", ACTIVE_INDEX));
             }
+        }
+    }
+
+    @Test
+    public void testIsWithinQuotaLocked_UserInitiated() {
+        // Put app in a state where regular jobs are out of quota.
+        setDischarging();
+        final long now = JobSchedulerService.sElapsedRealtimeClock.millis();
+        final int jobCount = mQcConstants.MAX_JOB_COUNT_PER_RATE_LIMITING_WINDOW;
+        mQuotaController.saveTimingSession(SOURCE_USER_ID, SOURCE_PACKAGE,
+                createTimingSession(now - (HOUR_IN_MILLIS), 15 * MINUTE_IN_MILLIS, 25), false);
+        mQuotaController.saveTimingSession(SOURCE_USER_ID, SOURCE_PACKAGE,
+                createTimingSession(now - (5 * MINUTE_IN_MILLIS), 3 * MINUTE_IN_MILLIS, jobCount),
+                false);
+        JobStatus job = createJobStatus("testIsWithinQuotaLocked_UserInitiated", 1);
+        spyOn(job);
+        synchronized (mQuotaController.mLock) {
+            mQuotaController.incrementJobCountLocked(SOURCE_USER_ID, SOURCE_PACKAGE, jobCount);
+            assertFalse(mQuotaController
+                    .isWithinQuotaLocked(SOURCE_USER_ID, SOURCE_PACKAGE, WORKING_INDEX));
+            doReturn(false).when(job).shouldTreatAsUserInitiatedJob();
+            assertFalse(mQuotaController.isWithinQuotaLocked(job));
+            // User-initiated job should still be allowed.
+            doReturn(true).when(job).shouldTreatAsUserInitiatedJob();
+            assertTrue(mQuotaController.isWithinQuotaLocked(job));
         }
     }
 

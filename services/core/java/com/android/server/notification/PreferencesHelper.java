@@ -108,7 +108,7 @@ public class PreferencesHelper implements RankingConfig {
     @VisibleForTesting
     static final int NOTIFICATION_CHANNEL_COUNT_LIMIT = 5000;
     @VisibleForTesting
-    static final int NOTIFICATION_CHANNEL_GROUP_COUNT_LIMIT = 50000;
+    static final int NOTIFICATION_CHANNEL_GROUP_COUNT_LIMIT = 6000;
 
     private static final int NOTIFICATION_PREFERENCES_PULL_LIMIT = 1000;
     private static final int NOTIFICATION_CHANNEL_PULL_LIMIT = 2000;
@@ -1007,6 +1007,7 @@ public class PreferencesHelper implements RankingConfig {
                     channel.setAllowBubbles(existing != null
                             ? existing.getAllowBubbles()
                             : NotificationChannel.DEFAULT_ALLOW_BUBBLE);
+                    channel.setImportantConversation(false);
                 }
                 clearLockedFieldsLocked(channel);
 

@@ -31,12 +31,14 @@ import com.android.tools.lint.detector.api.Scope
 import com.android.tools.lint.detector.api.Severity
 import com.android.tools.lint.detector.api.SourceCodeScanner
 import com.intellij.psi.PsiAnnotation
+import com.intellij.psi.PsiArrayInitializerMemberValue
 import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiMethod
 import org.jetbrains.uast.UAnnotation
-import org.jetbrains.uast.UClass
 import org.jetbrains.uast.UElement
 import org.jetbrains.uast.UMethod
+import org.jetbrains.uast.toUElement
 
 /**
  * Lint Detector that ensures that any method overriding a method annotated
@@ -54,15 +56,18 @@ import org.jetbrains.uast.UMethod
  */
 class EnforcePermissionDetector : Detector(), SourceCodeScanner {
 
-    val BINDER_CLASS = "android.os.Binder"
-    val JAVA_OBJECT = "java.lang.Object"
-
     override fun applicableAnnotations(): List<String> {
         return listOf(ANNOTATION_ENFORCE_PERMISSION)
     }
 
     override fun getApplicableUastTypes(): List<Class<out UElement>> {
         return listOf(UAnnotation::class.java)
+    }
+
+    private fun annotationValueGetChildren(elem: PsiElement): Array<PsiElement> {
+        if (elem is PsiArrayInitializerMemberValue)
+            return elem.getInitializers().map { it as PsiElement }.toTypedArray()
+        return elem.getChildren()
     }
 
     private fun areAnnotationsEquivalent(
@@ -82,18 +87,28 @@ class EnforcePermissionDetector : Detector(), SourceCodeScanner {
             if (attr1[i].name != attr2[i].name) {
                 return false
             }
-            val value1 = attr1[i].value
-            val value2 = attr2[i].value
-            if (value1 == null && value2 == null) {
-                continue
-            }
-            if (value1 == null || value2 == null) {
-                return false
-            }
+            val value1 = attr1[i].value ?: return false
+            val value2 = attr2[i].value ?: return false
+            // Try to compare values directly with each other.
             val v1 = ConstantEvaluator.evaluate(context, value1)
             val v2 = ConstantEvaluator.evaluate(context, value2)
-            if (v1 != v2) {
-                return false
+            if (v1 != null && v2 != null) {
+                if (v1 != v2) {
+                    return false
+                }
+            } else {
+                val children1 = annotationValueGetChildren(value1)
+                val children2 = annotationValueGetChildren(value2)
+                if (children1.size != children2.size) {
+                    return false
+                }
+                for (j in children1.indices) {
+                    val c1 = ConstantEvaluator.evaluate(context, children1[j])
+                    val c2 = ConstantEvaluator.evaluate(context, children2[j])
+                    if (c1 != c2) {
+                        return false
+                    }
+                }
             }
         }
         return true
@@ -106,6 +121,11 @@ class EnforcePermissionDetector : Detector(), SourceCodeScanner {
         overriddenMethod: PsiMethod,
         checkEquivalence: Boolean = true
     ) {
+        // If method is not from a Stub subclass, this method shouldn't use @EP at all.
+        // This is handled by EnforcePermissionHelperDetector.
+        if (!isContainedInSubclassOfStub(context, overridingMethod.toUElement() as? UMethod)) {
+            return
+        }
         val overridingAnnotation = overridingMethod.getAnnotation(ANNOTATION_ENFORCE_PERMISSION)
         val overriddenAnnotation = overriddenMethod.getAnnotation(ANNOTATION_ENFORCE_PERMISSION)
         val location = context.getLocation(element)
@@ -133,50 +153,13 @@ class EnforcePermissionDetector : Detector(), SourceCodeScanner {
         }
     }
 
-    private fun compareClasses(
-        context: JavaContext,
-        element: UElement,
-        newClass: PsiClass,
-        extendedClass: PsiClass,
-        checkEquivalence: Boolean = true
-    ) {
-        val newAnnotation = newClass.getAnnotation(ANNOTATION_ENFORCE_PERMISSION)
-        val extendedAnnotation = extendedClass.getAnnotation(ANNOTATION_ENFORCE_PERMISSION)
-
-        val location = context.getLocation(element)
-        val newClassName = newClass.qualifiedName
-        val extendedClassName = extendedClass.qualifiedName
-        if (newAnnotation == null) {
-            val msg = "The class $newClassName extends the class $extendedClassName which " +
-                "is annotated with @EnforcePermission. The same annotation must be used " +
-                "on $newClassName."
-            context.report(ISSUE_MISSING_ENFORCE_PERMISSION, element, location, msg)
-        } else if (extendedAnnotation == null) {
-            val msg = "The class $newClassName extends the class $extendedClassName which " +
-                "is not annotated with @EnforcePermission. The same annotation must be used " +
-                "on $extendedClassName. Did you forget to annotate the AIDL definition?"
-            context.report(ISSUE_MISSING_ENFORCE_PERMISSION, element, location, msg)
-        } else if (checkEquivalence && !areAnnotationsEquivalent(
-            context, newAnnotation, extendedAnnotation)) {
-            val msg = "The class $newClassName is annotated with ${newAnnotation.text} " +
-                "which differs from the parent class $extendedClassName: " +
-                "${extendedAnnotation.text}. The same annotation must be used for " +
-                "both classes."
-            context.report(ISSUE_MISMATCHING_ENFORCE_PERMISSION, element, location, msg)
-        }
-    }
-
     override fun visitAnnotationUsage(
         context: JavaContext,
         element: UElement,
         annotationInfo: AnnotationInfo,
         usageInfo: AnnotationUsageInfo
     ) {
-        if (usageInfo.type == AnnotationUsageType.EXTENDS) {
-            val newClass = element.sourcePsi?.parent?.parent as PsiClass
-            val extendedClass: PsiClass = usageInfo.referenced as PsiClass
-            compareClasses(context, element, newClass, extendedClass)
-        } else if (usageInfo.type == AnnotationUsageType.METHOD_OVERRIDE &&
+        if (usageInfo.type == AnnotationUsageType.METHOD_OVERRIDE &&
             annotationInfo.origin == AnnotationOrigin.METHOD) {
             val overridingMethod = element.sourcePsi as PsiMethod
             val overriddenMethod = usageInfo.referenced as PsiMethod
@@ -190,26 +173,14 @@ class EnforcePermissionDetector : Detector(), SourceCodeScanner {
                 if (node.qualifiedName != ANNOTATION_ENFORCE_PERMISSION) {
                     return
                 }
-                val method = node.uastParent as? UMethod
-                val klass = node.uastParent as? UClass
-                if (klass != null) {
-                    val newClass = klass as PsiClass
-                    val extendedClass = newClass.getSuperClass()
-                    if (extendedClass != null && extendedClass.qualifiedName != JAVA_OBJECT) {
-                        // The equivalence check can be skipped, if both classes are
-                        // annotated, it will be verified by visitAnnotationUsage.
-                        compareClasses(context, klass, newClass,
-                            extendedClass, checkEquivalence = false)
-                    }
-                } else if (method != null) {
-                    val overridingMethod = method as PsiMethod
-                    val parents = overridingMethod.findSuperMethods()
-                    for (overriddenMethod in parents) {
-                        // The equivalence check can be skipped, if both methods are
-                        // annotated, it will be verified by visitAnnotationUsage.
-                        compareMethods(context, method, overridingMethod,
-                            overriddenMethod, checkEquivalence = false)
-                    }
+                val method = node.uastParent as? UMethod ?: return
+                val overridingMethod = method as PsiMethod
+                val parents = overridingMethod.findSuperMethods()
+                for (overriddenMethod in parents) {
+                    // The equivalence check can be skipped, if both methods are
+                    // annotated, it will be verified by visitAnnotationUsage.
+                    compareMethods(context, method, overridingMethod,
+                        overriddenMethod, checkEquivalence = false)
                 }
             }
         }

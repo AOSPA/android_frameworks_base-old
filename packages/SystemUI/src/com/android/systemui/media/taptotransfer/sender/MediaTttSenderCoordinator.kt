@@ -30,6 +30,7 @@ import com.android.systemui.media.taptotransfer.MediaTttFlags
 import com.android.systemui.media.taptotransfer.common.MediaTttLogger
 import com.android.systemui.media.taptotransfer.common.MediaTttUtils
 import com.android.systemui.statusbar.CommandQueue
+import com.android.systemui.temporarydisplay.ViewPriority
 import com.android.systemui.temporarydisplay.chipbar.ChipbarCoordinator
 import com.android.systemui.temporarydisplay.chipbar.ChipbarEndItem
 import com.android.systemui.temporarydisplay.chipbar.ChipbarInfo
@@ -46,7 +47,7 @@ constructor(
     private val chipbarCoordinator: ChipbarCoordinator,
     private val commandQueue: CommandQueue,
     private val context: Context,
-    @MediaTttSenderLogger private val logger: MediaTttLogger,
+    @MediaTttSenderLogger private val logger: MediaTttLogger<ChipbarInfo>,
     private val mediaTttFlags: MediaTttFlags,
     private val uiEventLogger: MediaTttSenderUiEventLogger,
 ) : CoreStartable {
@@ -146,10 +147,15 @@ constructor(
         routeInfo: MediaRoute2Info,
         undoCallback: IUndoMediaTransferCallback?,
         context: Context,
-        logger: MediaTttLogger,
+        logger: MediaTttLogger<ChipbarInfo>,
     ): ChipbarInfo {
         val packageName = routeInfo.clientPackageName
-        val otherDeviceName = routeInfo.name.toString()
+        val otherDeviceName =
+            if (routeInfo.name.isBlank()) {
+                context.getString(R.string.media_ttt_default_device_type)
+            } else {
+                routeInfo.name.toString()
+            }
 
         return ChipbarInfo(
             // Display the app's icon as the start icon
@@ -180,6 +186,7 @@ constructor(
             wakeReason = MediaTttUtils.WAKE_REASON_SENDER,
             timeoutMs = chipStateSender.timeout,
             id = routeInfo.id,
+            priority = ViewPriority.NORMAL,
         )
     }
 

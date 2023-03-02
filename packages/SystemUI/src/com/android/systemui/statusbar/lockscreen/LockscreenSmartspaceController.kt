@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar.lockscreen
 
 import android.app.PendingIntent
+import android.app.WallpaperManager
 import android.app.smartspace.SmartspaceConfig
 import android.app.smartspace.SmartspaceManager
 import android.app.smartspace.SmartspaceSession
@@ -42,6 +43,7 @@ import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.flags.FeatureFlags
 import com.android.systemui.flags.Flags
 import com.android.systemui.plugins.ActivityStarter
+import com.android.systemui.plugins.BcSmartspaceConfigPlugin
 import com.android.systemui.plugins.BcSmartspaceDataPlugin
 import com.android.systemui.plugins.BcSmartspaceDataPlugin.SmartspaceTargetListener
 import com.android.systemui.plugins.BcSmartspaceDataPlugin.SmartspaceView
@@ -59,11 +61,11 @@ import java.util.Optional
 import java.util.concurrent.Executor
 import javax.inject.Inject
 
-/**
- * Controller for managing the smartspace view on the lockscreen
- */
+/** Controller for managing the smartspace view on the lockscreen */
 @SysUISingleton
-class LockscreenSmartspaceController @Inject constructor(
+class LockscreenSmartspaceController
+@Inject
+constructor(
         private val context: Context,
         private val featureFlags: FeatureFlags,
         private val smartspaceManager: SmartspaceManager,
@@ -80,7 +82,8 @@ class LockscreenSmartspaceController @Inject constructor(
         @Main private val uiExecutor: Executor,
         @Background private val bgExecutor: Executor,
         @Main private val handler: Handler,
-        optionalPlugin: Optional<BcSmartspaceDataPlugin>
+        optionalPlugin: Optional<BcSmartspaceDataPlugin>,
+        optionalConfigPlugin: Optional<BcSmartspaceConfigPlugin>,
 ) {
     companion object {
         private const val TAG = "LockscreenSmartspaceController"
@@ -88,6 +91,7 @@ class LockscreenSmartspaceController @Inject constructor(
 
     private var session: SmartspaceSession? = null
     private val plugin: BcSmartspaceDataPlugin? = optionalPlugin.orElse(null)
+    private val configPlugin: BcSmartspaceConfigPlugin? = optionalConfigPlugin.orElse(null)
 
     // Smartspace can be used on multiple displays, such as when the user casts their screen
     private var smartspaceViews = mutableSetOf<SmartspaceView>()
@@ -238,7 +242,9 @@ class LockscreenSmartspaceController @Inject constructor(
         }
 
         val ssView = plugin.getView(parent)
+        ssView.setUiSurface(BcSmartspaceDataPlugin.UI_SURFACE_LOCK_SCREEN_AOD)
         ssView.registerDataProvider(plugin)
+        ssView.registerConfigProvider(configPlugin)
 
         ssView.setIntentStarter(object : BcSmartspaceDataPlugin.IntentStarter {
             override fun startIntent(view: View, intent: Intent, showOnLockscreen: Boolean) {
@@ -281,8 +287,10 @@ class LockscreenSmartspaceController @Inject constructor(
         }
 
         val newSession = smartspaceManager.createSmartspaceSession(
-                SmartspaceConfig.Builder(context, "lockscreen").build())
-        Log.d(TAG, "Starting smartspace session for lockscreen")
+                SmartspaceConfig.Builder(
+                        context, BcSmartspaceDataPlugin.UI_SURFACE_LOCK_SCREEN_AOD).build())
+        Log.d(TAG, "Starting smartspace session for " +
+                BcSmartspaceDataPlugin.UI_SURFACE_LOCK_SCREEN_AOD)
         newSession.addOnTargetsAvailableListener(uiExecutor, sessionListener)
         this.session = newSession
 
@@ -390,7 +398,8 @@ class LockscreenSmartspaceController @Inject constructor(
     }
 
     private fun updateTextColorFromWallpaper() {
-        if (!regionSamplingEnabled) {
+        val wallpaperManager = WallpaperManager.getInstance(context)
+        if (!regionSamplingEnabled || wallpaperManager.lockScreenWallpaperExists()) {
             val wallpaperTextColor =
                     Utils.getColorAttrDefaultColor(context, R.attr.wallpaperTextColor)
             smartspaceViews.forEach { it.setPrimaryTextColor(wallpaperTextColor) }

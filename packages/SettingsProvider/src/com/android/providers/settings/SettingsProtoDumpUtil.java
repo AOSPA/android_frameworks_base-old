@@ -363,9 +363,6 @@ class SettingsProtoDumpUtil {
                 Settings.Global.BOOT_COUNT,
                 GlobalSettingsProto.BOOT_COUNT);
         dumpSetting(s, p,
-                Settings.Global.BUGREPORT_IN_POWER_MENU,
-                GlobalSettingsProto.BUGREPORT_IN_POWER_MENU);
-        dumpSetting(s, p,
                 Settings.Global.CACHED_APPS_FREEZER_ENABLED,
                 GlobalSettingsProto.CACHED_APPS_FREEZER_ENABLED);
         dumpSetting(s, p,
@@ -1632,6 +1629,7 @@ class SettingsProtoDumpUtil {
 
         // Settings.Global.INSTALL_NON_MARKET_APPS intentionally excluded since it's deprecated.
         // Settings.Global.APPLY_RAMPING_RINGER intentionally excluded since it's deprecated.
+        // Settings.Global.BUGREPORT_IN_POWER_MENU intentionally excluded since it's deprecated.
     }
 
     private static void dumpProtoConfigSettingsLocked(
@@ -1842,6 +1840,10 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.ALLOWED_GEOLOCATION_ORIGINS,
                 SecureSettingsProto.ALLOWED_GEOLOCATION_ORIGINS);
+
+        dumpSetting(s, p,
+                Settings.Secure.BUGREPORT_IN_POWER_MENU,
+                SecureSettingsProto.BUGREPORT_IN_POWER_MENU);
 
         final long aovToken = p.start(SecureSettingsProto.ALWAYS_ON_VPN);
         dumpSetting(s, p,
@@ -2665,7 +2667,6 @@ class SettingsProtoDumpUtil {
         p.end(token);
 
         // Settings.Secure.DEVELOPMENT_SETTINGS_ENABLED intentionally excluded since it's deprecated.
-        // Settings.Secure.BUGREPORT_IN_POWER_MENU intentionally excluded since it's deprecated.
         // Settings.Secure.ADB_ENABLED intentionally excluded since it's deprecated.
         // Settings.Secure.ALLOW_MOCK_LOCATION intentionally excluded since it's deprecated.
         // Settings.Secure.DATA_ROAMING intentionally excluded since it's deprecated.
@@ -2844,9 +2845,6 @@ class SettingsProtoDumpUtil {
                 Settings.System.SCREEN_BRIGHTNESS,
                 SystemSettingsProto.Screen.BRIGHTNESS);
         dumpSetting(s, p,
-                Settings.System.SCREEN_BRIGHTNESS_FOR_VR,
-                SystemSettingsProto.Screen.BRIGHTNESS_FOR_VR);
-        dumpSetting(s, p,
                 Settings.System.SCREEN_BRIGHTNESS_MODE,
                 SystemSettingsProto.Screen.BRIGHTNESS_MODE);
         dumpSetting(s, p,
@@ -2855,9 +2853,6 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.System.SCREEN_BRIGHTNESS_FLOAT,
                 SystemSettingsProto.Screen.BRIGHTNESS_FLOAT);
-        dumpSetting(s, p,
-                Settings.System.SCREEN_BRIGHTNESS_FOR_VR_FLOAT,
-                SystemSettingsProto.Screen.BRIGHTNESS_FOR_VR_FLOAT);
         p.end(screenToken);
 
         dumpSetting(s, p,

@@ -1002,8 +1002,8 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
 
                 final boolean redrawNeeded = sizeChanged || creating || hintChanged
                         || (mVisible && !mDrawFinished) || alphaChanged || relativeZChanged;
-                boolean shouldSyncBuffer =
-                        redrawNeeded && viewRoot.wasRelayoutRequested() && viewRoot.isInLocalSync();
+                boolean shouldSyncBuffer = redrawNeeded && viewRoot.wasRelayoutRequested()
+                        && viewRoot.isInWMSRequestedSync();
                 SyncBufferTransactionCallback syncBufferTransactionCallback = null;
                 if (shouldSyncBuffer) {
                     syncBufferTransactionCallback = new SyncBufferTransactionCallback();
@@ -1082,6 +1082,15 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
     }
 
     /**
+     * @hide
+     */
+    public String getName() {
+        ViewRootImpl viewRoot = getViewRootImpl();
+        String viewRootName = viewRoot == null ? "detached" : viewRoot.getTitle().toString();
+        return "SurfaceView[" + viewRootName + "]";
+    }
+
+    /**
      * If SV is trying to be part of the VRI sync, we need to add SV to the VRI sync before
      * invoking the redrawNeeded call to the owner. This is to ensure we can set up the SV in
      * the sync before the SV owner knows it needs to draw a new frame.
@@ -1093,35 +1102,35 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
     private void handleSyncBufferCallback(SurfaceHolder.Callback[] callbacks,
             SyncBufferTransactionCallback syncBufferTransactionCallback) {
 
-        getViewRootImpl().addToSync((parentSyncGroup, syncBufferCallback) ->
-                redrawNeededAsync(callbacks, () -> {
-                    Transaction t = null;
-                    if (mBlastBufferQueue != null) {
-                        mBlastBufferQueue.stopContinuousSyncTransaction();
-                        t = syncBufferTransactionCallback.waitForTransaction();
-                    }
+        final SurfaceSyncGroup surfaceSyncGroup = new SurfaceSyncGroup(getName());
+        getViewRootImpl().addToSync(surfaceSyncGroup);
+        redrawNeededAsync(callbacks, () -> {
+            Transaction t = null;
+            if (mBlastBufferQueue != null) {
+                mBlastBufferQueue.stopContinuousSyncTransaction();
+                t = syncBufferTransactionCallback.waitForTransaction();
+            }
 
-                    syncBufferCallback.onTransactionReady(t);
-                    onDrawFinished();
-                }));
+            surfaceSyncGroup.addTransactionToSync(t);
+            surfaceSyncGroup.markSyncReady();
+            onDrawFinished();
+        });
     }
 
     private void handleSyncNoBuffer(SurfaceHolder.Callback[] callbacks) {
-        final SurfaceSyncGroup syncGroup = new SurfaceSyncGroup();
+        final SurfaceSyncGroup surfaceSyncGroup = new SurfaceSyncGroup(getName());
         synchronized (mSyncGroups) {
-            mSyncGroups.add(syncGroup);
+            mSyncGroups.add(surfaceSyncGroup);
         }
 
-        syncGroup.addToSync((parentSyncGroup, syncBufferCallback) ->
-                redrawNeededAsync(callbacks, () -> {
-                    syncBufferCallback.onTransactionReady(null);
-                    onDrawFinished();
-                    synchronized (mSyncGroups) {
-                        mSyncGroups.remove(syncGroup);
-                    }
-                }));
+        redrawNeededAsync(callbacks, () -> {
+            synchronized (mSyncGroups) {
+                mSyncGroups.remove(surfaceSyncGroup);
+            }
+            surfaceSyncGroup.markSyncReady();
+            onDrawFinished();
+        });
 
-        syncGroup.markSyncReady();
     }
 
     private void redrawNeededAsync(SurfaceHolder.Callback[] callbacks,
@@ -1134,14 +1143,15 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
      * @hide
      */
     @Override
-    public void surfaceSyncStarted() {
+    public void vriDrawStarted(boolean isWmSync) {
         ViewRootImpl viewRoot = getViewRootImpl();
-        if (viewRoot != null) {
-            synchronized (mSyncGroups) {
+        synchronized (mSyncGroups) {
+            if (isWmSync && viewRoot != null) {
                 for (SurfaceSyncGroup syncGroup : mSyncGroups) {
-                    viewRoot.mergeSync(syncGroup);
+                    viewRoot.addToSync(syncGroup);
                 }
             }
+            mSyncGroups.clear();
         }
     }
 

@@ -18,7 +18,7 @@ package com.android.server.wm.flicker.quickswitch
 
 import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Presubmit
-import android.platform.test.annotations.RequiresDevice
+import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.BaseTest
 import com.android.server.wm.flicker.FlickerBuilder
 import com.android.server.wm.flicker.FlickerTest
@@ -26,7 +26,6 @@ import com.android.server.wm.flicker.FlickerTestFactory
 import com.android.server.wm.flicker.helpers.SimpleAppHelper
 import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
 import com.android.server.wm.flicker.junit.FlickerParametersRunnerFactory
-import com.android.server.wm.flicker.navBarWindowIsVisibleAtStartAndEnd
 import com.android.server.wm.traces.common.ComponentNameMatcher
 import com.android.server.wm.traces.common.Rect
 import com.android.server.wm.traces.common.service.PlatformConsts
@@ -54,7 +53,7 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-class QuickSwitchFromLauncherTest(flicker: FlickerTest) : BaseTest(flicker) {
+open class QuickSwitchFromLauncherTest(flicker: FlickerTest) : BaseTest(flicker) {
     private val testApp = SimpleAppHelper(instrumentation)
 
     /** {@inheritDoc} */
@@ -261,17 +260,6 @@ class QuickSwitchFromLauncherTest(flicker: FlickerTest) : BaseTest(flicker) {
     @Ignore("Nav bar window becomes invisible during quick switch")
     @Test
     override fun navBarWindowIsAlwaysVisible() = super.navBarWindowIsAlwaysVisible()
-
-    /**
-     * Checks that [ComponentNameMatcher.NAV_BAR] window is visible and above the app windows at the
-     * start and end of the WM trace
-     */
-    @Presubmit
-    @Test
-    fun navBarWindowIsVisibleAtStartAndEnd() {
-        Assume.assumeFalse(flicker.scenario.isTablet)
-        flicker.navBarWindowIsVisibleAtStartAndEnd()
-    }
 
     @Presubmit
     @Test

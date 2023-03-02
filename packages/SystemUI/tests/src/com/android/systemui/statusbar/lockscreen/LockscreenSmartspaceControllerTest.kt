@@ -36,6 +36,7 @@ import com.android.systemui.SysuiTestCase
 import com.android.systemui.flags.FeatureFlags
 import com.android.systemui.flags.Flags
 import com.android.systemui.plugins.ActivityStarter
+import com.android.systemui.plugins.BcSmartspaceConfigPlugin
 import com.android.systemui.plugins.BcSmartspaceDataPlugin
 import com.android.systemui.plugins.BcSmartspaceDataPlugin.SmartspaceTargetListener
 import com.android.systemui.plugins.BcSmartspaceDataPlugin.SmartspaceView
@@ -55,21 +56,21 @@ import com.android.systemui.util.mockito.capture
 import com.android.systemui.util.mockito.eq
 import com.android.systemui.util.settings.SecureSettings
 import com.android.systemui.util.time.FakeSystemClock
-import java.util.Optional
-import java.util.concurrent.Executor
 import org.junit.Before
 import org.junit.Test
 import org.mockito.ArgumentCaptor
 import org.mockito.Captor
 import org.mockito.Mock
+import org.mockito.Mockito.`when`
 import org.mockito.Mockito.anyInt
 import org.mockito.Mockito.clearInvocations
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.spy
 import org.mockito.Mockito.verify
-import org.mockito.Mockito.`when`
 import org.mockito.MockitoAnnotations
+import java.util.Optional
+import java.util.concurrent.Executor
 
 @SmallTest
 class LockscreenSmartspaceControllerTest : SysuiTestCase() {
@@ -113,6 +114,9 @@ class LockscreenSmartspaceControllerTest : SysuiTestCase() {
 
     @Mock
     private lateinit var plugin: BcSmartspaceDataPlugin
+
+    @Mock
+    private lateinit var configPlugin: BcSmartspaceConfigPlugin
 
     @Mock
     private lateinit var controllerListener: SmartspaceTargetListener
@@ -209,7 +213,8 @@ class LockscreenSmartspaceControllerTest : SysuiTestCase() {
                 executor,
                 bgExecutor,
                 handler,
-                Optional.of(plugin)
+                Optional.of(plugin),
+                Optional.of(configPlugin),
         )
 
         verify(deviceProvisionedController).addCallback(capture(deviceProvisionedCaptor))
@@ -518,7 +523,9 @@ class LockscreenSmartspaceControllerTest : SysuiTestCase() {
 
         // THEN the existing session is reused and views are registered
         verify(smartspaceManager, never()).createSmartspaceSession(any())
+        verify(smartspaceView2).setUiSurface(BcSmartspaceDataPlugin.UI_SURFACE_LOCK_SCREEN_AOD)
         verify(smartspaceView2).registerDataProvider(plugin)
+        verify(smartspaceView2).registerConfigProvider(configPlugin)
     }
 
     @Test
@@ -554,7 +561,9 @@ class LockscreenSmartspaceControllerTest : SysuiTestCase() {
 
         controller.stateChangeListener.onViewAttachedToWindow(view)
 
+        verify(smartspaceView).setUiSurface(BcSmartspaceDataPlugin.UI_SURFACE_LOCK_SCREEN_AOD)
         verify(smartspaceView).registerDataProvider(plugin)
+        verify(smartspaceView).registerConfigProvider(configPlugin)
         verify(smartspaceSession)
                 .addOnTargetsAvailableListener(any(), capture(sessionListenerCaptor))
         sessionListener = sessionListenerCaptor.value
@@ -636,10 +645,16 @@ class LockscreenSmartspaceControllerTest : SysuiTestCase() {
             override fun registerDataProvider(plugin: BcSmartspaceDataPlugin?) {
             }
 
+            override fun registerConfigProvider(plugin: BcSmartspaceConfigPlugin?) {
+            }
+
             override fun setPrimaryTextColor(color: Int) {
             }
 
             override fun setIsDreaming(isDreaming: Boolean) {
+            }
+
+            override fun setUiSurface(uiSurface: String) {
             }
 
             override fun setDozeAmount(amount: Float) {

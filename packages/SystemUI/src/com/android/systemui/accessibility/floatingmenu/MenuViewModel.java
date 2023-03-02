@@ -17,6 +17,7 @@
 package com.android.systemui.accessibility.floatingmenu;
 
 import android.content.Context;
+import android.view.accessibility.AccessibilityManager;
 
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
@@ -36,11 +37,14 @@ class MenuViewModel implements MenuInfoRepository.OnSettingsContentsChanged {
     private final MutableLiveData<MenuFadeEffectInfo> mFadeEffectInfoData =
             new MutableLiveData<>();
     private final MutableLiveData<Boolean> mMoveToTuckedData = new MutableLiveData<>();
+    private final MutableLiveData<Boolean> mDockTooltipData = new MutableLiveData<>();
+    private final MutableLiveData<Boolean> mMigrationTooltipData = new MutableLiveData<>();
     private final MutableLiveData<Position> mPercentagePositionData = new MutableLiveData<>();
     private final MenuInfoRepository mInfoRepository;
 
-    MenuViewModel(Context context) {
-        mInfoRepository = new MenuInfoRepository(context, /* settingsContentsChanged= */ this);
+    MenuViewModel(Context context, AccessibilityManager accessibilityManager) {
+        mInfoRepository = new MenuInfoRepository(context,
+                accessibilityManager, /* settingsContentsChanged= */ this);
     }
 
     @Override
@@ -66,9 +70,27 @@ class MenuViewModel implements MenuInfoRepository.OnSettingsContentsChanged {
         mInfoRepository.updateMenuSavingPosition(percentagePosition);
     }
 
+    void updateDockTooltipVisibility(boolean hasSeen) {
+        mInfoRepository.updateDockTooltipVisibility(hasSeen);
+    }
+
+    void updateMigrationTooltipVisibility(boolean visible) {
+        mInfoRepository.updateMigrationTooltipVisibility(visible);
+    }
+
     LiveData<Boolean> getMoveToTuckedData() {
         mInfoRepository.loadMenuMoveToTucked(mMoveToTuckedData::setValue);
         return mMoveToTuckedData;
+    }
+
+    LiveData<Boolean> getDockTooltipVisibilityData() {
+        mInfoRepository.loadDockTooltipVisibility(mDockTooltipData::setValue);
+        return mDockTooltipData;
+    }
+
+    LiveData<Boolean> getMigrationTooltipVisibilityData() {
+        mInfoRepository.loadMigrationTooltipVisibility(mMigrationTooltipData::setValue);
+        return mMigrationTooltipData;
     }
 
     LiveData<Position> getPercentagePositionData() {
@@ -91,11 +113,11 @@ class MenuViewModel implements MenuInfoRepository.OnSettingsContentsChanged {
         return mTargetFeaturesData;
     }
 
-    void registerContentObservers() {
-        mInfoRepository.registerContentObservers();
+    void registerObserversAndCallbacks() {
+        mInfoRepository.registerObserversAndCallbacks();
     }
 
-    void unregisterContentObservers() {
-        mInfoRepository.unregisterContentObservers();
+    void unregisterObserversAndCallbacks() {
+        mInfoRepository.unregisterObserversAndCallbacks();
     }
 }

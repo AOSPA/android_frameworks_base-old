@@ -404,6 +404,13 @@ public class ActivityManager {
     public static final int START_FLAG_NATIVE_DEBUGGING = 1<<3;
 
     /**
+     * Flag for IActivityManaqer.startActivity: launch the app for
+     * debugging and suspend threads.
+     * @hide
+     */
+    public static final int START_FLAG_DEBUG_SUSPEND = 1 << 4;
+
+    /**
      * Result for IActivityManaqer.broadcastIntent: success!
      * @hide
      */
@@ -4380,7 +4387,7 @@ public class ActivityManager {
      *
      * <p>This method will allow the user to launch activities on that display, and it's typically
      * used only on automotive builds when the vehicle has multiple displays (you can verify if it's
-     * supported by calling {@link UserManager#isUsersOnSecondaryDisplaysSupported()}).
+     * supported by calling {@link UserManager#isVisibleBackgroundUsersSupported()}).
      *
      * <p><b>NOTE:</b> differently from {@link #switchUser(int)}, which stops the current foreground
      * user before starting a new one, this method does not stop the previous user running in
@@ -4404,14 +4411,13 @@ public class ActivityManager {
     @TestApi
     @RequiresPermission(anyOf = {android.Manifest.permission.MANAGE_USERS,
             android.Manifest.permission.INTERACT_ACROSS_USERS})
-    public boolean startUserInBackgroundOnSecondaryDisplay(@UserIdInt int userId,
-            int displayId) {
-        if (!UserManager.isUsersOnSecondaryDisplaysEnabled()) {
+    public boolean startUserInBackgroundVisibleOnDisplay(@UserIdInt int userId, int displayId) {
+        if (!UserManager.isVisibleBackgroundUsersEnabled()) {
             throw new UnsupportedOperationException(
                     "device does not support users on secondary displays");
         }
         try {
-            return getService().startUserInBackgroundOnSecondaryDisplay(userId, displayId);
+            return getService().startUserInBackgroundVisibleOnDisplay(userId, displayId);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4427,9 +4433,9 @@ public class ActivityManager {
     @Nullable
     @RequiresPermission(anyOf = {android.Manifest.permission.MANAGE_USERS,
             android.Manifest.permission.INTERACT_ACROSS_USERS})
-    public int[] getSecondaryDisplayIdsForStartingBackgroundUsers() {
+    public int[] getDisplayIdsForStartingVisibleBackgroundUsers() {
         try {
-            return getService().getSecondaryDisplayIdsForStartingBackgroundUsers();
+            return getService().getDisplayIdsForStartingVisibleBackgroundUsers();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4589,7 +4595,7 @@ public class ActivityManager {
      * Stops the given {@code userId}.
      *
      * <p><b>NOTE:</b> on systems that support
-     * {@link UserManager#isUsersOnSecondaryDisplaysSupported() background users on secondary
+     * {@link UserManager#isVisibleBackgroundUsersSupported() background users on secondary
      * displays}, this method will also unassign the user from the display it was started on.
      *
      * @hide
@@ -5301,6 +5307,41 @@ public class ActivityManager {
             getService().waitForBroadcastIdle();
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Delays delivering broadcasts to the specified package.
+     *
+     * <p> When {@code delayedDurationMs} is {@code 0}, it will clears any previously
+     * set forced delays.
+     *
+     * <p><b>Note: This method is only intended for testing and it only
+     * works for packages that are already running.
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.DUMP)
+    public void forceDelayBroadcastDelivery(@NonNull String targetPackage,
+            @IntRange(from = 0) long delayedDurationMs) {
+        try {
+            getService().forceDelayBroadcastDelivery(targetPackage, delayedDurationMs);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Checks if the "modern" broadcast queue is enabled.
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.DUMP)
+    public boolean isModernBroadcastQueueEnabled() {
+        try {
+            return getService().isModernBroadcastQueueEnabled();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
         }
     }
 

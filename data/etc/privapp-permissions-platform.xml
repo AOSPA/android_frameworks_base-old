@@ -239,6 +239,7 @@ applications that come with the platform
 
     <privapp-permissions package="com.android.shell">
         <!-- Needed for test only -->
+        <permission name="android.permission.MANAGE_HEALTH_DATA"/>
         <permission name="android.permission.LAUNCH_DEVICE_MANAGER_SETUP"/>
         <permission name="android.permission.MODIFY_DAY_NIGHT_MODE"/>
         <permission name="android.permission.ACCESS_LOWPAN_STATE"/>
@@ -352,10 +353,6 @@ applications that come with the platform
         <permission name="android.permission.SET_WALLPAPER_COMPONENT" />
         <permission name="android.permission.SET_WALLPAPER_DIM_AMOUNT" />
         <permission name="android.permission.REQUEST_NOTIFICATION_ASSISTANT_SERVICE" />
-        <!-- Permission required for CTS test - TrustTestCases -->
-        <permission name="android.permission.PROVIDE_TRUST_AGENT" />
-        <permission name="android.permission.ACCESS_KEYGUARD_SECURE_STORAGE" />
-        <permission name="android.permission.TRUST_LISTENER" />
         <!-- Permissions required for Incremental CTS tests -->
         <permission name="com.android.permission.USE_INSTALLER_V2"/>
         <permission name="android.permission.LOADER_USAGE_STATS"/>
@@ -393,6 +390,7 @@ applications that come with the platform
         <permission name="android.permission.MANAGE_COMPANION_DEVICES" />
         <permission name="android.permission.REQUEST_COMPANION_PROFILE_APP_STREAMING" />
         <permission name="android.permission.REQUEST_COMPANION_PROFILE_WATCH" />
+        <permission name="android.permission.REQUEST_COMPANION_PROFILE_NEARBY_DEVICE_STREAMING" />
         <permission name="android.permission.REQUEST_COMPANION_PROFILE_COMPUTER" />
         <permission name="android.permission.REQUEST_COMPANION_SELF_MANAGED" />
         <!-- Permission required for testing registering pull atom callbacks. -->
@@ -463,6 +461,7 @@ applications that come with the platform
         <!-- Permission required for hotword detection service CTS tests -->
         <permission name="android.permission.MANAGE_HOTWORD_DETECTION" />
         <permission name="android.permission.BIND_HOTWORD_DETECTION_SERVICE" />
+        <permission name="android.permission.BIND_VISUAL_QUERY_DETECTION_SERVICE" />
         <permission name="android.permission.MANAGE_APP_HIBERNATION"/>
         <!-- Permission required for CTS test - ResourceObserverNativeTest -->
         <permission name="android.permission.REGISTER_MEDIA_RESOURCE_OBSERVER" />
@@ -473,6 +472,7 @@ applications that come with the platform
         <!-- Permission required for CTS test - SystemMediaRouter2Test -->
         <permission name="android.permission.MEDIA_CONTENT_CONTROL"/>
         <permission name="android.permission.MODIFY_AUDIO_ROUTING"/>
+        <permission name="android.permission.MODIFY_AUDIO_SYSTEM_SETTINGS"/>
         <!-- Permission required for CTS test - CallAudioInterceptionTest -->
         <permission name="android.permission.CALL_AUDIO_INTERCEPTION"/>
         <!-- Permission required for CTS test - CtsPermission5TestCases -->
@@ -506,6 +506,11 @@ applications that come with the platform
         <permission name="android.permission.CAPTURE_MEDIA_OUTPUT" />
         <permission name="android.permission.CAPTURE_TUNER_AUDIO_INPUT" />
         <permission name="android.permission.CAPTURE_VOICE_COMMUNICATION_OUTPUT" />
+        <permission name="android.permission.MODIFY_CELL_BROADCASTS" />
+        <!-- Permission required for CTS test - CtsBroadcastRadioTestCases -->
+        <permission name="android.permission.ACCESS_BROADCAST_RADIO"/>
+        <!-- Permission required for CTS test - CtsAmbientContextServiceTestCases -->
+        <permission name="android.permission.ACCESS_AMBIENT_CONTEXT_EVENT"/>
     </privapp-permissions>
 
     <privapp-permissions package="com.android.statementservice">

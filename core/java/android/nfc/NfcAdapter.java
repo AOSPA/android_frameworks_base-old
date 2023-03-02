@@ -17,12 +17,14 @@
 package android.nfc;
 
 import android.annotation.CallbackExecutor;
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
+import android.annotation.UserIdInt;
 import android.app.Activity;
 import android.app.ActivityThread;
 import android.app.OnActivityPausedListener;
@@ -30,6 +32,7 @@ import android.app.PendingIntent;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.IntentFilter;
+import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.nfc.tech.MifareClassic;
@@ -45,9 +48,14 @@ import android.os.ServiceManager;
 import android.util.Log;
 
 import java.io.IOException;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.Executor;
 
 /**
@@ -370,6 +378,45 @@ public final class NfcAdapter {
     public static final String ACTION_REQUIRE_UNLOCK_FOR_NFC =
             "android.nfc.action.REQUIRE_UNLOCK_FOR_NFC";
 
+    /**
+     * The requested app is correctly added to the Tag intent app preference.
+     *
+     * @see #setTagIntentAppPreferenceForUser(int userId, String pkg, boolean allow)
+     * @hide
+     */
+    @SystemApi
+    public static final int TAG_INTENT_APP_PREF_RESULT_SUCCESS = 0;
+
+    /**
+     * The requested app is not installed on the device.
+     *
+     * @see #setTagIntentAppPreferenceForUser(int userId, String pkg, boolean allow)
+     * @hide
+     */
+    @SystemApi
+    public static final int TAG_INTENT_APP_PREF_RESULT_PACKAGE_NOT_FOUND = -1;
+
+    /**
+     * The NfcService is not available.
+     *
+     * @see #setTagIntentAppPreferenceForUser(int userId, String pkg, boolean allow)
+     * @hide
+     */
+    @SystemApi
+    public static final int TAG_INTENT_APP_PREF_RESULT_UNAVAILABLE = -2;
+
+    /**
+     * Possible response codes from {@link #setTagIntentAppPreferenceForUser}.
+     *
+     * @hide
+     */
+    @IntDef(prefix = { "TAG_INTENT_APP_PREF_RESULT" }, value = {
+            TAG_INTENT_APP_PREF_RESULT_SUCCESS,
+            TAG_INTENT_APP_PREF_RESULT_PACKAGE_NOT_FOUND,
+            TAG_INTENT_APP_PREF_RESULT_UNAVAILABLE})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface TagIntentAppPreferenceResult {}
+
     // Guarded by NfcAdapter.class
     static boolean sIsInitialized = false;
     static boolean sHasNfcFeature;
@@ -525,6 +572,66 @@ public final class NfcAdapter {
     }
 
     /**
+     * Helper to check if this device has FEATURE_NFC_BEAM, but without using
+     * a context.
+     * Equivalent to
+     * context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_NFC_BEAM)
+     */
+    private static boolean hasBeamFeature() {
+        IPackageManager pm = ActivityThread.getPackageManager();
+        if (pm == null) {
+            Log.e(TAG, "Cannot get package manager, assuming no Android Beam feature");
+            return false;
+        }
+        try {
+            return pm.hasSystemFeature(PackageManager.FEATURE_NFC_BEAM, 0);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Package manager query failed, assuming no Android Beam feature", e);
+            return false;
+        }
+    }
+
+    /**
+     * Helper to check if this device has FEATURE_NFC, but without using
+     * a context.
+     * Equivalent to
+     * context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_NFC)
+     */
+    private static boolean hasNfcFeature() {
+        IPackageManager pm = ActivityThread.getPackageManager();
+        if (pm == null) {
+            Log.e(TAG, "Cannot get package manager, assuming no NFC feature");
+            return false;
+        }
+        try {
+            return pm.hasSystemFeature(PackageManager.FEATURE_NFC, 0);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Package manager query failed, assuming no NFC feature", e);
+            return false;
+        }
+    }
+
+    /**
+     * Helper to check if this device is NFC HCE capable, by checking for
+     * FEATURE_NFC_HOST_CARD_EMULATION and/or FEATURE_NFC_HOST_CARD_EMULATION_NFCF,
+     * but without using a context.
+     */
+    private static boolean hasNfcHceFeature() {
+        IPackageManager pm = ActivityThread.getPackageManager();
+        if (pm == null) {
+            Log.e(TAG, "Cannot get package manager, assuming no NFC feature");
+            return false;
+        }
+        try {
+            return pm.hasSystemFeature(PackageManager.FEATURE_NFC_HOST_CARD_EMULATION, 0)
+                || pm.hasSystemFeature(PackageManager.FEATURE_NFC_HOST_CARD_EMULATION_NFCF, 0);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Package manager query failed, assuming no NFC feature", e);
+            return false;
+        }
+    }
+
+    /**
      * Return list of Secure Elements which support off host card emulation.
      *
      * @return List<String> containing secure elements on the device which supports
@@ -533,21 +640,23 @@ public final class NfcAdapter {
      * @hide
      */
     public @NonNull List<String> getSupportedOffHostSecureElements() {
-        if (mContext == null) {
-            throw new UnsupportedOperationException("You need a context on NfcAdapter to use the "
-                    + " getSupportedOffHostSecureElements APIs");
-        }
         List<String> offHostSE = new ArrayList<String>();
-        PackageManager pm = mContext.getPackageManager();
+        IPackageManager pm = ActivityThread.getPackageManager();
         if (pm == null) {
             Log.e(TAG, "Cannot get package manager, assuming no off-host CE feature");
             return offHostSE;
         }
-        if (pm.hasSystemFeature(PackageManager.FEATURE_NFC_OFF_HOST_CARD_EMULATION_UICC)) {
-            offHostSE.add("SIM");
-        }
-        if (pm.hasSystemFeature(PackageManager.FEATURE_NFC_OFF_HOST_CARD_EMULATION_ESE)) {
-            offHostSE.add("eSE");
+        try {
+            if (pm.hasSystemFeature(PackageManager.FEATURE_NFC_OFF_HOST_CARD_EMULATION_UICC, 0)) {
+                offHostSE.add("SIM");
+            }
+            if (pm.hasSystemFeature(PackageManager.FEATURE_NFC_OFF_HOST_CARD_EMULATION_ESE, 0)) {
+                offHostSE.add("eSE");
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "Package manager query failed, assuming no off-host CE feature", e);
+            offHostSE.clear();
+            return offHostSE;
         }
         return offHostSE;
     }
@@ -559,20 +668,10 @@ public final class NfcAdapter {
      */
     @UnsupportedAppUsage
     public static synchronized NfcAdapter getNfcAdapter(Context context) {
-        if (context == null) {
-            if (sNullContextNfcAdapter == null) {
-                sNullContextNfcAdapter = new NfcAdapter(null);
-            }
-            return sNullContextNfcAdapter;
-        }
         if (!sIsInitialized) {
-            PackageManager pm;
-            pm = context.getPackageManager();
-            sHasNfcFeature = pm.hasSystemFeature(PackageManager.FEATURE_NFC);
-            sHasBeamFeature = pm.hasSystemFeature(PackageManager.FEATURE_NFC_BEAM);
-            boolean hasHceFeature =
-                    pm.hasSystemFeature(PackageManager.FEATURE_NFC_HOST_CARD_EMULATION)
-                    || pm.hasSystemFeature(PackageManager.FEATURE_NFC_HOST_CARD_EMULATION_NFCF);
+            sHasNfcFeature = hasNfcFeature();
+            sHasBeamFeature = hasBeamFeature();
+            boolean hasHceFeature = hasNfcHceFeature();
             /* is this device meant to have NFC */
             if (!sHasNfcFeature && !hasHceFeature) {
                 Log.v(TAG, "this device does not have NFC support");
@@ -607,6 +706,12 @@ public final class NfcAdapter {
             }
 
             sIsInitialized = true;
+        }
+        if (context == null) {
+            if (sNullContextNfcAdapter == null) {
+                sNullContextNfcAdapter = new NfcAdapter(null);
+            }
+            return sNullContextNfcAdapter;
         }
         NfcAdapter adapter = sNfcAdapters.get(context);
         if (adapter == null) {
@@ -2348,5 +2453,134 @@ public final class NfcAdapter {
     public void unregisterControllerAlwaysOnListener(
             @NonNull ControllerAlwaysOnListener listener) {
         mControllerAlwaysOnListener.unregister(listener);
+    }
+
+
+    /**
+     * Sets whether we dispatch NFC Tag intents to the package.
+     *
+     * <p>{@link #ACTION_NDEF_DISCOVERED}, {@link #ACTION_TECH_DISCOVERED} or
+     * {@link #ACTION_TAG_DISCOVERED} will not be dispatched to an Activity if its package is
+     * disallowed.
+     * <p>An app is added to the preference list with the allowed flag set to {@code true}
+     * when a Tag intent is dispatched to the package for the first time. This API is called
+     * by settings to note that the user wants to change this default preference.
+     *
+     * @param userId the user to whom this package name will belong to
+     * @param pkg the full name (i.e. com.google.android.tag) of the package that will be added to
+     * the preference list
+     * @param allow {@code true} to allow dispatching Tag intents to the package's activity,
+     * {@code false} otherwise
+     * @return the {@link #TagIntentAppPreferenceResult} value
+     * @throws UnsupportedOperationException if {@link isTagIntentAppPreferenceSupported} returns
+     * {@code false}
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS)
+    @TagIntentAppPreferenceResult
+    public int setTagIntentAppPreferenceForUser(@UserIdInt int userId,
+                @NonNull String pkg, boolean allow) {
+        Objects.requireNonNull(pkg, "pkg cannot be null");
+        if (!isTagIntentAppPreferenceSupported()) {
+            Log.e(TAG, "TagIntentAppPreference is not supported");
+            throw new UnsupportedOperationException();
+        }
+        try {
+            return sService.setTagIntentAppPreferenceForUser(userId, pkg, allow);
+        } catch (RemoteException e) {
+            attemptDeadServiceRecovery(e);
+            // Try one more time
+            if (sService == null) {
+                Log.e(TAG, "Failed to recover NFC Service.");
+            }
+            try {
+                return sService.setTagIntentAppPreferenceForUser(userId, pkg, allow);
+            } catch (RemoteException ee) {
+                Log.e(TAG, "Failed to recover NFC Service.");
+            }
+            return TAG_INTENT_APP_PREF_RESULT_UNAVAILABLE;
+        }
+    }
+
+
+    /**
+     * Get the Tag dispatch preference list of the UserId.
+     *
+     * <p>This returns a mapping of package names for this user id to whether we dispatch Tag
+     * intents to the package. {@link #ACTION_NDEF_DISCOVERED}, {@link #ACTION_TECH_DISCOVERED} or
+    *  {@link #ACTION_TAG_DISCOVERED} will not be dispatched to an Activity if its package is
+    *  disallowed.
+     *
+     * @param userId the user to whom this preference list will belong to
+     * @return a map of the UserId which indicates the mapping from package name to
+     * boolean(allow status), otherwise return an empty map
+     * @throws UnsupportedOperationException if {@link isTagIntentAppPreferenceSupported} returns
+     * {@code false}
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS)
+    @NonNull
+    public Map<String, Boolean> getTagIntentAppPreferenceForUser(@UserIdInt int userId) {
+        if (!isTagIntentAppPreferenceSupported()) {
+            Log.e(TAG, "TagIntentAppPreference is not supported");
+            throw new UnsupportedOperationException();
+        }
+        try {
+            Map<String, Boolean> result = (Map<String, Boolean>) sService
+                     .getTagIntentAppPreferenceForUser(userId);
+            return result;
+        } catch (RemoteException e) {
+            attemptDeadServiceRecovery(e);
+            // Try one more time
+            if (sService == null) {
+                Log.e(TAG, "Failed to recover NFC Service.");
+                return Collections.emptyMap();
+            }
+            try {
+                Map<String, Boolean> result = (Map<String, Boolean>) sService
+                        .getTagIntentAppPreferenceForUser(userId);
+                return result;
+            } catch (RemoteException ee) {
+                Log.e(TAG, "Failed to recover NFC Service.");
+            }
+            return Collections.emptyMap();
+        }
+    }
+
+    /**
+     * Checks if the device supports Tag application preference.
+     *
+     * @return {@code true} if the device supports Tag application preference, {@code false}
+     * otherwise
+     * @throws UnsupportedOperationException if FEATURE_NFC is unavailable
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS)
+    public boolean isTagIntentAppPreferenceSupported() {
+        if (!sHasNfcFeature) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            return sService.isTagIntentAppPreferenceSupported();
+        } catch (RemoteException e) {
+            attemptDeadServiceRecovery(e);
+            // Try one more time
+            if (sService == null) {
+                Log.e(TAG, "Failed to recover NFC Service.");
+                return false;
+            }
+            try {
+                return sService.isTagIntentAppPreferenceSupported();
+            } catch (RemoteException ee) {
+                Log.e(TAG, "Failed to recover NFC Service.");
+            }
+            return false;
+        }
     }
 }

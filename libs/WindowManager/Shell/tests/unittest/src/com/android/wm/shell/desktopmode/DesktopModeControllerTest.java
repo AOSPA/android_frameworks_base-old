@@ -16,18 +16,20 @@
 
 package com.android.wm.shell.desktopmode;
 
-import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
-import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOW_CONFIG_BOUNDS;
 import static android.view.WindowManager.TRANSIT_CHANGE;
+import static android.view.WindowManager.TRANSIT_CLOSE;
 import static android.view.WindowManager.TRANSIT_OPEN;
 import static android.view.WindowManager.TRANSIT_TO_FRONT;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_REORDER;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSession;
+import static com.android.wm.shell.desktopmode.DesktopTestHelpers.createFreeformTask;
+import static com.android.wm.shell.desktopmode.DesktopTestHelpers.createFullscreenTask;
+import static com.android.wm.shell.desktopmode.DesktopTestHelpers.createHomeTask;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -47,7 +49,6 @@ import android.os.IBinder;
 import android.testing.AndroidTestingRunner;
 import android.window.DisplayAreaInfo;
 import android.window.TransitionRequestInfo;
-import android.window.WindowContainerToken;
 import android.window.WindowContainerTransaction;
 import android.window.WindowContainerTransaction.Change;
 import android.window.WindowContainerTransaction.HierarchyOp;
@@ -58,7 +59,6 @@ import com.android.dx.mockito.inline.extended.StaticMockitoSession;
 import com.android.wm.shell.RootTaskDisplayAreaOrganizer;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.ShellTestCase;
-import com.android.wm.shell.TestRunningTaskInfoBuilder;
 import com.android.wm.shell.TestShellExecutor;
 import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.sysui.ShellController;
@@ -279,7 +279,7 @@ public class DesktopModeControllerTest extends ShellTestCase {
     }
 
     @Test
-    public void testShowDesktopApps_appsAlreadyVisible_doesNothing() {
+    public void testShowDesktopApps_appsAlreadyVisible_bringsToFront() {
         final RunningTaskInfo task1 = createFreeformTask();
         mDesktopModeTaskRepository.addActiveTask(task1.taskId);
         mDesktopModeTaskRepository.addOrMoveFreeformTaskToTop(task1.taskId);
@@ -294,8 +294,17 @@ public class DesktopModeControllerTest extends ShellTestCase {
         mController.showDesktopApps();
 
         final WindowContainerTransaction wct = getBringAppsToFrontTransaction();
-        // No reordering needed.
-        assertThat(wct.getHierarchyOps()).isEmpty();
+        // Check wct has reorder calls
+        assertThat(wct.getHierarchyOps()).hasSize(2);
+        // Task 1 appeared first, must be first reorder to top.
+        HierarchyOp op1 = wct.getHierarchyOps().get(0);
+        assertThat(op1.getType()).isEqualTo(HIERARCHY_OP_TYPE_REORDER);
+        assertThat(op1.getContainer()).isEqualTo(task1.token.asBinder());
+
+        // Task 2 appeared last, must be last reorder to top.
+        HierarchyOp op2 = wct.getHierarchyOps().get(1);
+        assertThat(op2.getType()).isEqualTo(HIERARCHY_OP_TYPE_REORDER);
+        assertThat(op2.getContainer()).isEqualTo(task2.token.asBinder());
     }
 
     @Test
@@ -325,6 +334,41 @@ public class DesktopModeControllerTest extends ShellTestCase {
     }
 
     @Test
+    public void testGetVisibleTaskCount_noTasks_returnsZero() {
+        assertThat(mController.getVisibleTaskCount()).isEqualTo(0);
+    }
+
+    @Test
+    public void testGetVisibleTaskCount_twoTasks_bothVisible_returnsTwo() {
+        RunningTaskInfo task1 = createFreeformTask();
+        mDesktopModeTaskRepository.addActiveTask(task1.taskId);
+        mDesktopModeTaskRepository.addOrMoveFreeformTaskToTop(task1.taskId);
+        mDesktopModeTaskRepository.updateVisibleFreeformTasks(task1.taskId, true /* visible */);
+
+        RunningTaskInfo task2 = createFreeformTask();
+        mDesktopModeTaskRepository.addActiveTask(task2.taskId);
+        mDesktopModeTaskRepository.addOrMoveFreeformTaskToTop(task2.taskId);
+        mDesktopModeTaskRepository.updateVisibleFreeformTasks(task2.taskId, true /* visible */);
+
+        assertThat(mController.getVisibleTaskCount()).isEqualTo(2);
+    }
+
+    @Test
+    public void testGetVisibleTaskCount_twoTasks_oneVisible_returnsOne() {
+        RunningTaskInfo task1 = createFreeformTask();
+        mDesktopModeTaskRepository.addActiveTask(task1.taskId);
+        mDesktopModeTaskRepository.addOrMoveFreeformTaskToTop(task1.taskId);
+        mDesktopModeTaskRepository.updateVisibleFreeformTasks(task1.taskId, true /* visible */);
+
+        RunningTaskInfo task2 = createFreeformTask();
+        mDesktopModeTaskRepository.addActiveTask(task2.taskId);
+        mDesktopModeTaskRepository.addOrMoveFreeformTaskToTop(task2.taskId);
+        mDesktopModeTaskRepository.updateVisibleFreeformTasks(task2.taskId, false /* visible */);
+
+        assertThat(mController.getVisibleTaskCount()).isEqualTo(1);
+    }
+
+    @Test
     public void testHandleTransitionRequest_desktopModeNotActive_returnsNull() {
         when(DesktopModeStatus.isActive(any())).thenReturn(false);
         WindowContainerTransaction wct = mController.handleRequest(
@@ -334,10 +378,10 @@ public class DesktopModeControllerTest extends ShellTestCase {
     }
 
     @Test
-    public void testHandleTransitionRequest_notTransitOpen_returnsNull() {
+    public void testHandleTransitionRequest_unsupportedTransit_returnsNull() {
         WindowContainerTransaction wct = mController.handleRequest(
                 new Binder(),
-                new TransitionRequestInfo(TRANSIT_TO_FRONT, null /* trigger */, null /* remote */));
+                new TransitionRequestInfo(TRANSIT_CLOSE, null /* trigger */, null /* remote */));
         assertThat(wct).isNull();
     }
 
@@ -352,13 +396,24 @@ public class DesktopModeControllerTest extends ShellTestCase {
     }
 
     @Test
-    public void testHandleTransitionRequest_returnsWct() {
+    public void testHandleTransitionRequest_taskOpen_returnsWct() {
         RunningTaskInfo trigger = new RunningTaskInfo();
-        trigger.token = new MockToken().mToken;
+        trigger.token = new MockToken().token();
         trigger.configuration.windowConfiguration.setWindowingMode(WINDOWING_MODE_FREEFORM);
         WindowContainerTransaction wct = mController.handleRequest(
                 mock(IBinder.class),
                 new TransitionRequestInfo(TRANSIT_OPEN, trigger, null /* remote */));
+        assertThat(wct).isNotNull();
+    }
+
+    @Test
+    public void testHandleTransitionRequest_taskToFront_returnsWct() {
+        RunningTaskInfo trigger = new RunningTaskInfo();
+        trigger.token = new MockToken().token();
+        trigger.configuration.windowConfiguration.setWindowingMode(WINDOWING_MODE_FREEFORM);
+        WindowContainerTransaction wct = mController.handleRequest(
+                mock(IBinder.class),
+                new TransitionRequestInfo(TRANSIT_TO_FRONT, trigger, null /* remote */));
         assertThat(wct).isNotNull();
     }
 
@@ -369,38 +424,11 @@ public class DesktopModeControllerTest extends ShellTestCase {
     }
 
     private DisplayAreaInfo createMockDisplayArea() {
-        DisplayAreaInfo displayAreaInfo = new DisplayAreaInfo(new MockToken().mToken,
+        DisplayAreaInfo displayAreaInfo = new DisplayAreaInfo(new MockToken().token(),
                 mContext.getDisplayId(), 0);
         when(mRootTaskDisplayAreaOrganizer.getDisplayAreaInfo(mContext.getDisplayId()))
                 .thenReturn(displayAreaInfo);
         return displayAreaInfo;
-    }
-
-    private RunningTaskInfo createFreeformTask() {
-        return new TestRunningTaskInfoBuilder()
-                .setToken(new MockToken().token())
-                .setActivityType(ACTIVITY_TYPE_STANDARD)
-                .setWindowingMode(WINDOWING_MODE_FREEFORM)
-                .setLastActiveTime(100)
-                .build();
-    }
-
-    private RunningTaskInfo createFullscreenTask() {
-        return new TestRunningTaskInfoBuilder()
-                .setToken(new MockToken().token())
-                .setActivityType(ACTIVITY_TYPE_STANDARD)
-                .setWindowingMode(WINDOWING_MODE_FULLSCREEN)
-                .setLastActiveTime(100)
-                .build();
-    }
-
-    private RunningTaskInfo createHomeTask() {
-        return new TestRunningTaskInfoBuilder()
-                .setToken(new MockToken().token())
-                .setActivityType(ACTIVITY_TYPE_HOME)
-                .setWindowingMode(WINDOWING_MODE_FULLSCREEN)
-                .setLastActiveTime(100)
-                .build();
     }
 
     private WindowContainerTransaction getDesktopModeSwitchTransaction() {
@@ -430,18 +458,4 @@ public class DesktopModeControllerTest extends ShellTestCase {
         assertThat(change.getConfiguration().windowConfiguration.getBounds().isEmpty()).isTrue();
     }
 
-    private static class MockToken {
-        private final WindowContainerToken mToken;
-        private final IBinder mBinder;
-
-        MockToken() {
-            mToken = mock(WindowContainerToken.class);
-            mBinder = mock(IBinder.class);
-            when(mToken.asBinder()).thenReturn(mBinder);
-        }
-
-        WindowContainerToken token() {
-            return mToken;
-        }
-    }
 }

@@ -18,6 +18,8 @@ package com.android.systemui.statusbar.phone;
 
 import static android.app.StatusBarManager.SESSION_KEYGUARD;
 
+import static com.android.systemui.keyguard.WakefulnessLifecycle.UNKNOWN_LAST_WAKE_TIME;
+
 import android.annotation.IntDef;
 import android.content.res.Resources;
 import android.hardware.biometrics.BiometricFaceConstants;
@@ -27,7 +29,6 @@ import android.hardware.fingerprint.FingerprintManager;
 import android.metrics.LogMaker;
 import android.os.Handler;
 import android.os.PowerManager;
-import android.os.SystemClock;
 import android.os.Trace;
 
 import androidx.annotation.Nullable;
@@ -59,6 +60,7 @@ import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
+import com.android.systemui.util.time.SystemClock;
 
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
@@ -75,6 +77,7 @@ import javax.inject.Inject;
  */
 @SysUISingleton
 public class BiometricUnlockController extends KeyguardUpdateMonitorCallback implements Dumpable {
+    private static final long RECENT_POWER_BUTTON_PRESS_THRESHOLD_MS = 400L;
     private static final long BIOMETRIC_WAKELOCK_TIMEOUT_MS = 15 * 1000;
     private static final String BIOMETRIC_WAKE_LOCK_NAME = "wake-and-unlock:wakelock";
     private static final UiEventLogger UI_EVENT_LOGGER = new UiEventLoggerImpl();
@@ -157,7 +160,6 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback imp
     private KeyguardViewController mKeyguardViewController;
     private DozeScrimController mDozeScrimController;
     private KeyguardViewMediator mKeyguardViewMediator;
-    private ScrimController mScrimController;
     private PendingAuthenticated mPendingAuthenticated = null;
     private boolean mHasScreenTurnedOnSinceAuthenticating;
     private boolean mFadedAwayAfterWakeAndUnlock;
@@ -166,9 +168,11 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback imp
     private final MetricsLogger mMetricsLogger;
     private final AuthController mAuthController;
     private final StatusBarStateController mStatusBarStateController;
+    private final WakefulnessLifecycle mWakefulnessLifecycle;
     private final LatencyTracker mLatencyTracker;
     private final VibratorHelper mVibratorHelper;
     private final BiometricUnlockLogger mLogger;
+    private final SystemClock mSystemClock;
 
     private long mLastFpFailureUptimeMillis;
     private int mNumConsecutiveFpFailures;
@@ -256,7 +260,7 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback imp
     @Inject
     public BiometricUnlockController(
             DozeScrimController dozeScrimController,
-            KeyguardViewMediator keyguardViewMediator, ScrimController scrimController,
+            KeyguardViewMediator keyguardViewMediator,
             NotificationShadeWindowController notificationShadeWindowController,
             KeyguardStateController keyguardStateController, Handler handler,
             KeyguardUpdateMonitor keyguardUpdateMonitor,
@@ -273,19 +277,21 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback imp
             SessionTracker sessionTracker,
             LatencyTracker latencyTracker,
             ScreenOffAnimationController screenOffAnimationController,
-            VibratorHelper vibrator) {
+            VibratorHelper vibrator,
+            SystemClock systemClock
+    ) {
         mPowerManager = powerManager;
         mUpdateMonitor = keyguardUpdateMonitor;
         mUpdateMonitor.registerCallback(this);
         mMediaManager = notificationMediaManager;
         mLatencyTracker = latencyTracker;
-        wakefulnessLifecycle.addObserver(mWakefulnessObserver);
+        mWakefulnessLifecycle = wakefulnessLifecycle;
+        mWakefulnessLifecycle.addObserver(mWakefulnessObserver);
         screenLifecycle.addObserver(mScreenObserver);
 
         mNotificationShadeWindowController = notificationShadeWindowController;
         mDozeScrimController = dozeScrimController;
         mKeyguardViewMediator = keyguardViewMediator;
-        mScrimController = scrimController;
         mKeyguardStateController = keyguardStateController;
         mHandler = handler;
         mConsecutiveFpFailureThreshold = resources.getInteger(
@@ -299,6 +305,7 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback imp
         mScreenOffAnimationController = screenOffAnimationController;
         mVibratorHelper = vibrator;
         mLogger = biometricUnlockLogger;
+        mSystemClock = systemClock;
 
         dumpManager.registerDumpable(getClass().getName(), this);
     }
@@ -366,12 +373,6 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback imp
         Trace.endSection();
     }
 
-    private boolean pulsingOrAod() {
-        final ScrimState scrimState = mScrimController.getState();
-        return scrimState == ScrimState.AOD
-                || scrimState == ScrimState.PULSING;
-    }
-
     @Override
     public void onBiometricAuthenticated(int userId, BiometricSourceType biometricSourceType,
             boolean isStrongBiometric) {
@@ -416,7 +417,7 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback imp
         boolean wasDeviceInteractive = mUpdateMonitor.isDeviceInteractive();
         mMode = mode;
         mHasScreenTurnedOnSinceAuthenticating = false;
-        if (mMode == MODE_WAKE_AND_UNLOCK_PULSING && pulsingOrAod()) {
+        if (mMode == MODE_WAKE_AND_UNLOCK_PULSING) {
             // If we are waking the device up while we are pulsing the clock and the
             // notifications would light up first, creating an unpleasant animation.
             // Defer changing the screen brightness by forcing doze brightness on our window
@@ -428,8 +429,11 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback imp
         Runnable wakeUp = ()-> {
             if (!wasDeviceInteractive || mUpdateMonitor.isDreaming()) {
                 mLogger.i("bio wakelock: Authenticated, waking up...");
-                mPowerManager.wakeUp(SystemClock.uptimeMillis(), PowerManager.WAKE_REASON_GESTURE,
-                        "android.policy:BIOMETRIC");
+                mPowerManager.wakeUp(
+                        mSystemClock.uptimeMillis(),
+                        PowerManager.WAKE_REASON_BIOMETRIC,
+                        "android.policy:BIOMETRIC"
+                );
             }
             Trace.beginSection("release wake-and-unlock");
             releaseBiometricWakeLock();
@@ -660,7 +664,7 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback imp
             startWakeAndUnlock(MODE_ONLY_WAKE);
         } else if (biometricSourceType == BiometricSourceType.FINGERPRINT
                 && mUpdateMonitor.isUdfpsSupported()) {
-            long currUptimeMillis = SystemClock.uptimeMillis();
+            long currUptimeMillis = mSystemClock.uptimeMillis();
             if (currUptimeMillis - mLastFpFailureUptimeMillis < mConsecutiveFpFailureThreshold) {
                 mNumConsecutiveFpFailures += 1;
             } else {
@@ -708,10 +712,24 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback imp
         cleanup();
     }
 
-    //these haptics are for device-entry only
+    // these haptics are for device-entry only
     private void vibrateSuccess(BiometricSourceType type) {
+        if (mAuthController.isSfpsEnrolled(KeyguardUpdateMonitor.getCurrentUser())
+                && lastWakeupFromPowerButtonWithinHapticThreshold()) {
+            mLogger.d("Skip auth success haptic. Power button was recently pressed.");
+            return;
+        }
         mVibratorHelper.vibrateAuthSuccess(
                 getClass().getSimpleName() + ", type =" + type + "device-entry::success");
+    }
+
+    private boolean lastWakeupFromPowerButtonWithinHapticThreshold() {
+        final boolean lastWakeupFromPowerButton = mWakefulnessLifecycle.getLastWakeReason()
+                == PowerManager.WAKE_REASON_POWER_BUTTON;
+        return lastWakeupFromPowerButton
+                && mWakefulnessLifecycle.getLastWakeTime() != UNKNOWN_LAST_WAKE_TIME
+                && mSystemClock.uptimeMillis() - mWakefulnessLifecycle.getLastWakeTime()
+                < RECENT_POWER_BUTTON_PRESS_THRESHOLD_MS;
     }
 
     private void vibrateError(BiometricSourceType type) {
@@ -806,7 +824,7 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback imp
         if (mUpdateMonitor.isUdfpsSupported()) {
             pw.print("   mNumConsecutiveFpFailures="); pw.println(mNumConsecutiveFpFailures);
             pw.print("   time since last failure=");
-            pw.println(SystemClock.uptimeMillis() - mLastFpFailureUptimeMillis);
+            pw.println(mSystemClock.uptimeMillis() - mLastFpFailureUptimeMillis);
         }
     }
 

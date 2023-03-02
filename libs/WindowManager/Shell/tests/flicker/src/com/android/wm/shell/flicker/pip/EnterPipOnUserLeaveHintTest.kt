@@ -20,11 +20,7 @@ import android.platform.test.annotations.Presubmit
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerBuilder
 import com.android.server.wm.flicker.FlickerTest
-import com.android.server.wm.flicker.helpers.setRotation
-import com.android.server.wm.flicker.helpers.wakeUpAndGoToHomeScreen
 import com.android.server.wm.flicker.junit.FlickerParametersRunnerFactory
-import com.android.server.wm.flicker.rules.RemoveAllTasksButHomeRule
-import com.android.server.wm.traces.common.service.PlatformConsts
 import org.junit.Assume
 import org.junit.FixMethodOrder
 import org.junit.Test
@@ -56,24 +52,33 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-class EnterPipOnUserLeaveHintTest(flicker: FlickerTest) : EnterPipTest(flicker) {
+open class EnterPipOnUserLeaveHintTest(flicker: FlickerTest) : EnterPipTest(flicker) {
     /** Defines the transition used to run the test */
     override val transition: FlickerBuilder.() -> Unit
         get() = {
             setup {
-                RemoveAllTasksButHomeRule.removeAllTasksButHome()
-                device.wakeUpAndGoToHomeScreen()
-                device.wakeUpAndGoToHomeScreen()
                 pipApp.launchViaIntent(wmHelper)
                 pipApp.enableEnterPipOnUserLeaveHint()
             }
             teardown {
-                setRotation(PlatformConsts.Rotation.ROTATION_0)
-                RemoveAllTasksButHomeRule.removeAllTasksButHome()
+                // close gracefully so that onActivityUnpinned() can be called before force exit
+                pipApp.closePipWindow(wmHelper)
                 pipApp.exit(wmHelper)
             }
             transitions { tapl.goHome() }
         }
+
+    @Presubmit
+    @Test
+    override fun pipAppWindowAlwaysVisible() {
+        // In gestural nav the pip will first move behind home and then above home. The visual
+        // appearance visible->invisible->visible is asserted by pipAppLayerAlwaysVisible().
+        // But the internal states of activity don't need to follow that, such as a temporary
+        // visibility state can be changed quickly outside a transaction so the test doesn't
+        // detect that. Hence, skip the case to avoid restricting the internal implementation.
+        Assume.assumeFalse(flicker.scenario.isGesturalNavigation)
+        super.pipAppWindowAlwaysVisible()
+    }
 
     @Presubmit
     @Test

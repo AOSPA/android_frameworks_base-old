@@ -38,13 +38,14 @@ import com.android.systemui.dreams.complication.ComplicationHostViewController;
 import com.android.systemui.dreams.dagger.DreamOverlayComponent;
 import com.android.systemui.dreams.dagger.DreamOverlayModule;
 import com.android.systemui.keyguard.domain.interactor.PrimaryBouncerCallbackInteractor;
+import com.android.systemui.keyguard.domain.interactor.PrimaryBouncerCallbackInteractor.PrimaryBouncerExpansionCallback;
 import com.android.systemui.statusbar.BlurUtils;
 import com.android.systemui.statusbar.phone.KeyguardBouncer;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
 import com.android.systemui.util.ViewController;
+import com.android.systemui.util.concurrency.DelayableExecutor;
 
 import java.util.Arrays;
-import java.util.concurrent.Executor;
 
 import javax.inject.Inject;
 import javax.inject.Named;
@@ -85,8 +86,9 @@ public class DreamOverlayContainerViewController extends ViewController<DreamOve
 
     private boolean mBouncerAnimating;
 
-    private final KeyguardBouncer.PrimaryBouncerExpansionCallback mBouncerExpansionCallback =
-            new KeyguardBouncer.PrimaryBouncerExpansionCallback() {
+    private final PrimaryBouncerExpansionCallback
+            mBouncerExpansionCallback =
+            new PrimaryBouncerExpansionCallback() {
 
                 @Override
                 public void onStartingToShow() {
@@ -170,6 +172,7 @@ public class DreamOverlayContainerViewController extends ViewController<DreamOve
     protected void onInit() {
         mStatusBarViewController.init();
         mComplicationHostViewController.init();
+        mDreamOverlayAnimationsController.init(mView);
     }
 
     @Override
@@ -184,7 +187,7 @@ public class DreamOverlayContainerViewController extends ViewController<DreamOve
 
         // Start dream entry animations. Skip animations for low light clock.
         if (!mStateController.isLowLightActive()) {
-            mDreamOverlayAnimationsController.startEntryAnimations(mView);
+            mDreamOverlayAnimationsController.startEntryAnimations();
         }
     }
 
@@ -261,10 +264,8 @@ public class DreamOverlayContainerViewController extends ViewController<DreamOve
      * @param onAnimationEnd Callback to trigger once animations are finished.
      * @param callbackExecutor Executor to execute the callback on.
      */
-    public void wakeUp(@NonNull Runnable onAnimationEnd, @NonNull Executor callbackExecutor) {
-        mDreamOverlayAnimationsController.startExitAnimations(mView, () -> {
-            callbackExecutor.execute(onAnimationEnd);
-            return null;
-        });
+    public void wakeUp(@NonNull Runnable onAnimationEnd,
+            @NonNull DelayableExecutor callbackExecutor) {
+        mDreamOverlayAnimationsController.wakeUp(onAnimationEnd, callbackExecutor);
     }
 }

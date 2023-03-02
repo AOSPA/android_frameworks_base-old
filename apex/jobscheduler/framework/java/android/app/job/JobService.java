@@ -27,6 +27,7 @@ import android.app.Service;
 import android.compat.Compatibility;
 import android.content.Intent;
 import android.os.IBinder;
+import android.util.Log;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -72,16 +73,12 @@ public abstract class JobService extends Service {
      * Detach the notification supplied to
      * {@link #setNotification(JobParameters, int, Notification, int)} when the job ends.
      * The notification will remain shown even after JobScheduler stops the job.
-     *
-     * @hide
      */
     public static final int JOB_END_NOTIFICATION_POLICY_DETACH = 0;
     /**
      * Cancel and remove the notification supplied to
      * {@link #setNotification(JobParameters, int, Notification, int)} when the job ends.
      * The notification will be removed from the notification shade.
-     *
-     * @hide
      */
     public static final int JOB_END_NOTIFICATION_POLICY_REMOVE = 1;
 
@@ -130,6 +127,11 @@ public abstract class JobService extends Service {
                     } else {
                         return JobService.this.getTransferredUploadBytes(params, item);
                     }
+                }
+
+                @Override
+                public void onNetworkChanged(@NonNull JobParameters params) {
+                    JobService.this.onNetworkChanged(params);
                 }
             };
         }
@@ -232,16 +234,29 @@ public abstract class JobService extends Service {
     public abstract boolean onStopJob(JobParameters params);
 
     /**
-     * Update how much data this job will transfer. This method can
-     * be called multiple times within the first 30 seconds after
-     * {@link #onStartJob(JobParameters)} has been called. Only
-     * one call will be heeded after that time has passed.
+     * This method is called that for a job that has a network constraint when the network
+     * to be used by the job changes. The new network object will be available via
+     * {@link JobParameters#getNetwork()}. Any network that results in this method call will
+     * match the job's requested network constraints.
      *
-     * This method (or an overload) must be called within the first
-     * 30 seconds for a data transfer job if a payload size estimate
-     * was not provided at the time of scheduling.
+     * <p>
+     * For example, if a device is on a metered mobile network and then connects to an
+     * unmetered WiFi network, and the job has indicated that both networks satisfy its
+     * network constraint, then this method will be called to notify the job of the new
+     * unmetered WiFi network.
      *
-     * @hide
+     * @param params The parameters identifying this job, similar to what was supplied to the job in
+     *               the {@link #onStartJob(JobParameters)} callback, but with an updated network.
+     * @see JobInfo.Builder#setRequiredNetwork(android.net.NetworkRequest)
+     * @see JobInfo.Builder#setRequiredNetworkType(int)
+     */
+    public void onNetworkChanged(@NonNull JobParameters params) {
+        Log.w(TAG, "onNetworkChanged() not implemented. Must override in a subclass.");
+    }
+
+    /**
+     * Update the amount of data this job is estimated to transfer after the job has started.
+     *
      * @see JobInfo.Builder#setEstimatedNetworkBytes(long, long)
      */
     public final void updateEstimatedNetworkBytes(@NonNull JobParameters params,
@@ -250,16 +265,9 @@ public abstract class JobService extends Service {
     }
 
     /**
-     * Update how much data will transfer for the JobWorkItem. This
-     * method can be called multiple times within the first 30 seconds
-     * after {@link #onStartJob(JobParameters)} has been called.
-     * Only one call will be heeded after that time has passed.
+     * Update the amount of data this JobWorkItem is estimated to transfer after the job has
+     * started.
      *
-     * This method (or an overload) must be called within the first
-     * 30 seconds for a data transfer job if a payload size estimate
-     * was not provided at the time of scheduling.
-     *
-     * @hide
      * @see JobInfo.Builder#setEstimatedNetworkBytes(long, long)
      */
     public final void updateEstimatedNetworkBytes(@NonNull JobParameters params,
@@ -270,7 +278,6 @@ public abstract class JobService extends Service {
 
     /**
      * Tell JobScheduler how much data has successfully been transferred for the data transfer job.
-     * @hide
      */
     public final void updateTransferredNetworkBytes(@NonNull JobParameters params,
             @BytesLong long transferredDownloadBytes, @BytesLong long transferredUploadBytes) {
@@ -281,7 +288,6 @@ public abstract class JobService extends Service {
     /**
      * Tell JobScheduler how much data has been transferred for the data transfer
      * {@link JobWorkItem}.
-     * @hide
      */
     public final void updateTransferredNetworkBytes(@NonNull JobParameters params,
             @NonNull JobWorkItem item,
@@ -400,9 +406,9 @@ public abstract class JobService extends Service {
 
     /**
      * Provide JobScheduler with a notification to post and tie to this job's lifecycle.
-     * This is required for all user-initiated jobs
-     * (scheduled via {link JobInfo.Builder#setUserInitiated(boolean)}) and optional for
-     * other jobs. If the app does not call this method for a required notification within
+     * This is only required for those user-initiated jobs which return {@code true} via
+     * {@link JobParameters#isUserInitiatedJob()}.
+     * If the app does not call this method for a required notification within
      * 10 seconds after {@link #onStartJob(JobParameters)} is called,
      * the system will trigger an ANR and stop this job.
      *
@@ -416,6 +422,11 @@ public abstract class JobService extends Service {
      * JobScheduler will not remember this notification after the job has finished running,
      * so apps must call this every time the job is started (if required or desired).
      *
+     * <p>
+     * If separate jobs use the same notification ID with this API, the most recently provided
+     * notification will be shown to the user, and the
+     * {@code jobEndNotificationPolicy} of the last job to stop will be applied.
+     *
      * @param params                   The parameters identifying this job, as supplied to
      *                                 the job in the {@link #onStartJob(JobParameters)} callback.
      * @param notificationId           The ID for this notification, as per
@@ -423,7 +434,6 @@ public abstract class JobService extends Service {
      *                                 Notification)}.
      * @param notification             The notification to be displayed.
      * @param jobEndNotificationPolicy The policy to apply to the notification when the job stops.
-     * @hide
      */
     public final void setNotification(@NonNull JobParameters params, int notificationId,
             @NonNull Notification notification,

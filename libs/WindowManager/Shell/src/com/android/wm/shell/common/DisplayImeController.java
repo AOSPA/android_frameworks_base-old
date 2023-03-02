@@ -16,6 +16,12 @@
 
 package com.android.wm.shell.common;
 
+import static android.view.EventLogTags.IMF_IME_REMOTE_ANIM_CANCEL;
+import static android.view.EventLogTags.IMF_IME_REMOTE_ANIM_END;
+import static android.view.EventLogTags.IMF_IME_REMOTE_ANIM_START;
+import static android.view.inputmethod.ImeTracker.DEBUG_IME_VISIBILITY;
+import static android.view.inputmethod.ImeTracker.TOKEN_NONE;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
@@ -26,6 +32,7 @@ import android.content.res.Configuration;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.RemoteException;
+import android.util.EventLog;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.view.IDisplayWindowInsetsController;
@@ -47,6 +54,7 @@ import androidx.annotation.VisibleForTesting;
 import com.android.wm.shell.sysui.ShellInit;
 
 import java.util.ArrayList;
+import java.util.Objects;
 import java.util.concurrent.Executor;
 
 /**
@@ -261,7 +269,7 @@ public class DisplayImeController implements DisplayController.OnDisplaysChanged
                     if (activeControl == null) {
                         continue;
                     }
-                    if (activeControl.getType() == InsetsState.ITYPE_IME) {
+                    if (activeControl.getType() == WindowInsets.Type.ime()) {
                         imeSourceControl = activeControl;
                     }
                 }
@@ -274,29 +282,30 @@ public class DisplayImeController implements DisplayController.OnDisplaysChanged
             }
 
             if (hasImeSourceControl) {
-                final Point lastSurfacePosition = mImeSourceControl != null
-                        ? mImeSourceControl.getSurfacePosition() : null;
-                final boolean positionChanged =
-                        !imeSourceControl.getSurfacePosition().equals(lastSurfacePosition);
-                final boolean leashChanged =
-                        !haveSameLeash(mImeSourceControl, imeSourceControl);
                 if (mAnimation != null) {
+                    final Point lastSurfacePosition = hadImeSourceControl
+                            ? mImeSourceControl.getSurfacePosition() : null;
+                    final boolean positionChanged =
+                            !imeSourceControl.getSurfacePosition().equals(lastSurfacePosition);
                     if (positionChanged) {
                         startAnimation(mImeShowing, true /* forceRestart */, null /* statsToken */);
                     }
                 } else {
-                    if (leashChanged) {
+                    if (!haveSameLeash(mImeSourceControl, imeSourceControl)) {
                         applyVisibilityToLeash(imeSourceControl);
                     }
                     if (!mImeShowing) {
                         removeImeSurface();
                     }
-                    if (mImeSourceControl != null) {
-                        mImeSourceControl.release(SurfaceControl::release);
-                    }
                 }
-                mImeSourceControl = imeSourceControl;
+            } else if (mAnimation != null) {
+                mAnimation.cancel();
             }
+
+            if (hadImeSourceControl && mImeSourceControl != imeSourceControl) {
+                mImeSourceControl.release(SurfaceControl::release);
+            }
+            mImeSourceControl = imeSourceControl;
         }
 
         private void applyVisibilityToLeash(InsetsSourceControl imeSourceControl) {
@@ -469,6 +478,15 @@ public class DisplayImeController implements DisplayController.OnDisplaysChanged
                                 ImeTracker.PHASE_WM_ANIMATION_RUNNING);
                         t.show(mImeSourceControl.getLeash());
                     }
+                    if (DEBUG_IME_VISIBILITY) {
+                        EventLog.writeEvent(IMF_IME_REMOTE_ANIM_START,
+                                statsToken != null ? statsToken.getTag() : TOKEN_NONE,
+                                mDisplayId, mAnimationDirection, alpha, startY , endY,
+                                Objects.toString(mImeSourceControl.getLeash()),
+                                Objects.toString(mImeSourceControl.getInsetsHint()),
+                                Objects.toString(mImeSourceControl.getSurfacePosition()),
+                                Objects.toString(mImeFrame));
+                    }
                     t.apply();
                     mTransactionPool.release(t);
                 }
@@ -476,6 +494,11 @@ public class DisplayImeController implements DisplayController.OnDisplaysChanged
                 @Override
                 public void onAnimationCancel(Animator animation) {
                     mCancelled = true;
+                    if (DEBUG_IME_VISIBILITY) {
+                        EventLog.writeEvent(IMF_IME_REMOTE_ANIM_CANCEL,
+                                statsToken != null ? statsToken.getTag() : TOKEN_NONE, mDisplayId,
+                                Objects.toString(mImeSourceControl.getInsetsHint()));
+                    }
                 }
 
                 @Override
@@ -498,6 +521,15 @@ public class DisplayImeController implements DisplayController.OnDisplaysChanged
                     } else if (mCancelled) {
                         ImeTracker.get().onCancelled(mStatsToken,
                                 ImeTracker.PHASE_WM_ANIMATION_RUNNING);
+                    }
+                    if (DEBUG_IME_VISIBILITY) {
+                        EventLog.writeEvent(IMF_IME_REMOTE_ANIM_END,
+                                statsToken != null ? statsToken.getTag() : TOKEN_NONE,
+                                mDisplayId, mAnimationDirection, endY,
+                                Objects.toString(mImeSourceControl.getLeash()),
+                                Objects.toString(mImeSourceControl.getInsetsHint()),
+                                Objects.toString(mImeSourceControl.getSurfacePosition()),
+                                Objects.toString(mImeFrame));
                     }
                     t.apply();
                     mTransactionPool.release(t);

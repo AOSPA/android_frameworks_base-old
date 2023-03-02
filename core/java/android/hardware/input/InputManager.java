@@ -31,7 +31,6 @@ import android.app.ActivityThread;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
-import android.content.pm.PackageManager;
 import android.hardware.BatteryState;
 import android.hardware.SensorManager;
 import android.hardware.lights.Light;
@@ -120,6 +119,12 @@ public final class InputManager {
     @GuardedBy("mBatteryListenersLock")
     private IInputDeviceBatteryListener mInputDeviceBatteryListener;
 
+    private final Object mKeyboardBacklightListenerLock = new Object();
+    @GuardedBy("mKeyboardBacklightListenerLock")
+    private List<KeyboardBacklightListenerDelegate> mKeyboardBacklightListeners;
+    @GuardedBy("mKeyboardBacklightListenerLock")
+    private IKeyboardBacklightListener mKeyboardBacklightListener;
+
     private InputDeviceSensorManager mInputDeviceSensorManager;
     /**
      * Broadcast Action: Query available keyboard layouts.
@@ -167,6 +172,14 @@ public final class InputManager {
      * The <code>android:keyboardLayout</code> attribute refers to a
      * <a href="http://source.android.com/tech/input/key-character-map-files.html">
      * key character map</a> resource that defines the keyboard layout.
+     * The <code>android:keyboardLocale</code> attribute specifies a comma separated list of BCP 47
+     * language tags depicting the locales supported by the keyboard layout. This attribute is
+     * optional and will be used for auto layout selection for external physical keyboards.
+     * The <code>android:keyboardLayoutType</code> attribute specifies the layoutType for the
+     * keyboard layout. This can be either empty or one of the following supported layout types:
+     * qwerty, qwertz, azerty, dvorak, colemak, workman, extended, turkish_q, turkish_f. This
+     * attribute is optional and will be used for auto layout selection for external physical
+     * keyboards.
      * </p>
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
@@ -706,6 +719,30 @@ public final class InputManager {
     }
 
     /**
+     * Returns the layout type of the queried layout
+     * <p>
+     * The input manager consults the built-in keyboard layouts as well as all keyboard layouts
+     * advertised by applications using a {@link #ACTION_QUERY_KEYBOARD_LAYOUTS} broadcast receiver.
+     * </p>
+     *
+     * @param layoutDescriptor The layout descriptor of the queried layout
+     * @return layout type of the queried layout
+     *
+     * @hide
+     */
+    @TestApi
+    @NonNull
+    public String getKeyboardLayoutTypeForLayoutDescriptor(@NonNull String layoutDescriptor) {
+        KeyboardLayout[] layouts = getKeyboardLayouts();
+        for (KeyboardLayout kl : layouts) {
+            if (layoutDescriptor.equals(kl.getDescriptor())) {
+                return kl.getLayoutType();
+            }
+        }
+        return "";
+    }
+
+    /**
      * Gets information about all supported keyboard layouts appropriate
      * for a specific input device.
      * <p>
@@ -986,7 +1023,7 @@ public final class InputManager {
     @Nullable
     public String getKeyboardLayoutForInputDevice(@NonNull InputDeviceIdentifier identifier,
             @UserIdInt int userId, @NonNull InputMethodInfo imeInfo,
-            @NonNull InputMethodSubtype imeSubtype) {
+            @Nullable InputMethodSubtype imeSubtype) {
         try {
             return mIm.getKeyboardLayoutForInputDevice(identifier, userId, imeInfo, imeSubtype);
         } catch (RemoteException ex) {
@@ -1014,7 +1051,7 @@ public final class InputManager {
     @RequiresPermission(Manifest.permission.SET_KEYBOARD_LAYOUT)
     public void setKeyboardLayoutForInputDevice(@NonNull InputDeviceIdentifier identifier,
             @UserIdInt int userId, @NonNull InputMethodInfo imeInfo,
-            @NonNull InputMethodSubtype imeSubtype, @NonNull String keyboardLayoutDescriptor) {
+            @Nullable InputMethodSubtype imeSubtype, @NonNull String keyboardLayoutDescriptor) {
         if (identifier == null) {
             throw new IllegalArgumentException("identifier must not be null");
         }
@@ -1031,8 +1068,8 @@ public final class InputManager {
     }
 
     /**
-     * Gets all keyboard layout descriptors that are enabled for the specified input device, userId,
-     * imeInfo and imeSubtype.
+     * Gets all keyboard layouts that are enabled for the specified input device, userId, imeInfo
+     * and imeSubtype.
      *
      * @param identifier The identifier for the input device.
      * @param userId user profile ID
@@ -1042,9 +1079,9 @@ public final class InputManager {
      *
      * @hide
      */
-    public String[] getKeyboardLayoutListForInputDevice(InputDeviceIdentifier identifier,
+    public KeyboardLayout[] getKeyboardLayoutListForInputDevice(InputDeviceIdentifier identifier,
             @UserIdInt int userId, @NonNull InputMethodInfo imeInfo,
-            @NonNull InputMethodSubtype imeSubtype) {
+            @Nullable InputMethodSubtype imeSubtype) {
         if (identifier == null) {
             throw new IllegalArgumentException("inputDeviceDescriptor must not be null");
         }
@@ -2034,13 +2071,287 @@ public final class InputManager {
      */
     @RequiresPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
     public void setStylusEverUsed(@NonNull Context context, boolean stylusEverUsed) {
-        if (context.checkCallingPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
-                != PackageManager.PERMISSION_GRANTED) {
-            throw new SecurityException("You need WRITE_SECURE_SETTINGS permission "
-                + "to set stylus ever used.");
-        }
         Settings.Global.putInt(context.getContentResolver(),
                 Settings.Global.STYLUS_EVER_USED, stylusEverUsed ? 1 : 0);
+    }
+
+    /**
+     * Whether there is a gesture-compatible touchpad connected to the device.
+     * @hide
+     */
+    public boolean areTouchpadGesturesAvailable(@NonNull Context context) {
+        // TODO: implement the right logic
+        return true;
+    }
+
+    /**
+     * Gets the touchpad pointer speed.
+     *
+     * The returned value only applies to gesture-compatible touchpads.
+     *
+     * @param context The application context.
+     * @return The pointer speed as a value between {@link #MIN_POINTER_SPEED} and
+     * {@link #MAX_POINTER_SPEED}, or the default value {@link #DEFAULT_POINTER_SPEED}.
+     *
+     * @hide
+     */
+    public int getTouchpadPointerSpeed(@NonNull Context context) {
+        int speed = DEFAULT_POINTER_SPEED;
+        // TODO: obtain the actual speed from the settings
+        return speed;
+    }
+
+    /**
+     * Sets the touchpad pointer speed, and saves it in the settings.
+     *
+     * The new speed will only apply to gesture-compatible touchpads.
+     *
+     * @param context The application context.
+     * @param speed The pointer speed as a value between {@link #MIN_POINTER_SPEED} and
+     * {@link #MAX_POINTER_SPEED}, or the default value {@link #DEFAULT_POINTER_SPEED}.
+     *
+     * @hide
+     */
+    public void setTouchpadPointerSpeed(@NonNull Context context, int speed) {
+        if (speed < MIN_POINTER_SPEED || speed > MAX_POINTER_SPEED) {
+            throw new IllegalArgumentException("speed out of range");
+        }
+
+        // TODO: set the right setting
+    }
+
+    /**
+     * Changes the touchpad pointer speed temporarily, but does not save the setting.
+     *
+     * The new speed will only apply to gesture-compatible touchpads.
+     * Requires {@link android.Manifest.permission.SET_POINTER_SPEED}.
+     *
+     * @param speed The pointer speed as a value between {@link #MIN_POINTER_SPEED} and
+     * {@link #MAX_POINTER_SPEED}, or the default value {@link #DEFAULT_POINTER_SPEED}.
+     *
+     * @hide
+     */
+    public void tryTouchpadPointerSpeed(int speed) {
+        if (speed < MIN_POINTER_SPEED || speed > MAX_POINTER_SPEED) {
+            throw new IllegalArgumentException("speed out of range");
+        }
+
+        // TODO: set the touchpad pointer speed on the gesture library
+    }
+
+    /**
+     * Returns true if the touchpad should use pointer acceleration.
+     *
+     * The returned value only applies to gesture-compatible touchpads.
+     *
+     * @param context The application context.
+     * @return Whether the touchpad should use pointer acceleration.
+     *
+     * @hide
+     */
+    public boolean useTouchpadPointerAcceleration(@NonNull Context context) {
+        // TODO: obtain the actual behavior from the settings
+        return true;
+    }
+
+    /**
+     * Sets the pointer acceleration behavior for the touchpad.
+     *
+     * The new behavior is only applied to gesture-compatible touchpads.
+     *
+     * @param context The application context.
+     * @param enabled Will enable pointer acceleration if true, disable it if false
+     *
+     * @hide
+     */
+    public void setTouchpadPointerAcceleration(@NonNull Context context, boolean enabled) {
+        // TODO: set the right setting
+    }
+
+    /**
+     * Returns true if moving two fingers upwards on the touchpad should
+     * scroll down, which is known as natural scrolling.
+     *
+     * The returned value only applies to gesture-compatible touchpads.
+     *
+     * @param context The application context.
+     * @return Whether the touchpad should use natural scrolling.
+     *
+     * @hide
+     */
+    public boolean useTouchpadNaturalScrolling(@NonNull Context context) {
+        // TODO: obtain the actual behavior from the settings
+        return true;
+    }
+
+    /**
+     * Sets the natural scroll behavior for the touchpad.
+     *
+     * If natural scrolling is enabled, moving two fingers upwards on the
+     * touchpad will scroll down.
+     *
+     * @param context The application context.
+     * @param enabled Will enable natural scroll if true, disable it if false
+     *
+     * @hide
+     */
+    public void setTouchpadNaturalScrolling(@NonNull Context context, boolean enabled) {
+        // TODO: set the right setting
+    }
+
+    /**
+     * Returns true if the touchpad should use tap to click.
+     *
+     * The returned value only applies to gesture-compatible touchpads.
+     *
+     * @param context The application context.
+     * @return Whether the touchpad should use tap to click.
+     *
+     * @hide
+     */
+    public boolean useTouchpadTapToClick(@NonNull Context context) {
+        // TODO: obtain the actual behavior from the settings
+        return true;
+    }
+
+    /**
+     * Sets the tap to click behavior for the touchpad.
+     *
+     * The new behavior is only applied to gesture-compatible touchpads.
+     *
+     * @param context The application context.
+     * @param enabled Will enable tap to click if true, disable it if false
+     *
+     * @hide
+     */
+    public void setTouchpadTapToClick(@NonNull Context context, boolean enabled) {
+        // TODO: set the right setting
+    }
+
+    /**
+     * Returns true if the touchpad should use tap dragging.
+     *
+     * The returned value only applies to gesture-compatible touchpads.
+     *
+     * @param context The application context.
+     * @return Whether the touchpad should use tap dragging.
+     *
+     * @hide
+     */
+    public boolean useTouchpadTapDragging(@NonNull Context context) {
+        // TODO: obtain the actual behavior from the settings
+        return true;
+    }
+
+    /**
+     * Sets the tap dragging behavior for the touchpad.
+     *
+     * The new behavior is only applied to gesture-compatible touchpads.
+     *
+     * @param context The application context.
+     * @param enabled Will enable tap dragging if true, disable it if false
+     *
+     * @hide
+     */
+    public void setTouchpadTapDragging(@NonNull Context context, boolean enabled) {
+        // TODO: set the right setting
+    }
+
+    /**
+     * Returns true if the touchpad should use the right click zone.
+     *
+     * The returned value only applies to gesture-compatible touchpads.
+     *
+     * @param context The application context.
+     * @return Whether the touchpad should use the right click zone.
+     *
+     * @hide
+     */
+    public boolean useTouchpadRightClickZone(@NonNull Context context) {
+        // TODO: obtain the actual behavior from the settings
+        return true;
+    }
+
+    /**
+     * Sets the right click zone behavior for the touchpad.
+     *
+     * The new behavior is only applied to gesture-compatible touchpads.
+     *
+     * @param context The application context.
+     * @param enabled Will enable the right click zone if true, disable it if false
+     *
+     * @hide
+     */
+    public void setTouchpadRightClickZone(@NonNull Context context, boolean enabled) {
+        // TODO: set the right setting
+    }
+
+    /**
+     * Registers a Keyboard backlight change listener to be notified about {@link
+     * KeyboardBacklightState} changes for connected keyboard devices.
+     *
+     * @param executor an executor on which the callback will be called
+     * @param listener the {@link KeyboardBacklightListener}
+     * @hide
+     * @see #unregisterKeyboardBacklightListener(KeyboardBacklightListener)
+     * @throws IllegalArgumentException if {@code listener} has already been registered previously.
+     * @throws NullPointerException if {@code listener} or {@code executor} is null.
+     */
+    @RequiresPermission(Manifest.permission.MONITOR_KEYBOARD_BACKLIGHT)
+    public void registerKeyboardBacklightListener(@NonNull Executor executor,
+            @NonNull KeyboardBacklightListener listener) throws IllegalArgumentException {
+        Objects.requireNonNull(executor, "executor should not be null");
+        Objects.requireNonNull(listener, "listener should not be null");
+
+        synchronized (mKeyboardBacklightListenerLock) {
+            if (mKeyboardBacklightListener == null) {
+                mKeyboardBacklightListeners = new ArrayList<>();
+                mKeyboardBacklightListener = new LocalKeyboardBacklightListener();
+
+                try {
+                    mIm.registerKeyboardBacklightListener(mKeyboardBacklightListener);
+                } catch (RemoteException e) {
+                    throw e.rethrowFromSystemServer();
+                }
+            }
+            for (KeyboardBacklightListenerDelegate delegate : mKeyboardBacklightListeners) {
+                if (delegate.mListener == listener) {
+                    throw new IllegalArgumentException("Listener has already been registered!");
+                }
+            }
+            KeyboardBacklightListenerDelegate delegate =
+                    new KeyboardBacklightListenerDelegate(listener, executor);
+            mKeyboardBacklightListeners.add(delegate);
+        }
+    }
+
+    /**
+     * Unregisters a previously added Keyboard backlight change listener.
+     *
+     * @param listener the {@link KeyboardBacklightListener}
+     * @see #registerKeyboardBacklightListener(Executor, KeyboardBacklightListener)
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.MONITOR_KEYBOARD_BACKLIGHT)
+    public void unregisterKeyboardBacklightListener(
+            @NonNull KeyboardBacklightListener listener) {
+        Objects.requireNonNull(listener, "listener should not be null");
+
+        synchronized (mKeyboardBacklightListenerLock) {
+            if (mKeyboardBacklightListeners == null) {
+                return;
+            }
+            mKeyboardBacklightListeners.removeIf((delegate) -> delegate.mListener == listener);
+            if (mKeyboardBacklightListeners.isEmpty()) {
+                try {
+                    mIm.unregisterKeyboardBacklightListener(mKeyboardBacklightListener);
+                } catch (RemoteException e) {
+                    throw e.rethrowFromSystemServer();
+                }
+                mKeyboardBacklightListeners = null;
+                mKeyboardBacklightListener = null;
+            }
+        }
     }
 
     /**
@@ -2134,6 +2445,27 @@ public final class InputManager {
          * {@link SystemClock#uptimeMillis} time base.
          */
         void onTabletModeChanged(long whenNanos, boolean inTabletMode);
+    }
+
+    /**
+     * A callback used to be notified about keyboard backlight state changes for keyboard device.
+     * The {@link #onKeyboardBacklightChanged(int, KeyboardBacklightState, boolean)} method
+     * will be called once after the listener is successfully registered to provide the initial
+     * keyboard backlight state of the device.
+     * @see #registerKeyboardBacklightListener(Executor, KeyboardBacklightListener)
+     * @see #unregisterKeyboardBacklightListener(KeyboardBacklightListener)
+     * @hide
+     */
+    public interface KeyboardBacklightListener {
+        /**
+         * Called when the keyboard backlight brightness level changes.
+         * @param deviceId the keyboard for which the backlight brightness changed.
+         * @param state the new keyboard backlight state, never null.
+         * @param isTriggeredByKeyPress whether brightness change was triggered by the user
+         *                              pressing up/down key on the keyboard.
+         */
+        void onKeyboardBacklightChanged(
+                int deviceId, @NonNull KeyboardBacklightState state, boolean isTriggeredByKeyPress);
     }
 
     private final class TabletModeChangedListener extends ITabletModeChangedListener.Stub {
@@ -2240,6 +2572,61 @@ public final class InputManager {
                 entry.mInputDeviceBatteryState = state;
                 for (InputDeviceBatteryListenerDelegate delegate : entry.mDelegates) {
                     delegate.notifyBatteryStateChanged(entry.mInputDeviceBatteryState);
+                }
+            }
+        }
+    }
+
+    // Implementation of the android.hardware.input.KeyboardBacklightState interface used to report
+    // the keyboard backlight state via the KeyboardBacklightListener interfaces.
+    private static final class LocalKeyboardBacklightState extends KeyboardBacklightState {
+
+        private final int mBrightnessLevel;
+        private final int mMaxBrightnessLevel;
+
+        LocalKeyboardBacklightState(int brightnesslevel, int maxBrightnessLevel) {
+            mBrightnessLevel = brightnesslevel;
+            mMaxBrightnessLevel = maxBrightnessLevel;
+        }
+
+        @Override
+        public int getBrightnessLevel() {
+            return mBrightnessLevel;
+        }
+
+        @Override
+        public int getMaxBrightnessLevel() {
+            return mMaxBrightnessLevel;
+        }
+    }
+
+    private static final class KeyboardBacklightListenerDelegate {
+        final KeyboardBacklightListener mListener;
+        final Executor mExecutor;
+
+        KeyboardBacklightListenerDelegate(KeyboardBacklightListener listener, Executor executor) {
+            mListener = listener;
+            mExecutor = executor;
+        }
+
+        void notifyKeyboardBacklightChange(int deviceId, IKeyboardBacklightState state,
+                boolean isTriggeredByKeyPress) {
+            mExecutor.execute(() ->
+                    mListener.onKeyboardBacklightChanged(deviceId,
+                            new LocalKeyboardBacklightState(state.brightnessLevel,
+                                    state.maxBrightnessLevel), isTriggeredByKeyPress));
+        }
+    }
+
+    private class LocalKeyboardBacklightListener extends IKeyboardBacklightListener.Stub {
+
+        @Override
+        public void onBrightnessChanged(int deviceId, IKeyboardBacklightState state,
+                boolean isTriggeredByKeyPress) {
+            synchronized (mKeyboardBacklightListenerLock) {
+                if (mKeyboardBacklightListeners == null) return;
+                for (KeyboardBacklightListenerDelegate delegate : mKeyboardBacklightListeners) {
+                    delegate.notifyKeyboardBacklightChange(deviceId, state, isTriggeredByKeyPress);
                 }
             }
         }

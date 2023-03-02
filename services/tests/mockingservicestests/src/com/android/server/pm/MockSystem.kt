@@ -55,6 +55,7 @@ import com.android.dx.mockito.inline.extended.ExtendedMockito.spy
 import com.android.dx.mockito.inline.extended.StaticMockitoSession
 import com.android.dx.mockito.inline.extended.StaticMockitoSessionBuilder
 import com.android.internal.R
+import com.android.server.LocalManagerRegistry
 import com.android.server.LocalServices
 import com.android.server.LockGuard
 import com.android.server.SystemConfig
@@ -62,6 +63,7 @@ import com.android.server.SystemServerInitThreadPool
 import com.android.server.compat.PlatformCompat
 import com.android.server.extendedtestutils.wheneverStatic
 import com.android.server.pm.dex.DexManager
+import com.android.server.pm.dex.DynamicCodeLogger
 import com.android.server.pm.parsing.PackageParser2
 import com.android.server.pm.parsing.pkg.PackageImpl
 import com.android.server.pm.parsing.pkg.ParsedPackage
@@ -148,6 +150,7 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
                 .mockStatic(LockGuard::class.java)
                 .mockStatic(EventLog::class.java)
                 .mockStatic(LocalServices::class.java)
+                .mockStatic(LocalManagerRegistry::class.java)
                 .mockStatic(DeviceConfig::class.java)
                 .mockStatic(HexEncoding::class.java)
                 .apply(withSession)
@@ -193,6 +196,7 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
         val incrementalManager: IncrementalManager = mock()
         val platformCompat: PlatformCompat = mock()
         val settings: Settings = mock()
+        val crossProfileIntentFilterHelper: CrossProfileIntentFilterHelper = mock()
         val resources: Resources = mock()
         val systemConfig: SystemConfig = mock()
         val apexManager: ApexManager = mock()
@@ -205,6 +209,7 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
             whenever(snapshot()) { appsFilterSnapshot }
         }
         val dexManager: DexManager = mock()
+        val dynamicCodeLogger: DynamicCodeLogger = mock()
         val installer: Installer = mock()
         val displayMetrics: DisplayMetrics = mock()
         val domainVerificationManagerInternal: DomainVerificationManagerInternal = mock()
@@ -279,7 +284,10 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
         whenever(mocks.injector.incrementalManager).thenReturn(mocks.incrementalManager)
         whenever(mocks.injector.compatibility).thenReturn(mocks.platformCompat)
         whenever(mocks.injector.settings).thenReturn(mocks.settings)
+        whenever(mocks.injector.crossProfileIntentFilterHelper)
+                .thenReturn(mocks.crossProfileIntentFilterHelper)
         whenever(mocks.injector.dexManager).thenReturn(mocks.dexManager)
+        whenever(mocks.injector.dynamicCodeLogger).thenReturn(mocks.dynamicCodeLogger)
         whenever(mocks.injector.systemConfig).thenReturn(mocks.systemConfig)
         whenever(mocks.injector.apexManager).thenReturn(mocks.apexManager)
         whenever(mocks.injector.scanningCachingPackageParser).thenReturn(mocks.packageParser)
@@ -322,16 +330,16 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
         whenever(mocks.settings.keySetManagerService).thenReturn(mocks.keySetManagerService)
         whenever(mocks.settings.keySetManagerService).thenReturn(mocks.keySetManagerService)
         whenever(mocks.settings.snapshot()).thenReturn(mocks.settings)
-        whenever(mocks.packageAbiHelper.derivePackageAbi(
-                any(AndroidPackage::class.java), anyBoolean(), nullable(), any(File::class.java))) {
+        whenever(mocks.packageAbiHelper.derivePackageAbi(any(AndroidPackage::class.java),
+            anyBoolean(), anyBoolean(), nullable(), any(File::class.java))) {
             android.util.Pair(PackageAbiHelper.Abis("", ""),
                     PackageAbiHelper.NativeLibraryPaths("", false, "", ""))
         }
         whenever(mocks.userManagerInternal.getUsers(true, false, false)).thenReturn(DEFAULT_USERS)
         whenever(mocks.userManagerService.userIds).thenReturn(intArrayOf(0))
         whenever(mocks.userManagerService.exists(0)).thenReturn(true)
-        whenever(mocks.packageAbiHelper.deriveNativeLibraryPaths(
-                any(AndroidPackage::class.java), anyBoolean(), any(File::class.java))) {
+        whenever(mocks.packageAbiHelper.deriveNativeLibraryPaths(any(AndroidPackage::class.java),
+                anyBoolean(), anyBoolean(), any(File::class.java))) {
             PackageAbiHelper.NativeLibraryPaths("", false, "", "")
         }
         whenever(mocks.injector.bootstrap(any(PackageManagerService::class.java))) {

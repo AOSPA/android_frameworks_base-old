@@ -22,10 +22,12 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityManager
 import com.android.systemui.classifier.FalsingCollector
+import com.android.systemui.dump.DumpManager
 import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.statusbar.VibratorHelper
 import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.util.concurrency.DelayableExecutor
+import com.android.systemui.util.time.SystemClock
 import com.android.systemui.util.view.ViewUtil
 import com.android.systemui.util.wakelock.WakeLock
 
@@ -37,12 +39,14 @@ class FakeChipbarCoordinator(
     mainExecutor: DelayableExecutor,
     accessibilityManager: AccessibilityManager,
     configurationController: ConfigurationController,
+    dumpManager: DumpManager,
     powerManager: PowerManager,
     falsingManager: FalsingManager,
     falsingCollector: FalsingCollector,
     viewUtil: ViewUtil,
     vibratorHelper: VibratorHelper,
     wakeLockBuilder: WakeLock.Builder,
+    systemClock: SystemClock,
 ) :
     ChipbarCoordinator(
         context,
@@ -51,14 +55,16 @@ class FakeChipbarCoordinator(
         mainExecutor,
         accessibilityManager,
         configurationController,
+        dumpManager,
         powerManager,
         falsingManager,
         falsingCollector,
         viewUtil,
         vibratorHelper,
         wakeLockBuilder,
+        systemClock,
     ) {
-    override fun animateViewOut(view: ViewGroup, onAnimationEnd: Runnable) {
+    override fun animateViewOut(view: ViewGroup, removalReason: String?, onAnimationEnd: Runnable) {
         // Just bypass the animation in tests
         onAnimationEnd.run()
     }

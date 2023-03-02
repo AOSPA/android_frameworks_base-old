@@ -44,6 +44,7 @@ import android.util.ArraySet;
 import android.util.SparseArray;
 
 import com.android.internal.util.function.pooled.PooledLambda;
+import com.android.server.pm.Installer.LegacyDexoptDisabledException;
 import com.android.server.pm.KnownPackages;
 import com.android.server.pm.PackageList;
 import com.android.server.pm.PackageSetting;
@@ -112,11 +113,11 @@ public abstract class PackageManagerInternal {
     /** Observer called whenever the list of packages changes */
     public interface PackageListObserver {
         /** A package was added to the system. */
-        void onPackageAdded(@NonNull String packageName, int uid);
+        default void onPackageAdded(@NonNull String packageName, int uid) {}
         /** A package was changed - either installed for a specific user or updated. */
         default void onPackageChanged(@NonNull String packageName, int uid) {}
         /** A package was removed from the system. */
-        void onPackageRemoved(@NonNull String packageName, int uid);
+        default void onPackageRemoved(@NonNull String packageName, int uid) {}
     }
 
     /**
@@ -375,10 +376,15 @@ public abstract class PackageManagerInternal {
             int deviceOwnerUserId, String deviceOwner, SparseArray<String> profileOwners);
 
     /**
-     * Marks packages as protected for a given user or all users in case of USER_ALL.
+     * Marks packages as protected for a given user or all users in case of USER_ALL. Setting
+     * {@code packageNames} to {@code null} means unset all existing protected packages for the
+     * given user.
+     *
+     * <p> Note that setting it if set for a specific user, it takes precedence over the packages
+     * set globally using USER_ALL.
      */
     public abstract void setOwnerProtectedPackages(
-            @UserIdInt int userId, @NonNull List<String> packageNames);
+            @UserIdInt int userId, @Nullable List<String> packageNames);
 
     /**
      * Returns {@code true} if a given package can't be wiped. Otherwise, returns {@code false}.
@@ -582,7 +588,7 @@ public abstract class PackageManagerInternal {
     public abstract ResolveInfo resolveIntentExported(Intent intent, String resolvedType,
             @PackageManager.ResolveInfoFlagsBits long flags,
             @PrivateResolveFlags long privateResolveFlags, int userId, boolean resolveForStart,
-            int filterCallingUid);
+            int filterCallingUid, int callingPid);
 
     /**
     * Resolves a service intent, allowing instant apps to be resolved.
@@ -1315,4 +1321,14 @@ public abstract class PackageManagerInternal {
 
     public abstract void setPackageStoppedState(@NonNull String packageName, boolean stopped,
             @UserIdInt int userId);
+
+    /** @deprecated For legacy shell command only. */
+    @Deprecated
+    public abstract void legacyDumpProfiles(@NonNull String packageName,
+            boolean dumpClassesAndMethods) throws LegacyDexoptDisabledException;
+
+    /** @deprecated For legacy shell command only. */
+    @Deprecated
+    public abstract void legacyReconcileSecondaryDexFiles(String packageName)
+            throws LegacyDexoptDisabledException;
 }

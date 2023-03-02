@@ -97,10 +97,19 @@ final class RadioModule {
 
         public void onTuneFailed(int result, ProgramSelector programSelector) {
             fireLater(() -> {
+                android.hardware.radio.ProgramSelector csel =
+                        ConversionUtils.programSelectorFromHalProgramSelector(programSelector);
+                int tunerResult = ConversionUtils.halResultToTunerResult(result);
                 synchronized (mLock) {
-                    android.hardware.radio.ProgramSelector csel =
-                            ConversionUtils.programSelectorFromHalProgramSelector(programSelector);
-                    fanoutAidlCallbackLocked(cb -> cb.onTuneFailed(result, csel));
+                    fanoutAidlCallbackLocked((cb, sdkVersion) -> {
+                        if (csel != null && !ConversionUtils
+                                .programSelectorMeetsSdkVersionRequirement(csel, sdkVersion)) {
+                            Slogf.e(TAG, "onTuneFailed: cannot send program selector "
+                                    + "requiring higher target SDK version");
+                            return;
+                        }
+                        cb.onTuneFailed(tunerResult, csel);
+                    });
                 }
             });
         }
@@ -108,11 +117,19 @@ final class RadioModule {
         @Override
         public void onCurrentProgramInfoChanged(ProgramInfo halProgramInfo) {
             fireLater(() -> {
+                RadioManager.ProgramInfo currentProgramInfo =
+                        ConversionUtils.programInfoFromHalProgramInfo(halProgramInfo);
+                Objects.requireNonNull(currentProgramInfo,
+                        "Program info from AIDL HAL is invalid");
                 synchronized (mLock) {
-                    mCurrentProgramInfo =
-                            ConversionUtils.programInfoFromHalProgramInfo(halProgramInfo);
-                    RadioManager.ProgramInfo currentProgramInfo = mCurrentProgramInfo;
-                    fanoutAidlCallbackLocked(cb -> {
+                    mCurrentProgramInfo = currentProgramInfo;
+                    fanoutAidlCallbackLocked((cb, sdkVersion) -> {
+                        if (!ConversionUtils.programInfoMeetsSdkVersionRequirement(
+                                currentProgramInfo, sdkVersion)) {
+                            Slogf.e(TAG, "onCurrentProgramInfoChanged: cannot send "
+                                    + "program info requiring higher target SDK version");
+                            return;
+                        }
                         cb.onCurrentProgramInfoChanged(currentProgramInfo);
                     });
                 }
@@ -139,7 +156,7 @@ final class RadioModule {
             fireLater(() -> {
                 synchronized (mLock) {
                     mAntennaConnected = connected;
-                    fanoutAidlCallbackLocked(cb -> cb.onAntennaState(connected));
+                    fanoutAidlCallbackLocked((cb, sdkVersion) -> cb.onAntennaState(connected));
                 }
             });
         }
@@ -147,8 +164,11 @@ final class RadioModule {
         @Override
         public void onConfigFlagUpdated(int flag, boolean value) {
             fireLater(() -> {
-                // TODO(b/243853343): implement config flag update method in
-                //  android.hardware.radio.ITunerCallback
+                synchronized (mLock) {
+                    fanoutAidlCallbackLocked((cb, sdkVersion) -> {
+                        cb.onConfigFlagUpdated(flag, value);
+                    });
+                }
             });
         }
 
@@ -158,7 +178,9 @@ final class RadioModule {
                 synchronized (mLock) {
                     Map<String, String> cparam =
                             ConversionUtils.vendorInfoFromHalVendorKeyValues(parameters);
-                    fanoutAidlCallbackLocked(cb -> cb.onParametersUpdated(cparam));
+                    fanoutAidlCallbackLocked((cb, sdkVersion) -> {
+                        cb.onParametersUpdated(cparam);
+                    });
                 }
             });
         }
@@ -222,14 +244,14 @@ final class RadioModule {
         mService.setTunerCallback(mHalTunerCallback);
     }
 
-    TunerSession openSession(android.hardware.radio.ITunerCallback userCb)
+    TunerSession openSession(android.hardware.radio.ITunerCallback userCb, int targetSdkVersion)
             throws RemoteException {
         mLogger.logRadioEvent("Open TunerSession");
         TunerSession tunerSession;
         Boolean antennaConnected;
         RadioManager.ProgramInfo currentProgramInfo;
         synchronized (mLock) {
-            tunerSession = new TunerSession(this, mService, userCb);
+            tunerSession = new TunerSession(this, mService, userCb, targetSdkVersion);
             mAidlTunerSessions.add(tunerSession);
             antennaConnected = mAntennaConnected;
             currentProgramInfo = mCurrentProgramInfo;
@@ -382,7 +404,8 @@ final class RadioModule {
     }
 
     interface AidlCallbackRunnable {
-        void run(android.hardware.radio.ITunerCallback callback) throws RemoteException;
+        void run(android.hardware.radio.ITunerCallback callback, int targetSdkVersion)
+                throws RemoteException;
     }
 
     // Invokes runnable with each TunerSession currently open.
@@ -399,7 +422,8 @@ final class RadioModule {
         List<TunerSession> deadSessions = null;
         for (int i = 0; i < mAidlTunerSessions.size(); i++) {
             try {
-                runnable.run(mAidlTunerSessions.valueAt(i).mCallback);
+                runnable.run(mAidlTunerSessions.valueAt(i).mCallback,
+                        mAidlTunerSessions.valueAt(i).getTargetSdkVersion());
             } catch (DeadObjectException ex) {
                 // The other side died without calling close(), so just purge it from our records.
                 Slogf.e(TAG, "Removing dead TunerSession");

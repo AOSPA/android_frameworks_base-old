@@ -255,6 +255,12 @@ public abstract class IPackageManagerBase extends IPackageManager.Stub {
 
     @Override
     @Deprecated
+    public final void clearPersistentPreferredActivity(IntentFilter filter, int userId) {
+        mPreferredActivityHelper.clearPersistentPreferredActivity(filter, userId);
+    }
+
+    @Override
+    @Deprecated
     public final void clearPackagePreferredActivities(String packageName) {
         mPreferredActivityHelper.clearPackagePreferredActivities(snapshot(),
                 packageName);
@@ -1153,9 +1159,10 @@ public abstract class IPackageManagerBase extends IPackageManager.Stub {
 
     @Override
     @Deprecated
-    public final boolean canPackageQuery(@NonNull String sourcePackageName,
-            @NonNull String targetPackageName, @UserIdInt int userId) {
-        return snapshot().canPackageQuery(sourcePackageName, targetPackageName, userId);
+    @NonNull
+    public final boolean[] canPackageQuery(@NonNull String sourcePackageName,
+            @NonNull String[] targetPackageNames, @UserIdInt int userId) {
+        return snapshot().canPackageQuery(sourcePackageName, targetPackageNames, userId);
     }
 
     @Override

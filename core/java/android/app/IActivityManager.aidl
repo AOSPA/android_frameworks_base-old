@@ -147,7 +147,6 @@ interface IActivityManager {
     oneway void finishReceiver(in IBinder who, int resultCode, in String resultData, in Bundle map,
             boolean abortBroadcast, int flags);
     void attachApplication(in IApplicationThread app, long startSeq);
-    void finishAttachApplication(long startSeq);
     List<ActivityManager.RunningTaskInfo> getTasks(int maxNum);
     @UnsupportedAppUsage
     void moveTaskToFront(in IApplicationThread caller, in String callingPackage, int task,
@@ -332,6 +331,7 @@ interface IActivityManager {
     @UnsupportedAppUsage
     void handleApplicationStrictModeViolation(in IBinder app, int penaltyMask,
             in StrictMode.ViolationInfo crashInfo);
+    void registerStrictModeCallback(in IBinder binder);
     boolean isTopActivityImmersive();
     void crashApplicationWithType(int uid, int initialPid, in String packageName, int userId,
             in String message, boolean force, int exceptionTypeId);
@@ -719,8 +719,8 @@ interface IActivityManager {
 
     /**
      * Control the app freezer state. Returns true in case of success, false if the operation
-     * didn't succeed (for example, when the app freezer isn't supported).
-     * Handling the freezer state via this method is reentrant, that is it can be
+     * didn't succeed (for example, when the app freezer isn't supported). 
+     * Handling the freezer state via this method is reentrant, that is it can be 
      * disabled and re-enabled multiple times in parallel. As long as there's a 1:1 disable to
      * enable match, the freezer is re-enabled at last enable only.
      * @param enable set it to true to enable the app freezer, false to disable it.
@@ -771,6 +771,14 @@ interface IActivityManager {
     /** Blocks until all broadcast queues become idle. */
     void waitForBroadcastIdle();
 
+    /** Delays delivering broadcasts to the specified package. */
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.DUMP)")
+    void forceDelayBroadcastDelivery(in String targetPackage, long delayedDurationMs);
+
+    /** Checks if the modern broadcast queue is enabled. */
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.DUMP)")
+    boolean isModernBroadcastQueueEnabled();
+
     /**
      * @return The reason code of whether or not the given UID should be exempted from background
      * restrictions here.
@@ -791,14 +799,14 @@ interface IActivityManager {
      */
     @JavaPassthrough(annotation=
             "@android.annotation.RequiresPermission(anyOf = {android.Manifest.permission.MANAGE_USERS, android.Manifest.permission.CREATE_USERS}, conditional = true)")
-    boolean startUserInBackgroundOnSecondaryDisplay(int userid, int displayId);
+    boolean startUserInBackgroundVisibleOnDisplay(int userid, int displayId);
 
     /**
-     * Gets the ids of displays that can be used on {@link #startUserInBackgroundOnSecondaryDisplay(int userId, int displayId)}.
+     * Gets the ids of displays that can be used on {@link #startUserInBackgroundVisibleOnDisplay(int userId, int displayId)}.
      *
      * <p>Typically used only by automotive builds when the vehicle has multiple displays.
      */
-    @nullable int[] getSecondaryDisplayIdsForStartingBackgroundUsers();
+    @nullable int[] getDisplayIdsForStartingVisibleBackgroundUsers();
 
     /** Returns if the service is a short-service is still "alive" and past the timeout. */
     boolean shouldServiceTimeOut(in ComponentName className, in IBinder token);

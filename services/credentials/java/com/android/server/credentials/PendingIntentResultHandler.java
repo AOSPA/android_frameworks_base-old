@@ -18,8 +18,10 @@ package com.android.server.credentials;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.credentials.CreateCredentialException;
 import android.credentials.CreateCredentialResponse;
-import android.credentials.Credential;
+import android.credentials.GetCredentialException;
+import android.credentials.GetCredentialResponse;
 import android.credentials.ui.ProviderPendingIntentResponse;
 import android.service.credentials.CredentialProviderService;
 import android.service.credentials.CredentialsResponseContent;
@@ -31,10 +33,16 @@ import android.service.credentials.CredentialsResponseContent;
  */
 public class PendingIntentResultHandler {
     /** Returns true if the result is successful and may contain result extras. */
-    public static boolean isSuccessfulResponse(
+    public static boolean isValidResponse(
             ProviderPendingIntentResponse pendingIntentResponse) {
         //TODO: Differentiate based on extra_error in the resultData
         return pendingIntentResponse.getResultCode() == Activity.RESULT_OK;
+    }
+
+    /** Returns true if the pending intent was cancelled by the user. */
+    public static boolean isCancelledResponse(
+            ProviderPendingIntentResponse pendingIntentResponse) {
+        return pendingIntentResponse.getResultCode() == Activity.RESULT_CANCELED;
     }
 
     /** Extracts the {@link CredentialsResponseContent} object added to the result data. */
@@ -43,8 +51,7 @@ public class PendingIntentResultHandler {
             return null;
         }
         return resultData.getParcelableExtra(
-                CredentialProviderService
-                        .EXTRA_GET_CREDENTIALS_CONTENT_RESULT,
+                CredentialProviderService.EXTRA_CREDENTIALS_RESPONSE_CONTENT,
                 CredentialsResponseContent.class);
     }
 
@@ -54,17 +61,41 @@ public class PendingIntentResultHandler {
             return null;
         }
         return resultData.getParcelableExtra(
-                CredentialProviderService.EXTRA_CREATE_CREDENTIAL_RESULT,
+                CredentialProviderService.EXTRA_CREATE_CREDENTIAL_RESPONSE,
                 CreateCredentialResponse.class);
     }
 
-    /** Extracts the {@link Credential} object added to the result data. */
-    public static Credential extractCredential(Intent resultData) {
+    /** Extracts the {@link GetCredentialResponse} object added to the result data. */
+    public static GetCredentialResponse extractGetCredentialResponse(Intent resultData) {
         if (resultData == null) {
             return null;
         }
         return resultData.getParcelableExtra(
-                CredentialProviderService.EXTRA_CREDENTIAL_RESULT,
-                Credential.class);
+                CredentialProviderService.EXTRA_GET_CREDENTIAL_RESPONSE,
+                GetCredentialResponse.class);
+    }
+
+    /** Extract the {@link CreateCredentialException} from the
+     * given pending intent . */
+    public static CreateCredentialException extractCreateCredentialException(
+            Intent resultData) {
+        if (resultData == null) {
+            return null;
+        }
+        return resultData.getParcelableExtra(
+                CredentialProviderService.EXTRA_CREATE_CREDENTIAL_EXCEPTION,
+                CreateCredentialException.class);
+    }
+
+    /** Extract the {@link GetCredentialException} from the
+     * given pending intent . */
+    public static GetCredentialException extractGetCredentialException(
+            Intent resultData) {
+        if (resultData == null) {
+            return null;
+        }
+        return resultData.getParcelableExtra(
+                CredentialProviderService.EXTRA_GET_CREDENTIAL_EXCEPTION,
+                GetCredentialException.class);
     }
 }

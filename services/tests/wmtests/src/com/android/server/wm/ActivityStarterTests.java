@@ -62,13 +62,16 @@ import static com.android.server.wm.TaskFragment.EMBEDDING_DISALLOWED_NEW_TASK;
 import static com.android.server.wm.TaskFragment.EMBEDDING_DISALLOWED_UNTRUSTED_HOST;
 import static com.android.server.wm.WindowContainer.POSITION_BOTTOM;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
+import static com.android.server.wm.WindowTestsBase.ActivityBuilder.DEFAULT_FAKE_UID;
 
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -79,6 +82,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.notNull;
 
 import android.app.ActivityOptions;
+import android.app.BackgroundStartPrivileges;
 import android.app.IApplicationThread;
 import android.app.PictureInPictureParams;
 import android.content.ComponentName;
@@ -383,7 +387,7 @@ public class ActivityStarterTests extends WindowTestsBase {
         doReturn(null).when(mMockPackageManager).resolveIntent(any(), any(), anyLong(), anyLong(),
                 anyInt(), anyBoolean(), anyInt());
         doReturn(null).when(mMockPackageManager).resolveIntentExported(any(), any(),
-                anyLong(), anyLong(), anyInt(), anyBoolean(), anyInt());
+                anyLong(), anyLong(), anyInt(), anyBoolean(), anyInt(), anyInt());
         doReturn(new ComponentName("", "")).when(mMockPackageManager).getSystemUiServiceComponent();
 
         // Never review permissions
@@ -751,16 +755,15 @@ public class ActivityStarterTests extends WindowTestsBase {
     }
 
     /**
-     * This test ensures that supported usecases aren't aborted when background starts are
-     * disallowed. Each scenarios tests one condition that makes them supported in isolation. In
-     * this case the real calling process (pending intent) has a visible window.
+     * The sending app has a visible window, but does not (by default) allow the pending intent to
+     * start the background activity.
      */
     @Test
-    public void
-            testBackgroundActivityStartsDisallowed_realCallingUidHasVisibleWindowNotAborted() {
+    public void testBackgroundActivityStartsDisallowed_realCallingUidHasVisibleWindowAborted() {
         doReturn(false).when(mAtm).isBackgroundActivityStartsEnabled();
+
         runAndVerifyBackgroundActivityStartsSubtest(
-                "disallowed_realCallingUidHasVisibleWindow_notAborted", false,
+                "disallowed_realCallingUidHasVisibleWindow_abortedInU", true,
                 UNIMPORTANT_UID, false, PROCESS_STATE_BOUND_TOP,
                 UNIMPORTANT_UID2, true, PROCESS_STATE_BOUND_TOP,
                 false, false, false, false, false, false);
@@ -889,7 +892,8 @@ public class ActivityStarterTests extends WindowTestsBase {
         doReturn(callerIsRecents).when(recentTasks).isCallerRecents(callingUid);
         // caller is temp allowed
         if (callerIsTempAllowed) {
-            callerApp.addOrUpdateAllowBackgroundActivityStartsToken(new Binder(), null);
+            callerApp.addOrUpdateBackgroundStartPrivileges(new Binder(),
+                    BackgroundStartPrivileges.ALLOW_BAL);
         }
         // caller is instrumenting with background activity starts privileges
         callerApp.setInstrumenting(callerIsInstrumentingWithBackgroundActivityStartPrivileges,
@@ -1508,7 +1512,7 @@ public class ActivityStarterTests extends WindowTestsBase {
                 .build();
         final ActivityOptions opts = ActivityOptions.makeLaunchIntoPip(params);
         ActivityRecord targetRecord = new ActivityBuilder(mAtm)
-                .setLaunchIntoPipActivityOptions(opts)
+                .setActivityOptions(opts)
                 .build();
 
         // Start the target launch-into-pip activity from a source
@@ -1622,12 +1626,136 @@ public class ActivityStarterTests extends WindowTestsBase {
         assertNull(starter2.mMovedToTopActivity);
     }
 
+    /**
+     * Tests a task with specific display category exist in system and then launching another
+     * activity with the same affinity but without define the display category. Make sure the
+     * lunching activity is placed on the different task.
+     */
+    @Test
+    public void testLaunchActivityWithoutDisplayCategory() {
+        final ActivityInfo info = new ActivityInfo();
+        info.applicationInfo = new ApplicationInfo();
+        info.taskAffinity = ActivityRecord.computeTaskAffinity("test", DEFAULT_FAKE_UID,
+                0 /* launchMode */);
+        info.requiredDisplayCategory = "automotive";
+        final Task task = new TaskBuilder(mSupervisor).setCreateActivity(true).setActivityInfo(info)
+                .build();
+
+        final ActivityRecord target = new ActivityBuilder(mAtm).setAffinity(info.taskAffinity)
+                .build();
+        final ActivityStarter starter = prepareStarter(FLAG_ACTIVITY_NEW_TASK, false);
+        spyOn(starter);
+        doReturn(START_SUCCESS).when(starter).isAllowedToStart(any(), anyBoolean(), any());
+        startActivityInner(starter, target, null /* source */, null /* options */,
+                null /* inTask */, null /* inTaskFragment */);
+
+        assertNotEquals(task, target.getTask());
+    }
+
+    /**
+     * Tests a task with a specific display category exist in the system and then launches another
+     * activity with the different display category. Make sure the launching activity is not placed
+     * on the sourceRecord's task.
+     */
+    @Test
+    public void testLaunchActivityWithDifferentDisplayCategory() {
+        final ActivityInfo info = new ActivityInfo();
+        info.applicationInfo = new ApplicationInfo();
+        info.taskAffinity = ActivityRecord.computeTaskAffinity("test", DEFAULT_FAKE_UID,
+                0 /* launchMode */);
+        info.requiredDisplayCategory = "automotive";
+        final Task task = new TaskBuilder(mSupervisor).setCreateActivity(true).setActivityInfo(info)
+                .build();
+
+        final ActivityRecord target = new ActivityBuilder(mAtm).setRequiredDisplayCategory("auto")
+                .setAffinity(info.taskAffinity).build();
+        final ActivityStarter starter = prepareStarter(0, false);
+        spyOn(starter);
+        doReturn(START_SUCCESS).when(starter).isAllowedToStart(any(), anyBoolean(), any());
+        startActivityInner(starter, target,  task.getBottomMostActivity(), null /* options */,
+                null /* inTask */, null /* inTaskFragment */);
+
+        assertNotEquals(task, target.getTask());
+    }
+
+    /**
+     * Tests a task with specific display category exist in system and then launching another
+     * activity with the same display category. Make sure the launching activity is placed on the
+     * same task.
+     */
+    @Test
+    public void testLaunchActivityWithSameDisplayCategory() {
+        final ActivityInfo info = new ActivityInfo();
+        info.applicationInfo = new ApplicationInfo();
+        info.taskAffinity = ActivityRecord.computeTaskAffinity("test", DEFAULT_FAKE_UID,
+                0 /* launchMode */);
+        info.requiredDisplayCategory = "automotive";
+        final Task task = new TaskBuilder(mSupervisor).setCreateActivity(true).setActivityInfo(info)
+                .build();
+
+        final ActivityRecord target = new ActivityBuilder(mAtm)
+                .setRequiredDisplayCategory(info.requiredDisplayCategory)
+                .setAffinity(info.taskAffinity).build();
+
+        final ActivityStarter starter = prepareStarter(0, false);
+        spyOn(starter);
+        doReturn(START_SUCCESS).when(starter).isAllowedToStart(any(), anyBoolean(), any());
+        startActivityInner(starter, target,  task.getBottomMostActivity(), null /* options */,
+                null /* inTask */, null /* inTaskFragment */);
+
+        assertEquals(task, target.getTask());
+    }
+
+    /**
+     * Tests a task with specific display category exist in system and launching activity into the
+     * specific task within inTask attribute. Make sure the activity is not placed on the task since
+     * the display category is different.
+     */
+    @Test
+    public void testLaunchActivityInTaskWithDisplayCategory() {
+        final ActivityInfo info = new ActivityInfo();
+        info.applicationInfo = new ApplicationInfo();
+        info.requiredDisplayCategory = "automotive";
+        final Task inTask = new TaskBuilder(mSupervisor).setActivityInfo(info).build();
+        inTask.inRecents = true;
+
+        final ActivityStarter starter = prepareStarter(0, false);
+        spyOn(starter);
+        doReturn(START_SUCCESS).when(starter).isAllowedToStart(any(), anyBoolean(), any());
+        final ActivityRecord target = new ActivityBuilder(mAtm).build();
+        startActivityInner(starter, target, null /* source */, null /* options */, inTask,
+                null /* inTaskFragment */);
+
+        assertNotEquals(inTask, target.getTask());
+    }
+
+    /**
+     * Tests a task without a specific display category exist in the system and launches activity
+     * with display category into the task within the inTask attribute. Make sure the activity is
+     * not placed on the task since the display category is different.
+     */
+    @Test
+    public void testLaunchDisplayCategoryActivityInTask() {
+        final Task inTask = new TaskBuilder(mSupervisor).build();
+        inTask.inRecents = true;
+
+        final ActivityStarter starter = prepareStarter(0, false);
+        spyOn(starter);
+        doReturn(START_SUCCESS).when(starter).isAllowedToStart(any(), anyBoolean(), any());
+        final ActivityRecord target = new ActivityBuilder(mAtm).setRequiredDisplayCategory("auto")
+                .build();
+        startActivityInner(starter, target, null /* source */, null /* options */, inTask,
+                null /* inTaskFragment */);
+
+        assertNotEquals(inTask, target.getTask());
+    }
+
     private static void startActivityInner(ActivityStarter starter, ActivityRecord target,
             ActivityRecord source, ActivityOptions options, Task inTask,
             TaskFragment inTaskFragment) {
         starter.startActivityInner(target, source, null /* voiceSession */,
                 null /* voiceInteractor */, 0 /* startFlags */,
-                options, inTask, inTaskFragment, false /* restrictedBgActivity */,
-                null /* intentGrants */);
+                options, inTask, inTaskFragment,
+                BackgroundActivityStartController.BAL_ALLOW_DEFAULT, null /* intentGrants */);
     }
 }

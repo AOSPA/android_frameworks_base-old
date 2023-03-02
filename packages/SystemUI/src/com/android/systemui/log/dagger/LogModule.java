@@ -23,6 +23,8 @@ import android.os.Looper;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.log.LogBufferFactory;
+import com.android.systemui.log.table.TableLogBuffer;
+import com.android.systemui.log.table.TableLogBufferFactory;
 import com.android.systemui.plugins.log.LogBuffer;
 import com.android.systemui.plugins.log.LogcatEchoTracker;
 import com.android.systemui.plugins.log.LogcatEchoTrackerDebug;
@@ -92,6 +94,14 @@ public class LogModule {
         return factory.create("LSShadeTransitionLog", 50);
     }
 
+    /** Provides a logging buffer for shade window messages. */
+    @Provides
+    @SysUISingleton
+    @ShadeWindowLog
+    public static LogBuffer provideShadeWindowLogBuffer(LogBufferFactory factory) {
+        return factory.create("ShadeWindowLog", 600, false);
+    }
+
     /** Provides a logging buffer for Shade messages. */
     @Provides
     @SysUISingleton
@@ -99,6 +109,15 @@ public class LogModule {
     public static LogBuffer provideShadeLogBuffer(LogBufferFactory factory) {
         return factory.create("ShadeLog", 500, false);
     }
+
+    /** Provides a logging buffer for Shade height messages. */
+    @Provides
+    @SysUISingleton
+    @ShadeHeightLog
+    public static LogBuffer provideShadeHeightLogBuffer(LogBufferFactory factory) {
+        return factory.create("ShadeHeightLog", 500 /* maxSize */);
+    }
+
 
     /** Provides a logging buffer for all logs related to managing notification sections. */
     @Provides
@@ -121,7 +140,7 @@ public class LogModule {
     @SysUISingleton
     @QSLog
     public static LogBuffer provideQuickSettingsLogBuffer(LogBufferFactory factory) {
-        return factory.create("QSLog", 500 /* maxSize */, false /* systrace */);
+        return factory.create("QSLog", 700 /* maxSize */, false /* systrace */);
     }
 
     /** Provides a logging buffer for {@link com.android.systemui.broadcast.BroadcastDispatcher} */
@@ -316,13 +335,33 @@ public class LogModule {
     }
 
     /**
-     * Provides a {@link LogBuffer} for keyguard clock logs.
+     * Provides a {@link LogBuffer} for general keyguard clock logs.
      */
     @Provides
     @SysUISingleton
     @KeyguardClockLog
     public static LogBuffer provideKeyguardClockLog(LogBufferFactory factory) {
-        return factory.create("KeyguardClockLog", 500);
+        return factory.create("KeyguardClockLog", 100);
+    }
+
+    /**
+     * Provides a {@link LogBuffer} for keyguard small clock logs.
+     */
+    @Provides
+    @SysUISingleton
+    @KeyguardSmallClockLog
+    public static LogBuffer provideKeyguardSmallClockLog(LogBufferFactory factory) {
+        return factory.create("KeyguardSmallClockLog", 100);
+    }
+
+    /**
+     * Provides a {@link LogBuffer} for keyguard large clock logs.
+     */
+    @Provides
+    @SysUISingleton
+    @KeyguardLargeClockLog
+    public static LogBuffer provideKeyguardLargeClockLog(LogBufferFactory factory) {
+        return factory.create("KeyguardLargeClockLog", 100);
     }
 
     /**
@@ -343,6 +382,14 @@ public class LogModule {
     @BluetoothLog
     public static LogBuffer providerBluetoothLogBuffer(LogBufferFactory factory) {
         return factory.create("BluetoothLog", 50);
+    }
+
+    /** Provides a logging buffer for the primary bouncer. */
+    @Provides
+    @SysUISingleton
+    @BouncerLog
+    public static TableLogBuffer provideBouncerLogBuffer(TableLogBufferFactory factory) {
+        return factory.create("BouncerLog", 250);
     }
 
     /**

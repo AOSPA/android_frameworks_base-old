@@ -20,6 +20,8 @@ import static android.app.ActivityManager.StopUserOnSwitch;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.PermissionMethod;
+import android.annotation.PermissionName;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager.ProcessCapability;
 import android.app.ActivityManager.RestrictionLevel;
@@ -28,11 +30,10 @@ import android.content.ComponentName;
 import android.content.IIntentReceiver;
 import android.content.IIntentSender;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ActivityPresentationInfo;
 import android.content.pm.ApplicationInfo;
-import android.content.pm.PermissionMethod;
-import android.content.pm.PermissionName;
 import android.content.pm.UserInfo;
 import android.net.Uri;
 import android.os.Bundle;
@@ -310,6 +311,12 @@ public abstract class ActivityManagerInternal {
     @PermissionMethod
     public abstract void enforceCallingPermission(@PermissionName String permission, String func);
 
+    /**
+     * Returns the current and target user ids as a {@link Pair}. Target user id will be
+     * {@link android.os.UserHandle#USER_NULL} if there is not an ongoing user switch.
+     */
+    public abstract Pair<Integer, Integer> getCurrentAndTargetUserIds();
+
     /** Returns the current user id. */
     public abstract int getCurrentUserId();
 
@@ -439,14 +446,14 @@ public abstract class ActivityManagerInternal {
             IApplicationThread resultToThread, IIntentReceiver resultTo, int resultCode,
             String resultData, Bundle resultExtras, String requiredPermission, Bundle bOptions,
             boolean serialized, boolean sticky, @UserIdInt int userId,
-            boolean allowBackgroundActivityStarts, @Nullable IBinder backgroundActivityStartsToken,
+            BackgroundStartPrivileges backgroundStartPrivileges,
             @Nullable int[] broadcastAllowList);
 
     public abstract ComponentName startServiceInPackage(int uid, Intent service,
             String resolvedType, boolean fgRequired, String callingPackage,
             @Nullable String callingFeatureId, @UserIdInt int userId,
-            boolean allowBackgroundActivityStarts,
-            @Nullable IBinder backgroundActivityStartsToken) throws TransactionTooLargeException;
+            BackgroundStartPrivileges backgroundStartPrivileges)
+            throws TransactionTooLargeException;
 
     public abstract void disconnectActivityFromServices(Object connectionHolder);
     public abstract void cleanUpServices(@UserIdInt int userId, ComponentName component,
@@ -910,4 +917,45 @@ public abstract class ActivityManagerInternal {
      * Return all client package names of a service.
      */
     public abstract ArraySet<String> getClientPackages(String servicePackageName);
+
+    /**
+     * Retrieve an IUnsafeIntentStrictModeCallback matching the given callingUid.
+     * Returns null no match is found.
+     * @param callingPid The PID mapped with the callback.
+     * @return The callback, if it exists.
+     */
+    public abstract IUnsafeIntentStrictModeCallback getRegisteredStrictModeCallback(
+            int callingPid);
+
+    /**
+     * Unregisters an IUnsafeIntentStrictModeCallback matching the given callingUid.
+     * @param callingPid The PID mapped with the callback.
+     */
+    public abstract void unregisterStrictModeCallback(int callingPid);
+
+    /**
+     * Start a foreground service delegate.
+     * @param options foreground service delegate options.
+     * @param connection a service connection served as callback to caller.
+     * @return true if delegate is started successfully, false otherwise.
+     * @hide
+     */
+    public abstract boolean startForegroundServiceDelegate(
+            @NonNull ForegroundServiceDelegationOptions options,
+            @Nullable ServiceConnection connection);
+
+    /**
+     * Stop a foreground service delegate.
+     * @param options the foreground service delegate options.
+     * @hide
+     */
+    public abstract void stopForegroundServiceDelegate(
+            @NonNull ForegroundServiceDelegationOptions options);
+
+    /**
+     * Stop a foreground service delegate by service connection.
+     * @param connection service connection used to start delegate previously.
+     * @hide
+     */
+    public abstract void stopForegroundServiceDelegate(@NonNull ServiceConnection connection);
 }

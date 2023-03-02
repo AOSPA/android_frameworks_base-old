@@ -22,7 +22,7 @@ import android.graphics.drawable.Drawable
 
 open class ProviderInfo(
   val icon: Drawable,
-  val name: String,
+  val id: String,
   val displayName: String,
 )
 
@@ -31,7 +31,6 @@ class EnabledProviderInfo(
   name: String,
   displayName: String,
   var createOptions: List<CreateOptionInfo>,
-  val isDefault: Boolean,
   var remoteEntry: RemoteInfo?,
 ) : ProviderInfo(icon, name, displayName)
 
@@ -56,11 +55,12 @@ class CreateOptionInfo(
   pendingIntent: PendingIntent?,
   fillInIntent: Intent?,
   val userProviderDisplayName: String?,
-  val profileIcon: Drawable,
+  val profileIcon: Drawable?,
   val passwordCount: Int?,
   val passkeyCount: Int?,
   val totalCredentialCount: Int?,
   val lastUsedTimeMillis: Long?,
+  val footerDescription: String?,
 ) : EntryInfo(providerId, entryKey, entrySubkey, pendingIntent, fillInIntent)
 
 class RemoteInfo(
@@ -75,9 +75,8 @@ data class RequestDisplayInfo(
   val title: String,
   val subtitle: String?,
   val type: String,
-  val appDomainName: String,
+  val appName: String,
   val typeIcon: Drawable,
-  val isFirstUsage: Boolean,
 )
 
 /**
@@ -92,6 +91,7 @@ data class ActiveEntry (
 /** The name of the current screen. */
 enum class CreateScreenState {
   PASSKEY_INTRO,
+  MORE_ABOUT_PASSKEYS_INTRO,
   PROVIDER_SELECTION,
   CREATION_OPTION_SELECTION,
   MORE_OPTIONS_SELECTION,

@@ -37,19 +37,23 @@ import android.telephony.TelephonyManager
 import androidx.annotation.VisibleForTesting
 import com.android.internal.telephony.PhoneConstants
 import com.android.settingslib.SignalIcon.MobileIconGroup
-import com.android.settingslib.mobile.MobileMappings
 import com.android.settingslib.mobile.MobileMappings.Config
+import com.android.systemui.R
 import com.android.systemui.broadcast.BroadcastDispatcher
 import com.android.systemui.common.coroutine.ConflatedCallbackFlow.conflatedCallbackFlow
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectivityModel
+import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.SubscriptionModel
-import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionRepository
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionsRepository
 import com.android.systemui.statusbar.pipeline.mobile.util.MobileMappingsProxy
 import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger
+import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger.Companion.logInputChange
+import com.android.systemui.statusbar.pipeline.wifi.data.model.WifiNetworkModel
+import com.android.systemui.statusbar.pipeline.wifi.data.repository.WifiRepository
+import com.android.systemui.util.kotlin.pairwiseBy
 import com.android.systemui.util.settings.GlobalSettings
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
@@ -62,6 +66,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.merge
@@ -85,33 +91,60 @@ constructor(
     private val context: Context,
     @Background private val bgDispatcher: CoroutineDispatcher,
     @Application private val scope: CoroutineScope,
-    private val mobileConnectionRepositoryFactory: MobileConnectionRepositoryImpl.Factory
+    // Some "wifi networks" should be rendered as a mobile connection, which is why the wifi
+    // repository is an input to the mobile repository.
+    // See [CarrierMergedConnectionRepository] for details.
+    wifiRepository: WifiRepository,
+    private val fullMobileRepoFactory: FullMobileConnectionRepository.Factory,
 ) : MobileConnectionsRepository {
-    private var subIdRepositoryCache: MutableMap<Int, MobileConnectionRepository> = mutableMapOf()
+    private var subIdRepositoryCache: MutableMap<Int, FullMobileConnectionRepository> =
+        mutableMapOf()
+
+    private val defaultNetworkName =
+        NetworkNameModel.Default(
+            context.getString(com.android.internal.R.string.lockscreen_carrier_default)
+        )
+
+    private val networkNameSeparator: String =
+        context.getString(R.string.status_bar_network_name_separator)
+
+    private val carrierMergedSubId: StateFlow<Int?> =
+        wifiRepository.wifiNetwork
+            .mapLatest {
+                if (it is WifiNetworkModel.CarrierMerged) {
+                    it.subscriptionId
+                } else {
+                    null
+                }
+            }
+            .distinctUntilChanged()
+            .stateIn(scope, started = SharingStarted.WhileSubscribed(), null)
+
+    private val mobileSubscriptionsChangeEvent: Flow<Unit> = conflatedCallbackFlow {
+        val callback =
+            object : SubscriptionManager.OnSubscriptionsChangedListener() {
+                override fun onSubscriptionsChanged() {
+                    trySend(Unit)
+                }
+            }
+
+        subscriptionManager.addOnSubscriptionsChangedListener(
+            bgDispatcher.asExecutor(),
+            callback,
+        )
+
+        awaitClose { subscriptionManager.removeOnSubscriptionsChangedListener(callback) }
+    }
 
     /**
      * State flow that emits the set of mobile data subscriptions, each represented by its own
-     * [SubscriptionInfo]. We probably only need the [SubscriptionInfo.getSubscriptionId] of each
-     * info object, but for now we keep track of the infos themselves.
+     * [SubscriptionModel].
      */
     override val subscriptions: StateFlow<List<SubscriptionModel>> =
-        conflatedCallbackFlow {
-                val callback =
-                    object : SubscriptionManager.OnSubscriptionsChangedListener() {
-                        override fun onSubscriptionsChanged() {
-                            trySend(Unit)
-                        }
-                    }
-
-                subscriptionManager.addOnSubscriptionsChangedListener(
-                    bgDispatcher.asExecutor(),
-                    callback,
-                )
-
-                awaitClose { subscriptionManager.removeOnSubscriptionsChangedListener(callback) }
-            }
+        merge(mobileSubscriptionsChangeEvent, carrierMergedSubId)
             .mapLatest { fetchSubscriptionsList().map { it.toSubscriptionModel() } }
-            .onEach { infos -> dropUnusedReposFromCache(infos) }
+            .logInputChange(logger, "onSubscriptionsChanged")
+            .onEach { infos -> updateRepos(infos) }
             .stateIn(scope, started = SharingStarted.WhileSubscribed(), listOf())
 
     /** StateFlow that keeps track of the current active mobile data subscription */
@@ -127,6 +160,8 @@ constructor(
                 telephonyManager.registerTelephonyCallback(bgDispatcher.asExecutor(), callback)
                 awaitClose { telephonyManager.unregisterTelephonyCallback(callback) }
             }
+            .distinctUntilChanged()
+            .logInputChange(logger, "onActiveDataSubscriptionIdChanged")
             .stateIn(scope, started = SharingStarted.WhileSubscribed(), INVALID_SUBSCRIPTION_ID)
 
     private val defaultDataSubIdChangeEvent: MutableSharedFlow<Unit> =
@@ -140,6 +175,7 @@ constructor(
                 intent.getIntExtra(PhoneConstants.SUBSCRIPTION_KEY, INVALID_SUBSCRIPTION_ID)
             }
             .distinctUntilChanged()
+            .logInputChange(logger, "ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED")
             .onEach { defaultDataSubIdChangeEvent.tryEmit(Unit) }
             .stateIn(
                 scope,
@@ -148,23 +184,15 @@ constructor(
             )
 
     private val carrierConfigChangedEvent =
-        broadcastDispatcher.broadcastFlow(
-            IntentFilter(CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED)
-        )
+        broadcastDispatcher
+            .broadcastFlow(IntentFilter(CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED))
+            .logInputChange(logger, "ACTION_CARRIER_CONFIG_CHANGED")
 
-    /**
-     * [Config] is an object that tracks relevant configuration flags for a given subscription ID.
-     * In the case of [MobileMappings], it's hard-coded to check the default data subscription's
-     * config, so this will apply to every icon that we care about.
-     *
-     * Relevant bits in the config are things like
-     * [CarrierConfigManager.KEY_SHOW_4G_FOR_LTE_DATA_ICON_BOOL]
-     *
-     * This flow will produce whenever the default data subscription or the carrier config changes.
-     */
-    private val defaultDataSubRatConfig: StateFlow<Config> =
+    override val defaultDataSubRatConfig: StateFlow<Config> =
         merge(defaultDataSubIdChangeEvent, carrierConfigChangedEvent)
             .mapLatest { Config.readConfig(context) }
+            .distinctUntilChanged()
+            .logInputChange(logger, "defaultDataSubRatConfig")
             .stateIn(
                 scope,
                 SharingStarted.WhileSubscribed(),
@@ -172,12 +200,18 @@ constructor(
             )
 
     override val defaultMobileIconMapping: Flow<Map<String, MobileIconGroup>> =
-        defaultDataSubRatConfig.map { mobileMappingsProxy.mapIconSets(it) }
+        defaultDataSubRatConfig
+            .map { mobileMappingsProxy.mapIconSets(it) }
+            .distinctUntilChanged()
+            .logInputChange(logger, "defaultMobileIconMapping")
 
     override val defaultMobileIconGroup: Flow<MobileIconGroup> =
-        defaultDataSubRatConfig.map { mobileMappingsProxy.getDefaultIcons(it) }
+        defaultDataSubRatConfig
+            .map { mobileMappingsProxy.getDefaultIcons(it) }
+            .distinctUntilChanged()
+            .logInputChange(logger, "defaultMobileIconGroup")
 
-    override fun getRepoForSubId(subId: Int): MobileConnectionRepository {
+    override fun getRepoForSubId(subId: Int): FullMobileConnectionRepository {
         if (!isValidSubId(subId)) {
             throw IllegalArgumentException(
                 "subscriptionId $subId is not in the list of valid subscriptions"
@@ -192,22 +226,24 @@ constructor(
      * In single-SIM devices, the [MOBILE_DATA] setting is phone-wide. For multi-SIM, the individual
      * connection repositories also observe the URI for [MOBILE_DATA] + subId.
      */
-    override val globalMobileDataSettingChangedEvent: Flow<Unit> = conflatedCallbackFlow {
-        val observer =
-            object : ContentObserver(null) {
-                override fun onChange(selfChange: Boolean) {
-                    trySend(Unit)
-                }
+    override val globalMobileDataSettingChangedEvent: Flow<Unit> =
+        conflatedCallbackFlow {
+                val observer =
+                    object : ContentObserver(null) {
+                        override fun onChange(selfChange: Boolean) {
+                            trySend(Unit)
+                        }
+                    }
+
+                globalSettings.registerContentObserver(
+                    globalSettings.getUriFor(MOBILE_DATA),
+                    true,
+                    observer
+                )
+
+                awaitClose { context.contentResolver.unregisterContentObserver(observer) }
             }
-
-        globalSettings.registerContentObserver(
-            globalSettings.getUriFor(MOBILE_DATA),
-            true,
-            observer
-        )
-
-        awaitClose { context.contentResolver.unregisterContentObserver(observer) }
-    }
+            .logInputChange(logger, "globalMobileDataSettingChangedEvent")
 
     @SuppressLint("MissingPermission")
     override val defaultMobileNetworkConnectivity: StateFlow<MobileConnectivityModel> =
@@ -237,7 +273,38 @@ constructor(
 
                 awaitClose { connectivityManager.unregisterNetworkCallback(callback) }
             }
+            .distinctUntilChanged()
+            .logInputChange(logger, "defaultMobileNetworkConnectivity")
             .stateIn(scope, SharingStarted.WhileSubscribed(), MobileConnectivityModel())
+
+    /**
+     * Flow that tracks the active mobile data subscriptions. Emits `true` whenever the active data
+     * subscription Id changes but the subscription group remains the same. In these cases, we want
+     * to retain the previous subscription's validation status for up to 2s to avoid flickering the
+     * icon.
+     *
+     * TODO(b/265164432): we should probably expose all change events, not just same group
+     */
+    @SuppressLint("MissingPermission")
+    override val activeSubChangedInGroupEvent =
+        flow {
+                activeMobileDataSubscriptionId.pairwiseBy { prevVal: Int, newVal: Int ->
+                    if (!defaultMobileNetworkConnectivity.value.isValidated) {
+                        return@pairwiseBy
+                    }
+                    val prevSub = subscriptionManager.getActiveSubscriptionInfo(prevVal)
+                    val nextSub = subscriptionManager.getActiveSubscriptionInfo(newVal)
+
+                    if (prevSub == null || nextSub == null) {
+                        return@pairwiseBy
+                    }
+
+                    if (prevSub.groupUuid != null && prevSub.groupUuid == nextSub.groupUuid) {
+                        emit(Unit)
+                    }
+                }
+            }
+            .flowOn(bgDispatcher)
 
     private fun isValidSubId(subId: Int): Boolean {
         subscriptions.value.forEach {
@@ -251,12 +318,25 @@ constructor(
 
     @VisibleForTesting fun getSubIdRepoCache() = subIdRepositoryCache
 
-    private fun createRepositoryForSubId(subId: Int): MobileConnectionRepository {
-        return mobileConnectionRepositoryFactory.build(
+    private fun createRepositoryForSubId(subId: Int): FullMobileConnectionRepository {
+        return fullMobileRepoFactory.build(
             subId,
-            defaultDataSubId,
+            isCarrierMerged(subId),
+            defaultNetworkName,
+            networkNameSeparator,
             globalMobileDataSettingChangedEvent,
         )
+    }
+
+    private fun updateRepos(newInfos: List<SubscriptionModel>) {
+        dropUnusedReposFromCache(newInfos)
+        subIdRepositoryCache.forEach { (subId, repo) ->
+            repo.setIsCarrierMerged(isCarrierMerged(subId))
+        }
+    }
+
+    private fun isCarrierMerged(subId: Int): Boolean {
+        return subId == carrierMergedSubId.value
     }
 
     private fun dropUnusedReposFromCache(newInfos: List<SubscriptionModel>) {

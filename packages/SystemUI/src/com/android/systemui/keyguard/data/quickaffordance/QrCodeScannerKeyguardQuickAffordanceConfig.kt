@@ -84,16 +84,12 @@ constructor(
                     instructions =
                         listOf(
                             context.getString(
-                                R.string.keyguard_affordance_enablement_dialog_message,
-                                pickerName,
-                            ),
-                            context.getString(
                                 R.string
                                     .keyguard_affordance_enablement_dialog_qr_scanner_instruction
                             ),
                         ),
                 )
-            else -> KeyguardQuickAffordanceConfig.PickerScreenState.Default
+            else -> KeyguardQuickAffordanceConfig.PickerScreenState.Default()
         }
     }
 

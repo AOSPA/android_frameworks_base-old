@@ -16,11 +16,11 @@
 
 package android.app.backup;
 
-import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
+import android.app.backup.BackupAnnotations.OperationType;
 import android.app.compat.CompatChanges;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledAfter;
@@ -37,8 +37,6 @@ import android.os.UserHandle;
 import android.util.Log;
 import android.util.Pair;
 
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
 import java.util.List;
 
 /**
@@ -405,6 +403,36 @@ public class BackupManager {
             } catch (RemoteException e) {
                 Log.e(TAG, "setBackupEnabled() couldn't connect");
             }
+        }
+    }
+
+    /**
+     * Enable/disable the framework backup scheduling entirely for the context user. When disabled,
+     * no Key/Value or Full backup jobs will be scheduled by the Android framework.
+     *
+     * <p>Note: This does not disable backups: only their scheduling is affected and backups can
+     * still be triggered manually.
+     *
+     * <p>Callers must hold the android.permission.BACKUP permission to use this method. If the
+     * context user is different from the calling user, then the caller must additionally hold the
+     * android.permission.INTERACT_ACROSS_USERS_FULL permission.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(allOf = {android.Manifest.permission.BACKUP,
+            android.Manifest.permission.INTERACT_ACROSS_USERS_FULL}, conditional = true)
+    public void setFrameworkSchedulingEnabled(boolean isEnabled) {
+        checkServiceBinder();
+        if (sService == null) {
+            Log.e(TAG, "setFrameworkSchedulingEnabled() couldn't connect");
+            return;
+        }
+
+        try {
+            sService.setFrameworkSchedulingEnabledForUser(mContext.getUserId(), isEnabled);
+        } catch (RemoteException e) {
+            Log.e(TAG, "setFrameworkSchedulingEnabled() couldn't connect");
         }
     }
 
@@ -1039,6 +1067,42 @@ public class BackupManager {
                     + "BackupAgent");
         }
         return backupAgent.getBackupRestoreEventLogger();
+    }
+
+    /**
+     * Get an instance of {@link BackupRestoreEventLogger} to report B&R related events during a
+     * delayed restore operation.
+     *
+     * @return an instance of {@link BackupRestoreEventLogger}.
+     *
+     * @hide
+     */
+    @NonNull
+    @SystemApi
+    public BackupRestoreEventLogger getDelayedRestoreLogger() {
+        return new BackupRestoreEventLogger(OperationType.RESTORE);
+    }
+
+    /**
+     * Report B&R related events following a delayed restore operation.
+     *
+     * @param logger an instance of {@link BackupRestoreEventLogger} to which the corresponding
+     *               events have been logged.
+     *
+     * @hide
+     */
+    @NonNull
+    @SystemApi
+    public void reportDelayedRestoreResult(@NonNull BackupRestoreEventLogger logger) {
+        checkServiceBinder();
+        if (sService != null) {
+            try {
+                sService.reportDelayedRestoreResult(mContext.getPackageName(),
+                        logger.getLoggingResults());
+            } catch (RemoteException e) {
+                Log.w(TAG, "reportDelayedRestoreResult() couldn't connect");
+            }
+        }
     }
 
     /*

@@ -242,8 +242,6 @@ interface ISub {
 
     int getDefaultSubId();
 
-    int clearSubInfo();
-
     int getPhoneId(int subId);
 
     /**
@@ -274,11 +272,6 @@ interface ISub {
     boolean isSubscriptionEnabled(int subId);
 
     int getEnabledSubscriptionId(int slotIndex);
-    /**
-     * Get the SIM state for the slot index
-     * @return SIM state as the ordinal of IccCardConstants.State
-     */
-    int getSimStateForSlotIndex(int slotIndex);
 
     boolean isActiveSubId(int subId, String callingPackage, String callingFeatureId);
 
@@ -333,4 +326,34 @@ interface ISub {
      * @throws IllegalArgumentException if subId is invalid.
      */
      UserHandle getSubscriptionUserHandle(int subId);
+
+     /**
+      * Check if subscription and user are associated with each other.
+      *
+      * @param subscriptionId the subId of the subscription
+      * @param userHandle user handle of the user
+      * @return {@code true} if subscription is associated with user
+      * {code true} if there are no subscriptions on device
+      * else {@code false} if subscription is not associated with user.
+      *
+      * @throws IllegalArgumentException if subscription is invalid.
+      * @throws SecurityException if the caller doesn't have permissions required.
+      * @throws IllegalStateException if subscription service is not available.
+      *
+      * @hide
+      */
+      boolean isSubscriptionAssociatedWithUser(int subscriptionId, in UserHandle userHandle);
+
+      /**
+       * Get list of subscriptions associated with user.
+       *
+       * @param userHandle user handle of the user
+       * @return list of subscriptionInfo associated with the user.
+       *
+       * @throws SecurityException if the caller doesn't have permissions required.
+       * @throws IllegalStateException if subscription service is not available.
+       *
+       * @hide
+       */
+       List<SubscriptionInfo> getSubscriptionInfoListAssociatedWithUser(in UserHandle userHandle);
 }

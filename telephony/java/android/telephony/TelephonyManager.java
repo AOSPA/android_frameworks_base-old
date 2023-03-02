@@ -71,7 +71,6 @@ import android.os.PersistableBundle;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.SystemProperties;
-import android.os.UserHandle;
 import android.os.WorkSource;
 import android.provider.Settings.SettingNotFoundException;
 import android.service.carrier.CarrierIdentifier;
@@ -127,7 +126,6 @@ import com.android.internal.telephony.IccLogicalChannelRequest;
 import com.android.internal.telephony.OperatorInfo;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.RILConstants;
-import com.android.internal.telephony.SmsApplication;
 import com.android.telephony.Rlog;
 
 import java.io.IOException;
@@ -362,6 +360,31 @@ public class TelephonyManager {
     public static final int SRVCC_STATE_HANDOVER_CANCELED  = 3;
 
     /**
+     * Convert srvcc handover state to string.
+     *
+     * @param state The srvcc handover state.
+     * @return The srvcc handover state in string format.
+     *
+     * @hide
+     */
+    public static @NonNull String srvccStateToString(int state) {
+        switch (state) {
+            case TelephonyManager.SRVCC_STATE_HANDOVER_NONE:
+                return "NONE";
+            case TelephonyManager.SRVCC_STATE_HANDOVER_STARTED:
+                return "STARTED";
+            case TelephonyManager.SRVCC_STATE_HANDOVER_COMPLETED:
+                return "COMPLETED";
+            case TelephonyManager.SRVCC_STATE_HANDOVER_FAILED:
+                return "FAILED";
+            case TelephonyManager.SRVCC_STATE_HANDOVER_CANCELED:
+                return "CANCELED";
+            default:
+                return "UNKNOWN(" + state + ")";
+        }
+    }
+
+    /**
      * A UICC card identifier used if the device does not support the operation.
      * For example, {@link #getCardIdForDefaultEuicc()} returns this value if the device has no
      * eUICC, or the eUICC cannot be read.
@@ -389,6 +412,9 @@ public class TelephonyManager {
 
     /** @hide */
     public static final int INVALID_PORT_INDEX = -1;
+
+    /** @hide */
+    public static final String PROPERTY_ENABLE_NULL_CIPHER_TOGGLE = "enable_null_cipher_toggle";
 
     private final Context mContext;
     private final int mSubId;
@@ -2969,7 +2995,7 @@ public class TelephonyManager {
     public static final int NETWORK_TYPE_HSPA = TelephonyProtoEnums.NETWORK_TYPE_HSPA; // = 10.
     /**
      * Current network is iDen
-     * @deprecated Legacy network type no longer being used.
+     * @deprecated Legacy network type no longer being used starting in Android U.
      */
     @Deprecated
     public static final int NETWORK_TYPE_IDEN = TelephonyProtoEnums.NETWORK_TYPE_IDEN; // = 11.
@@ -3590,7 +3616,7 @@ public class TelephonyManager {
                     "state as absent");
             return SIM_STATE_ABSENT;
         }
-        return SubscriptionManager.getSimStateForSlotIndex(slotIndex);
+        return getSimStateForSlotIndex(slotIndex);
     }
 
     /**
@@ -3737,9 +3763,7 @@ public class TelephonyManager {
     @Deprecated
     public @SimState int getSimApplicationState(int physicalSlotIndex) {
         int activePort = getFirstActivePortIndex(physicalSlotIndex);
-        int simState =
-                SubscriptionManager.getSimStateForSlotIndex(getLogicalSlotIndex(physicalSlotIndex,
-                        activePort));
+        int simState = getSimStateForSlotIndex(getLogicalSlotIndex(physicalSlotIndex, activePort));
         return getSimApplicationStateFromSimState(simState);
     }
 
@@ -3765,9 +3789,7 @@ public class TelephonyManager {
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     @RequiresFeature(PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)
     public @SimState int getSimApplicationState(int physicalSlotIndex, int portIndex) {
-        int simState =
-                SubscriptionManager.getSimStateForSlotIndex(getLogicalSlotIndex(physicalSlotIndex,
-                        portIndex));
+        int simState = getSimStateForSlotIndex(getLogicalSlotIndex(physicalSlotIndex, portIndex));
         return getSimApplicationStateFromSimState(simState);
     }
 
@@ -3836,7 +3858,7 @@ public class TelephonyManager {
      */
     @RequiresFeature(PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)
     public @SimState int getSimState(int slotIndex) {
-        int simState = SubscriptionManager.getSimStateForSlotIndex(slotIndex);
+        int simState = getSimStateForSlotIndex(slotIndex);
         if (simState == SIM_STATE_LOADED) {
             simState = SIM_STATE_READY;
         }
@@ -14001,7 +14023,7 @@ public class TelephonyManager {
      * If used, will be converted to {@link #NETWORK_TYPE_BITMASK_LTE}.
      * network type bitmask indicating the support of radio tech LTE CA (carrier aggregation).
      *
-     * @deprecated Please use {@link #NETWORK_TYPE_BITMASK_LTE} instead.
+     * @deprecated Please use {@link #NETWORK_TYPE_BITMASK_LTE} instead. Deprecated in Android U.
      */
     @Deprecated
     public static final long NETWORK_TYPE_BITMASK_LTE_CA = (1 << (NETWORK_TYPE_LTE_CA -1));
@@ -17318,7 +17340,7 @@ public class TelephonyManager {
      * During the setup time, subsequent attempts will return
      * {@link #PURCHASE_PREMIUM_CAPABILITY_RESULT_PENDING_NETWORK_SETUP}.
      * After setup is complete, subsequent attempts will return
-     * {@link #PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_PURCHASED} until the booster expires.
+     * {@link #PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_PURCHASED} until the boost expires.
      * The expiry time is determined by the type or duration of boost purchased from the carrier,
      * provided at {@link CarrierConfigManager#KEY_PREMIUM_CAPABILITY_PURCHASE_URL_STRING}.
      */
@@ -17329,13 +17351,11 @@ public class TelephonyManager {
      * If purchasing premium capabilities is throttled, it will be for the amount of time
      * specified by {@link CarrierConfigManager
      * #KEY_PREMIUM_CAPABILITY_PURCHASE_CONDITION_BACKOFF_HYSTERESIS_TIME_MILLIS_LONG}.
-     * If displaying the network boost notification is throttled, it will be for the amount of time
-     * specified by {@link CarrierConfigManager
+     * If displaying the performance boost notification is throttled, it will be for the amount of
+     * time specified by {@link CarrierConfigManager
      * #KEY_PREMIUM_CAPABILITY_NOTIFICATION_BACKOFF_HYSTERESIS_TIME_MILLIS_LONG}.
-     * If a foreground application requests premium capabilities, the network boost notification
-     * will be displayed to the user regardless of the throttled status.
-     * We will show the network boost notification to the user up to the daily and monthly maximum
-     * number of times specified by
+     * We will show the performance boost notification to the user up to the daily and monthly
+     * maximum number of times specified by
      * {@link CarrierConfigManager#KEY_PREMIUM_CAPABILITY_MAXIMUM_DAILY_NOTIFICATION_COUNT_INT} and
      * {@link CarrierConfigManager#KEY_PREMIUM_CAPABILITY_MAXIMUM_MONTHLY_NOTIFICATION_COUNT_INT}.
      * Subsequent attempts will return the same error until the request is no longer throttled
@@ -17345,7 +17365,7 @@ public class TelephonyManager {
 
     /**
      * Purchase premium capability failed because it is already purchased and available.
-     * Subsequent attempts will return the same error until the booster expires.
+     * Subsequent attempts will return the same error until the performance boost expires.
      */
     public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_PURCHASED = 3;
 
@@ -17357,14 +17377,11 @@ public class TelephonyManager {
     public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_IN_PROGRESS = 4;
 
     /**
-     * Purchase premium capability failed because a foreground application requested the same
-     * capability. The notification for the current application will be dismissed and a new
-     * notification will be displayed to the user for the foreground application.
-     * Subsequent attempts will return
-     * {@link #PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_IN_PROGRESS} until the foreground
-     * application's request is completed.
+     * Purchase premium capability failed because the requesting application is not in the
+     * foreground. Subsequent attempts will return the same error until the requesting application
+     * moves to the foreground.
      */
-    public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_OVERRIDDEN = 5;
+    public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_NOT_FOREGROUND = 5;
 
     /**
      * Purchase premium capability failed because the user canceled the operation.
@@ -17394,10 +17411,10 @@ public class TelephonyManager {
 
     /**
      * Purchase premium capability failed because we did not receive a response from the user
-     * for the booster notification within the time specified by
+     * for the performance boost notification within the time specified by
      * {@link CarrierConfigManager#KEY_PREMIUM_CAPABILITY_NOTIFICATION_DISPLAY_TIMEOUT_MILLIS_LONG}.
-     * The booster notification will be automatically dismissed and subsequent attempts will be
-     * throttled for the amount of time specified by
+     * The performance boost notification will be automatically dismissed and subsequent attempts
+     * will be throttled for the amount of time specified by
      * {@link CarrierConfigManager
      * #KEY_PREMIUM_CAPABILITY_NOTIFICATION_BACKOFF_HYSTERESIS_TIME_MILLIS_LONG}
      * and return {@link #PURCHASE_PREMIUM_CAPABILITY_RESULT_THROTTLED}.
@@ -17461,7 +17478,7 @@ public class TelephonyManager {
             PURCHASE_PREMIUM_CAPABILITY_RESULT_THROTTLED,
             PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_PURCHASED,
             PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_IN_PROGRESS,
-            PURCHASE_PREMIUM_CAPABILITY_RESULT_OVERRIDDEN,
+            PURCHASE_PREMIUM_CAPABILITY_RESULT_NOT_FOREGROUND,
             PURCHASE_PREMIUM_CAPABILITY_RESULT_USER_CANCELED,
             PURCHASE_PREMIUM_CAPABILITY_RESULT_CARRIER_DISABLED,
             PURCHASE_PREMIUM_CAPABILITY_RESULT_CARRIER_ERROR,
@@ -17491,8 +17508,8 @@ public class TelephonyManager {
                 return "ALREADY_PURCHASED";
             case PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_IN_PROGRESS:
                 return "ALREADY_IN_PROGRESS";
-            case PURCHASE_PREMIUM_CAPABILITY_RESULT_OVERRIDDEN:
-                return "OVERRIDDEN";
+            case PURCHASE_PREMIUM_CAPABILITY_RESULT_NOT_FOREGROUND:
+                return "NOT_FOREGROUND";
             case PURCHASE_PREMIUM_CAPABILITY_RESULT_USER_CANCELED:
                 return "USER_CANCELED";
             case PURCHASE_PREMIUM_CAPABILITY_RESULT_CARRIER_DISABLED:
@@ -17529,10 +17546,12 @@ public class TelephonyManager {
      * @param executor The callback executor for the response.
      * @param callback The result of the purchase request.
      *                 One of {@link PurchasePremiumCapabilityResult}.
-     * @throws SecurityException if the caller does not hold permission READ_BASIC_PHONE_STATE.
+     * @throws SecurityException if the caller does not hold permissions
+     *         READ_BASIC_PHONE_STATE or INTERNET.
      * @see #isPremiumCapabilityAvailableForPurchase(int) to check whether the capability is valid.
      */
-    @RequiresPermission(android.Manifest.permission.READ_BASIC_PHONE_STATE)
+    @RequiresPermission(allOf = {android.Manifest.permission.READ_BASIC_PHONE_STATE,
+            android.Manifest.permission.INTERNET})
     public void purchasePremiumCapability(@PremiumCapability int capability,
             @NonNull @CallbackExecutor Executor executor,
             @NonNull @PurchasePremiumCapabilityResult Consumer<Integer> callback) {
@@ -17753,33 +17772,301 @@ public class TelephonyManager {
     }
 
     /**
-     * Fetches the EFPSISMSC value from the SIM that contains the Public Service Identity
-     * of the SM-SC (either a SIP URI or tel URI), the value is common for both appType
-     * {@link #APPTYPE_ISIM} and {@link #APPTYPE_SIM}.
-     * The EFPSISMSC value is used by the ME to submit SMS over IP as defined in 24.341 [55].
+     * Returns a constant indicating the state of sim for the slot index.
      *
-     * @param appType ICC Application type {@link #APPTYPE_ISIM} or {@link #APPTYPE_USIM}
-     * @return SIP URI or tel URI of the Public Service Identity of the SM-SC
+     * @param slotIndex Logical SIM slot index.
+     *
+     * @see TelephonyManager.SimState
+     *
+     * @hide
+     */
+    @SimState
+    public static int getSimStateForSlotIndex(int slotIndex) {
+        try {
+            ITelephony telephony = ITelephony.Stub.asInterface(
+                    TelephonyFrameworkInitializer
+                            .getTelephonyServiceManager()
+                            .getTelephonyServiceRegisterer()
+                            .get());
+            if (telephony != null) {
+                return telephony.getSimStateForSlotIndex(slotIndex);
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error in getSimStateForSlotIndex: " + e);
+        }
+        return TelephonyManager.SIM_STATE_UNKNOWN;
+    }
+
+    /**
+     * Set the UE's ability to accept/reject null ciphered and null integrity-protected connections.
+     *
+     * The modem is required to ignore this in case of an emergency call.
+     *
+     * <p>Requires permission: android.Manifest.MODIFY_PHONE_STATE</p>
+     *
+     * @param enabled if null ciphered and null integrity protected connections are permitted
+     * @throws IllegalStateException if the Telephony process is not currently available
+     * @throws SecurityException if the caller does not have the required privileges
+     * @throws UnsupportedOperationException if the modem does not support disabling null ciphers.
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    public void setNullCipherAndIntegrityEnabled(boolean enabled) {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                telephony.setNullCipherAndIntegrityEnabled(enabled);
+            } else {
+                throw new IllegalStateException("telephony service is null.");
+            }
+        } catch (RemoteException ex) {
+            Rlog.e(TAG, "setNullCipherAndIntegrityEnabled RemoteException", ex);
+            ex.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Get the value of the global preference for null cipher and integriy enablement.
+     * Note: This does not return the state of the modem, only the persisted global preference.
+     *
+     * <p>Requires permission: android.Manifest.READ_PHONE_STATE</p>
+     *
+     * @throws IllegalStateException if the Telephony process is not currently available
+     * @throws SecurityException if the caller does not have the required privileges
+     * @throws UnsupportedOperationException if the modem does not support disabling null ciphers.
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.READ_PHONE_STATE)
+    public boolean isNullCipherAndIntegrityPreferenceEnabled() {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                return telephony.isNullCipherAndIntegrityPreferenceEnabled();
+            } else {
+                throw new IllegalStateException("telephony service is null.");
+            }
+        } catch (RemoteException ex) {
+            Rlog.e(TAG, "isNullCipherAndIntegrityPreferenceEnabled RemoteException", ex);
+            ex.rethrowFromSystemServer();
+        }
+        return true;
+    }
+
+    /**
+     * Get current cell broadcast message identifier ranges.
+     *
+     * @throws SecurityException if the caller does not have the required permission
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_CELL_BROADCASTS)
+    @NonNull
+    public List<CellBroadcastIdRange> getCellBroadcastIdRanges() {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                return telephony.getCellBroadcastIdRanges(getSubId());
+            } else {
+                throw new IllegalStateException("telephony service is null.");
+            }
+        } catch (RemoteException ex) {
+            ex.rethrowFromSystemServer();
+        }
+        return new ArrayList<>();
+    }
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = {"CELL_BROADCAST_RESULT_"}, value = {
+            CELL_BROADCAST_RESULT_UNKNOWN,
+            CELL_BROADCAST_RESULT_SUCCESS,
+            CELL_BROADCAST_RESULT_UNSUPPORTED,
+            CELL_BROADCAST_RESULT_FAIL_CONFIG,
+            CELL_BROADCAST_RESULT_FAIL_ACTIVATION})
+    public @interface CellBroadcastResult {}
+
+    /**
+     * The result of the cell broadcast request is unknown
+     * @hide
+     */
+    @SystemApi
+    public static final int CELL_BROADCAST_RESULT_UNKNOWN = -1;
+
+    /**
+     * The cell broadcast request is successful.
+     * @hide
+     */
+    @SystemApi
+    public static final int CELL_BROADCAST_RESULT_SUCCESS = 0;
+
+    /**
+     * The cell broadcast request is not supported.
+     * @hide
+     */
+    @SystemApi
+    public static final int CELL_BROADCAST_RESULT_UNSUPPORTED = 1;
+
+    /**
+     * The cell broadcast request is failed due to the error to set config
+     * @hide
+     */
+    @SystemApi
+    public static final int CELL_BROADCAST_RESULT_FAIL_CONFIG = 2;
+
+    /**
+     * The cell broadcast request is failed due to the error to set activation
+     * @hide
+     */
+    @SystemApi
+    public static final int CELL_BROADCAST_RESULT_FAIL_ACTIVATION = 3;
+
+    /**
+     * Set reception of cell broadcast messages with the list of the given ranges
+     *
+     * <p>The ranges set previously will be overridden by the new one. Empty list
+     * can be used to clear the ranges.
+     *
+     * @param ranges the list of {@link CellBroadcastIdRange} to be set.
+     * @param executor The {@link Executor} that will be used to call the callback.
+     * @param callback A callback called on the supplied {@link Executor} to notify
+     * the result when the operation completes.
+     * @throws SecurityException if the caller does not have the required permission
+     * @throws IllegalArgumentException when the ranges are invalid.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_CELL_BROADCASTS)
+    public void setCellBroadcastIdRanges(@NonNull List<CellBroadcastIdRange> ranges,
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull Consumer<Integer> callback) {
+        IIntegerConsumer consumer = callback == null ? null : new IIntegerConsumer.Stub() {
+            @Override
+            public void accept(int result) {
+                final long identity = Binder.clearCallingIdentity();
+                try {
+                    executor.execute(() -> callback.accept(result));
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
+            }
+        };
+
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                telephony.setCellBroadcastIdRanges(getSubId(), ranges, consumer);
+            } else {
+                throw new IllegalStateException("telephony service is null.");
+            }
+        } catch (RemoteException ex) {
+            ex.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns whether the domain selection service is supported.
+     *
+     * <p>Requires Permission:
+     * {@link android.Manifest.permission#READ_PRIVILEGED_PHONE_STATE READ_PRIVILEGED_PHONE_STATE}.
+     *
+     * @return {@code true} if the domain selection service is supported.
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    @RequiresFeature(PackageManager.FEATURE_TELEPHONY_CALLING)
+    public boolean isDomainSelectionSupported() {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                return telephony.isDomainSelectionSupported();
+            }
+        } catch (RemoteException ex) {
+            Rlog.w(TAG, "RemoteException", ex);
+        }
+        return false;
+    }
+
+    /**
+     * Returns the primary IMEI (International Mobile Equipment Identity) of the device as
+     * mentioned in GSMA TS.37. {@link #getImei(int)} returns the IMEI that belongs to the selected
+     * slotID whereas this API {@link #getPrimaryImei()} returns primary IMEI of the device.
+     * A single SIM device with only one IMEI will be set by default as primary IMEI.
+     * A multi-SIM device with multiple IMEIs will have one of the IMEIs set as primary as
+     * mentioned in GSMA TS37_2.2_REQ_8.
+     *
+     * <p>Requires one of the following permissions
+     * <ul>
+     *     <li>If the calling app has been granted the READ_PRIVILEGED_PHONE_STATE permission; this
+     *     is a privileged permission that can only be granted to apps preloaded on the device.
+     *     <li>If the calling app is the device owner of a fully-managed device, a profile
+     *     owner of an organization-owned device, or their delegates (see {@link
+     *     android.app.admin.DevicePolicyManager#getEnrollmentSpecificId()}).
+     *     <li>If the calling app has carrier privileges (see {@link #hasCarrierPrivileges}) on any
+     *     active subscription.
+     *     <li>If the calling app is the default SMS role holder (see {@link
+     *     RoleManager#isRoleHeld(String)}).
+     *     <li>If the calling app has been granted the
+     *      {@link Manifest.permission#USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER} permission.
+     * </ul>
+     *
+     * @return Primary IMEI of type string
+     * @throws UnsupportedOperationException if the radio doesn't support this feature.
      * @throws SecurityException if the caller does not have the required permission/privileges
+     */
+    @NonNull
+    @RequiresFeature(PackageManager.FEATURE_TELEPHONY_GSM)
+    public String getPrimaryImei() {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony == null) {
+                Rlog.e(TAG, "getPrimaryImei(): IPhoneSubInfo instance is NULL");
+                throw new IllegalStateException("Telephony service not available.");
+            }
+            return telephony.getPrimaryImei(getOpPackageName(), getAttributionTag());
+        } catch (RemoteException ex) {
+            Rlog.e(TAG, "getPrimaryImei() RemoteException : " + ex);
+            throw ex.rethrowAsRuntimeException();
+        }
+    }
+
+    /**
+     * Convert SIM state into string.
+     *
+     * @param state SIM state.
+     * @return SIM state in string format.
+     *
      * @hide
      */
     @NonNull
-    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
-    @RequiresFeature(PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)
-    public String getSmscIdentity(int appType) {
-        try {
-            IPhoneSubInfo info = getSubscriberInfoService();
-            if (info == null) {
-                Rlog.e(TAG, "getSmscIdentity(): IPhoneSubInfo instance is NULL");
-                return null;
-            }
-            /** Fetches the SIM PSISMSC params based on subId and appType */
-            return info.getSmscIdentity(getSubId(), appType);
-        } catch (RemoteException ex) {
-            Rlog.e(TAG, "getSmscIdentity(): RemoteException: " + ex.getMessage());
-        } catch (NullPointerException ex) {
-            Rlog.e(TAG, "getSmscIdentity(): NullPointerException: " + ex.getMessage());
+    public static String simStateToString(@SimState int state) {
+        switch (state) {
+            case TelephonyManager.SIM_STATE_UNKNOWN:
+                return "UNKNOWN";
+            case TelephonyManager.SIM_STATE_ABSENT:
+                return "ABSENT";
+            case TelephonyManager.SIM_STATE_PIN_REQUIRED:
+                return "PIN_REQUIRED";
+            case TelephonyManager.SIM_STATE_PUK_REQUIRED:
+                return "PUK_REQUIRED";
+            case TelephonyManager.SIM_STATE_NETWORK_LOCKED:
+                return "NETWORK_LOCKED";
+            case TelephonyManager.SIM_STATE_READY:
+                return "READY";
+            case TelephonyManager.SIM_STATE_NOT_READY:
+                return "NOT_READY";
+            case TelephonyManager.SIM_STATE_PERM_DISABLED:
+                return "PERM_DISABLED";
+            case TelephonyManager.SIM_STATE_CARD_IO_ERROR:
+                return "CARD_IO_ERROR";
+            case TelephonyManager.SIM_STATE_CARD_RESTRICTED:
+                return "CARD_RESTRICTED";
+            case TelephonyManager.SIM_STATE_LOADED:
+                return "LOADED";
+            case TelephonyManager.SIM_STATE_PRESENT:
+                return "PRESENT";
+            default:
+                return "UNKNOWN(" + state + ")";
         }
-        return null;
     }
 }

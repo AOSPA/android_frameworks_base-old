@@ -916,6 +916,11 @@ public class NotificationStackScrollLayoutController {
         return mView.getTranslationX();
     }
 
+    /** Set view y-translation */
+    public void setTranslationY(float translationY) {
+        mView.setTranslationY(translationY);
+    }
+
     public int indexOfChild(View view) {
         return mView.indexOfChild(view);
     }
@@ -1237,11 +1242,7 @@ public class NotificationStackScrollLayoutController {
                 // For more details, see: b/228790482
                 && !isInTransitionToKeyguard();
 
-        mView.updateEmptyShadeView(
-                shouldShow,
-                mZenModeController.areNotificationsHiddenInShade(),
-                mNotifPipelineFlags.getShouldFilterUnseenNotifsOnKeyguard()
-                        && mSeenNotificationsProvider.getHasFilteredOutSeenNotifications());
+        mView.updateEmptyShadeView(shouldShow, mZenModeController.areNotificationsHiddenInShade());
 
         Trace.endSection();
     }
@@ -1897,8 +1898,10 @@ public class NotificationStackScrollLayoutController {
             }
             if (ev.getActionMasked() == MotionEvent.ACTION_UP) {
                 // Ensure the falsing manager records the touch. we don't do anything with it
-                // at the moment.
-                mFalsingManager.isFalseTouch(Classifier.SHADE_DRAG);
+                // at the moment, but it may trigger a global falsing event.
+                if (!horizontalSwipeWantsIt) {
+                    mFalsingManager.isFalseTouch(Classifier.SHADE_DRAG);
+                }
                 mView.setCheckForLeaveBehind(true);
             }
             traceJankOnTouchEvent(ev.getActionMasked(), scrollerWantsIt);
@@ -1935,6 +1938,9 @@ public class NotificationStackScrollLayoutController {
         @Override
         public void setNotifStats(@NonNull NotifStats notifStats) {
             mNotifStats = notifStats;
+            mView.setHasFilteredOutSeenNotifications(
+                    mNotifPipelineFlags.getShouldFilterUnseenNotifsOnKeyguard()
+                            && mSeenNotificationsProvider.getHasFilteredOutSeenNotifications());
             updateFooter();
             updateShowEmptyShadeView();
         }

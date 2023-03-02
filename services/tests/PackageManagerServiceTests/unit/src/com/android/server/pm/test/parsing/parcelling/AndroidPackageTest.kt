@@ -30,6 +30,7 @@ import android.util.ArraySet
 import android.util.SparseArray
 import android.util.SparseIntArray
 import com.android.internal.R
+import com.android.server.pm.parsing.pkg.AndroidPackageUtils
 import com.android.server.pm.parsing.pkg.PackageImpl
 import com.android.server.pm.pkg.AndroidPackage
 import com.android.server.pm.pkg.component.ParsedActivityImpl
@@ -88,6 +89,10 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
         "sortReceivers",
         "sortServices",
         "setAllComponentsDirectBootAware",
+        "getUsesLibrariesSorted",
+        "getUsesOptionalLibrariesSorted",
+        "getUsesSdkLibrariesSorted",
+        "getUsesStaticLibrariesSorted",
         // Tested through setting minor/major manually
         "setLongVersionCode",
         "getLongVersionCode",
@@ -126,31 +131,47 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
         "addUsesStaticLibrary",
         "getUsesStaticLibraries",
         "getUsesStaticLibrariesVersions",
-        "getUsesStaticLibrariesCertDigests"
+        "getUsesStaticLibrariesCertDigests",
+
+        // Tested through getSetByValue via AndroidPackageHidden APIs, to be removed eventually
+        "setOdm",
+        "setOem",
+        "setPrivileged",
+        "setProduct",
+        "setSystem",
+        "setSystemExt",
+        "setVendor",
+        "isOdm",
+        "isOem",
+        "isPrivileged",
+        "isProduct",
+        "isSystem",
+        "isSystemExt",
+        "isVendor",
     )
 
     override val baseParams = listOf(
+        AndroidPackage::getApplicationClassName,
         AndroidPackage::getAppComponentFactory,
         AndroidPackage::getAutoRevokePermissions,
         AndroidPackage::getBackupAgentName,
-        AndroidPackage::getBanner,
+        AndroidPackage::getBannerRes,
         AndroidPackage::getBaseApkPath,
         AndroidPackage::getBaseRevisionCode,
         AndroidPackage::getCategory,
         AndroidPackage::getClassLoaderName,
-        AndroidPackage::getClassName,
         AndroidPackage::getCompatibleWidthLimitDp,
         AndroidPackage::getCompileSdkVersion,
         AndroidPackage::getCompileSdkVersionCodeName,
-        AndroidPackage::getDataExtractionRules,
+        AndroidPackage::getDataExtractionRulesRes,
         AndroidPackage::getDescriptionRes,
-        AndroidPackage::getFullBackupContent,
+        AndroidPackage::getFullBackupContentRes,
         AndroidPackage::getGwpAsanMode,
         AndroidPackage::getIconRes,
         AndroidPackage::getInstallLocation,
         AndroidPackage::getLabelRes,
         AndroidPackage::getLargestWidthLimitDp,
-        AndroidPackage::getLogo,
+        AndroidPackage::getLogoRes,
         AndroidPackage::getLocaleConfigRes,
         AndroidPackage::getManageSpaceActivityName,
         AndroidPackage::getMaxSdkVersion,
@@ -178,15 +199,15 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
         PackageImpl::getSecondaryCpuAbi,
         AndroidPackage::getSecondaryNativeLibraryDir,
         AndroidPackage::getSharedUserId,
-        AndroidPackage::getSharedUserLabel,
+        AndroidPackage::getSharedUserLabelRes,
         AndroidPackage::getSdkLibraryName,
         AndroidPackage::getSdkLibVersionMajor,
         AndroidPackage::getStaticSharedLibraryName,
-        AndroidPackage::getStaticSharedLibVersion,
+        AndroidPackage::getStaticSharedLibraryVersion,
         AndroidPackage::getTargetSandboxVersion,
         AndroidPackage::getTargetSdkVersion,
         AndroidPackage::getTaskAffinity,
-        AndroidPackage::getTheme,
+        AndroidPackage::getThemeRes,
         AndroidPackage::getUiOptions,
         AndroidPackage::getUid,
         AndroidPackage::getVersionName,
@@ -197,8 +218,9 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
         AndroidPackage::isAllowClearUserDataOnFailedRestore,
         AndroidPackage::isAllowNativeHeapPointerTagging,
         AndroidPackage::isAllowTaskReparenting,
+        AndroidPackage::isAllowUpdateOwnership,
         AndroidPackage::isBackupInForeground,
-        AndroidPackage::isBaseHardwareAccelerated,
+        AndroidPackage::isHardwareAccelerated,
         AndroidPackage::isCantSaveState,
         AndroidPackage::isCoreApp,
         AndroidPackage::isCrossProfile,
@@ -221,15 +243,11 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
         AndroidPackage::isLargeHeap,
         AndroidPackage::isMultiArch,
         AndroidPackage::isNativeLibraryRootRequiresIsa,
-        AndroidPackage::isOdm,
-        AndroidPackage::isOem,
         AndroidPackage::isOnBackInvokedCallbackEnabled,
-        AndroidPackage::isOverlay,
+        AndroidPackage::isResourceOverlay,
         AndroidPackage::isOverlayIsStatic,
         AndroidPackage::isPartiallyDirectBootAware,
         AndroidPackage::isPersistent,
-        AndroidPackage::isPrivileged,
-        AndroidPackage::isProduct,
         AndroidPackage::isProfileableByShell,
         AndroidPackage::isRequestLegacyExternalStorage,
         AndroidPackage::isRequiredForAllUsers,
@@ -240,17 +258,14 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
         AndroidPackage::isStaticSharedLibrary,
         AndroidPackage::isStub,
         AndroidPackage::isSupportsRtl,
-        AndroidPackage::isSystem,
-        AndroidPackage::isSystemExt,
         AndroidPackage::isTestOnly,
         AndroidPackage::isUse32BitAbi,
         AndroidPackage::isUseEmbeddedDex,
         AndroidPackage::isUsesCleartextTraffic,
         AndroidPackage::isUsesNonSdkApi,
-        AndroidPackage::isVendor,
         AndroidPackage::isVisibleToInstantApps,
         AndroidPackage::isVmSafeMode,
-        AndroidPackage::isLeavingSharedUid,
+        AndroidPackage::isLeavingSharedUser,
         AndroidPackage::isResetEnabledSettingsOnAppDataCleared,
         AndroidPackage::getMaxAspectRatio,
         AndroidPackage::getMinAspectRatio,
@@ -283,7 +298,7 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
         adder(AndroidPackage::getUsesOptionalLibraries, "testUsesOptionalLibrary"),
         adder(AndroidPackage::getUsesOptionalNativeLibraries, "testUsesOptionalNativeLibrary"),
         getSetByValue(
-            AndroidPackage::areAttributionsUserVisible,
+            AndroidPackage::isAttributionsUserVisible,
             PackageImpl::setAttributionsAreUserVisible,
             true
         ),
@@ -518,6 +533,38 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
             }
         ),
         getter(AndroidPackage::getKnownActivityEmbeddingCerts, setOf("TESTEMBEDDINGCERT")),
+        getSetByValue({ AndroidPackageUtils.isOdm(it) }, "isOdm", PackageImpl::setOdm, true),
+        getSetByValue({ AndroidPackageUtils.isOem(it) }, "isOem", PackageImpl::setOem, true),
+        getSetByValue(
+            { AndroidPackageUtils.isPrivileged(it) },
+            "isPrivileged",
+            PackageImpl::setPrivileged,
+            true
+        ),
+        getSetByValue(
+            { AndroidPackageUtils.isProduct(it) },
+            "isProduct",
+            PackageImpl::setProduct,
+            true
+        ),
+        getSetByValue(
+            { AndroidPackageUtils.isVendor(it) },
+            "isVendor",
+            PackageImpl::setVendor,
+            true
+        ),
+        getSetByValue(
+            { AndroidPackageUtils.isSystem(it) },
+            "isSystem",
+            PackageImpl::setSystem,
+            true
+        ),
+        getSetByValue(
+            { AndroidPackageUtils.isSystemExt(it) },
+            "isSystemExt",
+            PackageImpl::setSystemExt,
+            true
+        ),
     )
 
     override fun initialObject() = PackageImpl.forParsing(

@@ -70,7 +70,7 @@ import java.util.List;
 
 /**
  * A frame layout containing the actual payload of the notification, including the contracted,
- * expanded and heads up layout. This class is responsible for clipping the content and and
+ * expanded and heads up layout. This class is responsible for clipping the content and
  * switching between the expanded, contracted and the heads up view depending on its clipped size.
  */
 public class NotificationContentView extends FrameLayout implements NotificationFadeAware {
@@ -183,6 +183,8 @@ public class NotificationContentView extends FrameLayout implements Notification
     private boolean mIsContentExpandable;
     private boolean mRemoteInputVisible;
     private int mUnrestrictedContentHeight;
+
+    private boolean mContentAnimating;
 
     public NotificationContentView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -627,6 +629,13 @@ public class NotificationContentView extends FrameLayout implements Notification
         int hint;
         if (mHeadsUpChild != null && isVisibleOrTransitioning(VISIBLE_TYPE_HEADSUP)) {
             hint = getViewHeight(VISIBLE_TYPE_HEADSUP);
+            if (mHeadsUpRemoteInput != null && mHeadsUpRemoteInput.isAnimatingAppearance()
+                    && mHeadsUpRemoteInputController.isFocusAnimationFlagActive()) {
+                // While the RemoteInputView is animating its appearance, it should be allowed
+                // to overlap the hint, therefore no space is reserved for the hint during the
+                // appearance animation of the RemoteInputView
+                hint = 0;
+            }
         } else if (mExpandedChild != null) {
             hint = getViewHeight(VISIBLE_TYPE_EXPANDED);
         } else if (mContractedChild != null) {
@@ -2122,8 +2131,49 @@ public class NotificationContentView extends FrameLayout implements Notification
         return false;
     }
 
+    /**
+     * Starts and stops animations in the underlying views.
+     * Avoids restarting the animations by checking whether they're already running first.
+     * Return value is used for testing.
+     *
+     * @param running whether to start animations running, or stop them.
+     * @return true if the state of animations changed.
+     */
+    public boolean setContentAnimationRunning(boolean running) {
+        boolean stateChangeRequired = (running != mContentAnimating);
+        if (stateChangeRequired) {
+            // Starts or stops the animations in the potential views.
+            if (mContractedWrapper != null) {
+                mContractedWrapper.setAnimationsRunning(running);
+            }
+            if (mExpandedWrapper != null) {
+                mExpandedWrapper.setAnimationsRunning(running);
+            }
+            if (mHeadsUpWrapper != null) {
+                mHeadsUpWrapper.setAnimationsRunning(running);
+            }
+            // Updates the state tracker.
+            mContentAnimating = running;
+            return true;
+        }
+        return false;
+    }
+
     private static class RemoteInputViewData {
         @Nullable RemoteInputView mView;
         @Nullable RemoteInputViewController mController;
+    }
+
+    @VisibleForTesting
+    protected void setContractedWrapper(NotificationViewWrapper contractedWrapper) {
+        mContractedWrapper = contractedWrapper;
+    }
+    @VisibleForTesting
+    protected void setExpandedWrapper(NotificationViewWrapper expandedWrapper) {
+        mExpandedWrapper = expandedWrapper;
+    }
+    @VisibleForTesting
+    protected void setHeadsUpWrapper(NotificationViewWrapper headsUpWrapper) {
+        mHeadsUpWrapper = headsUpWrapper;
     }
 }

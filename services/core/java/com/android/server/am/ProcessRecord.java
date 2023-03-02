@@ -25,6 +25,7 @@ import android.app.ActivityManager;
 import android.app.ApplicationExitInfo;
 import android.app.ApplicationExitInfo.Reason;
 import android.app.ApplicationExitInfo.SubReason;
+import android.app.BackgroundStartPrivileges;
 import android.app.IApplicationThread;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManagerInternal;
@@ -199,11 +200,6 @@ class ProcessRecord implements WindowProcessListener {
      * When the process is started. (before zygote fork)
      */
     private volatile long mStartElapsedTime;
-
-    /**
-     * When the process was sent the bindApplication request
-     */
-    private volatile long mBindApplicationTime;
 
     /**
      * This will be same as {@link #uid} usually except for some apps used during factory testing.
@@ -775,10 +771,6 @@ class ProcessRecord implements WindowProcessListener {
         return mStartElapsedTime;
     }
 
-    long getBindApplicationTime() {
-        return mBindApplicationTime;
-    }
-
     int getStartUid() {
         return mStartUid;
     }
@@ -1045,6 +1037,11 @@ class ProcessRecord implements WindowProcessListener {
 
     boolean hasRecentTasks() {
         return mWindowProcessController.hasRecentTasks();
+    }
+
+    @GuardedBy("mService")
+    public ApplicationInfo getApplicationInfo() {
+        return info;
     }
 
     @GuardedBy({"mService", "mProcLock"})
@@ -1336,16 +1333,16 @@ class ProcessRecord implements WindowProcessListener {
      * {@param originatingToken} if you have one such originating token, this is useful for tracing
      * back the grant in the case of the notification token.
      */
-    void addOrUpdateAllowBackgroundActivityStartsToken(Binder entity,
-            @Nullable IBinder originatingToken) {
+    void addOrUpdateBackgroundStartPrivileges(Binder entity,
+            BackgroundStartPrivileges backgroundStartPrivileges) {
         Objects.requireNonNull(entity);
-        mWindowProcessController.addOrUpdateAllowBackgroundActivityStartsToken(entity,
-                originatingToken);
+        mWindowProcessController.addOrUpdateBackgroundStartPrivileges(entity,
+                backgroundStartPrivileges);
     }
 
-    void removeAllowBackgroundActivityStartsToken(Binder entity) {
+    void removeBackgroundStartPrivileges(Binder entity) {
         Objects.requireNonNull(entity);
-        mWindowProcessController.removeAllowBackgroundActivityStartsToken(entity);
+        mWindowProcessController.removeBackgroundStartPrivileges(entity);
     }
 
     @Override

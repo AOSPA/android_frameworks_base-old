@@ -35,6 +35,7 @@ import android.telephony.CallForwardingInfo;
 import android.telephony.CarrierRestrictionRules;
 import android.telephony.CellIdentity;
 import android.telephony.CellInfo;
+import android.telephony.CellBroadcastIdRange;
 import android.telephony.ClientRequestStats;
 import android.telephony.ThermalMitigationRequest;
 import android.telephony.gba.UaSecurityProtocolIdentifier;
@@ -1318,6 +1319,16 @@ interface ITelephony {
      *   {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
      */
     String getImeiForSlot(int slotIndex, String callingPackage, String callingFeatureId);
+
+    /**
+     * Returns the primary IMEI of the device
+     *
+     * @param callingPackage The package name of the caller
+     * @param callingFeatureId The feature Id of the calling package
+     * @throws UnsupportedOperationException if the radio doesn't support this feature.
+     * @throws SecurityException if the caller does not have the required permission/privileges
+     */
+    String getPrimaryImei(String callingPackage, String callingFeatureId);
 
     /**
      * Returns the Type Allocation Code from the IMEI for the given slot.
@@ -2628,5 +2639,52 @@ interface ITelephony {
       * {@code null} if the functionality is not supported.
       * @hide
       */
-      ComponentName getDefaultRespondViaMessageApplication(int subId, boolean updateIfNeeded);
+    ComponentName getDefaultRespondViaMessageApplication(int subId, boolean updateIfNeeded);
+
+    /**
+     * Get the SIM state for the logical SIM slot index.
+     *
+     * @param slotIndex Logical SIM slot index.
+     */
+    int getSimStateForSlotIndex(int slotIndex);
+
+    /**
+     * Set whether the radio is able to connect with null ciphering or integrity
+     * algorithms. This is a global setting and will apply to all active subscriptions
+     * and all new subscriptions after this.
+     *
+     * <p>Requires Permission:
+     *   {@link android.Manifest.permission#MODIFY_PHONE_STATE MODIFY_PHONE_STATE}
+     *
+     * @param enabled when true, null  cipher and integrity algorithms are allowed.
+     * @hide
+     */
+    void setNullCipherAndIntegrityEnabled(boolean enabled);
+
+    /**
+    * Get whether the radio is able to connect with null ciphering or integrity
+    * algorithms. Note that this retrieves the phone-global preference and not
+    * the state of the radio.
+    *
+    * @hide
+    */
+    boolean isNullCipherAndIntegrityPreferenceEnabled();
+
+    /**
+     * Get current broadcast ranges.
+     */
+    List<CellBroadcastIdRange> getCellBroadcastIdRanges(int subId);
+
+    /**
+     * Set reception of cell broadcast messages with the list of the given ranges
+     */
+    void setCellBroadcastIdRanges(int subId, in List<CellBroadcastIdRange> ranges,
+            IIntegerConsumer callback);
+
+    /**
+     * Returns whether the domain selection service is supported.
+     *
+     * @return {@code true} if the domain selection service is supported.
+     */
+    boolean isDomainSelectionSupported();
 }

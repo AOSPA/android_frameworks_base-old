@@ -46,6 +46,7 @@ import android.app.ActivityTaskManager;
 import android.app.ActivityTaskManager.RootTaskInfo;
 import android.app.AppGlobals;
 import android.app.BroadcastOptions;
+import android.app.ForegroundServiceDelegationOptions;
 import android.app.IActivityController;
 import android.app.IActivityManager;
 import android.app.IActivityTaskManager;
@@ -373,8 +374,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     return runGetCurrentForegroundProcess(pw, mInternal, mTaskInterface);
                 case "reset-dropbox-rate-limiter":
                     return runResetDropboxRateLimiter();
-                case "list-secondary-displays-for-starting-users":
-                    return runListSecondaryDisplaysForStartingUsers(pw);
+                case "list-displays-for-starting-users":
+                    return runListDisplaysForStartingUsers(pw);
                 case "set-foreground-service-delegate":
                     return runSetForegroundServiceDelegate(pw);
                 default:
@@ -411,6 +412,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
             public boolean handleOption(String opt, ShellCommand cmd) {
                 if (opt.equals("-D")) {
                     mStartFlags |= ActivityManager.START_FLAG_DEBUG;
+                } else if (opt.equals("--suspend")) {
+                    mStartFlags |= ActivityManager.START_FLAG_DEBUG_SUSPEND;
                 } else if (opt.equals("-N")) {
                     mStartFlags |= ActivityManager.START_FLAG_NATIVE_DEBUGGING;
                 } else if (opt.equals("-W")) {
@@ -1350,6 +1353,9 @@ final class ActivityManagerShellCommand extends ShellCommand {
         final InputStream mInput;
         final String mGdbPort;
         final boolean mMonkey;
+        final boolean mSimpleMode;
+        final String mTarget;
+        final boolean mAlwaysContinue;
 
         static final int STATE_NORMAL = 0;
         static final int STATE_CRASHED = 1;
@@ -1377,16 +1383,30 @@ final class ActivityManagerShellCommand extends ShellCommand {
         boolean mGotGdbPrint;
 
         MyActivityController(IActivityManager iam, PrintWriter pw, InputStream input,
-                String gdbPort, boolean monkey) {
+                String gdbPort, boolean monkey, boolean simpleMode, String target,
+                boolean alwaysContinue) {
             mInterface = iam;
             mPw = pw;
             mInput = input;
             mGdbPort = gdbPort;
             mMonkey = monkey;
+            mSimpleMode = simpleMode;
+            mTarget = target;
+            mAlwaysContinue = alwaysContinue;
+        }
+
+        private boolean shouldHandlePackageOrProcess(String packageOrProcess) {
+            if (mTarget == null) {
+                return true; // Always handle all packages / processes.
+            }
+            return mTarget.equals(packageOrProcess);
         }
 
         @Override
         public boolean activityResuming(String pkg) {
+            if (!shouldHandlePackageOrProcess(pkg)) {
+                return true;
+            }
             synchronized (this) {
                 mPw.println("** Activity resuming: " + pkg);
                 mPw.flush();
@@ -1396,6 +1416,9 @@ final class ActivityManagerShellCommand extends ShellCommand {
 
         @Override
         public boolean activityStarting(Intent intent, String pkg) {
+            if (!shouldHandlePackageOrProcess(pkg)) {
+                return true;
+            }
             synchronized (this) {
                 mPw.println("** Activity starting: " + pkg);
                 mPw.flush();
@@ -1406,17 +1429,28 @@ final class ActivityManagerShellCommand extends ShellCommand {
         @Override
         public boolean appCrashed(String processName, int pid, String shortMsg, String longMsg,
                 long timeMillis, String stackTrace) {
+            if (!shouldHandlePackageOrProcess(processName)) {
+                return true; // Don't kill
+            }
             synchronized (this) {
-                mPw.println("** ERROR: PROCESS CRASHED");
-                mPw.println("processName: " + processName);
-                mPw.println("processPid: " + pid);
-                mPw.println("shortMsg: " + shortMsg);
-                mPw.println("longMsg: " + longMsg);
-                mPw.println("timeMillis: " + timeMillis);
-                mPw.println("stack:");
-                mPw.print(stackTrace);
-                mPw.println("#");
+                if (mSimpleMode) {
+                    mPw.println("** PROCESS CRASHED: " + processName);
+                } else {
+                    mPw.println("** ERROR: PROCESS CRASHED");
+                    mPw.println("processName: " + processName);
+                    mPw.println("processPid: " + pid);
+                    mPw.println("shortMsg: " + shortMsg);
+                    mPw.println("longMsg: " + longMsg);
+                    mPw.println("timeMillis: " + timeMillis);
+                    mPw.println("uptime: " + SystemClock.uptimeMillis());
+                    mPw.println("stack:");
+                    mPw.print(stackTrace);
+                    mPw.println("#");
+                }
                 mPw.flush();
+                if (mAlwaysContinue) {
+                    return true;
+                }
                 int result = waitControllerLocked(pid, STATE_CRASHED);
                 return result == RESULT_CRASH_KILL ? false : true;
             }
@@ -1424,12 +1458,23 @@ final class ActivityManagerShellCommand extends ShellCommand {
 
         @Override
         public int appEarlyNotResponding(String processName, int pid, String annotation) {
+            if (!shouldHandlePackageOrProcess(processName)) {
+                return 0; // Continue
+            }
             synchronized (this) {
-                mPw.println("** ERROR: EARLY PROCESS NOT RESPONDING");
-                mPw.println("processName: " + processName);
-                mPw.println("processPid: " + pid);
-                mPw.println("annotation: " + annotation);
+                if (mSimpleMode) {
+                    mPw.println("** EARLY PROCESS NOT RESPONDING: " + processName);
+                } else {
+                    mPw.println("** ERROR: EARLY PROCESS NOT RESPONDING");
+                    mPw.println("processName: " + processName);
+                    mPw.println("processPid: " + pid);
+                    mPw.println("annotation: " + annotation);
+                    mPw.println("uptime: " + SystemClock.uptimeMillis());
+                }
                 mPw.flush();
+                if (mAlwaysContinue) {
+                    return 0;
+                }
                 int result = waitControllerLocked(pid, STATE_EARLY_ANR);
                 if (result == RESULT_EARLY_ANR_KILL) return -1;
                 return 0;
@@ -1438,14 +1483,25 @@ final class ActivityManagerShellCommand extends ShellCommand {
 
         @Override
         public int appNotResponding(String processName, int pid, String processStats) {
+            if (!shouldHandlePackageOrProcess(processName)) {
+                return 0; // Default == show dialog
+            }
             synchronized (this) {
-                mPw.println("** ERROR: PROCESS NOT RESPONDING");
-                mPw.println("processName: " + processName);
-                mPw.println("processPid: " + pid);
-                mPw.println("processStats:");
-                mPw.print(processStats);
-                mPw.println("#");
+                if (mSimpleMode) {
+                    mPw.println("** PROCESS NOT RESPONDING: " + processName);
+                } else {
+                    mPw.println("** ERROR: PROCESS NOT RESPONDING");
+                    mPw.println("processName: " + processName);
+                    mPw.println("processPid: " + pid);
+                    mPw.println("uptime: " + SystemClock.uptimeMillis());
+                    mPw.println("processStats:");
+                    mPw.print(processStats);
+                    mPw.println("#");
+                }
                 mPw.flush();
+                if (mAlwaysContinue) {
+                    return 0;
+                }
                 int result = waitControllerLocked(pid, STATE_ANR);
                 if (result == RESULT_ANR_KILL) return -1;
                 if (result == RESULT_ANR_WAIT) return 1;
@@ -1455,11 +1511,16 @@ final class ActivityManagerShellCommand extends ShellCommand {
 
         @Override
         public int systemNotResponding(String message) {
+            if (mTarget != null) {
+                return -1; // If any target is set, just return.
+            }
             synchronized (this) {
                 mPw.println("** ERROR: PROCESS NOT RESPONDING");
-                mPw.println("message: " + message);
-                mPw.println("#");
-                mPw.println("Allowing system to die.");
+                if (!mSimpleMode) {
+                    mPw.println("message: " + message);
+                    mPw.println("#");
+                    mPw.println("Allowing system to die.");
+                }
                 mPw.flush();
                 return -1;
             }
@@ -1565,6 +1626,9 @@ final class ActivityManagerShellCommand extends ShellCommand {
         }
 
         void printMessageForState() {
+            if (mAlwaysContinue && mSimpleMode) {
+                return; // In the simplest mode, we don't need to show anything.
+            }
             switch (mState) {
                 case STATE_NORMAL:
                     mPw.println("Monitoring activity manager...  available commands:");
@@ -1660,11 +1724,21 @@ final class ActivityManagerShellCommand extends ShellCommand {
         String opt;
         String gdbPort = null;
         boolean monkey = false;
+        boolean simpleMode = false;
+        boolean alwaysContinue = false;
+        String target = null;
+
         while ((opt=getNextOption()) != null) {
             if (opt.equals("--gdb")) {
                 gdbPort = getNextArgRequired();
+            } else if (opt.equals("-p")) {
+                target = getNextArgRequired();
             } else if (opt.equals("-m")) {
                 monkey = true;
+            } else if (opt.equals("-s")) {
+                simpleMode = true;
+            } else if (opt.equals("-c")) {
+                alwaysContinue = true;
             } else {
                 getErrPrintWriter().println("Error: Unknown option: " + opt);
                 return -1;
@@ -1672,7 +1746,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         }
 
         MyActivityController controller = new MyActivityController(mInterface, pw,
-                getRawInputStream(), gdbPort, monkey);
+                getRawInputStream(), gdbPort, monkey, simpleMode, target, alwaysContinue);
         controller.run();
         return 0;
     }
@@ -2082,19 +2156,24 @@ final class ActivityManagerShellCommand extends ShellCommand {
         boolean success;
         String displaySuffix;
 
-        if (displayId == Display.INVALID_DISPLAY) {
-            success = mInterface.startUserInBackgroundWithListener(userId, waiter);
-            displaySuffix = "";
-        } else {
-            if (!UserManager.isUsersOnSecondaryDisplaysEnabled()) {
-                pw.println("Not supported");
-                return -1;
+        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "shell_runStartUser" + userId);
+        try {
+            if (displayId == Display.INVALID_DISPLAY) {
+                success = mInterface.startUserInBackgroundWithListener(userId, waiter);
+                displaySuffix = "";
+            } else {
+                if (!UserManager.isVisibleBackgroundUsersEnabled()) {
+                    pw.println("Not supported");
+                    return -1;
+                }
+                success = mInterface.startUserInBackgroundVisibleOnDisplay(userId, displayId);
+                displaySuffix = " on display " + displayId;
             }
-            success = mInterface.startUserInBackgroundOnSecondaryDisplay(userId, displayId);
-            displaySuffix = " on display " + displayId;
-        }
-        if (wait && success) {
-            success = waiter.waitForFinish(USER_OPERATION_TIMEOUT_MS);
+            if (wait && success) {
+                success = waiter.waitForFinish(USER_OPERATION_TIMEOUT_MS);
+            }
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
         }
 
         if (success) {
@@ -3674,8 +3753,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
         return 0;
     }
 
-    int runListSecondaryDisplaysForStartingUsers(PrintWriter pw) throws RemoteException {
-        int[] displayIds = mInterface.getSecondaryDisplayIdsForStartingBackgroundUsers();
+    int runListDisplaysForStartingUsers(PrintWriter pw) throws RemoteException {
+        int[] displayIds = mInterface.getDisplayIdsForStartingVisibleBackgroundUsers();
         pw.println(displayIds == null || displayIds.length == 0
                 ? "none"
                 : Arrays.toString(displayIds));
@@ -3893,9 +3972,12 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("  make-uid-idle [--user <USER_ID> | all | current] <PACKAGE>");
             pw.println("      If the given application's uid is in the background and waiting to");
             pw.println("      become idle (not allowing background services), do that now.");
-            pw.println("  monitor [--gdb <port>]");
+            pw.println("  monitor [--gdb <port>] [-p <TARGET>] [-s] [-c]");
             pw.println("      Start monitoring for crashes or ANRs.");
             pw.println("      --gdb: start gdbserv on the given port at crash/ANR");
+            pw.println("      -p: only show events related to a specific process / package");
+            pw.println("      -s: simple mode, only show a summary line for each event");
+            pw.println("      -c: assume the input is always [c]ontinue");
             pw.println("  watch-uids [--oom <uid>]");
             pw.println("      Start watching for and reporting uid state changes.");
             pw.println("      --oom: specify a uid for which to report detailed change messages.");
@@ -4042,7 +4124,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("         Set an app's background restriction level which in turn map to a app standby bucket.");
             pw.println("  get-bg-restriction-level [--user <USER_ID>] <PACKAGE>");
             pw.println("         Get an app's background restriction level.");
-            pw.println("  list-secondary-displays-for-starting-users");
+            pw.println("  list-displays-for-starting-users");
             pw.println("         Lists the id of displays that can be used to start users on "
                     + "background.");
             pw.println("  set-foreground-service-delegate [--user <USER_ID>] <PACKAGE> start|stop");

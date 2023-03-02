@@ -176,7 +176,7 @@ public final class BluetoothVcp implements BluetoothProfile {
         mAttributionSource = mAdapter.getAttributionSource();
     }
 
-    /*package*/ void close() {
+    public void close() {
         mProfileConnector.disconnect();
     }
 

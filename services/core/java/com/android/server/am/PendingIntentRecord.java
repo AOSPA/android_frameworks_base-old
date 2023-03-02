@@ -22,15 +22,21 @@ import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
 
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.app.ActivityManager;
 import android.app.ActivityOptions;
+import android.app.BackgroundStartPrivileges;
 import android.app.BroadcastOptions;
 import android.app.IApplicationThread;
 import android.app.PendingIntent;
+import android.app.compat.CompatChanges;
+import android.compat.annotation.ChangeId;
+import android.compat.annotation.EnabledAfter;
 import android.content.IIntentReceiver;
 import android.content.IIntentSender;
 import android.content.Intent;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.PowerWhitelistManager;
@@ -39,6 +45,7 @@ import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.TransactionTooLargeException;
 import android.os.UserHandle;
+import android.provider.DeviceConfig;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Slog;
@@ -54,6 +61,13 @@ import java.util.Objects;
 
 public final class PendingIntentRecord extends IIntentSender.Stub {
     private static final String TAG = TAG_WITH_CLASS_NAME ? "PendingIntentRecord" : TAG_AM;
+
+    /** If enabled BAL are prevented by default in applications targeting U and later. */
+    @ChangeId
+    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.TIRAMISU)
+    private static final long DEFAULT_RESCIND_BAL_PRIVILEGES_FROM_PENDING_INTENT_SENDER = 244637991;
+    private static final String ENABLE_DEFAULT_RESCIND_BAL_PRIVILEGES_FROM_PENDING_INTENT_SENDER =
+            "enable_default_rescind_bal_privileges_from_pending_intent_sender";
 
     public static final int FLAG_ACTIVITY_SENDER = 1 << 0;
     public static final int FLAG_BROADCAST_SENDER = 1 << 1;
@@ -330,20 +344,60 @@ public final class PendingIntentRecord extends IIntentSender.Stub {
         return activityOptions.isPendingIntentBackgroundActivityLaunchAllowedByPermission();
     }
 
-    public static boolean isPendingIntentBalAllowedByCaller(
-            @Nullable ActivityOptions activityOptions) {
+    /**
+     * Return the {@link BackgroundStartPrivileges} the activity options grant the PendingIntent to
+     * use caller's BAL permission.
+     */
+    public static BackgroundStartPrivileges getBackgroundStartPrivilegesAllowedByCaller(
+            @Nullable ActivityOptions activityOptions, int callingUid) {
         if (activityOptions == null) {
-            return ActivityOptions.PENDING_INTENT_BAL_ALLOWED_DEFAULT;
+            // since the ActivityOptions were not created by the app itself, determine the default
+            // for the app
+            return getDefaultBackgroundStartPrivileges(callingUid);
         }
-        return isPendingIntentBalAllowedByCaller(activityOptions.toBundle());
+        return getBackgroundStartPrivilegesAllowedByCaller(activityOptions.toBundle(),
+                callingUid);
     }
 
-    private static boolean isPendingIntentBalAllowedByCaller(@Nullable Bundle options) {
-        if (options == null) {
-            return ActivityOptions.PENDING_INTENT_BAL_ALLOWED_DEFAULT;
+    private static BackgroundStartPrivileges getBackgroundStartPrivilegesAllowedByCaller(
+            @Nullable Bundle options, int callingUid) {
+        if (options == null || !options.containsKey(
+                        ActivityOptions.KEY_PENDING_INTENT_BACKGROUND_ACTIVITY_ALLOWED)) {
+            return getDefaultBackgroundStartPrivileges(callingUid);
         }
-        return options.getBoolean(ActivityOptions.KEY_PENDING_INTENT_BACKGROUND_ACTIVITY_ALLOWED,
-                ActivityOptions.PENDING_INTENT_BAL_ALLOWED_DEFAULT);
+        return options.getBoolean(ActivityOptions.KEY_PENDING_INTENT_BACKGROUND_ACTIVITY_ALLOWED)
+                ? BackgroundStartPrivileges.ALLOW_BAL
+                : BackgroundStartPrivileges.NONE;
+    }
+
+    private static boolean isDefaultRescindBalPrivilegesFromPendingIntentSenderEnabled() {
+        return DeviceConfig.getBoolean(
+                DeviceConfig.NAMESPACE_WINDOW_MANAGER,
+                ENABLE_DEFAULT_RESCIND_BAL_PRIVILEGES_FROM_PENDING_INTENT_SENDER,
+                false); // assume false if the property is unknown
+    }
+
+    /**
+     * Default {@link BackgroundStartPrivileges} to be used if the intent sender has not made an
+     * explicit choice.
+     *
+     * @hide
+     */
+    @RequiresPermission(
+            allOf = {
+                    android.Manifest.permission.READ_COMPAT_CHANGE_CONFIG,
+                    android.Manifest.permission.LOG_COMPAT_CHANGE
+            })
+    public static BackgroundStartPrivileges getDefaultBackgroundStartPrivileges(
+            int callingUid) {
+        boolean isFlagEnabled = isDefaultRescindBalPrivilegesFromPendingIntentSenderEnabled();
+        boolean isChangeEnabledForApp = CompatChanges.isChangeEnabled(
+                DEFAULT_RESCIND_BAL_PRIVILEGES_FROM_PENDING_INTENT_SENDER, callingUid);
+        if (isFlagEnabled && isChangeEnabledForApp) {
+            return BackgroundStartPrivileges.ALLOW_FGS;
+        } else {
+            return BackgroundStartPrivileges.ALLOW_BAL;
+        }
     }
 
     @Deprecated
@@ -493,11 +547,6 @@ public final class PendingIntentRecord extends IIntentSender.Stub {
             if (userId == UserHandle.USER_CURRENT) {
                 userId = controller.mUserController.getCurrentOrTargetUserId();
             }
-            // temporarily allow receivers and services to open activities from background if the
-            // PendingIntent.send() caller was foreground at the time of sendInner() call
-            final boolean allowTrampoline = uid != callingUid
-                    && controller.mAtmInternal.isUidForeground(callingUid)
-                    && isPendingIntentBalAllowedByCaller(options);
 
             // note: we on purpose don't pass in the information about the PendingIntent's creator,
             // like pid or ProcessRecord, to the ActivityTaskManagerInternal calls below, because
@@ -515,8 +564,7 @@ public final class PendingIntentRecord extends IIntentSender.Stub {
                                     allIntents, allResolvedTypes, resultTo, mergedOptions, userId,
                                     false /* validateIncomingUser */,
                                     this /* originatingPendingIntent */,
-                                    mAllowBgActivityStartsForActivitySender.contains(
-                                            allowlistToken));
+                                    getBackgroundStartPrivilegesForActivitySender(allowlistToken));
                         } else {
                             res = controller.mAtmInternal.startActivityInPackage(uid, callingPid,
                                     callingUid, key.packageName, key.featureId, finalIntent,
@@ -524,8 +572,7 @@ public final class PendingIntentRecord extends IIntentSender.Stub {
                                     mergedOptions, userId, null, "PendingIntentRecord",
                                     false /* validateIncomingUser */,
                                     this /* originatingPendingIntent */,
-                                    mAllowBgActivityStartsForActivitySender.contains(
-                                            allowlistToken));
+                                    getBackgroundStartPrivilegesForActivitySender(allowlistToken));
                         }
                     } catch (RuntimeException e) {
                         Slog.w(TAG, "Unable to send startActivity intent", e);
@@ -537,17 +584,17 @@ public final class PendingIntentRecord extends IIntentSender.Stub {
                     break;
                 case ActivityManager.INTENT_SENDER_BROADCAST:
                     try {
-                        final boolean allowedByToken =
-                                mAllowBgActivityStartsForBroadcastSender.contains(allowlistToken);
-                        final IBinder bgStartsToken = (allowedByToken) ? allowlistToken : null;
-
+                        final BackgroundStartPrivileges backgroundStartPrivileges =
+                                getBackgroundStartPrivilegesForActivitySender(
+                                        mAllowBgActivityStartsForBroadcastSender, allowlistToken,
+                                        options, callingUid);
                         // If a completion callback has been requested, require
                         // that the broadcast be delivered synchronously
                         int sent = controller.mAmInternal.broadcastIntentInPackage(key.packageName,
                                 key.featureId, uid, callingUid, callingPid, finalIntent,
                                 resolvedType, finishedReceiverThread, finishedReceiver, code, null,
                                 null, requiredPermission, options, (finishedReceiver != null),
-                                false, userId, allowedByToken || allowTrampoline, bgStartsToken,
+                                false, userId, backgroundStartPrivileges,
                                 null /* broadcastAllowList */);
                         if (sent == ActivityManager.BROADCAST_SUCCESS) {
                             sendFinish = false;
@@ -559,14 +606,14 @@ public final class PendingIntentRecord extends IIntentSender.Stub {
                 case ActivityManager.INTENT_SENDER_SERVICE:
                 case ActivityManager.INTENT_SENDER_FOREGROUND_SERVICE:
                     try {
-                        final boolean allowedByToken =
-                                mAllowBgActivityStartsForServiceSender.contains(allowlistToken);
-                        final IBinder bgStartsToken = (allowedByToken) ? allowlistToken : null;
-
+                        final BackgroundStartPrivileges backgroundStartPrivileges =
+                                getBackgroundStartPrivilegesForActivitySender(
+                                        mAllowBgActivityStartsForServiceSender, allowlistToken,
+                                        options, callingUid);
                         controller.mAmInternal.startServiceInPackage(uid, finalIntent, resolvedType,
                                 key.type == ActivityManager.INTENT_SENDER_FOREGROUND_SERVICE,
                                 key.packageName, key.featureId, userId,
-                                allowedByToken || allowTrampoline, bgStartsToken);
+                                backgroundStartPrivileges);
                     } catch (RuntimeException e) {
                         Slog.w(TAG, "Unable to send startService intent", e);
                     } catch (TransactionTooLargeException e) {
@@ -587,6 +634,27 @@ public final class PendingIntentRecord extends IIntentSender.Stub {
         }
 
         return res;
+    }
+
+    private BackgroundStartPrivileges getBackgroundStartPrivilegesForActivitySender(
+            IBinder allowlistToken) {
+        return mAllowBgActivityStartsForActivitySender.contains(allowlistToken)
+                ? BackgroundStartPrivileges.allowBackgroundActivityStarts(allowlistToken)
+                : BackgroundStartPrivileges.NONE;
+    }
+
+    private BackgroundStartPrivileges getBackgroundStartPrivilegesForActivitySender(
+            ArraySet<IBinder> allowedTokenSet, IBinder allowlistToken,
+            Bundle options, int callingUid) {
+        if (allowedTokenSet.contains(allowlistToken)) {
+            return BackgroundStartPrivileges.allowBackgroundActivityStarts(allowlistToken);
+        }
+        // temporarily allow receivers and services to open activities from background if the
+        // PendingIntent.send() caller was foreground at the time of sendInner() call
+        if (uid != callingUid && controller.mAtmInternal.isUidForeground(callingUid)) {
+            return getBackgroundStartPrivilegesAllowedByCaller(options, callingUid);
+        }
+        return BackgroundStartPrivileges.NONE;
     }
 
     @Override

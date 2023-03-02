@@ -144,7 +144,7 @@ public class ParsedActivityUtils {
                                 | flag(ActivityInfo.FLAG_SYSTEM_USER_ONLY, R.styleable.AndroidManifestActivity_systemUserOnly, sa)));
 
             if (!receiver) {
-                activity.setFlags(activity.getFlags() | (flag(ActivityInfo.FLAG_HARDWARE_ACCELERATED, R.styleable.AndroidManifestActivity_hardwareAccelerated, pkg.isBaseHardwareAccelerated(), sa)
+                activity.setFlags(activity.getFlags() | (flag(ActivityInfo.FLAG_HARDWARE_ACCELERATED, R.styleable.AndroidManifestActivity_hardwareAccelerated, pkg.isHardwareAccelerated(), sa)
                                         | flag(ActivityInfo.FLAG_ALLOW_EMBEDDED, R.styleable.AndroidManifestActivity_allowEmbedded, sa)
                                         | flag(ActivityInfo.FLAG_ALWAYS_FOCUSABLE, R.styleable.AndroidManifestActivity_alwaysFocusable, sa)
                                         | flag(ActivityInfo.FLAG_AUTO_REMOVE_FROM_RECENTS, R.styleable.AndroidManifestActivity_autoRemoveFromRecents, sa)
@@ -194,6 +194,15 @@ public class ParsedActivityUtils {
                     activity.setMinAspectRatio(resizeMode,
                             sa.getFloat(R.styleable.AndroidManifestActivity_minAspectRatio,
                                     0 /*default*/));
+                }
+
+                if (sa.hasValue(R.styleable.AndroidManifestActivity_enableOnBackInvokedCallback)) {
+                    boolean enable = sa.getBoolean(
+                            R.styleable.AndroidManifestActivity_enableOnBackInvokedCallback,
+                            false);
+                    activity.setPrivateFlags(activity.getPrivateFlags()
+                            | (enable ? ActivityInfo.PRIVATE_FLAG_ENABLE_ON_BACK_INVOKED_CALLBACK
+                                    : ActivityInfo.PRIVATE_FLAG_DISABLE_ON_BACK_INVOKED_CALLBACK));
                 }
             } else {
                 activity.setLaunchMode(ActivityInfo.LAUNCH_MULTIPLE)

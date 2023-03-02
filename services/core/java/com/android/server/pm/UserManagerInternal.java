@@ -59,6 +59,18 @@ public abstract class UserManagerInternal {
     })
     public @interface UserAssignmentResult {}
 
+    public static final int USER_START_MODE_FOREGROUND = 1;
+    public static final int USER_START_MODE_BACKGROUND = 2;
+    public static final int USER_START_MODE_BACKGROUND_VISIBLE = 3;
+
+    private static final String PREFIX_USER_START_MODE = "USER_START_MODE_";
+    @IntDef(flag = false, prefix = {PREFIX_USER_START_MODE}, value = {
+            USER_START_MODE_FOREGROUND,
+            USER_START_MODE_BACKGROUND,
+            USER_START_MODE_BACKGROUND_VISIBLE
+    })
+    public @interface UserStartMode {}
+
     public interface UserRestrictionsListener {
         /**
          * Called when a user restriction changes.
@@ -141,23 +153,39 @@ public abstract class UserManagerInternal {
     /**
      * Called by {@link com.android.server.devicepolicy.DevicePolicyManagerService} to update
      * whether the device is managed by device owner.
+     *
+     * @deprecated Use methods in {@link android.app.admin.DevicePolicyManagerInternal}.
      */
+    @Deprecated
+    // TODO(b/258213147): Remove
     public abstract void setDeviceManaged(boolean isManaged);
 
     /**
      * Returns whether the device is managed by device owner.
+     *
+     * @deprecated Use methods in {@link android.app.admin.DevicePolicyManagerInternal}.
      */
+    @Deprecated
+    // TODO(b/258213147): Remove
     public abstract boolean isDeviceManaged();
 
     /**
      * Called by {@link com.android.server.devicepolicy.DevicePolicyManagerService} to update
      * whether the user is managed by profile owner.
+     *
+     * @deprecated Use methods in {@link android.app.admin.DevicePolicyManagerInternal}.
      */
+    // TODO(b/258213147): Remove
+    @Deprecated
     public abstract void setUserManaged(int userId, boolean isManaged);
 
     /**
-     * whether a profile owner manages this user.
+     * Whether a profile owner manages this user.
+     *
+     * @deprecated Use methods in {@link android.app.admin.DevicePolicyManagerInternal}.
      */
+    // TODO(b/258213147): Remove
+    @Deprecated
     public abstract boolean isUserManaged(int userId);
 
     /**
@@ -360,24 +388,51 @@ public abstract class UserManagerInternal {
      * and the user is {@link UserManager#isUserVisible() visible}.
      *
      * <p><b>NOTE: </b>this method is meant to be used only by {@code UserController} (when a user
-     * is started). If other clients (like {@code CarService} need to explicitly change the user /
-     * display assignment, we'll need to provide other APIs.
+     * is started); for extra unassignments, callers should call {@link
+     * #assignUserToExtraDisplay(int, int)} instead.
      *
      * <p><b>NOTE: </b>this method doesn't validate if the display exists, it's up to the caller to
      * pass a valid display id.
      */
     public abstract @UserAssignmentResult int assignUserToDisplayOnStart(@UserIdInt int userId,
-            @UserIdInt int profileGroupId,
-            boolean foreground, int displayId);
+            @UserIdInt int profileGroupId, @UserStartMode int userStartMode, int displayId);
+
+    /**
+     * Assigns an extra display to the given user, so the user is visible on that display.
+     *
+     * <p>This method is meant to be used on automotive builds where a passenger zone has more than
+     * one display (for example, the "main" display and a smaller display used for input).
+     *
+     * <p><b>NOTE: </b>this call will be ignored on devices that do not
+     * {@link UserManager#isVisibleBackgroundUsersSupported() support visible background users}.
+     *
+     * @return whether the operation succeeded, in which case the user would be visible on the
+     * display.
+     */
+    public abstract boolean assignUserToExtraDisplay(@UserIdInt int userId, int displayId);
 
     /**
      * Unassigns a user from its current display when it's stopping.
      *
      * <p><b>NOTE: </b>this method is meant to be used only by {@code UserController} (when a user
-     * is stopped). If other clients (like {@code CarService} need to explicitly change the user /
-     * display assignment, we'll need to provide other APIs.
+     * is stopped); for extra unassignments, callers should call
+     * {@link #unassignUserFromExtraDisplay(int, int)} instead.
      */
     public abstract void unassignUserFromDisplayOnStop(@UserIdInt int userId);
+
+    /**
+     * Unassigns the extra display from the given user.
+     *
+     * <p>This method is meant to be used on automotive builds where a passenger zone has more than
+     * one display (for example, the "main" display and a smaller display used for input).
+     *
+     * <p><b>NOTE: </b>this call will be ignored on devices that do not
+     * {@link UserManager#isVisibleBackgroundUsersSupported() support visible background users}.
+     *
+     * @return whether the operation succeeded, i.e., the user was previously
+     *         {@link #assignUserToExtraDisplay(int, int) assigned to an extra display}.
+     */
+    public abstract boolean unassignUserFromExtraDisplay(@UserIdInt int userId, int displayId);
 
     /**
      * Returns {@code true} if the user is visible (as defined by
@@ -429,6 +484,13 @@ public abstract class UserManagerInternal {
                 result);
     }
 
+    /**
+     * Gets the user-friendly representation of a user start {@code mode}.
+     */
+    public static String userStartModeToString(@UserStartMode int mode) {
+        return DebugUtils.constantToString(UserManagerInternal.class, PREFIX_USER_START_MODE, mode);
+    }
+
     /** Adds a {@link UserVisibilityListener}. */
     public abstract void addUserVisibilityListener(UserVisibilityListener listener);
 
@@ -451,4 +513,20 @@ public abstract class UserManagerInternal {
      * @see UserManager#isMainUser()
      */
     public abstract @UserIdInt int getMainUserId();
+
+    /**
+     * Returns the id of the user which should be in the foreground after boot completes.
+     *
+     * <p>If a boot user has been provided by calling {@link UserManager#setBootUser}, the
+     * returned value will be whatever was specified, as long as that user exists and can be
+     * switched to.
+     *
+     * <p>Otherwise, in {@link UserManager#isHeadlessSystemUserMode() headless system user mode},
+     * this will be the user who was last in the foreground on this device. If there is no
+     * switchable user on the device, a new user will be created and its id will be returned.
+     *
+     * <p>In non-headless system user mode, the return value will be {@link UserHandle#USER_SYSTEM}.
+     */
+    public abstract @UserIdInt int getBootUser()
+            throws UserManager.CheckedUserOperationException;
 }

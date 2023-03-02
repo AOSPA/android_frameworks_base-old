@@ -28,6 +28,8 @@ import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_IN
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LAUNCHER_APP_LAUNCH_FROM_RECENTS;
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LAUNCHER_APP_LAUNCH_FROM_WIDGET;
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LAUNCHER_APP_SWIPE_TO_RECENTS;
+import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LAUNCHER_CLOSE_ALL_APPS_SWIPE;
+import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LAUNCHER_CLOSE_ALL_APPS_TO_HOME;
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LAUNCHER_OPEN_ALL_APPS;
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LAUNCHER_QUICK_SWITCH;
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LAUNCHER_UNLOCK_ENTRANCE_ANIMATION;
@@ -228,6 +230,8 @@ public class InteractionJankMonitor {
     public static final int CUJ_LOCKSCREEN_OCCLUSION = 64;
     public static final int CUJ_RECENTS_SCROLLING = 65;
     public static final int CUJ_LAUNCHER_APP_SWIPE_TO_RECENTS = 66;
+    public static final int CUJ_LAUNCHER_CLOSE_ALL_APPS_SWIPE = 67;
+    public static final int CUJ_LAUNCHER_CLOSE_ALL_APPS_TO_HOME = 68;
 
     private static final int NO_STATSD_LOGGING = -1;
 
@@ -303,6 +307,8 @@ public class InteractionJankMonitor {
             UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LOCKSCREEN_OCCLUSION,
             UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__RECENTS_SCROLLING,
             UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LAUNCHER_APP_SWIPE_TO_RECENTS,
+            UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LAUNCHER_CLOSE_ALL_APPS_SWIPE,
+            UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LAUNCHER_CLOSE_ALL_APPS_TO_HOME,
     };
 
     private static class InstanceHolder {
@@ -393,7 +399,9 @@ public class InteractionJankMonitor {
             CUJ_LAUNCHER_UNLOCK_ENTRANCE_ANIMATION,
             CUJ_LOCKSCREEN_OCCLUSION,
             CUJ_RECENTS_SCROLLING,
-            CUJ_LAUNCHER_APP_SWIPE_TO_RECENTS
+            CUJ_LAUNCHER_APP_SWIPE_TO_RECENTS,
+            CUJ_LAUNCHER_CLOSE_ALL_APPS_SWIPE,
+            CUJ_LAUNCHER_CLOSE_ALL_APPS_TO_HOME
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface CujType {
@@ -780,17 +788,17 @@ public class InteractionJankMonitor {
         // 2. The returned string should be the same with the name defined in atoms.proto.
         switch (cujType) {
             case CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE:
-                return "SHADE_EXPAND_COLLAPSE";
+                return "NOTIFICATION_SHADE_EXPAND_COLLAPSE";
             case CUJ_NOTIFICATION_SHADE_SCROLL_FLING:
-                return "SHADE_SCROLL_FLING";
+                return "NOTIFICATION_SHADE_SCROLL_FLING";
             case CUJ_NOTIFICATION_SHADE_ROW_EXPAND:
-                return "SHADE_ROW_EXPAND";
+                return "NOTIFICATION_SHADE_ROW_EXPAND";
             case CUJ_NOTIFICATION_SHADE_ROW_SWIPE:
-                return "SHADE_ROW_SWIPE";
+                return "NOTIFICATION_SHADE_ROW_SWIPE";
             case CUJ_NOTIFICATION_SHADE_QS_EXPAND_COLLAPSE:
-                return "SHADE_QS_EXPAND_COLLAPSE";
+                return "NOTIFICATION_SHADE_QS_EXPAND_COLLAPSE";
             case CUJ_NOTIFICATION_SHADE_QS_SCROLL_SWIPE:
-                return "SHADE_QS_SCROLL_SWIPE";
+                return "NOTIFICATION_SHADE_QS_SCROLL_SWIPE";
             case CUJ_LAUNCHER_APP_LAUNCH_FROM_RECENTS:
                 return "LAUNCHER_APP_LAUNCH_FROM_RECENTS";
             case CUJ_LAUNCHER_APP_LAUNCH_FROM_ICON:
@@ -880,9 +888,9 @@ public class InteractionJankMonitor {
             case CUJ_SPLIT_SCREEN_EXIT:
                 return "SPLIT_SCREEN_EXIT";
             case CUJ_LOCKSCREEN_LAUNCH_CAMERA:
-                return "CUJ_LOCKSCREEN_LAUNCH_CAMERA";
+                return "LOCKSCREEN_LAUNCH_CAMERA";
             case CUJ_SPLIT_SCREEN_RESIZE:
-                return "CUJ_SPLIT_SCREEN_RESIZE";
+                return "SPLIT_SCREEN_RESIZE";
             case CUJ_SETTINGS_SLIDER:
                 return "SETTINGS_SLIDER";
             case CUJ_TAKE_SCREENSHOT:
@@ -911,6 +919,10 @@ public class InteractionJankMonitor {
                 return "RECENTS_SCROLLING";
             case CUJ_LAUNCHER_APP_SWIPE_TO_RECENTS:
                 return "LAUNCHER_APP_SWIPE_TO_RECENTS";
+            case CUJ_LAUNCHER_CLOSE_ALL_APPS_SWIPE:
+                return "LAUNCHER_CLOSE_ALL_APPS_SWIPE";
+            case CUJ_LAUNCHER_CLOSE_ALL_APPS_TO_HOME:
+                return "LAUNCHER_CLOSE_ALL_APPS_TO_HOME";
         }
         return "UNKNOWN";
     }

@@ -39,7 +39,6 @@ import androidx.test.runner.AndroidJUnit4;
 
 import com.android.phone.slice.SlicePurchaseController;
 
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -49,7 +48,7 @@ import org.mockito.MockitoAnnotations;
 
 @RunWith(AndroidJUnit4.class)
 public class SlicePurchaseActivityTest extends ActivityUnitTestCase<SlicePurchaseActivity> {
-    private static final String TAG = "SlicePurchaseActivityTest";
+    private static final String CARRIER = "Some Carrier";
     private static final String URL = "file:///android_asset/slice_purchase_test.html";
     private static final int PHONE_ID = 0;
 
@@ -94,7 +93,9 @@ public class SlicePurchaseActivityTest extends ActivityUnitTestCase<SlicePurchas
                 SubscriptionManager.getDefaultDataSubscriptionId());
         intent.putExtra(SlicePurchaseController.EXTRA_PREMIUM_CAPABILITY,
                 TelephonyManager.PREMIUM_CAPABILITY_PRIORITIZE_LATENCY);
-        intent.putExtra(SlicePurchaseController.EXTRA_REQUESTING_APP_NAME, TAG);
+        intent.putExtra(SlicePurchaseController.EXTRA_PURCHASE_URL,
+                SlicePurchaseController.SLICE_PURCHASE_TEST_FILE);
+        intent.putExtra(SlicePurchaseController.EXTRA_CARRIER, CARRIER);
         Intent spiedIntent = spy(intent);
 
         // set up pending intents
@@ -108,12 +109,6 @@ public class SlicePurchaseActivityTest extends ActivityUnitTestCase<SlicePurchas
                 eq(SlicePurchaseController.EXTRA_INTENT_CANCELED), eq(PendingIntent.class));
 
         mSlicePurchaseActivity = startActivity(spiedIntent, null, null);
-    }
-
-    @After
-    public void tearDown() throws Exception {
-        mSlicePurchaseActivity.onDestroy();
-        super.tearDown();
     }
 
     @Test

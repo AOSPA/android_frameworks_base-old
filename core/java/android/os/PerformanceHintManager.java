@@ -20,6 +20,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemService;
+import android.annotation.TestApi;
 import android.content.Context;
 
 import com.android.internal.util.Preconditions;
@@ -113,24 +114,36 @@ public final class PerformanceHintManager {
         * This hint indicates a sudden increase in CPU workload intensity. It means
         * that this hint session needs extra CPU resources immediately to meet the
         * target duration for the current work cycle.
+        *
+        * @hide
         */
+        @TestApi
         public static final int CPU_LOAD_UP = 0;
         /**
         * This hint indicates a decrease in CPU workload intensity. It means that
         * this hint session can reduce CPU resources and still meet the target duration.
+        *
+        * @hide
         */
+        @TestApi
         public static final int CPU_LOAD_DOWN = 1;
-        /*
+        /**
         * This hint indicates an upcoming CPU workload that is completely changed and
         * unknown. It means that the hint session should reset CPU resources to a known
         * baseline to prepare for an arbitrary load, and must wake up if inactive.
+        *
+        * @hide
         */
+        @TestApi
         public static final int CPU_LOAD_RESET = 2;
-        /*
+        /**
         * This hint indicates that the most recent CPU workload is resuming after a
         * period of inactivity. It means that the hint session should allocate similar
         * CPU resources to what was used previously, and must wake up if inactive.
+        *
+        * @hide
         */
+        @TestApi
         public static final int CPU_LOAD_RESUME = 3;
 
         /** @hide */
@@ -196,7 +209,10 @@ public final class PerformanceHintManager {
          * Sends performance hints to inform the hint session of changes in the workload.
          *
          * @param hint The hint to send to the session.
+         *
+         * @hide
          */
+        @TestApi
         public void sendHint(@Hint int hint) {
             Preconditions.checkArgumentNonNegative(hint, "the hint ID should be at least"
                     + " zero.");
@@ -206,16 +222,50 @@ public final class PerformanceHintManager {
                 Reference.reachabilityFence(this);
             }
         }
+
+        /**
+         * Set a list of threads to the performance hint session. This operation will replace
+         * the current list of threads with the given list of threads.
+         * Note that this is not an oneway method.
+         *
+         * @param tids The list of threads to be associated with this session. They must be
+         *     part of this app's thread group.
+         *
+         * @throws IllegalStateException if the hint session is not in the foreground.
+         * @throws IllegalArgumentException if the thread id list is empty.
+         * @throws SecurityException if any thread id doesn't belong to the application.
+         */
+        public void setThreads(@NonNull int[] tids) {
+            if (mNativeSessionPtr == 0) {
+                return;
+            }
+            if (tids.length == 0) {
+                throw new IllegalArgumentException("Thread id list can't be empty.");
+            }
+            nativeSetThreads(mNativeSessionPtr, tids);
+        }
+
+        /**
+         * Returns the list of thread ids.
+         *
+         * @hide
+         */
+        @TestApi
+        public @Nullable int[] getThreadIds() {
+            return nativeGetThreadIds(mNativeSessionPtr);
+        }
     }
 
     private static native long nativeAcquireManager();
     private static native long nativeGetPreferredUpdateRateNanos(long nativeManagerPtr);
     private static native long nativeCreateSession(long nativeManagerPtr,
             int[] tids, long initialTargetWorkDurationNanos);
+    private static native int[] nativeGetThreadIds(long nativeSessionPtr);
     private static native void nativeUpdateTargetWorkDuration(long nativeSessionPtr,
             long targetDurationNanos);
     private static native void nativeReportActualWorkDuration(long nativeSessionPtr,
             long actualDurationNanos);
     private static native void nativeCloseSession(long nativeSessionPtr);
     private static native void nativeSendHint(long nativeSessionPtr, int hint);
+    private static native void nativeSetThreads(long nativeSessionPtr, int[] tids);
 }

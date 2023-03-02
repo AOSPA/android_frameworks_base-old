@@ -266,6 +266,20 @@ public class LockSettingsStorageTests {
     }
 
     @Test
+    public void testNullKey() {
+        mStorage.setString(null, "value", 0);
+
+        // Verify that this doesn't throw an exception.
+        assertEquals("value", mStorage.readKeyValue(null, null, 0));
+
+        // The read that happens as part of prefetchUser shouldn't throw an exception either.
+        mStorage.clearCache();
+        mStorage.prefetchUser(0);
+
+        assertEquals("value", mStorage.readKeyValue(null, null, 0));
+    }
+
+    @Test
     public void testRemoveUser() {
         mStorage.writeKeyValue("key", "value", 0);
         mStorage.writeKeyValue("key", "value", 1);
@@ -389,11 +403,11 @@ public class LockSettingsStorageTests {
 
     @Test
     public void testPersistentData_serializeUnserialize() {
-        byte[] serialized = PersistentData.toBytes(PersistentData.TYPE_SP, SOME_USER_ID,
+        byte[] serialized = PersistentData.toBytes(PersistentData.TYPE_SP_GATEKEEPER, SOME_USER_ID,
                 DevicePolicyManager.PASSWORD_QUALITY_COMPLEX, PAYLOAD);
         PersistentData deserialized = PersistentData.fromBytes(serialized);
 
-        assertEquals(PersistentData.TYPE_SP, deserialized.type);
+        assertEquals(PersistentData.TYPE_SP_GATEKEEPER, deserialized.type);
         assertEquals(DevicePolicyManager.PASSWORD_QUALITY_COMPLEX, deserialized.qualityForUi);
         assertArrayEquals(PAYLOAD, deserialized.payload);
     }
@@ -424,13 +438,13 @@ public class LockSettingsStorageTests {
         // the wire format in the future.
         byte[] serializedVersion1 = new byte[] {
                 1, /* PersistentData.VERSION_1 */
-                1, /* PersistentData.TYPE_SP */
+                1, /* PersistentData.TYPE_SP_GATEKEEPER */
                 0x00, 0x00, 0x04, 0x0A,  /* SOME_USER_ID */
                 0x00, 0x03, 0x00, 0x00,  /* PASSWORD_NUMERIC_COMPLEX */
                 1, 2, -1, -2, 33, /* PAYLOAD */
         };
         PersistentData deserialized = PersistentData.fromBytes(serializedVersion1);
-        assertEquals(PersistentData.TYPE_SP, deserialized.type);
+        assertEquals(PersistentData.TYPE_SP_GATEKEEPER, deserialized.type);
         assertEquals(SOME_USER_ID, deserialized.userId);
         assertEquals(DevicePolicyManager.PASSWORD_QUALITY_NUMERIC_COMPLEX,
                 deserialized.qualityForUi);
@@ -438,7 +452,7 @@ public class LockSettingsStorageTests {
 
         // Make sure the constants we use on the wire do not change.
         assertEquals(0, PersistentData.TYPE_NONE);
-        assertEquals(1, PersistentData.TYPE_SP);
+        assertEquals(1, PersistentData.TYPE_SP_GATEKEEPER);
         assertEquals(2, PersistentData.TYPE_SP_WEAVER);
     }
 

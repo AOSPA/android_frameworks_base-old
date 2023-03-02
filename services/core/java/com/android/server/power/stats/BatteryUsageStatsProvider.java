@@ -91,7 +91,7 @@ public class BatteryUsageStatsProvider {
                 mPowerCalculators.add(new ScreenPowerCalculator(mPowerProfile));
                 mPowerCalculators.add(new AmbientDisplayPowerCalculator(mPowerProfile));
                 mPowerCalculators.add(new IdlePowerCalculator(mPowerProfile));
-                mPowerCalculators.add(new CustomMeasuredPowerCalculator(mPowerProfile));
+                mPowerCalculators.add(new CustomEnergyConsumerPowerCalculator(mPowerProfile));
                 mPowerCalculators.add(new UserPowerCalculator());
 
                 // It is important that SystemServicePowerCalculator be applied last,
@@ -286,16 +286,15 @@ public class BatteryUsageStatsProvider {
                 BatteryStats.Uid.PROCESS_STATE_FOREGROUND, realtimeUs,
                 BatteryStats.STATS_SINCE_CHARGED);
 
-        totalForegroundDurationUs += uid.getProcessStateTime(
-                BatteryStats.Uid.PROCESS_STATE_FOREGROUND_SERVICE, realtimeUs,
-                BatteryStats.STATS_SINCE_CHARGED);
-
         return totalForegroundDurationUs / 1000;
     }
 
     private long getProcessBackgroundTimeMs(BatteryStats.Uid uid, long realtimeUs) {
-        return uid.getProcessStateTime(BatteryStats.Uid.PROCESS_STATE_BACKGROUND, realtimeUs,
-                BatteryStats.STATS_SINCE_CHARGED) / 1000;
+        return (uid.getProcessStateTime(BatteryStats.Uid.PROCESS_STATE_BACKGROUND,
+                realtimeUs, BatteryStats.STATS_SINCE_CHARGED)
+                + uid.getProcessStateTime(BatteryStats.Uid.PROCESS_STATE_FOREGROUND_SERVICE,
+                realtimeUs, BatteryStats.STATS_SINCE_CHARGED))
+                / 1000;
     }
 
     private BatteryUsageStats getAggregatedBatteryUsageStats(BatteryUsageStatsQuery query) {

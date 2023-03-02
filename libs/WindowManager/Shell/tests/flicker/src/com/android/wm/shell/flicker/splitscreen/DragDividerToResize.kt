@@ -18,12 +18,12 @@ package com.android.wm.shell.flicker.splitscreen
 
 import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.IwTest
-import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerBuilder
 import com.android.server.wm.flicker.FlickerTest
 import com.android.server.wm.flicker.FlickerTestFactory
+import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
 import com.android.server.wm.flicker.junit.FlickerParametersRunnerFactory
 import com.android.wm.shell.flicker.SPLIT_SCREEN_DIVIDER_COMPONENT
 import com.android.wm.shell.flicker.appWindowIsVisibleAtEnd
@@ -84,7 +84,19 @@ class DragDividerToResize(flicker: FlickerTest) : SplitScreenBase(flicker) {
     @Test
     fun splitScreenDividerKeepVisible() = flicker.layerKeepVisible(SPLIT_SCREEN_DIVIDER_COMPONENT)
 
-    @Presubmit @Test fun primaryAppLayerKeepVisible() = flicker.layerKeepVisible(primaryApp)
+    @Presubmit
+    @Test
+    fun primaryAppLayerKeepVisible() {
+        Assume.assumeFalse(isShellTransitionsEnabled)
+        flicker.layerKeepVisible(primaryApp)
+    }
+
+    @FlakyTest(bugId = 263213649)
+    @Test
+    fun primaryAppLayerKeepVisible_ShellTransit() {
+        Assume.assumeTrue(isShellTransitionsEnabled)
+        flicker.layerKeepVisible(primaryApp)
+    }
 
     @Presubmit
     @Test
@@ -106,14 +118,27 @@ class DragDividerToResize(flicker: FlickerTest) : SplitScreenBase(flicker) {
 
     @Presubmit
     @Test
-    fun primaryAppBoundsChanges() =
+    fun primaryAppBoundsChanges() {
+        Assume.assumeFalse(isShellTransitionsEnabled)
         flicker.splitAppLayerBoundsChanges(
             primaryApp,
             landscapePosLeft = true,
             portraitPosTop = false
         )
+    }
 
-    @FlakyTest(bugId = 250530664)
+    @FlakyTest(bugId = 263213649)
+    @Test
+    fun primaryAppBoundsChanges_ShellTransit() {
+        Assume.assumeTrue(isShellTransitionsEnabled)
+        flicker.splitAppLayerBoundsChanges(
+            primaryApp,
+            landscapePosLeft = true,
+            portraitPosTop = false
+        )
+    }
+
+    @Presubmit
     @Test
     fun secondaryAppBoundsChanges() =
         flicker.splitAppLayerBoundsChanges(
@@ -123,60 +148,9 @@ class DragDividerToResize(flicker: FlickerTest) : SplitScreenBase(flicker) {
         )
 
     /** {@inheritDoc} */
-    @Postsubmit @Test override fun entireScreenCovered() = super.entireScreenCovered()
-
-    /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest(bugId = 263213649)
     @Test
-    override fun navBarLayerIsVisibleAtStartAndEnd() = super.navBarLayerIsVisibleAtStartAndEnd()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun navBarWindowIsAlwaysVisible() = super.navBarWindowIsAlwaysVisible()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun statusBarLayerIsVisibleAtStartAndEnd() =
-        super.statusBarLayerIsVisibleAtStartAndEnd()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun statusBarLayerPositionAtStartAndEnd() = super.statusBarLayerPositionAtStartAndEnd()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun statusBarWindowIsAlwaysVisible() = super.statusBarWindowIsAlwaysVisible()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun taskBarLayerIsVisibleAtStartAndEnd() = super.taskBarLayerIsVisibleAtStartAndEnd()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun taskBarWindowIsAlwaysVisible() = super.taskBarWindowIsAlwaysVisible()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
-        super.visibleLayersShownMoreThanOneConsecutiveEntry()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun visibleWindowsShownMoreThanOneConsecutiveEntry() =
-        super.visibleWindowsShownMoreThanOneConsecutiveEntry()
+    override fun entireScreenCovered() = super.entireScreenCovered()
 
     companion object {
         @Parameterized.Parameters(name = "{0}")

@@ -104,8 +104,15 @@ import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.fragments.FragmentHostManager;
 import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
+import com.android.systemui.keyguard.domain.interactor.AlternateBouncerInteractor;
 import com.android.systemui.keyguard.domain.interactor.KeyguardBottomAreaInteractor;
+import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor;
+import com.android.systemui.keyguard.ui.viewmodel.DreamingToLockscreenTransitionViewModel;
+import com.android.systemui.keyguard.ui.viewmodel.GoneToDreamingTransitionViewModel;
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardBottomAreaViewModel;
+import com.android.systemui.keyguard.ui.viewmodel.LockscreenToDreamingTransitionViewModel;
+import com.android.systemui.keyguard.ui.viewmodel.LockscreenToOccludedTransitionViewModel;
+import com.android.systemui.keyguard.ui.viewmodel.OccludedToLockscreenTransitionViewModel;
 import com.android.systemui.media.controls.pipeline.MediaDataManager;
 import com.android.systemui.media.controls.ui.KeyguardMediaController;
 import com.android.systemui.media.controls.ui.MediaHierarchyManager;
@@ -174,6 +181,7 @@ import com.android.wm.shell.animation.FlingAnimationUtils;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
@@ -185,6 +193,8 @@ import org.mockito.stubbing.Answer;
 
 import java.util.List;
 import java.util.Optional;
+
+import kotlinx.coroutines.CoroutineDispatcher;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
@@ -219,6 +229,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     @Mock private KeyguardStateController mKeyguardStateController;
     @Mock private DozeLog mDozeLog;
     @Mock private ShadeLogger mShadeLog;
+    @Mock private ShadeHeightLogger mShadeHeightLogger;
     @Mock private CommandQueue mCommandQueue;
     @Mock private VibratorHelper mVibratorHelper;
     @Mock private LatencyTracker mLatencyTracker;
@@ -286,6 +297,15 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     @Mock private ViewTreeObserver mViewTreeObserver;
     @Mock private KeyguardBottomAreaViewModel mKeyguardBottomAreaViewModel;
     @Mock private KeyguardBottomAreaInteractor mKeyguardBottomAreaInteractor;
+    @Mock private AlternateBouncerInteractor mAlternateBouncerInteractor;
+    @Mock private DreamingToLockscreenTransitionViewModel mDreamingToLockscreenTransitionViewModel;
+    @Mock private OccludedToLockscreenTransitionViewModel mOccludedToLockscreenTransitionViewModel;
+    @Mock private LockscreenToDreamingTransitionViewModel mLockscreenToDreamingTransitionViewModel;
+    @Mock private LockscreenToOccludedTransitionViewModel mLockscreenToOccludedTransitionViewModel;
+    @Mock private GoneToDreamingTransitionViewModel mGoneToDreamingTransitionViewModel;
+
+    @Mock private KeyguardTransitionInteractor mKeyguardTransitionInteractor;
+    @Mock private CoroutineDispatcher mMainDispatcher;
     @Mock private MotionEvent mDownMotionEvent;
     @Captor
     private ArgumentCaptor<NotificationStackScrollLayout.OnEmptySpaceClickListener>
@@ -456,6 +476,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 mLatencyTracker, mPowerManager, mAccessibilityManager, 0, mUpdateMonitor,
                 mMetricsLogger,
                 mShadeLog,
+                mShadeHeightLogger,
                 mConfigurationController,
                 () -> flingAnimationUtilsBuilder, mStatusBarTouchableRegionManager,
                 mConversationNotificationManager, mMediaHierarchyManager,
@@ -501,6 +522,14 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 systemClock,
                 mKeyguardBottomAreaViewModel,
                 mKeyguardBottomAreaInteractor,
+                mAlternateBouncerInteractor,
+                mDreamingToLockscreenTransitionViewModel,
+                mOccludedToLockscreenTransitionViewModel,
+                mLockscreenToDreamingTransitionViewModel,
+                mGoneToDreamingTransitionViewModel,
+                mLockscreenToOccludedTransitionViewModel,
+                mMainDispatcher,
+                mKeyguardTransitionInteractor,
                 mDumpManager,
                 mEmergencyButtonControllerFactory);
         mNotificationPanelViewController.initDependencies(
@@ -614,6 +643,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     }
 
     @Test
+    @Ignore("b/261472011 - Test appears inconsistent across environments")
     public void getVerticalSpaceForLockscreenNotifications_useLockIconBottomPadding_returnsSpaceAvailable() {
         setBottomPadding(/* stackScrollLayoutBottom= */ 180,
                 /* lockIconPadding= */ 20,
@@ -625,6 +655,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     }
 
     @Test
+    @Ignore("b/261472011 - Test appears inconsistent across environments")
     public void getVerticalSpaceForLockscreenNotifications_useIndicationBottomPadding_returnsSpaceAvailable() {
         setBottomPadding(/* stackScrollLayoutBottom= */ 180,
                 /* lockIconPadding= */ 0,
@@ -636,6 +667,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     }
 
     @Test
+    @Ignore("b/261472011 - Test appears inconsistent across environments")
     public void getVerticalSpaceForLockscreenNotifications_useAmbientBottomPadding_returnsSpaceAvailable() {
         setBottomPadding(/* stackScrollLayoutBottom= */ 180,
                 /* lockIconPadding= */ 0,
@@ -1101,6 +1133,17 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
 
         mStatusBarStateController.setState(KEYGUARD);
 
+        assertThat(mNotificationPanelViewController.isQsExpanded()).isEqualTo(false);
+        assertThat(mNotificationPanelViewController.isQsExpandImmediate()).isEqualTo(false);
+    }
+
+    @Test
+    public void testLockedSplitShadeTransitioningToKeyguard_closesQS() {
+        enableSplitShade(true);
+        mStatusBarStateController.setState(SHADE_LOCKED);
+        mNotificationPanelViewController.setQsExpanded(true);
+
+        mStatusBarStateController.setState(KEYGUARD);
 
         assertThat(mNotificationPanelViewController.isQsExpanded()).isEqualTo(false);
         assertThat(mNotificationPanelViewController.isQsExpandImmediate()).isEqualTo(false);
@@ -1667,6 +1710,42 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
         int transitionDistance = mNotificationPanelViewController.getMaxPanelTransitionDistance();
         mNotificationPanelViewController.setExpandedHeight(transitionDistance);
         assertThat(mNotificationPanelViewController.isFullyExpanded()).isTrue();
+    }
+
+    @Test
+    public void shadeExpanded_inShadeState() {
+        mStatusBarStateController.setState(SHADE);
+
+        mNotificationPanelViewController.setExpandedHeight(0);
+        assertThat(mNotificationPanelViewController.isShadeFullyOpen()).isFalse();
+
+        int transitionDistance = mNotificationPanelViewController.getMaxPanelTransitionDistance();
+        mNotificationPanelViewController.setExpandedHeight(transitionDistance);
+        assertThat(mNotificationPanelViewController.isShadeFullyOpen()).isTrue();
+    }
+
+    @Test
+    public void shadeExpanded_onKeyguard() {
+        mStatusBarStateController.setState(KEYGUARD);
+
+        int transitionDistance = mNotificationPanelViewController.getMaxPanelTransitionDistance();
+        mNotificationPanelViewController.setExpandedHeight(transitionDistance);
+        assertThat(mNotificationPanelViewController.isShadeFullyOpen()).isFalse();
+
+        // set maxQsExpansion in NPVC
+        int maxQsExpansion = 123;
+        mNotificationPanelViewController.setQs(mQs);
+        when(mQs.getDesiredHeight()).thenReturn(maxQsExpansion);
+        triggerLayoutChange();
+
+        mNotificationPanelViewController.setQsExpansionHeight(maxQsExpansion);
+        assertThat(mNotificationPanelViewController.isShadeFullyOpen()).isTrue();
+    }
+
+    @Test
+    public void shadeExpanded_onShadeLocked() {
+        mStatusBarStateController.setState(SHADE_LOCKED);
+        assertThat(mNotificationPanelViewController.isShadeFullyOpen()).isTrue();
     }
 
     private static MotionEvent createMotionEvent(int x, int y, int action) {

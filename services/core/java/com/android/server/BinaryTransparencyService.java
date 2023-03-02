@@ -19,10 +19,14 @@ package com.android.server;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SuppressLint;
+import android.apex.ApexInfo;
+import android.apex.IApexService;
+import android.app.compat.CompatChanges;
 import android.app.job.JobInfo;
 import android.app.job.JobParameters;
 import android.app.job.JobScheduler;
 import android.app.job.JobService;
+import android.compat.annotation.ChangeId;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
@@ -31,6 +35,7 @@ import android.content.pm.InstallSourceInfo;
 import android.content.pm.ModuleInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageManagerInternal;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.SharedLibraryInfo;
 import android.content.pm.Signature;
@@ -39,6 +44,14 @@ import android.content.pm.SigningInfo;
 import android.content.pm.parsing.result.ParseInput;
 import android.content.pm.parsing.result.ParseResult;
 import android.content.pm.parsing.result.ParseTypeImpl;
+import android.hardware.biometrics.SensorProperties;
+import android.hardware.biometrics.SensorProperties.ComponentInfo;
+import android.hardware.face.FaceManager;
+import android.hardware.face.FaceSensorProperties;
+import android.hardware.fingerprint.FingerprintManager;
+import android.hardware.fingerprint.FingerprintSensorProperties;
+import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
+import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -58,10 +71,10 @@ import android.util.apk.ApkSigningBlockUtils;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.IBinaryTransparencyService;
 import com.android.internal.util.FrameworkStatsLog;
+import com.android.server.pm.ApexManager;
 
 import libcore.util.HexEncoding;
 
-import java.io.File;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.security.PublicKey;
@@ -72,8 +85,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * @hide
@@ -105,7 +118,6 @@ public class BinaryTransparencyService extends SystemService {
     @VisibleForTesting
     static final String BUNDLE_CONTENT_DIGEST = "content-digest";
 
-    static final String APEX_PRELOAD_LOCATION = "/system/apex/";
     static final String APEX_PRELOAD_LOCATION_ERROR = "could-not-be-determined";
 
     // used for indicating any type of error during MBA measurement
@@ -119,12 +131,21 @@ public class BinaryTransparencyService extends SystemService {
     // used for indicating newly installed MBAs that are updated (but unused currently)
     static final int MBA_STATUS_UPDATED_NEW_INSTALL = 4;
 
-    private static final boolean DEBUG = true;     // set this to false upon submission
+    private static final boolean DEBUG = false;     // toggle this for local debug
 
     private final Context mContext;
     private String mVbmetaDigest;
     // the system time (in ms) the last measurement was taken
     private long mMeasurementsLastRecordedMs;
+    private PackageManagerInternal mPackageManagerInternal;
+
+    /**
+     * Guards whether or not measurements of MBA to be performed. When this change is enabled,
+     * measurements of MBAs are performed. But when it is disabled, only measurements of APEX
+     * and modules are done.
+     */
+    @ChangeId
+    public static final long LOG_MBA_INFO = 245692487L;
 
     final class BinaryTransparencyServiceImpl extends IBinaryTransparencyService.Stub {
 
@@ -263,7 +284,7 @@ public class BinaryTransparencyService extends SystemService {
                     String[] signerDigestHexStrings = computePackageSignerSha256Digests(
                             packageInfo.signingInfo);
 
-                    // log to Westworld
+                    // log to statsd
                     FrameworkStatsLog.write(FrameworkStatsLog.APEX_INFO_GATHERED,
                                             packageInfo.packageName,
                                             packageInfo.getLongVersionCode(),
@@ -320,9 +341,7 @@ public class BinaryTransparencyService extends SystemService {
                     FrameworkStatsLog.write(FrameworkStatsLog.MOBILE_BUNDLED_APP_INFO_GATHERED,
                             packageInfo.packageName,
                             packageInfo.getLongVersionCode(),
-                            (cDigest != null) ? HexEncoding.encodeToString(
-                                    packageMeasurement.getByteArray(BUNDLE_CONTENT_DIGEST),
-                                    false) : null,
+                            (cDigest != null) ? HexEncoding.encodeToString(cDigest, false) : null,
                             packageMeasurement.getInt(BUNDLE_CONTENT_DIGEST_ALGORITHM),
                             signerDigestHexStrings, // signer_cert_digest
                             mba_status,             // mba_status
@@ -338,60 +357,63 @@ public class BinaryTransparencyService extends SystemService {
                         + " packages after considering preloads");
             }
 
-            // lastly measure all newly installed MBAs
-            for (PackageInfo packageInfo : getNewlyInstalledMbas()) {
-                if (packagesMeasured.contains(packageInfo.packageName)) {
-                    continue;
-                }
-                packagesMeasured.add(packageInfo.packageName);
-
-                Bundle packageMeasurement = measurePackage(packageInfo);
-                results.add(packageMeasurement);
-
-                if (record) {
-                    // compute digests of signing info
-                    String[] signerDigestHexStrings = computePackageSignerSha256Digests(
-                            packageInfo.signingInfo);
-
-                    // then extract package's InstallSourceInfo
-                    if (DEBUG) {
-                        Slog.d(TAG, "Extracting InstallSourceInfo for " + packageInfo.packageName);
+            if (CompatChanges.isChangeEnabled(LOG_MBA_INFO)) {
+                // lastly measure all newly installed MBAs
+                for (PackageInfo packageInfo : getNewlyInstalledMbas()) {
+                    if (packagesMeasured.contains(packageInfo.packageName)) {
+                        continue;
                     }
-                    InstallSourceInfo installSourceInfo = getInstallSourceInfo(
-                            packageInfo.packageName);
-                    String initiator = null;
-                    SigningInfo initiatorSignerInfo = null;
-                    String[] initiatorSignerInfoDigest = null;
-                    String installer = null;
-                    String originator = null;
+                    packagesMeasured.add(packageInfo.packageName);
 
-                    if (installSourceInfo != null) {
-                        initiator = installSourceInfo.getInitiatingPackageName();
-                        initiatorSignerInfo = installSourceInfo.getInitiatingPackageSigningInfo();
-                        if (initiatorSignerInfo != null) {
-                            initiatorSignerInfoDigest = computePackageSignerSha256Digests(
-                                    initiatorSignerInfo);
+                    Bundle packageMeasurement = measurePackage(packageInfo);
+                    results.add(packageMeasurement);
+
+                    if (record) {
+                        // compute digests of signing info
+                        String[] signerDigestHexStrings = computePackageSignerSha256Digests(
+                                packageInfo.signingInfo);
+
+                        // then extract package's InstallSourceInfo
+                        if (DEBUG) {
+                            Slog.d(TAG,
+                                    "Extracting InstallSourceInfo for " + packageInfo.packageName);
                         }
-                        installer = installSourceInfo.getInstallingPackageName();
-                        originator = installSourceInfo.getOriginatingPackageName();
-                    }
+                        InstallSourceInfo installSourceInfo = getInstallSourceInfo(
+                                packageInfo.packageName);
+                        String initiator = null;
+                        SigningInfo initiatorSignerInfo = null;
+                        String[] initiatorSignerInfoDigest = null;
+                        String installer = null;
+                        String originator = null;
 
-                    // we should now have all the info needed for the atom
-                    byte[] cDigest = packageMeasurement.getByteArray(BUNDLE_CONTENT_DIGEST);
-                    FrameworkStatsLog.write(FrameworkStatsLog.MOBILE_BUNDLED_APP_INFO_GATHERED,
-                            packageInfo.packageName,
-                            packageInfo.getLongVersionCode(),
-                            (cDigest != null) ? HexEncoding.encodeToString(
-                                    packageMeasurement.getByteArray(BUNDLE_CONTENT_DIGEST),
-                                    false) : null,
-                            packageMeasurement.getInt(BUNDLE_CONTENT_DIGEST_ALGORITHM),
-                            signerDigestHexStrings,
-                            MBA_STATUS_NEW_INSTALL,   // mba_status
-                            initiator,
-                            initiatorSignerInfoDigest,
-                            installer,
-                            originator
-                    );
+                        if (installSourceInfo != null) {
+                            initiator = installSourceInfo.getInitiatingPackageName();
+                            initiatorSignerInfo =
+                                    installSourceInfo.getInitiatingPackageSigningInfo();
+                            if (initiatorSignerInfo != null) {
+                                initiatorSignerInfoDigest = computePackageSignerSha256Digests(
+                                        initiatorSignerInfo);
+                            }
+                            installer = installSourceInfo.getInstallingPackageName();
+                            originator = installSourceInfo.getOriginatingPackageName();
+                        }
+
+                        // we should now have all the info needed for the atom
+                        byte[] cDigest = packageMeasurement.getByteArray(BUNDLE_CONTENT_DIGEST);
+                        FrameworkStatsLog.write(FrameworkStatsLog.MOBILE_BUNDLED_APP_INFO_GATHERED,
+                                packageInfo.packageName,
+                                packageInfo.getLongVersionCode(),
+                                (cDigest != null) ? HexEncoding.encodeToString(cDigest, false)
+                                        : null,
+                                packageMeasurement.getInt(BUNDLE_CONTENT_DIGEST_ALGORITHM),
+                                signerDigestHexStrings,
+                                MBA_STATUS_NEW_INSTALL,   // mba_status
+                                initiator,
+                                initiatorSignerInfoDigest,
+                                installer,
+                                originator
+                        );
+                    }
                 }
             }
             if (DEBUG) {
@@ -517,32 +539,35 @@ public class BinaryTransparencyService extends SystemService {
                         pw.println("|--> Pre-installed package install location: "
                                 + origPackageFilepath);
 
-                        if (useSha256) {
-                            String sha256Digest = PackageUtils.computeSha256DigestForLargeFile(
-                                    origPackageFilepath, PackageUtils.createLargeFileBuffer());
-                            pw.println("|--> Pre-installed package SHA-256 digest: "
-                                    + sha256Digest);
-                        }
+                        if (!origPackageFilepath.equals(APEX_PRELOAD_LOCATION_ERROR)) {
+                            if (useSha256) {
+                                String sha256Digest = PackageUtils.computeSha256DigestForLargeFile(
+                                        origPackageFilepath, PackageUtils.createLargeFileBuffer());
+                                pw.println("|--> Pre-installed package SHA-256 digest: "
+                                        + sha256Digest);
+                            }
 
-
-                        Map<Integer, byte[]> contentDigests = computeApkContentDigest(
-                                origPackageFilepath);
-                        if (contentDigests == null) {
-                            pw.println("ERROR: Failed to compute package content digest for "
-                                    + origPackageFilepath);
-                        } else {
-                            for (Map.Entry<Integer, byte[]> entry : contentDigests.entrySet()) {
-                                Integer algorithmId = entry.getKey();
-                                byte[] contentDigest = entry.getValue();
-                                pw.println("|--> Pre-installed package content digest: "
-                                        + HexEncoding.encodeToString(contentDigest, false));
-                                pw.println("|--> Pre-installed package content digest algorithm: "
-                                        + translateContentDigestAlgorithmIdToString(algorithmId));
+                            Map<Integer, byte[]> contentDigests = computeApkContentDigest(
+                                    origPackageFilepath);
+                            if (contentDigests == null) {
+                                pw.println("|--> ERROR: Failed to compute package content digest "
+                                        + "for " + origPackageFilepath);
+                            } else {
+                                for (Map.Entry<Integer, byte[]> entry : contentDigests.entrySet()) {
+                                    Integer algorithmId = entry.getKey();
+                                    byte[] contentDigest = entry.getValue();
+                                    pw.println("|--> Pre-installed package content digest: "
+                                            + HexEncoding.encodeToString(contentDigest, false));
+                                    pw.println("|--> Pre-installed package content digest "
+                                            + "algorithm: "
+                                            + translateContentDigestAlgorithmIdToString(
+                                                    algorithmId));
+                                }
                             }
                         }
                     }
                     pw.println("First install time (ms): " + packageInfo.firstInstallTime);
-                    pw.println("Last update time (ms): " + packageInfo.lastUpdateTime);
+                    pw.println("Last update time (ms):   " + packageInfo.lastUpdateTime);
                     // TODO(b/261493591): Determination of whether a package is preinstalled can be
                     // made more robust
                     boolean isPreloaded = (packageInfo.firstInstallTime
@@ -574,9 +599,10 @@ public class BinaryTransparencyService extends SystemService {
                         pw.println("ERROR: Package's signingInfo is null.");
                         return;
                     }
-                    // TODO(b/261501773): Handle printing of lineage of rotated keys.
                     pw.println("--- Package Signer Info ---");
                     pw.println("Has multiple signers: " + signerInfo.hasMultipleSigners());
+                    pw.println("Signing key has been rotated: "
+                            + signerInfo.hasPastSigningCertificates());
                     Signature[] packageSigners = signerInfo.getApkContentsSigners();
                     for (Signature packageSigner : packageSigners) {
                         byte[] packageSignerDigestBytes =
@@ -590,8 +616,31 @@ public class BinaryTransparencyService extends SystemService {
                         } catch (CertificateException e) {
                             Slog.e(TAG,
                                     "Failed to obtain public key of signer for cert with hash: "
-                                    + packageSignerDigestHextring);
-                            e.printStackTrace();
+                                    + packageSignerDigestHextring, e);
+                        }
+                    }
+
+                    if (!signerInfo.hasMultipleSigners()
+                            && signerInfo.hasPastSigningCertificates()) {
+                        pw.println("== Signing Cert Lineage (Excluding The Most Recent) ==");
+                        pw.println("(Certs are sorted in the order of rotation, beginning with the "
+                                   + "original signing cert)");
+                        Signature[] signingCertHistory = signerInfo.getSigningCertificateHistory();
+                        for (int i = 0; i < (signingCertHistory.length - 1); i++) {
+                            Signature signature = signingCertHistory[i];
+                            byte[] signatureDigestBytes = PackageUtils.computeSha256DigestBytes(
+                                    signature.toByteArray());
+                            String certHashHexString = HexEncoding.encodeToString(
+                                    signatureDigestBytes, false);
+                            pw.println("  ++ Signer cert #" + (i + 1) + " ++");
+                            pw.println("  Cert SHA256-digest: " + certHashHexString);
+                            try {
+                                PublicKey publicKey = signature.getPublicKey();
+                                pw.println("  Signing key algorithm: " + publicKey.getAlgorithm());
+                            } catch (CertificateException e) {
+                                Slog.e(TAG, "Failed to obtain public key of signer for cert "
+                                        + "with hash: " + certHashHexString, e);
+                            }
                         }
                     }
 
@@ -630,7 +679,7 @@ public class BinaryTransparencyService extends SystemService {
                     pw.println("Component factory: "
                             + packageInfo.applicationInfo.appComponentFactory);
                     pw.println("Process name: " + packageInfo.applicationInfo.processName);
-                    pw.println("Task affinity : " + packageInfo.applicationInfo.taskAffinity);
+                    pw.println("Task affinity: " + packageInfo.applicationInfo.taskAffinity);
                     pw.println("UID: " + packageInfo.applicationInfo.uid);
                     pw.println("Shared UID: " + packageInfo.sharedUserId);
 
@@ -827,6 +876,7 @@ public class BinaryTransparencyService extends SystemService {
                     boolean printLibraries = false;
                     boolean useSha256 = false;
                     boolean printHeaders = true;
+                    boolean preloadsOnly = false;
                     String opt;
                     while ((opt = getNextOption()) != null) {
                         switch (opt) {
@@ -844,6 +894,9 @@ public class BinaryTransparencyService extends SystemService {
                             case "--no-headers":
                                 printHeaders = false;
                                 break;
+                            case "--preloads-only":
+                                preloadsOnly = true;
+                                break;
                             default:
                                 pw.println("ERROR: Unknown option: " + opt);
                                 return 1;
@@ -851,7 +904,47 @@ public class BinaryTransparencyService extends SystemService {
                     }
 
                     if (!verbose && printHeaders) {
-                        printHeadersHelper("MBA", useSha256, pw);
+                        if (preloadsOnly) {
+                            printHeadersHelper("Preload", useSha256, pw);
+                        } else {
+                            printHeadersHelper("MBA", useSha256, pw);
+                        }
+                    }
+
+                    PackageManager pm = mContext.getPackageManager();
+                    for (PackageInfo packageInfo : pm.getInstalledPackages(
+                            PackageManager.PackageInfoFlags.of(PackageManager.MATCH_FACTORY_ONLY
+                            | PackageManager.GET_SIGNING_CERTIFICATES))) {
+                        if (packageInfo.signingInfo == null) {
+                            PackageInfo origPackageInfo = packageInfo;
+                            try {
+                                pm.getPackageInfo(packageInfo.packageName,
+                                        PackageManager.PackageInfoFlags.of(PackageManager.MATCH_ALL
+                                                | PackageManager.GET_SIGNING_CERTIFICATES));
+                            } catch (PackageManager.NameNotFoundException e) {
+                                Slog.e(TAG, "Failed to obtain an updated PackageInfo of "
+                                        + origPackageInfo.packageName);
+                                packageInfo = origPackageInfo;
+                            }
+                        }
+
+                        if (verbose && printHeaders) {
+                            printHeadersHelper("Preload", useSha256, pw);
+                        }
+                        pw.print(packageInfo.packageName + ",");
+                        pw.print(packageInfo.getLongVersionCode() + ",");
+                        printPackageMeasurements(packageInfo, useSha256, pw);
+
+                        if (verbose) {
+                            printAppDetails(packageInfo, printLibraries, pw);
+                            printPackageInstallationInfo(packageInfo, useSha256, pw);
+                            printPackageSignerDetails(packageInfo.signingInfo, pw);
+                            pw.println("");
+                        }
+                    }
+
+                    if (preloadsOnly) {
+                        return 0;
                     }
                     for (PackageInfo packageInfo : getNewlyInstalledMbas()) {
                         if (verbose && printHeaders) {
@@ -867,25 +960,6 @@ public class BinaryTransparencyService extends SystemService {
                             printPackageSignerDetails(packageInfo.signingInfo, pw);
                             pw.println("");
                         }
-                    }
-                    return 0;
-                }
-
-                // TODO(b/259347186): add option handling full file-based SHA256 digest
-                private int printAllPreloads() {
-                    final PrintWriter pw = getOutPrintWriter();
-
-                    PackageManager pm = mContext.getPackageManager();
-                    if (pm == null) {
-                        Slog.e(TAG, "Failed to obtain PackageManager.");
-                        return -1;
-                    }
-                    List<PackageInfo> factoryApps = pm.getInstalledPackages(
-                            PackageManager.PackageInfoFlags.of(PackageManager.MATCH_FACTORY_ONLY));
-
-                    pw.println("Preload Info [Format: package_name]");
-                    for (PackageInfo packageInfo : factoryApps) {
-                        pw.println(packageInfo.packageName);
                     }
                     return 0;
                 }
@@ -914,8 +988,6 @@ public class BinaryTransparencyService extends SystemService {
                                     return printAllModules();
                                 case "mba_info":
                                     return printAllMbas();
-                                case "preload_info":
-                                    return printAllPreloads();
                                 default:
                                     pw.println(String.format("ERROR: Unknown info type '%s'",
                                             infoType));
@@ -943,7 +1015,7 @@ public class BinaryTransparencyService extends SystemService {
                                + "APEX hashes. WARNING: This can be a very slow and CPU-intensive "
                                + "computation.");
                     pw.println("      -v: lists more verbose information about each APEX.");
-                    pw.println("      --no-headers: does not print the header if specified");
+                    pw.println("      --no-headers: does not print the header if specified.");
                     pw.println("");
                     pw.println("  get module_info [-o] [-v] [--no-headers]");
                     pw.println("    Print information about installed modules on device.");
@@ -951,9 +1023,9 @@ public class BinaryTransparencyService extends SystemService {
                                + "module hashes. WARNING: This can be a very slow and "
                                + "CPU-intensive computation.");
                     pw.println("      -v: lists more verbose information about each module.");
-                    pw.println("      --no-headers: does not print the header if specified");
+                    pw.println("      --no-headers: does not print the header if specified.");
                     pw.println("");
-                    pw.println("  get mba_info [-o] [-v] [-l] [--no-headers]");
+                    pw.println("  get mba_info [-o] [-v] [-l] [--no-headers] [--preloads-only]");
                     pw.println("    Print information about installed mobile bundle apps "
                                + "(MBAs on device).");
                     pw.println("      -o: also uses the old digest scheme (SHA256) to compute "
@@ -962,7 +1034,9 @@ public class BinaryTransparencyService extends SystemService {
                     pw.println("      -v: lists more verbose information about each app.");
                     pw.println("      -l: lists shared library info. (This option only works "
                                + "when -v option is also specified)");
-                    pw.println("      --no-headers: does not print the header if specified");
+                    pw.println("      --no-headers: does not print the header if specified.");
+                    pw.println("      --preloads-only: lists only preloaded apps. This options can "
+                               + "also be combined with others.");
                     pw.println("");
                 }
 
@@ -981,6 +1055,7 @@ public class BinaryTransparencyService extends SystemService {
         mServiceImpl = new BinaryTransparencyServiceImpl();
         mVbmetaDigest = VBMETA_DIGEST_UNINITIALIZED;
         mMeasurementsLastRecordedMs = 0;
+        mPackageManagerInternal = LocalServices.getService(PackageManagerInternal.class);
     }
 
     /**
@@ -995,6 +1070,38 @@ public class BinaryTransparencyService extends SystemService {
         } catch (Throwable t) {
             Slog.e(TAG, "Failed to start BinaryTransparencyService.", t);
         }
+
+        // register a package observer to detect updates to preloads
+        mPackageManagerInternal.getPackageList(new PackageManagerInternal.PackageListObserver() {
+            @Override
+            public void onPackageAdded(String packageName, int uid) {
+
+            }
+
+            @Override
+            public void onPackageChanged(String packageName, int uid) {
+                // check if the updated package is a preloaded app.
+                PackageManager pm = mContext.getPackageManager();
+                try {
+                    pm.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(
+                            PackageManager.MATCH_FACTORY_ONLY));
+                } catch (PackageManager.NameNotFoundException e) {
+                    // this means that this package is not a preloaded app
+                    return;
+                }
+
+                Slog.d(TAG, "Preload " + packageName + " was updated. Scheduling measurement...");
+                UpdateMeasurementsJobService.scheduleBinaryMeasurements(mContext,
+                        BinaryTransparencyService.this);
+            }
+
+            @Override
+            public void onPackageRemoved(String packageName, int uid) {
+
+            }
+        });
+
+        // TODO(b/264428429): Register observer for updates to APEXs.
     }
 
     /**
@@ -1011,6 +1118,15 @@ public class BinaryTransparencyService extends SystemService {
             Slog.i(TAG, "Boot completed. Getting VBMeta Digest.");
             getVBMetaDigestInformation();
 
+            // Log to statsd
+            // TODO(b/264061957): For now, biometric system properties are always collected if users
+            //  share usage & diagnostics information. In the future, collect biometric system
+            //  properties only when transparency log verification of the target partitions fails
+            //  (e.g. when the system/vendor partitions have been changed) once the binary
+            //  transparency infrastructure is ready.
+            Slog.i(TAG, "Boot completed. Collecting biometric system properties.");
+            collectBiometricProperties();
+
             // to avoid the risk of holding up boot time, computations to measure APEX, Module, and
             // MBA digests are scheduled here, but only executed when the device is idle and plugged
             // in.
@@ -1024,6 +1140,8 @@ public class BinaryTransparencyService extends SystemService {
      * JobService to measure all covered binaries and record result to Westworld.
      */
     public static class UpdateMeasurementsJobService extends JobService {
+        private static AtomicBoolean sScheduled = new AtomicBoolean();
+        private static long sTimeLastRanMs = 0;
         private static final int DO_BINARY_MEASUREMENTS_JOB_ID =
                 UpdateMeasurementsJobService.class.hashCode();
 
@@ -1050,6 +1168,8 @@ public class BinaryTransparencyService extends SystemService {
                     Slog.e(TAG, "Taking binary measurements was interrupted.", e);
                     return;
                 }
+                sTimeLastRanMs = System.currentTimeMillis();
+                sScheduled.set(false);
                 jobFinished(params, false);
             }).start();
 
@@ -1070,19 +1190,171 @@ public class BinaryTransparencyService extends SystemService {
                 return;
             }
 
+            if (sScheduled.get()) {
+                Slog.d(TAG, "A measurement job has already been scheduled.");
+                return;
+            }
+
+            long minWaitingPeriodMs = 0;
+            if (sTimeLastRanMs != 0) {
+                minWaitingPeriodMs = RECORD_MEASUREMENTS_COOLDOWN_MS
+                        - (System.currentTimeMillis() - sTimeLastRanMs);
+                // bound the range of minWaitingPeriodMs in the case where > 24h has elapsed
+                minWaitingPeriodMs = Math.max(0,
+                        Math.min(minWaitingPeriodMs, RECORD_MEASUREMENTS_COOLDOWN_MS));
+                Slog.d(TAG, "Scheduling the next measurement to be done at least "
+                        + minWaitingPeriodMs + "ms from now.");
+            }
+
             final JobInfo jobInfo = new JobInfo.Builder(DO_BINARY_MEASUREMENTS_JOB_ID,
                     new ComponentName(context, UpdateMeasurementsJobService.class))
                     .setRequiresDeviceIdle(true)
                     .setRequiresCharging(true)
-                    .setPeriodic(RECORD_MEASUREMENTS_COOLDOWN_MS)
+                    .setMinimumLatency(minWaitingPeriodMs)
                     .build();
             if (jobScheduler.schedule(jobInfo) != JobScheduler.RESULT_SUCCESS) {
                 Slog.e(TAG, "Failed to schedule job to measure binaries.");
                 return;
             }
+            sScheduled.set(true);
             Slog.d(TAG, TextUtils.formatSimple(
                     "Job %d to measure binaries was scheduled successfully.",
                     DO_BINARY_MEASUREMENTS_JOB_ID));
+        }
+    }
+
+    /**
+     * Convert a {@link FingerprintSensorProperties} sensor type to the corresponding enum to be
+     * logged.
+     *
+     * @param sensorType See {@link FingerprintSensorProperties}
+     * @return The enum to be logged
+     */
+    private int toFingerprintSensorType(@FingerprintSensorProperties.SensorType int sensorType) {
+        switch (sensorType) {
+            case FingerprintSensorProperties.TYPE_REAR:
+                return FrameworkStatsLog
+                        .BIOMETRIC_PROPERTIES_COLLECTED__SENSOR_TYPE__SENSOR_FP_REAR;
+            case FingerprintSensorProperties.TYPE_UDFPS_ULTRASONIC:
+                return FrameworkStatsLog
+                        .BIOMETRIC_PROPERTIES_COLLECTED__SENSOR_TYPE__SENSOR_FP_UDFPS_ULTRASONIC;
+            case FingerprintSensorProperties.TYPE_UDFPS_OPTICAL:
+                return FrameworkStatsLog
+                        .BIOMETRIC_PROPERTIES_COLLECTED__SENSOR_TYPE__SENSOR_FP_UDFPS_OPTICAL;
+            case FingerprintSensorProperties.TYPE_POWER_BUTTON:
+                return FrameworkStatsLog
+                        .BIOMETRIC_PROPERTIES_COLLECTED__SENSOR_TYPE__SENSOR_FP_POWER_BUTTON;
+            case FingerprintSensorProperties.TYPE_HOME_BUTTON:
+                return FrameworkStatsLog
+                        .BIOMETRIC_PROPERTIES_COLLECTED__SENSOR_TYPE__SENSOR_FP_HOME_BUTTON;
+            default:
+                return FrameworkStatsLog
+                        .BIOMETRIC_PROPERTIES_COLLECTED__SENSOR_TYPE__SENSOR_UNKNOWN;
+        }
+    }
+
+    /**
+     * Convert a {@link FaceSensorProperties} sensor type to the corresponding enum to be logged.
+     *
+     * @param sensorType See {@link FaceSensorProperties}
+     * @return The enum to be logged
+     */
+    private int toFaceSensorType(@FaceSensorProperties.SensorType int sensorType) {
+        switch (sensorType) {
+            case FaceSensorProperties.TYPE_RGB:
+                return FrameworkStatsLog
+                        .BIOMETRIC_PROPERTIES_COLLECTED__SENSOR_TYPE__SENSOR_FACE_RGB;
+            case FaceSensorProperties.TYPE_IR:
+                return FrameworkStatsLog
+                        .BIOMETRIC_PROPERTIES_COLLECTED__SENSOR_TYPE__SENSOR_FACE_IR;
+            default:
+                return FrameworkStatsLog
+                        .BIOMETRIC_PROPERTIES_COLLECTED__SENSOR_TYPE__SENSOR_UNKNOWN;
+        }
+    }
+
+    /**
+     * Convert a {@link SensorProperties} sensor strength to the corresponding enum to be logged.
+     *
+     * @param sensorStrength See {@link SensorProperties}
+     * @return The enum to be logged
+     */
+    private int toSensorStrength(@SensorProperties.Strength int sensorStrength) {
+        switch (sensorStrength) {
+            case SensorProperties.STRENGTH_CONVENIENCE:
+                return FrameworkStatsLog
+                        .BIOMETRIC_PROPERTIES_COLLECTED__SENSOR_STRENGTH__STRENGTH_CONVENIENCE;
+            case SensorProperties.STRENGTH_WEAK:
+                return FrameworkStatsLog
+                        .BIOMETRIC_PROPERTIES_COLLECTED__SENSOR_STRENGTH__STRENGTH_WEAK;
+            case SensorProperties.STRENGTH_STRONG:
+                return FrameworkStatsLog
+                        .BIOMETRIC_PROPERTIES_COLLECTED__SENSOR_STRENGTH__STRENGTH_STRONG;
+            default:
+                return FrameworkStatsLog
+                        .BIOMETRIC_PROPERTIES_COLLECTED__SENSOR_STRENGTH__STRENGTH_UNKNOWN;
+        }
+    }
+
+    /**
+     * A helper function to log detailed biometric sensor properties to statsd.
+     *
+     * @param prop The biometric sensor properties to be logged
+     * @param modality The modality of the biometric (e.g. fingerprint, face) to be logged
+     * @param sensorType The specific type of the biometric to be logged
+     */
+    private void logBiometricProperties(SensorProperties prop, int modality, int sensorType) {
+        final int sensorId = prop.getSensorId();
+        final int sensorStrength = toSensorStrength(prop.getSensorStrength());
+
+        // Log data for each component
+        // Note: none of the component info is a device identifier since every device of a given
+        // model and build share the same biometric system info (see b/216195167)
+        for (ComponentInfo componentInfo : prop.getComponentInfo()) {
+            FrameworkStatsLog.write(FrameworkStatsLog.BIOMETRIC_PROPERTIES_COLLECTED,
+                    sensorId,
+                    modality,
+                    sensorType,
+                    sensorStrength,
+                    componentInfo.getComponentId().trim(),
+                    componentInfo.getHardwareVersion().trim(),
+                    componentInfo.getFirmwareVersion().trim(),
+                    componentInfo.getSerialNumber().trim(),
+                    componentInfo.getSoftwareVersion().trim());
+        }
+    }
+
+    private void collectBiometricProperties() {
+        PackageManager pm = mContext.getPackageManager();
+        FingerprintManager fpManager = null;
+        FaceManager faceManager = null;
+        if (pm != null && pm.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)) {
+            fpManager = mContext.getSystemService(FingerprintManager.class);
+        }
+        if (pm != null && pm.hasSystemFeature(PackageManager.FEATURE_FACE)) {
+            faceManager = mContext.getSystemService(FaceManager.class);
+        }
+
+        if (fpManager != null) {
+            // Log data for each fingerprint sensor
+            for (FingerprintSensorPropertiesInternal propInternal :
+                    fpManager.getSensorPropertiesInternal()) {
+                final FingerprintSensorProperties prop =
+                        FingerprintSensorProperties.from(propInternal);
+                logBiometricProperties(prop,
+                        FrameworkStatsLog
+                                .BIOMETRIC_PROPERTIES_COLLECTED__MODALITY__MODALITY_FINGERPRINT,
+                        toFingerprintSensorType(prop.getSensorType()));
+            }
+        }
+
+        if (faceManager != null) {
+            // Log data for each face sensor
+            for (FaceSensorProperties prop : faceManager.getSensorProperties()) {
+                logBiometricProperties(prop,
+                        FrameworkStatsLog.BIOMETRIC_PROPERTIES_COLLECTED__MODALITY__MODALITY_FACE,
+                        toFaceSensorType(prop.getSensorType()));
+            }
         }
     }
 
@@ -1144,19 +1416,23 @@ public class BinaryTransparencyService extends SystemService {
 
     @NonNull
     private String getOriginalApexPreinstalledLocation(String packageName,
-                                                   String currentInstalledLocation) {
-        // get a listing of all apex files in /system/apex/
-        Set<String> originalApexs = Stream.of(new File(APEX_PRELOAD_LOCATION).listFiles())
-                                        .filter(f -> !f.isDirectory())
-                                        .map(File::getName)
-                                        .collect(Collectors.toSet());
-
-        for (String originalApex : originalApexs) {
-            if (originalApex.startsWith(packageName)) {
-                return APEX_PRELOAD_LOCATION + originalApex;
+            String currentInstalledLocation) {
+        try {
+            // It appears that only apexd knows the preinstalled location, and it uses module name
+            // as the identifier instead of package name. Given the input is a package name, we
+            // need to covert to module name.
+            final String moduleName = ApexManager.getInstance().getApexModuleNameForPackageName(
+                    packageName);
+            IApexService apexService = IApexService.Stub.asInterface(
+                    Binder.allowBlocking(ServiceManager.waitForService("apexservice")));
+            for (ApexInfo info : apexService.getAllPackages()) {
+                if (moduleName.equals(info.moduleName)) {
+                    return info.preinstalledModulePath;
+                }
             }
+        } catch (RemoteException e) {
+            Slog.e(TAG, "Unable to get package list from apexservice", e);
         }
-
         return APEX_PRELOAD_LOCATION_ERROR;
     }
 

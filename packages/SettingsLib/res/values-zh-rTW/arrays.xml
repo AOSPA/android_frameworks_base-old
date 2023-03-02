@@ -64,6 +64,7 @@
     <item msgid="2779123106632690576">"已啟用"</item>
     <item>"已過濾已啟用的標題"</item>
     <item>"已過濾已啟用的媒體包"</item>
+    <item>"已啟用（已過濾配置文件）"</item>
   </string-array>
   <string-array name="bluetooth_avrcp_versions">
     <item msgid="6603880723315236832">"AVRCP 1.5 (預設)"</item>
@@ -249,7 +250,7 @@
   </string-array>
   <string-array name="track_frame_time_entries">
     <item msgid="634406443901014984">"關閉"</item>
-    <item msgid="1288760936356000927">"在螢幕上以列顯示"</item>
+    <item msgid="1288760936356000927">"在螢幕上顯示長條圖"</item>
     <item msgid="5023908510820531131">"在「<xliff:g id="AS_TYPED_COMMAND">adb shell dumpsys gfxinfo</xliff:g>」指令中"</item>
   </string-array>
   <string-array name="debug_hw_overdraw_entries">

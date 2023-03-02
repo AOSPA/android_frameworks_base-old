@@ -510,6 +510,8 @@ final class DisplayPowerState {
                     boolean valid = state != Display.STATE_UNKNOWN && !Float.isNaN(brightnessState);
                     boolean changed = stateChanged || backlightChanged;
                     if (!valid || !changed) {
+                        mStateChangeInProgress = false;
+                        mBacklightChangeInProgress = false;
                         try {
                             mLock.wait();
                         } catch (InterruptedException ex) {

@@ -57,7 +57,7 @@ internal class MobileState(
 ) : ConnectivityState() {
 
     @JvmField var telephonyDisplayInfo = TelephonyDisplayInfo(TelephonyManager.NETWORK_TYPE_UNKNOWN,
-            TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NONE)
+            TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NONE, false)
     @JvmField var serviceState: ServiceState? = null
     @JvmField var signalStrength: SignalStrength? = null
 
@@ -145,7 +145,7 @@ internal class MobileState(
     }
 
     fun isRoaming(): Boolean {
-        return serviceState != null && serviceState!!.roaming
+        return telephonyDisplayInfo != null && telephonyDisplayInfo.isRoaming
     }
 
     /**

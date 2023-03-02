@@ -17,8 +17,8 @@
 package com.android.server.permission.access.collection
 
 inline fun <T> List<T>.allIndexed(predicate: (Int, T) -> Boolean): Boolean {
-    for (index in 0 until size) {
-        if (!predicate(index, this[index])) {
+    forEachIndexed { index, element ->
+        if (!predicate(index, element)) {
             return false
         }
     }
@@ -26,8 +26,8 @@ inline fun <T> List<T>.allIndexed(predicate: (Int, T) -> Boolean): Boolean {
 }
 
 inline fun <T> List<T>.anyIndexed(predicate: (Int, T) -> Boolean): Boolean {
-    for (index in 0 until size) {
-        if (predicate(index, this[index])) {
+    forEachIndexed { index, element ->
+        if (predicate(index, element)) {
             return true
         }
     }
@@ -40,27 +40,39 @@ inline fun <T> List<T>.forEachIndexed(action: (Int, T) -> Unit) {
     }
 }
 
+inline fun <T> List<T>.forEachReversedIndexed(action: (Int, T) -> Unit) {
+    for (index in lastIndex downTo 0) {
+        action(index, this[index])
+    }
+}
+
 inline fun <T> List<T>.noneIndexed(predicate: (Int, T) -> Boolean): Boolean {
-    for (index in 0 until size) {
-        if (predicate(index, this[index])) {
+    forEachIndexed { index, element ->
+        if (predicate(index, element)) {
             return false
         }
     }
     return true
 }
 
-inline fun <T> MutableList<T>.removeAllIndexed(predicate: (Int, T) -> Boolean) {
-    for (index in lastIndex downTo 0) {
-        if (predicate(index, this[index])) {
+inline fun <T> MutableList<T>.removeAllIndexed(predicate: (Int, T) -> Boolean): Boolean {
+    var isChanged = false
+    forEachReversedIndexed { index, element ->
+        if (predicate(index, element)) {
             removeAt(index)
+            isChanged = true
         }
     }
+    return isChanged
 }
 
-inline fun <T> MutableList<T>.retainAllIndexed(predicate: (Int, T) -> Boolean) {
-    for (index in lastIndex downTo 0) {
-        if (!predicate(index, this[index])) {
+inline fun <T> MutableList<T>.retainAllIndexed(predicate: (Int, T) -> Boolean): Boolean {
+    var isChanged = false
+    forEachReversedIndexed { index, element ->
+        if (!predicate(index, element)) {
             removeAt(index)
+            isChanged = true
         }
     }
+    return isChanged
 }

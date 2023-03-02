@@ -17,12 +17,7 @@
 package android.hardware;
 
 import static android.system.OsConstants.EACCES;
-import static android.system.OsConstants.EBUSY;
-import static android.system.OsConstants.EINVAL;
 import static android.system.OsConstants.ENODEV;
-import static android.system.OsConstants.ENOSYS;
-import static android.system.OsConstants.EOPNOTSUPP;
-import static android.system.OsConstants.EUSERS;
 
 import android.annotation.Nullable;
 import android.annotation.SdkConstant;
@@ -35,6 +30,7 @@ import android.graphics.ImageFormat;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
+import android.hardware.camera2.CameraManager;
 import android.media.AudioAttributes;
 import android.media.IAudioService;
 import android.os.Build;
@@ -45,7 +41,6 @@ import android.os.Message;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
-import android.os.SystemProperties;
 import android.renderscript.Allocation;
 import android.renderscript.Element;
 import android.renderscript.RSIllegalArgumentException;
@@ -338,7 +333,10 @@ public class Camera {
         if(cameraId >= getNumberOfCameras()){
             throw new RuntimeException("Unknown camera ID");
         }
-        _getCameraInfo(cameraId, cameraInfo);
+        boolean overrideToPortrait = CameraManager.shouldOverrideToPortrait(
+                ActivityThread.currentApplication().getApplicationContext());
+
+        _getCameraInfo(cameraId, overrideToPortrait, cameraInfo);
         IBinder b = ServiceManager.getService(Context.AUDIO_SERVICE);
         IAudioService audioService = IAudioService.Stub.asInterface(b);
         try {
@@ -351,7 +349,8 @@ public class Camera {
             Log.e(TAG, "Audio service is unavailable for queries");
         }
     }
-    private native static void _getCameraInfo(int cameraId, CameraInfo cameraInfo);
+    private native static void _getCameraInfo(int cameraId, boolean overrideToPortrait,
+            CameraInfo cameraInfo);
 
     /**
      * Information about a camera
@@ -547,8 +546,10 @@ public class Camera {
             mEventHandler = null;
         }
 
+        boolean overrideToPortrait = CameraManager.shouldOverrideToPortrait(
+                ActivityThread.currentApplication().getApplicationContext());
         return native_setup(new WeakReference<Camera>(this), cameraId,
-                ActivityThread.currentOpPackageName());
+                ActivityThread.currentOpPackageName(), overrideToPortrait);
     }
 
     /** used by Camera#open, Camera#open(int) */
@@ -621,7 +622,8 @@ public class Camera {
     }
 
     @UnsupportedAppUsage
-    private native int native_setup(Object cameraThis, int cameraId, String packageName);
+    private native int native_setup(Object cameraThis, int cameraId, String packageName,
+            boolean overrideToPortrait);
 
     private native final void native_release();
 

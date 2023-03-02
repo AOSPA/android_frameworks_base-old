@@ -53,6 +53,7 @@ import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
+import com.android.systemui.keyguard.shared.constants.KeyguardBouncerConstants;
 import com.android.systemui.scrim.ScrimView;
 import com.android.systemui.shade.NotificationPanelViewController;
 import com.android.systemui.statusbar.notification.stack.ViewState;
@@ -147,7 +148,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
      * 0, the bouncer is visible.
      */
     @FloatRange(from = 0, to = 1)
-    private float mBouncerHiddenFraction = KeyguardBouncer.EXPANSION_HIDDEN;
+    private float mBouncerHiddenFraction = KeyguardBouncerConstants.EXPANSION_HIDDEN;
 
     /**
      * Set whether an unocclusion animation is currently running on the notification panel. Used
@@ -232,7 +233,6 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
     private boolean mExpansionAffectsAlpha = true;
     private boolean mAnimateChange;
     private boolean mUpdatePending;
-    private boolean mTracking;
     private long mAnimationDuration = -1;
     private long mAnimationDelay;
     private Animator.AnimatorListener mAnimatorListener;
@@ -526,7 +526,6 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
     }
 
     public void onTrackingStarted() {
-        mTracking = true;
         mDarkenWhileDragging = !mKeyguardStateController.canDismissLockScreen();
         if (!mKeyguardUnlockAnimationController.isPlayingCannedUnlockAnimation()) {
             mAnimatingPanelExpansionOnUnlock = false;
@@ -534,7 +533,6 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
     }
 
     public void onExpandingFinished() {
-        mTracking = false;
         setUnocclusionAnimationRunning(false);
     }
 
@@ -813,7 +811,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
             }
 
             if (mState == ScrimState.DREAMING
-                    && mBouncerHiddenFraction != KeyguardBouncer.EXPANSION_HIDDEN) {
+                    && mBouncerHiddenFraction != KeyguardBouncerConstants.EXPANSION_HIDDEN) {
                 final float interpolatedFraction =
                         BouncerPanelExpansionCalculator.aboutToShowBouncerProgress(
                                 mBouncerHiddenFraction);
@@ -1450,8 +1448,6 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
         pw.print(" expansionProgress=");
         pw.println(mTransitionToLockScreenFullShadeNotificationsProgress);
 
-        pw.print("  mTracking=");
-        pw.println(mTracking);
         pw.print("  mDefaultScrimAlpha=");
         pw.println(mDefaultScrimAlpha);
         pw.print("  mPanelExpansionFraction=");

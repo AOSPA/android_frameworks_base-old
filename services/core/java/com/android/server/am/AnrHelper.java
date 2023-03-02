@@ -99,23 +99,26 @@ class AnrHelper {
     void appNotResponding(ProcessRecord anrProcess, TimeoutRecord timeoutRecord) {
         appNotResponding(anrProcess, null /* activityShortComponentName */, null /* aInfo */,
                 null /* parentShortComponentName */, null /* parentProcess */,
-                false /* aboveSystem */, null/*auxiliaryTaskExecutor*/, timeoutRecord);
+                false /* aboveSystem */, null/*auxiliaryTaskExecutor*/, timeoutRecord, /*isContinuousAnr*/ false);
     }
 
     void appNotResponding(ProcessRecord anrProcess, String activityShortComponentName,
          ApplicationInfo aInfo, String parentShortComponentName,
          WindowProcessController parentProcess, boolean aboveSystem,
-         ExecutorService auxiliaryTaskExecutor, TimeoutRecord timeoutRecord) {
+         ExecutorService auxiliaryTaskExecutor, TimeoutRecord timeoutRecord, boolean isContinuousAnr) {
          appNotResponding(new AnrRecord(anrProcess, activityShortComponentName, aInfo,
-                   parentShortComponentName, parentProcess, aboveSystem, auxiliaryTaskExecutor, timeoutRecord));
+                   parentShortComponentName, parentProcess, aboveSystem, auxiliaryTaskExecutor, timeoutRecord,
+                   isContinuousAnr));
     }
 
     void deferAppNotResponding(ProcessRecord anrProcess, String activityShortComponentName,
         ApplicationInfo aInfo, String parentShortComponentName,
         WindowProcessController parentProcess, boolean aboveSystem,
-        ExecutorService auxiliaryTaskExecutor, TimeoutRecord timeoutRecord, long delayInMillis) {
+        ExecutorService auxiliaryTaskExecutor, TimeoutRecord timeoutRecord, long delayInMillis,
+        boolean isContinuousAnr) {
         AnrRecord anrRecord = new AnrRecord(anrProcess, activityShortComponentName, aInfo,
-                parentShortComponentName, parentProcess, aboveSystem, auxiliaryTaskExecutor, timeoutRecord);
+                parentShortComponentName, parentProcess, aboveSystem, auxiliaryTaskExecutor, timeoutRecord,
+                isContinuousAnr);
         Message msg = Message.obtain();
         msg.what = APP_NOT_RESPONDING_DEFER_MSG;
         msg.obj = anrRecord;
@@ -155,8 +158,8 @@ class AnrHelper {
                       anrRecordPlacingOnQueueWithSize(mAnrRecords.size());
                     mAnrRecords.add(anrRecord);
                 }
-                startAnrConsumerIfNeeded();
             }
+            startAnrConsumerIfNeeded();
         } finally {
             anrRecord.mTimeoutRecord.mLatencyTracker.appNotRespondingEnded();
         }
@@ -252,10 +255,12 @@ class AnrHelper {
         final boolean mAboveSystem;
         final ExecutorService mAuxiliaryTaskExecutor;
         final long mTimestamp = SystemClock.uptimeMillis();
+        final boolean mIsContinuousAnr;
         AnrRecord(ProcessRecord anrProcess, String activityShortComponentName,
                 ApplicationInfo aInfo, String parentShortComponentName,
                 WindowProcessController parentProcess, boolean aboveSystem,
-                ExecutorService auxiliaryTaskExecutor, TimeoutRecord timeoutRecord) {
+                ExecutorService auxiliaryTaskExecutor, TimeoutRecord timeoutRecord,
+                boolean isContinuousAnr) {
             mApp = anrProcess;
             mPid = anrProcess.mPid;
             mActivityShortComponentName = activityShortComponentName;
@@ -265,6 +270,7 @@ class AnrHelper {
             mParentProcess = parentProcess;
             mAboveSystem = aboveSystem;
             mAuxiliaryTaskExecutor = auxiliaryTaskExecutor;
+            mIsContinuousAnr = isContinuousAnr;
         }
 
         void appNotResponding(boolean onlyDumpSelf) {
@@ -272,7 +278,8 @@ class AnrHelper {
                 mTimeoutRecord.mLatencyTracker.anrProcessingStarted();
                 mApp.mErrorState.appNotResponding(mActivityShortComponentName, mAppInfo,
                         mParentShortComponentName, mParentProcess, mAboveSystem,
-                        mTimeoutRecord, mAuxiliaryTaskExecutor, onlyDumpSelf);
+                        mTimeoutRecord, mAuxiliaryTaskExecutor, onlyDumpSelf,
+                        mIsContinuousAnr);
             } finally {
                 mTimeoutRecord.mLatencyTracker.anrProcessingEnded();
             }

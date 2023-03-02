@@ -24,8 +24,6 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import com.android.credentialmanager.CredentialManagerRepo
 import com.android.credentialmanager.common.DialogResult
@@ -33,29 +31,32 @@ import com.android.credentialmanager.common.ProviderActivityResult
 import com.android.credentialmanager.common.ResultState
 import com.android.credentialmanager.jetpack.developer.PublicKeyCredential
 import com.android.internal.util.Preconditions
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 
 data class GetCredentialUiState(
   val providerInfoList: List<ProviderInfo>,
-  val currentScreenState: GetScreenState,
   val requestDisplayInfo: RequestDisplayInfo,
+  val currentScreenState: GetScreenState = toGetScreenState(providerInfoList),
   val providerDisplayInfo: ProviderDisplayInfo = toProviderDisplayInfo(providerInfoList),
   val selectedEntry: EntryInfo? = null,
+  val activeEntry: EntryInfo? = toActiveEntry(providerDisplayInfo),
   val hidden: Boolean = false,
   val providerActivityPending: Boolean = false,
+  val isNoAccount: Boolean = false,
 )
 
-class GetCredentialViewModel(
-  credManRepo: CredentialManagerRepo = CredentialManagerRepo.getInstance()
-) : ViewModel() {
+class GetCredentialViewModel(private val credManRepo: CredentialManagerRepo) : ViewModel() {
 
   var uiState by mutableStateOf(credManRepo.getCredentialInitialUiState())
       private set
 
-  val dialogResult: MutableLiveData<DialogResult> by lazy {
-    MutableLiveData<DialogResult>()
-  }
+  val dialogResult: MutableSharedFlow<DialogResult> =
+    MutableSharedFlow(replay = 0, extraBufferCapacity = 1,
+      onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
-  fun observeDialogResult(): LiveData<DialogResult> {
+  fun observeDialogResult(): SharedFlow<DialogResult> {
     return dialogResult
   }
 
@@ -68,10 +69,19 @@ class GetCredentialViewModel(
         hidden = true,
       )
     } else {
-      CredentialManagerRepo.getInstance().onOptionSelected(
-        entry.providerId, entry.entryKey, entry.entrySubkey,
-      )
-      dialogResult.value = DialogResult(ResultState.COMPLETE)
+      credManRepo.onOptionSelected(entry.providerId, entry.entryKey, entry.entrySubkey)
+      dialogResult.tryEmit(DialogResult(ResultState.COMPLETE))
+    }
+  }
+
+  fun onConfirmEntrySelected() {
+    val activeEntry = uiState.activeEntry
+    if (activeEntry != null) {
+      onEntrySelected(activeEntry)
+    } else {
+      Log.w("Account Selector",
+        "Illegal state: confirm is pressed but activeEntry isn't set.")
+      dialogResult.tryEmit(DialogResult(ResultState.COMPLETE))
     }
   }
 
@@ -108,7 +118,7 @@ class GetCredentialViewModel(
                 "${entry.providerId}, key=${entry.entryKey}, subkey=${entry.entrySubkey}, " +
                 "resultCode=$resultCode, resultData=$resultData}"
         )
-        CredentialManagerRepo.getInstance().onOptionSelected(
+        credManRepo.onOptionSelected(
           entry.providerId, entry.entryKey, entry.entrySubkey,
           resultCode, resultData,
         )
@@ -116,7 +126,7 @@ class GetCredentialViewModel(
         Log.w("Account Selector",
           "Illegal state: received a provider result but found no matching entry.")
       }
-      dialogResult.value = DialogResult(ResultState.COMPLETE)
+      dialogResult.tryEmit(DialogResult(ResultState.COMPLETE))
     }
   }
 
@@ -127,6 +137,14 @@ class GetCredentialViewModel(
     )
   }
 
+  fun onMoreOptionOnSnackBarSelected(isNoAccount: Boolean) {
+    Log.d("Account Selector", "More Option on snackBar selected")
+    uiState = uiState.copy(
+      currentScreenState = GetScreenState.ALL_SIGN_IN_OPTIONS,
+      isNoAccount = isNoAccount,
+    )
+  }
+
   fun onBackToPrimarySelectionScreen() {
     uiState = uiState.copy(
       currentScreenState = GetScreenState.PRIMARY_SELECTION
@@ -134,8 +152,8 @@ class GetCredentialViewModel(
   }
 
   fun onCancel() {
-    CredentialManagerRepo.getInstance().onCancel()
-    dialogResult.value = DialogResult(ResultState.CANCELED)
+    credManRepo.onCancel()
+    dialogResult.tryEmit(DialogResult(ResultState.NORMAL_CANCELED))
   }
 }
 
@@ -173,7 +191,7 @@ private fun toProviderDisplayInfo(
   Preconditions.checkState(remoteEntryList.size <= 1)
 
   // Compose sortedUserNameToCredentialEntryList
-  val comparator = CredentialEntryInfoComparator()
+  val comparator = CredentialEntryInfoComparatorByTypeThenTimestamp()
   // Sort per username
   userNameToCredentialEntryMap.values.forEach {
     it.sortWith(comparator)
@@ -182,7 +200,7 @@ private fun toProviderDisplayInfo(
   val sortedUserNameToCredentialEntryList = userNameToCredentialEntryMap.map {
     PerUserNameCredentialEntryList(it.key, it.value)
   }.sortedWith(
-    compareBy(comparator) { it.sortedCredentialEntryList.first() }
+    compareByDescending{ it.sortedCredentialEntryList.first().lastUsedTimeMillis }
   )
 
   return ProviderDisplayInfo(
@@ -192,9 +210,56 @@ private fun toProviderDisplayInfo(
   )
 }
 
-internal class CredentialEntryInfoComparator : Comparator<CredentialEntryInfo> {
+private fun toActiveEntry(
+  providerDisplayInfo: ProviderDisplayInfo,
+): EntryInfo? {
+  val sortedUserNameToCredentialEntryList =
+    providerDisplayInfo.sortedUserNameToCredentialEntryList
+  val authenticationEntryList = providerDisplayInfo.authenticationEntryList
+  var activeEntry: EntryInfo? = null
+  if (sortedUserNameToCredentialEntryList
+      .size == 1 && authenticationEntryList.isEmpty()
+  ) {
+    activeEntry = sortedUserNameToCredentialEntryList.first().sortedCredentialEntryList.first()
+  } else if (
+    sortedUserNameToCredentialEntryList
+      .isEmpty() && authenticationEntryList.size == 1
+  ) {
+    activeEntry = authenticationEntryList.first()
+  }
+  return activeEntry
+}
+
+private fun toGetScreenState(
+  providerInfoList: List<ProviderInfo>
+): GetScreenState {
+  var noLocalAccount = true
+  var remoteInfo: RemoteEntryInfo? = null
+  providerInfoList.forEach{providerInfo -> if (
+    providerInfo.credentialEntryList.isNotEmpty() || providerInfo.authenticationEntry != null
+  ) { noLocalAccount = false }
+    // TODO: handle the error situation that if multiple remoteInfos exists
+    if (providerInfo.remoteEntry != null) {
+      remoteInfo = providerInfo.remoteEntry
+    }
+  }
+
+  return if (noLocalAccount && remoteInfo != null)
+    GetScreenState.REMOTE_ONLY else GetScreenState.PRIMARY_SELECTION
+}
+
+internal class CredentialEntryInfoComparatorByTypeThenTimestamp : Comparator<CredentialEntryInfo> {
   override fun compare(p0: CredentialEntryInfo, p1: CredentialEntryInfo): Int {
-    // First order by last used timestamp
+    // First prefer passkey type for its security benefits
+    if (p0.credentialType != p1.credentialType) {
+      if (PublicKeyCredential.TYPE_PUBLIC_KEY_CREDENTIAL == p0.credentialType) {
+        return -1
+      } else if (PublicKeyCredential.TYPE_PUBLIC_KEY_CREDENTIAL == p1.credentialType) {
+        return 1
+      }
+    }
+
+    // Then order by last used timestamp
     if (p0.lastUsedTimeMillis != null && p1.lastUsedTimeMillis != null) {
       if (p0.lastUsedTimeMillis < p1.lastUsedTimeMillis) {
         return 1
@@ -205,15 +270,6 @@ internal class CredentialEntryInfoComparator : Comparator<CredentialEntryInfo> {
       return -1
     } else if (p1.lastUsedTimeMillis != null && p1.lastUsedTimeMillis > 0) {
       return 1
-    }
-
-    // Then prefer passkey type for its security benefits
-    if (p0.credentialType != p1.credentialType) {
-      if (PublicKeyCredential.TYPE_PUBLIC_KEY_CREDENTIAL == p0.credentialType) {
-        return -1
-      } else if (PublicKeyCredential.TYPE_PUBLIC_KEY_CREDENTIAL == p1.credentialType) {
-        return 1
-      }
     }
     return 0
   }

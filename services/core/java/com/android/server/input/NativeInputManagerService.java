@@ -186,6 +186,10 @@ interface NativeInputManagerService {
 
     void changeUniqueIdAssociation();
 
+    void changeTypeAssociation();
+
+    void changeKeyboardLayoutAssociation();
+
     void notifyPointerDisplayIdChanged();
 
     void setDisplayEligibilityForPointerCapture(int displayId, boolean enabled);
@@ -208,6 +212,9 @@ interface NativeInputManagerService {
 
     /** Get the bluetooth address of an input device if known, otherwise return null. */
     String getBluetoothAddress(int deviceId);
+
+    /** Set whether stylus button reporting through motion events should be enabled. */
+    void setStylusButtonMotionEventsEnabled(boolean enabled);
 
     /** The native implementation of InputManagerService methods. */
     class NativeImpl implements NativeInputManagerService {
@@ -400,6 +407,12 @@ interface NativeInputManagerService {
         public native void changeUniqueIdAssociation();
 
         @Override
+        public native void changeTypeAssociation();
+
+        @Override
+        public native void changeKeyboardLayoutAssociation();
+
+        @Override
         public native void notifyPointerDisplayIdChanged();
 
         @Override
@@ -429,5 +442,8 @@ interface NativeInputManagerService {
 
         @Override
         public native String getBluetoothAddress(int deviceId);
+
+        @Override
+        public native void setStylusButtonMotionEventsEnabled(boolean enabled);
     }
 }

@@ -53,7 +53,7 @@ oneway interface IStatusBar
             boolean showImeSwitcher);
     void setWindowState(int display, int window, int state);
 
-    void showRecentApps(boolean triggeredFromAltTab);
+    void showRecentApps(boolean triggeredFromAltTab, boolean forward);
     void hideRecentApps(boolean triggeredFromAltTab, boolean triggeredFromHomeKey);
     void toggleRecentApps();
     void toggleSplitScreen();
@@ -337,4 +337,11 @@ oneway interface IStatusBar
      * @param leftOrTop indicates where the stage split is.
      */
     void enterStageSplitFromRunningApp(boolean leftOrTop);
+
+    /**
+     * Shows the media output switcher dialog.
+     *
+     * @param packageName of the session for which the output switcher is shown.
+     */
+    void showMediaOutputSwitcher(String packageName);
 }

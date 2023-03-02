@@ -35,6 +35,7 @@ import android.media.AudioDeviceAttributes;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.media.AudioPlaybackConfiguration;
+import android.media.AudioPlaybackConfiguration.FormatInfo;
 import android.media.AudioPlaybackConfiguration.PlayerMuteEvent;
 import android.media.AudioSystem;
 import android.media.IPlaybackConfigDispatcher;
@@ -75,13 +76,15 @@ import java.util.function.Consumer;
 public final class PlaybackActivityMonitor
         implements AudioPlaybackConfiguration.PlayerDeathMonitor, PlayerFocusEnforcer {
 
-    public static final String TAG = "AudioService.PlaybackActivityMonitor";
+    public static final String TAG = "AS.PlaybackActivityMon";
 
     /*package*/ static final boolean DEBUG = false;
     /*package*/ static final int VOLUME_SHAPER_SYSTEM_DUCK_ID = 1;
     /*package*/ static final int VOLUME_SHAPER_SYSTEM_FADEOUT_ID = 2;
     /*package*/ static final int VOLUME_SHAPER_SYSTEM_MUTE_AWAIT_CONNECTION_ID = 3;
+    /*package*/ static final int VOLUME_SHAPER_SYSTEM_STRONG_DUCK_ID = 4;
 
+    // ducking settings for a "normal duck" at -14dB
     private static final VolumeShaper.Configuration DUCK_VSHAPE =
             new VolumeShaper.Configuration.Builder()
                 .setId(VOLUME_SHAPER_SYSTEM_DUCK_ID)
@@ -95,6 +98,22 @@ public final class PlaybackActivityMonitor
                 .build();
     private static final VolumeShaper.Configuration DUCK_ID =
             new VolumeShaper.Configuration(VOLUME_SHAPER_SYSTEM_DUCK_ID);
+
+    // ducking settings for a "strong duck" at -35dB (attenuation factor of 0.017783)
+    private static final VolumeShaper.Configuration STRONG_DUCK_VSHAPE =
+            new VolumeShaper.Configuration.Builder()
+                .setId(VOLUME_SHAPER_SYSTEM_STRONG_DUCK_ID)
+                .setCurve(new float[] { 0.f, 1.f } /* times */,
+                        new float[] { 1.f, 0.017783f } /* volumes */)
+                .setOptionFlags(VolumeShaper.Configuration.OPTION_FLAG_CLOCK_TIME)
+                .setDuration(MediaFocusControl.getFocusRampTimeMs(
+                        AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK,
+                        new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                                .build()))
+                    .build();
+    private static final VolumeShaper.Configuration STRONG_DUCK_ID =
+            new VolumeShaper.Configuration(VOLUME_SHAPER_SYSTEM_STRONG_DUCK_ID);
+
     private static final VolumeShaper.Operation PLAY_CREATE_IF_NEEDED =
             new VolumeShaper.Operation.Builder(VolumeShaper.Operation.PLAY)
                     .createIfNeeded()
@@ -343,7 +362,7 @@ public final class PlaybackActivityMonitor
 
             if (event == AudioPlaybackConfiguration.PLAYER_UPDATE_PORT_ID) {
                 mEventHandler.sendMessage(
-                        mEventHandler.obtainMessage(MSG_L_UPDATE_PORT_EVENT, eventValue, piid));
+                        mEventHandler.obtainMessage(MSG_II_UPDATE_PORT_EVENT, eventValue, piid));
                 return;
             } else if (event == AudioPlaybackConfiguration.PLAYER_STATE_STARTED) {
                 for (Integer uidInteger: mBannedUids) {
@@ -399,7 +418,7 @@ public final class PlaybackActivityMonitor
         }
 
         if (DEBUG) {
-            Log.v(TAG, TextUtils.formatSimple("portEvent(portId=%d, event=%s, extras=%s)",
+            Log.v(TAG, TextUtils.formatSimple("BLA portEvent(portId=%d, event=%s, extras=%s)",
                     portId, AudioPlaybackConfiguration.playerStateToString(event), extras));
         }
 
@@ -427,7 +446,12 @@ public final class PlaybackActivityMonitor
 
             if (event == AudioPlaybackConfiguration.PLAYER_UPDATE_MUTED) {
                 mEventHandler.sendMessage(
-                        mEventHandler.obtainMessage(MSG_L_UPDATE_PLAYER_MUTED_EVENT, piid,
+                        mEventHandler.obtainMessage(MSG_IIL_UPDATE_PLAYER_MUTED_EVENT, piid,
+                                portId,
+                                extras));
+            } else if (event == AudioPlaybackConfiguration.PLAYER_UPDATE_FORMAT) {
+                mEventHandler.sendMessage(
+                        mEventHandler.obtainMessage(MSG_IIL_UPDATE_PLAYER_FORMAT, piid,
                                 portId,
                                 extras));
             }
@@ -457,7 +481,7 @@ public final class PlaybackActivityMonitor
 
                 // remove all port ids mapped to the released player
                 mEventHandler.sendMessage(
-                        mEventHandler.obtainMessage(MSG_L_CLEAR_PORTS_FOR_PIID, piid, /*arg2=*/0));
+                        mEventHandler.obtainMessage(MSG_I_CLEAR_PORTS_FOR_PIID, piid, /*arg2=*/0));
 
                 if (change && mDoNotLogPiidList.contains(piid)) {
                     // do not dispatch a change for a "do not log" player
@@ -778,9 +802,21 @@ public final class PlaybackActivityMonitor
             // add the players eligible for ducking to the list, and duck them
             // (if apcsToDuck is empty, this will at least mark this uid as ducked, so when
             //  players of the same uid start, they will be ducked by DuckingManager.checkDuck())
-            mDuckingManager.duckUid(loser.getClientUid(), apcsToDuck);
+            mDuckingManager.duckUid(loser.getClientUid(), apcsToDuck, reqCausesStrongDuck(winner));
         }
         return true;
+    }
+
+    private boolean reqCausesStrongDuck(FocusRequester requester) {
+        if (requester.getGainRequest() != AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK) {
+            return false;
+        }
+        final int reqUsage = requester.getAudioAttributes().getUsage();
+        if ((reqUsage == AudioAttributes.USAGE_ASSISTANT)
+                || (reqUsage == AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)) {
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -1058,10 +1094,11 @@ public final class PlaybackActivityMonitor
     private static final class DuckingManager {
         private final HashMap<Integer, DuckedApp> mDuckers = new HashMap<Integer, DuckedApp>();
 
-        synchronized void duckUid(int uid, ArrayList<AudioPlaybackConfiguration> apcsToDuck) {
+        synchronized void duckUid(int uid, ArrayList<AudioPlaybackConfiguration> apcsToDuck,
+                boolean requestCausesStrongDuck) {
             if (DEBUG) {  Log.v(TAG, "DuckingManager: duckUid() uid:"+ uid); }
             if (!mDuckers.containsKey(uid)) {
-                mDuckers.put(uid, new DuckedApp(uid));
+                mDuckers.put(uid, new DuckedApp(uid, requestCausesStrongDuck));
             }
             final DuckedApp da = mDuckers.get(uid);
             for (AudioPlaybackConfiguration apc : apcsToDuck) {
@@ -1108,10 +1145,13 @@ public final class PlaybackActivityMonitor
 
         private static final class DuckedApp {
             private final int mUid;
+            /** determines whether ducking is done with DUCK_VSHAPE or STRONG_DUCK_VSHAPE */
+            private final boolean mUseStrongDuck;
             private final ArrayList<Integer> mDuckedPlayers = new ArrayList<Integer>();
 
-            DuckedApp(int uid) {
+            DuckedApp(int uid, boolean useStrongDuck) {
                 mUid = uid;
+                mUseStrongDuck = useStrongDuck;
             }
 
             void dump(PrintWriter pw) {
@@ -1132,9 +1172,10 @@ public final class PlaybackActivityMonitor
                     return;
                 }
                 try {
-                    sEventLogger.enqueue((new DuckEvent(apc, skipRamp)).printLog(TAG));
+                    sEventLogger.enqueue((new DuckEvent(apc, skipRamp, mUseStrongDuck))
+                            .printLog(TAG));
                     apc.getPlayerProxy().applyVolumeShaper(
-                            DUCK_VSHAPE,
+                            mUseStrongDuck ? STRONG_DUCK_VSHAPE : DUCK_VSHAPE,
                             skipRamp ? PLAY_SKIP_RAMP : PLAY_CREATE_IF_NEEDED);
                     mDuckedPlayers.add(piid);
                 } catch (Exception e) {
@@ -1150,7 +1191,7 @@ public final class PlaybackActivityMonitor
                             sEventLogger.enqueue((new EventLogger.StringEvent("unducking piid:"
                                     + piid)).printLog(TAG));
                             apc.getPlayerProxy().applyVolumeShaper(
-                                    DUCK_ID,
+                                    mUseStrongDuck ? STRONG_DUCK_ID : DUCK_ID,
                                     VolumeShaper.Operation.REVERSE);
                         } catch (Exception e) {
                             Log.e(TAG, "Error unducking player piid:" + piid + " uid:" + mUid, e);
@@ -1303,13 +1344,17 @@ public final class PlaybackActivityMonitor
     }
 
     static final class DuckEvent extends VolumeShaperEvent {
+        final boolean mUseStrongDuck;
+
         @Override
         String getVSAction() {
-            return "ducking";
+            return mUseStrongDuck ? "ducking (strong)" : "ducking";
         }
 
-        DuckEvent(@NonNull AudioPlaybackConfiguration apc, boolean skipRamp) {
+        DuckEvent(@NonNull AudioPlaybackConfiguration apc, boolean skipRamp, boolean useStrongDuck)
+        {
             super(apc, skipRamp);
+            mUseStrongDuck = useStrongDuck;
         }
     }
 
@@ -1349,6 +1394,21 @@ public final class PlaybackActivityMonitor
         @Override
         public String eventToString() {
             return "muteAwaitConnection muting usages " + Arrays.toString(mUsagesToMute);
+        }
+    }
+
+    private static final class PlayerFormatEvent extends EventLogger.Event {
+        private final int mPlayerIId;
+        private final AudioPlaybackConfiguration.FormatInfo mFormat;
+
+        PlayerFormatEvent(int piid, AudioPlaybackConfiguration.FormatInfo format) {
+            mPlayerIId = piid;
+            mFormat = format;
+        }
+
+        @Override
+        public String eventToString() {
+            return new String("player piid:" + mPlayerIId + " format update:" + mFormat);
         }
     }
 
@@ -1478,7 +1538,7 @@ public final class PlaybackActivityMonitor
      *     msg.arg1: port id
      *     msg.arg2: piid
      */
-    private static final int MSG_L_UPDATE_PORT_EVENT = 2;
+    private static final int MSG_II_UPDATE_PORT_EVENT = 2;
 
     /**
      * event for player getting muted
@@ -1488,14 +1548,24 @@ public final class PlaybackActivityMonitor
      *     msg.obj: extras describing the mute reason
      *         type: PersistableBundle
      */
-    private static final int MSG_L_UPDATE_PLAYER_MUTED_EVENT = 3;
+    private static final int MSG_IIL_UPDATE_PLAYER_MUTED_EVENT = 3;
 
     /**
      * clear all ports assigned to a given piid
      * args:
      *     msg.arg1: the piid
      */
-    private static final int MSG_L_CLEAR_PORTS_FOR_PIID = 4;
+    private static final int MSG_I_CLEAR_PORTS_FOR_PIID = 4;
+
+    /**
+     * event for player reporting playback format and spatialization status
+     * args:
+     *     msg.arg1: piid
+     *     msg.arg2: port id
+     *     msg.obj: extras describing the sample rate, channel mask, spatialized
+     *         type: PersistableBundle
+     */
+    private static final int MSG_IIL_UPDATE_PLAYER_FORMAT = 5;
 
     private void initEventHandler() {
         mEventThread = new HandlerThread(TAG);
@@ -1513,12 +1583,13 @@ public final class PlaybackActivityMonitor
                         }
                         mMuteAwaitConnectionTimeoutCb.accept((AudioDeviceAttributes) msg.obj);
                         break;
-                    case MSG_L_UPDATE_PORT_EVENT:
+
+                    case MSG_II_UPDATE_PORT_EVENT:
                         synchronized (mPlayerLock) {
                             mPortIdToPiid.put(/*portId*/msg.arg1, /*piid*/msg.arg2);
                         }
                         break;
-                    case MSG_L_UPDATE_PLAYER_MUTED_EVENT:
+                    case MSG_IIL_UPDATE_PLAYER_MUTED_EVENT:
                         // TODO: replace PersistableBundle with own struct
                         PersistableBundle extras = (PersistableBundle) msg.obj;
                         if (extras == null) {
@@ -1533,14 +1604,18 @@ public final class PlaybackActivityMonitor
                             sEventLogger.enqueue(
                                     new PlayerEvent(piid, PLAYER_UPDATE_MUTED, eventValue));
 
-                            final AudioPlaybackConfiguration apc = mPlayers.get(piid);
+                            final AudioPlaybackConfiguration apc;
+                            synchronized (mPlayerLock) {
+                                apc = mPlayers.get(piid);
+                            }
                             if (apc == null || !apc.handleMutedEvent(eventValue)) {
                                 break;  // do not dispatch
                             }
                             dispatchPlaybackChange(/* iplayerReleased= */false);
                         }
                         break;
-                    case MSG_L_CLEAR_PORTS_FOR_PIID:
+
+                    case MSG_I_CLEAR_PORTS_FOR_PIID:
                         int piid = msg.arg1;
                         if (piid == AudioPlaybackConfiguration.PLAYER_PIID_INVALID) {
                             Log.w(TAG, "Received clear ports with invalid piid");
@@ -1553,6 +1628,34 @@ public final class PlaybackActivityMonitor
                                 mPortIdToPiid.removeAt(portIdx);
                             }
                         }
+                        break;
+
+                    case MSG_IIL_UPDATE_PLAYER_FORMAT:
+                        final PersistableBundle formatExtras = (PersistableBundle) msg.obj;
+                        if (formatExtras == null) {
+                            Log.w(TAG, "Received format event with no extras");
+                            break;
+                        }
+                        final boolean spatialized = formatExtras.getBoolean(
+                                AudioPlaybackConfiguration.EXTRA_PLAYER_EVENT_SPATIALIZED, false);
+                        final int sampleRate = formatExtras.getInt(
+                                AudioPlaybackConfiguration.EXTRA_PLAYER_EVENT_SAMPLE_RATE, 0);
+                        final int nativeChannelMask = formatExtras.getInt(
+                                AudioPlaybackConfiguration.EXTRA_PLAYER_EVENT_CHANNEL_MASK, 0);
+                        final FormatInfo format =
+                                new FormatInfo(spatialized, nativeChannelMask, sampleRate);
+
+                        sEventLogger.enqueue(new PlayerFormatEvent(msg.arg1, format));
+
+                        final AudioPlaybackConfiguration apc;
+                        synchronized (mPlayerLock) {
+                            apc = mPlayers.get(msg.arg1);
+                        }
+                        if (apc == null || !apc.handleFormatEvent(format)) {
+                            break;  // do not dispatch
+                        }
+                        // TODO optimize for no dispatch to non-privileged listeners
+                        dispatchPlaybackChange(/* iplayerReleased= */false);
                         break;
                     default:
                         break;

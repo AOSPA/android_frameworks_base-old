@@ -36,9 +36,11 @@ import android.media.MediaRecorder;
 import android.media.PlayerBase;
 import android.os.Parcel;
 import android.os.RemoteException;
+import android.platform.test.annotations.Presubmit;
 import android.util.ArraySet;
 
 import androidx.test.InstrumentationRegistry;
+import androidx.test.filters.FlakyTest;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.server.companion.virtual.GenericWindowPolicyController;
@@ -53,6 +55,7 @@ import org.mockito.MockitoAnnotations;
 import java.util.ArrayList;
 import java.util.List;
 
+@Presubmit
 @RunWith(AndroidJUnit4.class)
 public class VirtualAudioControllerTest {
     private static final int APP1_UID = 100;
@@ -85,12 +88,14 @@ public class VirtualAudioControllerTest {
                         /* pipBlockedCallback= */ null,
                         /* activityBlockedCallback= */ null,
                         /* secureWindowCallback= */ null,
+                        /* intentListenerCallback= */ null,
                         /* displayCategories= */ new ArrayList<>(),
                         /* recentsPolicy= */
                         VirtualDeviceParams.RECENTS_POLICY_ALLOW_IN_HOST_DEVICE_RECENTS);
     }
 
 
+    @FlakyTest(bugId = 265155135)
     @Test
     public void startListening_receivesCallback() throws RemoteException {
         ArraySet<Integer> runningUids = new ArraySet<>();

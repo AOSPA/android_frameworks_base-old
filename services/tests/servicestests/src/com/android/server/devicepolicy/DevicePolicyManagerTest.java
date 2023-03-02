@@ -4310,7 +4310,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         mContext.binder.callingUid = DpmMockContext.CALLER_SYSTEM_USER_UID;
         setupDeviceOwner();
         assertExpectException(SecurityException.class, null, () ->
-                dpm.setSystemSetting(admin1, Settings.System.SCREEN_BRIGHTNESS_FOR_VR, "0"));
+                dpm.setSystemSetting(admin1, Settings.System.SCREEN_AUTO_BRIGHTNESS_ADJ, "0"));
     }
 
     @Test
@@ -5014,7 +5014,8 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                 .thenReturn(new UserInfo(UserHandle.USER_SYSTEM, "user system", 0));
         when(getServices().userManager.getPrimaryUser())
                 .thenReturn(new UserInfo(UserHandle.USER_SYSTEM, "user system", 0));
-
+        when(getServices().subscriptionManager.getActiveSubscriptionIdList(false)).thenReturn(
+                new int[1]);
         // Set some device-wide policies:
         // Security logging
         when(getServices().settings.securityLogGetLoggingEnabledProperty()).thenReturn(true);
@@ -5062,6 +5063,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         // Unsuspend personal apps
         verify(getServices().packageManagerInternal)
                 .unsuspendForSuspendingPackage(PLATFORM_PACKAGE_NAME, UserHandle.USER_SYSTEM);
+        verify(getServices().subscriptionManager).setSubscriptionUserHandle(0, null);
     }
 
     @Test
@@ -7394,7 +7396,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         verify(getServices().alarmManager, times(1)).set(anyInt(), eq(PROFILE_OFF_DEADLINE), any());
         // Now the user should see a warning notification.
         verify(getServices().notificationManager, times(1))
-                .notify(anyInt(), any());
+                .notifyAsUser(any(), anyInt(), any(), any());
         // Apps shouldn't be suspended yet.
         verifyZeroInteractions(getServices().ipackageManager);
         clearInvocations(getServices().alarmManager);
@@ -7408,7 +7410,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         verifyZeroInteractions(getServices().alarmManager);
         // Now the user should see a notification about suspended apps.
         verify(getServices().notificationManager, times(1))
-                .notify(anyInt(), any());
+                .notifyAsUser(any(), anyInt(), any(), any());
         // Verify that the apps are suspended.
         verify(getServices().ipackageManager, times(1)).setPackagesSuspendedAsUser(
                 any(), eq(true), any(), any(), any(), any(), anyInt());
@@ -7730,9 +7732,9 @@ public class DevicePolicyManagerTest extends DpmTestBase {
 
         dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
 
-        assertThat(dpm.getDeviceOwnerType(admin1)).isEqualTo(DEVICE_OWNER_TYPE_FINANCED);
+        assertThat(dpm.isFinancedDevice()).isTrue();
         initializeDpms();
-        assertThat(dpm.getDeviceOwnerType(admin1)).isEqualTo(DEVICE_OWNER_TYPE_FINANCED);
+        assertThat(dpm.isFinancedDevice()).isTrue();
     }
 
     @Test
@@ -7743,19 +7745,12 @@ public class DevicePolicyManagerTest extends DpmTestBase {
 
         dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
 
-        assertThat(dpm.getDeviceOwnerType(admin1)).isEqualTo(DEVICE_OWNER_TYPE_FINANCED);
+        assertThat(dpm.isFinancedDevice()).isTrue();
     }
 
     @Test
-    public void testGetDeviceOwnerType_throwsExceptionWhenThereIsNoDeviceOwner() {
-        assertThrows(IllegalStateException.class, () -> dpm.getDeviceOwnerType(admin1));
-    }
-
-    @Test
-    public void testGetDeviceOwnerType_throwsExceptionWhenNotAsDeviceOwnerAdmin() throws Exception {
-        setDeviceOwner();
-
-        assertThrows(IllegalStateException.class, () -> dpm.getDeviceOwnerType(admin2));
+    public void testIsFinancedDevice_throwsExceptionWhenThereIsNoDeviceOwner() {
+        assertThrows(SecurityException.class, () -> dpm.isFinancedDevice());
     }
 
     @Test

@@ -40,9 +40,11 @@ import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_N
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_QUICK_SETTINGS_EXPANDED;
 import static com.android.systemui.statusbar.StatusBarState.KEYGUARD;
 import static com.android.systemui.statusbar.StatusBarState.SHADE;
+import static com.android.systemui.statusbar.StatusBarState.SHADE_LOCKED;
 import static com.android.systemui.statusbar.VibratorHelper.TOUCH_VIBRATION_ATTRIBUTES;
 import static com.android.systemui.statusbar.notification.stack.StackStateAnimator.ANIMATION_DURATION_FOLD_TO_AOD;
 import static com.android.systemui.util.DumpUtilsKt.asIndenting;
+import static com.android.systemui.util.kotlin.JavaAdapterKt.collectFlow;
 
 import static java.lang.Float.isNaN;
 
@@ -138,8 +140,17 @@ import com.android.systemui.flags.Flags;
 import com.android.systemui.fragments.FragmentHostManager.FragmentListener;
 import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
+import com.android.systemui.keyguard.domain.interactor.AlternateBouncerInteractor;
 import com.android.systemui.keyguard.domain.interactor.KeyguardBottomAreaInteractor;
+import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor;
+import com.android.systemui.keyguard.shared.model.TransitionState;
+import com.android.systemui.keyguard.shared.model.TransitionStep;
+import com.android.systemui.keyguard.ui.viewmodel.DreamingToLockscreenTransitionViewModel;
+import com.android.systemui.keyguard.ui.viewmodel.GoneToDreamingTransitionViewModel;
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardBottomAreaViewModel;
+import com.android.systemui.keyguard.ui.viewmodel.LockscreenToDreamingTransitionViewModel;
+import com.android.systemui.keyguard.ui.viewmodel.LockscreenToOccludedTransitionViewModel;
+import com.android.systemui.keyguard.ui.viewmodel.OccludedToLockscreenTransitionViewModel;
 import com.android.systemui.media.controls.pipeline.MediaDataManager;
 import com.android.systemui.media.controls.ui.KeyguardMediaController;
 import com.android.systemui.media.controls.ui.MediaHierarchyManager;
@@ -233,6 +244,8 @@ import java.util.function.Consumer;
 
 import javax.inject.Inject;
 import javax.inject.Provider;
+
+import kotlinx.coroutines.CoroutineDispatcher;
 
 @CentralSurfacesComponent.CentralSurfacesScope
 public final class NotificationPanelViewController implements Dumpable {
@@ -353,6 +366,7 @@ public final class NotificationPanelViewController implements Dumpable {
     private final FragmentListener mQsFragmentListener = new QsFragmentListener();
     private final AccessibilityDelegate mAccessibilityDelegate = new ShadeAccessibilityDelegate();
     private final NotificationGutsManager mGutsManager;
+    private final AlternateBouncerInteractor mAlternateBouncerInteractor;
 
     private long mDownTime;
     private boolean mTouchSlopExceededBeforeDown;
@@ -442,6 +456,7 @@ public final class NotificationPanelViewController implements Dumpable {
     private float mDownY;
     private int mDisplayTopInset = 0; // in pixels
     private int mDisplayRightInset = 0; // in pixels
+    private int mDisplayLeftInset = 0; // in pixels
     private int mLargeScreenShadeHeaderHeight;
     private int mSplitShadeNotificationsScrimMarginBottom;
 
@@ -637,6 +652,7 @@ public final class NotificationPanelViewController implements Dumpable {
     private final KeyguardBottomAreaViewModel mKeyguardBottomAreaViewModel;
     private final KeyguardBottomAreaInteractor mKeyguardBottomAreaInteractor;
     private float mMinExpandHeight;
+    private ShadeHeightLogger mShadeHeightLogger;
     private boolean mPanelUpdateWhenAnimatorEnds;
     private boolean mHasVibratedOnOpen = false;
     private int mFixedDuration = NO_FIXED_DURATION;
@@ -681,6 +697,21 @@ public final class NotificationPanelViewController implements Dumpable {
     private boolean mGestureWaitForTouchSlop;
     private boolean mIgnoreXTouchSlop;
     private boolean mExpandLatencyTracking;
+    private DreamingToLockscreenTransitionViewModel mDreamingToLockscreenTransitionViewModel;
+    private OccludedToLockscreenTransitionViewModel mOccludedToLockscreenTransitionViewModel;
+    private LockscreenToDreamingTransitionViewModel mLockscreenToDreamingTransitionViewModel;
+    private GoneToDreamingTransitionViewModel mGoneToDreamingTransitionViewModel;
+    private LockscreenToOccludedTransitionViewModel mLockscreenToOccludedTransitionViewModel;
+
+    private KeyguardTransitionInteractor mKeyguardTransitionInteractor;
+    private CoroutineDispatcher mMainDispatcher;
+    private boolean mIsOcclusionTransitionRunning = false;
+    private int mDreamingToLockscreenTransitionTranslationY;
+    private int mOccludedToLockscreenTransitionTranslationY;
+    private int mLockscreenToDreamingTransitionTranslationY;
+    private int mGoneToDreamingTransitionTranslationY;
+    private int mLockscreenToOccludedTransitionTranslationY;
+    private boolean mUnocclusionTransitionFlagEnabled = false;
 
     private final Runnable mFlingCollapseRunnable = () -> fling(0, false /* expand */,
             mNextCollapseSpeedUpFactor, false /* expandBecauseOfFalsing */);
@@ -691,10 +722,40 @@ public final class NotificationPanelViewController implements Dumpable {
         updatePanelExpansionAndVisibility();
     };
     private final Runnable mMaybeHideExpandedRunnable = () -> {
-        if (getExpansionFraction() == 0.0f) {
+        if (getExpandedFraction() == 0.0f) {
             postToView(mHideExpandedRunnable);
         }
     };
+
+    private final Consumer<TransitionStep> mDreamingToLockscreenTransition =
+            (TransitionStep step) -> {
+                mIsOcclusionTransitionRunning =
+                    step.getTransitionState() == TransitionState.RUNNING;
+            };
+
+    private final Consumer<TransitionStep> mOccludedToLockscreenTransition =
+            (TransitionStep step) -> {
+                mIsOcclusionTransitionRunning =
+                    step.getTransitionState() == TransitionState.RUNNING;
+            };
+
+    private final Consumer<TransitionStep> mLockscreenToDreamingTransition =
+            (TransitionStep step) -> {
+                mIsOcclusionTransitionRunning =
+                    step.getTransitionState() == TransitionState.RUNNING;
+            };
+
+    private final Consumer<TransitionStep> mGoneToDreamingTransition =
+            (TransitionStep step) -> {
+                mIsOcclusionTransitionRunning =
+                    step.getTransitionState() == TransitionState.RUNNING;
+            };
+
+    private final Consumer<TransitionStep> mLockscreenToOccludedTransition =
+            (TransitionStep step) -> {
+                mIsOcclusionTransitionRunning =
+                    step.getTransitionState() == TransitionState.RUNNING;
+            };
 
     @Inject
     public NotificationPanelViewController(NotificationPanelView view,
@@ -716,6 +777,7 @@ public final class NotificationPanelViewController implements Dumpable {
             KeyguardUpdateMonitor keyguardUpdateMonitor,
             MetricsLogger metricsLogger,
             ShadeLogger shadeLogger,
+            ShadeHeightLogger shadeHeightLogger,
             ConfigurationController configurationController,
             Provider<FlingAnimationUtils.Builder> flingAnimationUtilsBuilder,
             StatusBarTouchableRegionManager statusBarTouchableRegionManager,
@@ -763,6 +825,14 @@ public final class NotificationPanelViewController implements Dumpable {
             SystemClock systemClock,
             KeyguardBottomAreaViewModel keyguardBottomAreaViewModel,
             KeyguardBottomAreaInteractor keyguardBottomAreaInteractor,
+            AlternateBouncerInteractor alternateBouncerInteractor,
+            DreamingToLockscreenTransitionViewModel dreamingToLockscreenTransitionViewModel,
+            OccludedToLockscreenTransitionViewModel occludedToLockscreenTransitionViewModel,
+            LockscreenToDreamingTransitionViewModel lockscreenToDreamingTransitionViewModel,
+            GoneToDreamingTransitionViewModel goneToDreamingTransitionViewModel,
+            LockscreenToOccludedTransitionViewModel lockscreenToOccludedTransitionViewModel,
+            @Main CoroutineDispatcher mainDispatcher,
+            KeyguardTransitionInteractor keyguardTransitionInteractor,
             DumpManager dumpManager,
             EmergencyButtonController.Factory emergencyButtonControllerFactory) {
         keyguardStateController.addCallback(new KeyguardStateController.Callback() {
@@ -777,7 +847,14 @@ public final class NotificationPanelViewController implements Dumpable {
         mLockscreenGestureLogger = lockscreenGestureLogger;
         mShadeExpansionStateManager = shadeExpansionStateManager;
         mShadeLog = shadeLogger;
+        mShadeHeightLogger = shadeHeightLogger;
         mGutsManager = gutsManager;
+        mDreamingToLockscreenTransitionViewModel = dreamingToLockscreenTransitionViewModel;
+        mOccludedToLockscreenTransitionViewModel = occludedToLockscreenTransitionViewModel;
+        mLockscreenToDreamingTransitionViewModel = lockscreenToDreamingTransitionViewModel;
+        mGoneToDreamingTransitionViewModel = goneToDreamingTransitionViewModel;
+        mLockscreenToOccludedTransitionViewModel = lockscreenToOccludedTransitionViewModel;
+        mKeyguardTransitionInteractor = keyguardTransitionInteractor;
         mView.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
             @Override
             public void onViewAttachedToWindow(View v) {
@@ -856,6 +933,7 @@ public final class NotificationPanelViewController implements Dumpable {
         mFalsingCollector = falsingCollector;
         mPowerManager = powerManager;
         mWakeUpCoordinator = coordinator;
+        mMainDispatcher = mainDispatcher;
         mAccessibilityManager = accessibilityManager;
         mView.setAccessibilityPaneTitle(determineAccessibilityPaneTitle());
         setPanelAlpha(255, false /* animate */);
@@ -924,6 +1002,8 @@ public final class NotificationPanelViewController implements Dumpable {
         mNotificationPanelUnfoldAnimationController = unfoldComponent.map(
                 SysUIUnfoldComponent::getNotificationPanelUnfoldAnimationController);
 
+        mUnocclusionTransitionFlagEnabled = featureFlags.isEnabled(Flags.UNOCCLUSION_TRANSITION);
+
         mQsFrameTranslateController = qsFrameTranslateController;
         updateUserSwitcherFlags();
         mKeyguardBottomAreaViewModel = keyguardBottomAreaViewModel;
@@ -945,6 +1025,7 @@ public final class NotificationPanelViewController implements Dumpable {
                         unlockAnimationStarted(playingCannedAnimation, isWakeAndUnlock, startDelay);
                     }
                 });
+        mAlternateBouncerInteractor = alternateBouncerInteractor;
         dumpManager.registerDumpable(this);
     }
 
@@ -1076,6 +1157,63 @@ public final class NotificationPanelViewController implements Dumpable {
         mKeyguardUnfoldTransition.ifPresent(u -> u.setup(mView));
         mNotificationPanelUnfoldAnimationController.ifPresent(controller ->
                 controller.setup(mNotificationContainerParent));
+
+        if (mUnocclusionTransitionFlagEnabled) {
+            // Dreaming->Lockscreen
+            collectFlow(mView, mKeyguardTransitionInteractor.getDreamingToLockscreenTransition(),
+                    mDreamingToLockscreenTransition, mMainDispatcher);
+            collectFlow(mView, mDreamingToLockscreenTransitionViewModel.getLockscreenAlpha(),
+                    setTransitionAlpha(mNotificationStackScrollLayoutController),
+                    mMainDispatcher);
+            collectFlow(mView, mDreamingToLockscreenTransitionViewModel.lockscreenTranslationY(
+                    mDreamingToLockscreenTransitionTranslationY),
+                    setTransitionY(mNotificationStackScrollLayoutController),
+                    mMainDispatcher);
+
+            // Occluded->Lockscreen
+            collectFlow(mView, mKeyguardTransitionInteractor.getOccludedToLockscreenTransition(),
+                    mOccludedToLockscreenTransition, mMainDispatcher);
+            collectFlow(mView, mOccludedToLockscreenTransitionViewModel.getLockscreenAlpha(),
+                    setTransitionAlpha(mNotificationStackScrollLayoutController),
+                    mMainDispatcher);
+            collectFlow(mView, mOccludedToLockscreenTransitionViewModel.lockscreenTranslationY(
+                    mOccludedToLockscreenTransitionTranslationY),
+                    setTransitionY(mNotificationStackScrollLayoutController),
+                    mMainDispatcher);
+
+            // Lockscreen->Dreaming
+            collectFlow(mView, mKeyguardTransitionInteractor.getLockscreenToDreamingTransition(),
+                    mLockscreenToDreamingTransition, mMainDispatcher);
+            collectFlow(mView, mLockscreenToDreamingTransitionViewModel.getLockscreenAlpha(),
+                    setTransitionAlpha(mNotificationStackScrollLayoutController),
+                    mMainDispatcher);
+            collectFlow(mView, mLockscreenToDreamingTransitionViewModel.lockscreenTranslationY(
+                    mLockscreenToDreamingTransitionTranslationY),
+                    setTransitionY(mNotificationStackScrollLayoutController),
+                    mMainDispatcher);
+
+            // Gone->Dreaming
+            collectFlow(mView, mKeyguardTransitionInteractor.getGoneToDreamingTransition(),
+                    mGoneToDreamingTransition, mMainDispatcher);
+            collectFlow(mView, mGoneToDreamingTransitionViewModel.getLockscreenAlpha(),
+                    setTransitionAlpha(mNotificationStackScrollLayoutController),
+                    mMainDispatcher);
+            collectFlow(mView, mGoneToDreamingTransitionViewModel.lockscreenTranslationY(
+                    mGoneToDreamingTransitionTranslationY),
+                    setTransitionY(mNotificationStackScrollLayoutController),
+                    mMainDispatcher);
+
+            // Lockscreen->Occluded
+            collectFlow(mView, mKeyguardTransitionInteractor.getLockscreenToOccludedTransition(),
+                    mLockscreenToOccludedTransition, mMainDispatcher);
+            collectFlow(mView, mLockscreenToOccludedTransitionViewModel.getLockscreenAlpha(),
+                    setTransitionAlpha(mNotificationStackScrollLayoutController),
+                    mMainDispatcher);
+            collectFlow(mView, mLockscreenToOccludedTransitionViewModel.lockscreenTranslationY(
+                    mLockscreenToOccludedTransitionTranslationY),
+                    setTransitionY(mNotificationStackScrollLayoutController),
+                    mMainDispatcher);
+        }
     }
 
     @VisibleForTesting
@@ -1110,6 +1248,16 @@ public final class NotificationPanelViewController implements Dumpable {
         mUdfpsMaxYBurnInOffset = mResources.getDimensionPixelSize(R.dimen.udfps_burn_in_offset_y);
         mSplitShadeScrimTransitionDistance = mResources.getDimensionPixelSize(
                 R.dimen.split_shade_scrim_transition_distance);
+        mDreamingToLockscreenTransitionTranslationY = mResources.getDimensionPixelSize(
+                R.dimen.dreaming_to_lockscreen_transition_lockscreen_translation_y);
+        mOccludedToLockscreenTransitionTranslationY = mResources.getDimensionPixelSize(
+                R.dimen.occluded_to_lockscreen_transition_lockscreen_translation_y);
+        mLockscreenToDreamingTransitionTranslationY = mResources.getDimensionPixelSize(
+                R.dimen.lockscreen_to_dreaming_transition_lockscreen_translation_y);
+        mGoneToDreamingTransitionTranslationY = mResources.getDimensionPixelSize(
+                R.dimen.gone_to_dreaming_transition_lockscreen_translation_y);
+        mLockscreenToOccludedTransitionTranslationY = mResources.getDimensionPixelSize(
+                R.dimen.lockscreen_to_occluded_transition_lockscreen_translation_y);
     }
 
     private void updateViewControllers(KeyguardStatusView keyguardStatusView,
@@ -1335,8 +1483,10 @@ public final class NotificationPanelViewController implements Dumpable {
         mKeyguardBottomArea.init(
                 mKeyguardBottomAreaViewModel,
                 mFalsingManager,
-                mLockIconViewController
-        );
+                mLockIconViewController,
+                stringResourceId ->
+                        mKeyguardIndicationController.showTransientIndication(stringResourceId),
+                mVibratorHelper);
         EmergencyButton emergencyButton =
                 mKeyguardBottomArea.findViewById(R.id.emergency_call_button);
         mEmergencyButtonController = mEmergencyButtonControllerFactory.create(emergencyButton);
@@ -1775,10 +1925,14 @@ public final class NotificationPanelViewController implements Dumpable {
     }
 
     private void updateClock() {
+        if (mIsOcclusionTransitionRunning) {
+            return;
+        }
         float alpha = mClockPositionResult.clockAlpha * mKeyguardOnlyContentAlpha;
         mKeyguardStatusViewController.setAlpha(alpha);
         mKeyguardStatusViewController
-                .setTranslationYExcludingMedia(mKeyguardOnlyTransitionTranslationY);
+            .setTranslationY(mKeyguardOnlyTransitionTranslationY, /* excludeMedia= */true);
+
         if (mKeyguardQsUserSwitchController != null) {
             mKeyguardQsUserSwitchController.setAlpha(alpha);
         }
@@ -1824,6 +1978,7 @@ public final class NotificationPanelViewController implements Dumpable {
             waiting = true;
         } else {
             resetViews(false /* animate */);
+            mShadeHeightLogger.logFunctionCall("collapsePanel");
             setExpandedFraction(0); // just in case
         }
         if (!waiting) {
@@ -2153,7 +2308,6 @@ public final class NotificationPanelViewController implements Dumpable {
                 if ((h > touchSlop || (h < -touchSlop && mQsExpanded))
                         && Math.abs(h) > Math.abs(x - mInitialTouchX)
                         && shouldQuickSettingsIntercept(mInitialTouchX, mInitialTouchY, h)) {
-                    debugLog("onQsIntercept - start tracking expansion");
                     mView.getParent().requestDisallowInterceptTouchEvent(true);
                     mShadeLog.onQsInterceptMoveQsTrackingEnabled(h);
                     mQsTracking = true;
@@ -2223,7 +2377,7 @@ public final class NotificationPanelViewController implements Dumpable {
             // When false, down but not synthesized motion event.
             mLastEventSynthesizedDown = mExpectingSynthesizedDown;
             mLastDownEvents.insert(
-                    mSystemClock.currentTimeMillis(),
+                    event.getEventTime(),
                     mDownX,
                     mDownY,
                     mQsTouchAboveFalsingThreshold,
@@ -2338,7 +2492,7 @@ public final class NotificationPanelViewController implements Dumpable {
 
 
     private boolean handleQsTouch(MotionEvent event) {
-        if (mSplitShadeEnabled && touchXOutsideOfQs(event.getX())) {
+        if (isSplitShadeAndTouchXOutsideQs(event.getX())) {
             return false;
         }
         final int action = event.getActionMasked();
@@ -2356,7 +2510,7 @@ public final class NotificationPanelViewController implements Dumpable {
             mInitialTouchY = event.getY();
             mInitialTouchX = event.getX();
         }
-        if (!isFullyCollapsed()) {
+        if (!isFullyCollapsed() && !isShadeOrQsHeightAnimationRunning()) {
             handleQsDown(event);
         }
         // defer touches on QQS to shade while shade is collapsing. Added margin for error
@@ -2364,7 +2518,7 @@ public final class NotificationPanelViewController implements Dumpable {
         if (!mSplitShadeEnabled
                 && computeQsExpansionFraction() <= 0.01 && getExpandedFraction() < 1.0) {
             mShadeLog.logMotionEvent(event,
-                    "handleQsTouch: QQS touched while shade collapsing");
+                    "handleQsTouch: QQS touched while shade collapsing, QS tracking disabled");
             mQsTracking = false;
         }
         if (!mQsExpandImmediate && mQsTracking) {
@@ -2395,12 +2549,14 @@ public final class NotificationPanelViewController implements Dumpable {
         return false;
     }
 
-    private boolean touchXOutsideOfQs(float touchX) {
-        return touchX < mQsFrame.getX() || touchX > mQsFrame.getX() + mQsFrame.getWidth();
+    /** Returns whether split shade is enabled and an x coordinate is outside of the QS frame. */
+    private boolean isSplitShadeAndTouchXOutsideQs(float touchX) {
+        return mSplitShadeEnabled && (touchX < mQsFrame.getX()
+                || touchX > mQsFrame.getX() + mQsFrame.getWidth());
     }
 
     private boolean isInQsArea(float x, float y) {
-        if (touchXOutsideOfQs(x)) {
+        if (isSplitShadeAndTouchXOutsideQs(x)) {
             return false;
         }
         // Let's reject anything at the very bottom around the home handle in gesture nav
@@ -2660,7 +2816,9 @@ public final class NotificationPanelViewController implements Dumpable {
         } else if (statusBarState == KEYGUARD
                 || statusBarState == StatusBarState.SHADE_LOCKED) {
             mKeyguardBottomArea.setVisibility(View.VISIBLE);
-            mKeyguardBottomArea.setAlpha(1f);
+            if (!mIsOcclusionTransitionRunning) {
+                mKeyguardBottomArea.setAlpha(1f);
+            }
         } else {
             mKeyguardBottomArea.setVisibility(View.GONE);
         }
@@ -2866,7 +3024,7 @@ public final class NotificationPanelViewController implements Dumpable {
             // left bounds can ignore insets, it should always reach the edge of the screen
             return 0;
         } else {
-            return mNotificationStackScrollLayoutController.getLeft();
+            return mNotificationStackScrollLayoutController.getLeft() + mDisplayLeftInset;
         }
     }
 
@@ -2874,7 +3032,7 @@ public final class NotificationPanelViewController implements Dumpable {
         if (mIsFullWidth) {
             return mView.getRight() + mDisplayRightInset;
         } else {
-            return mNotificationStackScrollLayoutController.getRight();
+            return mNotificationStackScrollLayoutController.getRight() + mDisplayLeftInset;
         }
     }
 
@@ -2998,14 +3156,30 @@ public final class NotificationPanelViewController implements Dumpable {
 
         // Convert global clipping coordinates to local ones,
         // relative to NotificationStackScrollLayout
-        int nsslLeft = left - mNotificationStackScrollLayoutController.getLeft();
-        int nsslRight = right - mNotificationStackScrollLayoutController.getLeft();
+        int nsslLeft = calculateNsslLeft(left);
+        int nsslRight = calculateNsslRight(right);
         int nsslTop = getNotificationsClippingTopBounds(top);
         int nsslBottom = bottom - mNotificationStackScrollLayoutController.getTop();
         int bottomRadius = mSplitShadeEnabled ? radius : 0;
         int topRadius = mSplitShadeEnabled && mExpandingFromHeadsUp ? 0 : radius;
         mNotificationStackScrollLayoutController.setRoundedClippingBounds(
                 nsslLeft, nsslTop, nsslRight, nsslBottom, topRadius, bottomRadius);
+    }
+
+    private int calculateNsslLeft(int nsslLeftAbsolute) {
+        int left = nsslLeftAbsolute - mNotificationStackScrollLayoutController.getLeft();
+        if (mIsFullWidth) {
+            return left;
+        }
+        return left - mDisplayLeftInset;
+    }
+
+    private int calculateNsslRight(int nsslRightAbsolute) {
+        int right = nsslRightAbsolute - mNotificationStackScrollLayoutController.getLeft();
+        if (mIsFullWidth) {
+            return right;
+        }
+        return right - mDisplayLeftInset;
     }
 
     private int getNotificationsClippingTopBounds(int qsTop) {
@@ -3527,6 +3701,9 @@ public final class NotificationPanelViewController implements Dumpable {
     }
 
     private void updateNotificationTranslucency() {
+        if (mIsOcclusionTransitionRunning) {
+            return;
+        }
         float alpha = 1f;
         if (mClosingWithAlphaFadeOut && !mExpandingFromHeadsUp
                 && !mHeadsUpManager.hasPinnedHeadsUp()) {
@@ -3582,6 +3759,9 @@ public final class NotificationPanelViewController implements Dumpable {
     }
 
     private void updateKeyguardBottomAreaAlpha() {
+        if (mIsOcclusionTransitionRunning) {
+            return;
+        }
         // There are two possible panel expansion behaviors:
         // • User dragging up to unlock: we want to fade out as quick as possible
         //   (ALPHA_EXPANSION_THRESHOLD) to avoid seeing the bouncer over the bottom area.
@@ -3614,7 +3794,9 @@ public final class NotificationPanelViewController implements Dumpable {
     }
 
     private void onExpandingFinished() {
-        mScrimController.onExpandingFinished();
+        if (!mUnocclusionTransitionFlagEnabled) {
+            mScrimController.onExpandingFinished();
+        }
         mNotificationStackScrollLayoutController.onExpansionStopped();
         mHeadsUpManager.onExpandingFinished();
         mConversationNotificationManager.onNotificationPanelExpandStateChanged(isFullyCollapsed());
@@ -3699,6 +3881,7 @@ public final class NotificationPanelViewController implements Dumpable {
                                     beginJankMonitoring();
                                     fling(0  /* expand */);
                                 } else {
+                                    mShadeHeightLogger.logFunctionCall("expand");
                                     setExpandedFraction(1f);
                                 }
                                 mInstantExpanding = false;
@@ -4396,6 +4579,7 @@ public final class NotificationPanelViewController implements Dumpable {
         ipw.print("mDownY="); ipw.println(mDownY);
         ipw.print("mDisplayTopInset="); ipw.println(mDisplayTopInset);
         ipw.print("mDisplayRightInset="); ipw.println(mDisplayRightInset);
+        ipw.print("mDisplayLeftInset="); ipw.println(mDisplayLeftInset);
         ipw.print("mLargeScreenShadeHeaderHeight="); ipw.println(mLargeScreenShadeHeaderHeight);
         ipw.print("mSplitShadeNotificationsScrimMarginBottom=");
         ipw.println(mSplitShadeNotificationsScrimMarginBottom);
@@ -4733,6 +4917,7 @@ public final class NotificationPanelViewController implements Dumpable {
             if (!openingWithTouch || !mHasVibratedOnOpen) {
                 mVibratorHelper.vibrate(VibrationEffect.EFFECT_TICK);
                 mHasVibratedOnOpen = true;
+                mShadeLog.v("Vibrating on opening, mHasVibratedOnOpen=true");
             }
         }
     }
@@ -4762,6 +4947,7 @@ public final class NotificationPanelViewController implements Dumpable {
         mInitialTouchFromKeyguard = mKeyguardStateController.isShowing();
         if (startTracking) {
             mTouchSlopExceeded = true;
+            mShadeHeightLogger.logFunctionCall("startExpandMotion");
             setExpandedHeight(mInitialOffsetOnTouch);
             onTrackingStarted();
         }
@@ -4822,7 +5008,7 @@ public final class NotificationPanelViewController implements Dumpable {
                 mUpdateFlingVelocity = vel;
             }
         } else if (!mCentralSurfaces.isBouncerShowing()
-                && !mStatusBarKeyguardViewManager.isShowingAlternateBouncer()
+                && !mAlternateBouncerInteractor.isVisibleState()
                 && !mKeyguardStateController.isKeyguardGoingAway()) {
             onEmptySpaceClick();
             onTrackingStopped(true);
@@ -4907,6 +5093,7 @@ public final class NotificationPanelViewController implements Dumpable {
     @VisibleForTesting
     void setExpandedHeight(float height) {
         debugLog("setExpandedHeight(%.1f)", height);
+        mShadeHeightLogger.logFunctionCall("setExpandedHeight");
         setExpandedHeightInternal(height);
     }
 
@@ -4930,10 +5117,13 @@ public final class NotificationPanelViewController implements Dumpable {
             return;
         }
 
+        mShadeHeightLogger.logFunctionCall("updateExpandedHeightToMaxHeight");
         setExpandedHeight(currentMaxPanelHeight);
     }
 
     private void setExpandedHeightInternal(float h) {
+        mShadeHeightLogger.logSetExpandedHeightInternal(h, mSystemClock.currentTimeMillis());
+
         if (isNaN(h)) {
             Log.wtf(TAG, "ExpandedHeight set to NaN");
         }
@@ -4990,7 +5180,9 @@ public final class NotificationPanelViewController implements Dumpable {
 
     /** Sets the expanded height relative to a number from 0 to 1. */
     public void setExpandedFraction(float frac) {
-        setExpandedHeight(getMaxPanelTransitionDistance() * frac);
+        final int maxDist = getMaxPanelTransitionDistance();
+        mShadeHeightLogger.logFunctionCall("setExpandedFraction");
+        setExpandedHeight(maxDist * frac);
     }
 
     float getExpandedHeight() {
@@ -5001,8 +5193,35 @@ public final class NotificationPanelViewController implements Dumpable {
         return mExpandedFraction;
     }
 
+    /**
+     * This method should not be used anymore, you should probably use {@link #isShadeFullyOpen()}
+     * instead. It was overused as indicating if shade is open or we're on keyguard/AOD.
+     * Moving forward we should be explicit about the what state we're checking.
+     * @return if panel is covering the screen, which means we're in expanded shade or keyguard/AOD
+     *
+     * @deprecated depends on the state you check, use {@link #isShadeFullyOpen()},
+     * {@link #isOnAod()}, {@link #isOnKeyguard()} instead.
+     */
+    @Deprecated
     public boolean isFullyExpanded() {
         return mExpandedHeight >= getMaxPanelTransitionDistance();
+    }
+
+    /**
+     * Returns true if shade is fully opened, that is we're actually in the notification shade
+     * with QQS or QS. It's different from {@link #isFullyExpanded()} that it will not report
+     * shade as always expanded if we're on keyguard/AOD. It will return true only when user goes
+     * from keyguard to shade.
+     */
+    public boolean isShadeFullyOpen() {
+        if (mBarState == SHADE) {
+            return isFullyExpanded();
+        } else if (mBarState == SHADE_LOCKED) {
+            return true;
+        } else {
+            // case of two finger swipe from the top of keyguard
+            return computeQsExpansionFraction() == 1;
+        }
     }
 
     public boolean isFullyCollapsed() {
@@ -5025,6 +5244,7 @@ public final class NotificationPanelViewController implements Dumpable {
     /** Collapses the shade instantly without animation. */
     public void instantCollapse() {
         abortAnimations();
+        mShadeHeightLogger.logFunctionCall("instantCollapse");
         setExpandedFraction(0f);
         if (mExpanding) {
             notifyExpandingFinished();
@@ -5097,6 +5317,11 @@ public final class NotificationPanelViewController implements Dumpable {
         }
     }
 
+    /** Returns whether a shade or QS expansion animation is running */
+    private boolean isShadeOrQsHeightAnimationRunning() {
+        return mHeightAnimator != null && !mHintAnimationRunning && !mIsSpringBackAnimation;
+    }
+
     /**
      * Phase 2: Bounce down.
      */
@@ -5141,6 +5366,7 @@ public final class NotificationPanelViewController implements Dumpable {
                                         animator.getAnimatedFraction()));
                         setOverExpansionInternal(expansion, false /* isFromGesture */);
                     }
+                    mShadeHeightLogger.logFunctionCall("height animator update");
                     setExpandedHeightInternal((float) animation.getAnimatedValue());
                 });
         return animator;
@@ -5255,10 +5481,6 @@ public final class NotificationPanelViewController implements Dumpable {
                 InteractionJankMonitor.CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE);
     }
 
-    private float getExpansionFraction() {
-        return mExpandedFraction;
-    }
-
     private ShadeExpansionStateManager getShadeExpansionStateManager() {
         return mShadeExpansionStateManager;
     }
@@ -5329,7 +5551,7 @@ public final class NotificationPanelViewController implements Dumpable {
         @Override
         public void flingTopOverscroll(float velocity, boolean open) {
             // in split shade mode we want to expand/collapse QS only when touch happens within QS
-            if (mSplitShadeEnabled && touchXOutsideOfQs(mInitialTouchX)) {
+            if (isSplitShadeAndTouchXOutsideQs(mInitialTouchX)) {
                 return;
             }
             mLastOverscroll = 0f;
@@ -5490,6 +5712,15 @@ public final class NotificationPanelViewController implements Dumpable {
             mBarState = statusBarState;
             mKeyguardShowing = keyguardShowing;
 
+            boolean fromShadeToKeyguard = statusBarState == KEYGUARD
+                    && (oldState == SHADE || oldState == SHADE_LOCKED);
+            if (mSplitShadeEnabled && fromShadeToKeyguard) {
+                // user can go to keyguard from different shade states and closing animation
+                // may not fully run - we always want to make sure we close QS when that happens
+                // as we never need QS open in fresh keyguard state
+                closeQs();
+            }
+
             if (oldState == KEYGUARD && (goingToFullShade
                     || statusBarState == StatusBarState.SHADE_LOCKED)) {
 
@@ -5509,27 +5740,12 @@ public final class NotificationPanelViewController implements Dumpable {
                 mKeyguardStatusBarViewController.animateKeyguardStatusBarIn();
 
                 mNotificationStackScrollLayoutController.resetScrollPosition();
-                // Only animate header if the header is visible. If not, it will partially
-                // animate out
-                // the top of QS
-                if (!mQsExpanded) {
-                    // TODO(b/185683835) Nicer clipping when using new spacial model
-                    if (mSplitShadeEnabled) {
-                        mQs.animateHeaderSlidingOut();
-                    }
-                }
             } else {
                 // this else branch means we are doing one of:
                 //  - from KEYGUARD to SHADE (but not fully expanded as when swiping from the top)
                 //  - from SHADE to KEYGUARD
                 //  - from SHADE_LOCKED to SHADE
                 //  - getting notified again about the current SHADE or KEYGUARD state
-                if (mSplitShadeEnabled && oldState == SHADE && statusBarState == KEYGUARD) {
-                    // user can go to keyguard from different shade states and closing animation
-                    // may not fully run - we always want to make sure we close QS when that happens
-                    // as we never need QS open in fresh keyguard state
-                    closeQs();
-                }
                 final boolean animatingUnlockedShadeToKeyguard = oldState == SHADE
                         && statusBarState == KEYGUARD
                         && mScreenOffAnimationController.isKeyguardShowDelayed();
@@ -5621,6 +5837,7 @@ public final class NotificationPanelViewController implements Dumpable {
         mStatusBarStateController.setUpcomingState(KEYGUARD);
         mStatusBarStateListener.onStateChanged(KEYGUARD);
         mStatusBarStateListener.onDozeAmountChanged(1f, 1f);
+        mShadeHeightLogger.logFunctionCall("showAodUi");
         setExpandedFraction(1f);
     }
 
@@ -5740,6 +5957,7 @@ public final class NotificationPanelViewController implements Dumpable {
         Insets combinedInsets = insets.getInsetsIgnoringVisibility(insetTypes);
         mDisplayTopInset = combinedInsets.top;
         mDisplayRightInset = combinedInsets.right;
+        mDisplayLeftInset = combinedInsets.left;
 
         mNavigationBarBottomHeight = insets.getStableInsetBottom();
         updateMaxHeadsUpTranslation();
@@ -5776,6 +5994,32 @@ public final class NotificationPanelViewController implements Dumpable {
         mCurrentPanelState = state;
     }
 
+    private Consumer<Float> setTransitionAlpha(
+            NotificationStackScrollLayoutController stackScroller) {
+        return (Float alpha) -> {
+            mKeyguardStatusViewController.setAlpha(alpha);
+            stackScroller.setAlpha(alpha);
+
+            mKeyguardBottomAreaInteractor.setAlpha(alpha);
+            mLockIconViewController.setAlpha(alpha);
+
+            if (mKeyguardQsUserSwitchController != null) {
+                mKeyguardQsUserSwitchController.setAlpha(alpha);
+            }
+            if (mKeyguardUserSwitcherController != null) {
+                mKeyguardUserSwitcherController.setAlpha(alpha);
+            }
+        };
+    }
+
+    private Consumer<Float> setTransitionY(
+                NotificationStackScrollLayoutController stackScroller) {
+        return (Float translationY) -> {
+            mKeyguardStatusViewController.setTranslationY(translationY,  /* excludeMedia= */false);
+            stackScroller.setTranslationY(translationY);
+        };
+    }
+
     @VisibleForTesting
     StatusBarStateController getStatusBarStateController() {
         return mStatusBarStateController;
@@ -5808,12 +6052,9 @@ public final class NotificationPanelViewController implements Dumpable {
         /** @see ViewGroup#onInterceptTouchEvent(MotionEvent) */
         public boolean onInterceptTouchEvent(MotionEvent event) {
             mShadeLog.logMotionEvent(event, "NPVC onInterceptTouchEvent");
-            if (SPEW_LOGCAT) {
-                Log.v(TAG,
-                        "NPVC onInterceptTouchEvent (" + event.getId() + "): (" + event.getX()
-                                + "," + event.getY() + ")");
-            }
             if (mQs.disallowPanelTouches()) {
+                mShadeLog.logMotionEvent(event,
+                        "NPVC not intercepting touch, panel touches disallowed");
                 return false;
             }
             initDownStates(event);
@@ -5846,8 +6087,15 @@ public final class NotificationPanelViewController implements Dumpable {
                         + "QsIntercept");
                 return true;
             }
-            if (mInstantExpanding || !mNotificationsDragEnabled || mTouchDisabled || (mMotionAborted
-                    && event.getActionMasked() != MotionEvent.ACTION_DOWN)) {
+
+            if (mInstantExpanding || !mNotificationsDragEnabled || mTouchDisabled) {
+                mShadeLog.logNotInterceptingTouchInstantExpanding(mInstantExpanding,
+                        !mNotificationsDragEnabled, mTouchDisabled);
+                return false;
+            }
+            if (mMotionAborted && event.getActionMasked() != MotionEvent.ACTION_DOWN) {
+                mShadeLog.logMotionEventStatusBarState(event, mStatusBarStateController.getState(),
+                        "NPVC MotionEvent not intercepted: non-down action, motion was aborted");
                 return false;
             }
 
@@ -5902,6 +6150,9 @@ public final class NotificationPanelViewController implements Dumpable {
                     }
                     break;
                 case MotionEvent.ACTION_POINTER_DOWN:
+                    mShadeLog.logMotionEventStatusBarState(event,
+                            mStatusBarStateController.getState(),
+                            "onInterceptTouchEvent: pointer down action");
                     if (mStatusBarStateController.getState() == StatusBarState.KEYGUARD) {
                         mMotionAborted = true;
                         mVelocityTracker.clear();
@@ -5943,7 +6194,8 @@ public final class NotificationPanelViewController implements Dumpable {
                     // events are received in this handler with identical downTimes. Until the
                     // source of the issue can be located, detect this case and ignore.
                     // see b/193350347
-                    Log.w(TAG, "Duplicate down event detected... ignoring");
+                    mShadeLog.logMotionEvent(event,
+                            "onTouch: duplicate down event detected... ignoring");
                     return true;
                 }
                 mLastTouchDownTime = event.getDownTime();
@@ -5951,6 +6203,8 @@ public final class NotificationPanelViewController implements Dumpable {
 
 
             if (mQsFullyExpanded && mQs != null && mQs.disallowPanelTouches()) {
+                mShadeLog.logMotionEvent(event,
+                        "onTouch: ignore touch, panel touches disallowed and qs fully expanded");
                 return false;
             }
 
@@ -5958,6 +6212,8 @@ public final class NotificationPanelViewController implements Dumpable {
             // otherwise user would be able to pull down QS or expand the shade.
             if (mCentralSurfaces.isBouncerShowingScrimmed()
                     || mCentralSurfaces.isBouncerShowingOverDream()) {
+                mShadeLog.logMotionEvent(event,
+                        "onTouch: ignore touch, bouncer scrimmed or showing over dream");
                 return false;
             }
 
@@ -6015,15 +6271,17 @@ public final class NotificationPanelViewController implements Dumpable {
 
         private boolean handleTouch(MotionEvent event) {
             if (mInstantExpanding) {
-                mShadeLog.logMotionEvent(event, "onTouch: touch ignored due to instant expanding");
+                mShadeLog.logMotionEvent(event,
+                        "handleTouch: touch ignored due to instant expanding");
                 return false;
             }
             if (mTouchDisabled && event.getActionMasked() != MotionEvent.ACTION_CANCEL) {
-                mShadeLog.logMotionEvent(event, "onTouch: non-cancel action, touch disabled");
+                mShadeLog.logMotionEvent(event, "handleTouch: non-cancel action, touch disabled");
                 return false;
             }
             if (mMotionAborted && event.getActionMasked() != MotionEvent.ACTION_DOWN) {
-                mShadeLog.logMotionEvent(event, "onTouch: non-down action, motion was aborted");
+                mShadeLog.logMotionEventStatusBarState(event, mStatusBarStateController.getState(),
+                        "handleTouch: non-down action, motion was aborted");
                 return false;
             }
 
@@ -6033,7 +6291,7 @@ public final class NotificationPanelViewController implements Dumpable {
                     // Turn off tracking if it's on or the shade can get stuck in the down position.
                     onTrackingStopped(true /* expand */);
                 }
-                mShadeLog.logMotionEvent(event, "onTouch: drag not enabled");
+                mShadeLog.logMotionEvent(event, "handleTouch: drag not enabled");
                 return false;
             }
 
@@ -6078,8 +6336,7 @@ public final class NotificationPanelViewController implements Dumpable {
                     mCollapsedAndHeadsUpOnDown =
                             isFullyCollapsed() && mHeadsUpManager.hasPinnedHeadsUp();
                     addMovement(event);
-                    boolean regularHeightAnimationRunning = mHeightAnimator != null
-                            && !mHintAnimationRunning && !mIsSpringBackAnimation;
+                    boolean regularHeightAnimationRunning = isShadeOrQsHeightAnimationRunning();
                     if (!mGestureWaitForTouchSlop || regularHeightAnimationRunning) {
                         mTouchSlopExceeded = regularHeightAnimationRunning
                                 || mTouchSlopExceededBeforeDown;
@@ -6106,6 +6363,9 @@ public final class NotificationPanelViewController implements Dumpable {
                     }
                     break;
                 case MotionEvent.ACTION_POINTER_DOWN:
+                    mShadeLog.logMotionEventStatusBarState(event,
+                            mStatusBarStateController.getState(),
+                            "handleTouch: pointer down action");
                     if (mStatusBarStateController.getState() == StatusBarState.KEYGUARD) {
                         mMotionAborted = true;
                         endMotionEvent(event, x, y, true /* forceCancel */);
@@ -6116,6 +6376,7 @@ public final class NotificationPanelViewController implements Dumpable {
                     if (isFullyCollapsed()) {
                         // If panel is fully collapsed, reset haptic effect before adding movement.
                         mHasVibratedOnOpen = false;
+                        mShadeLog.logHasVibrated(mHasVibratedOnOpen, mExpandedFraction);
                     }
                     addMovement(event);
                     if (!isFullyCollapsed()) {
@@ -6149,6 +6410,7 @@ public final class NotificationPanelViewController implements Dumpable {
                         // otherwise {@link NotificationStackScrollLayout}
                         // wrongly enables stack height updates at the start of lockscreen swipe-up
                         mAmbientState.setSwipingUp(h <= 0);
+                        mShadeHeightLogger.logFunctionCall("ACTION_MOVE");
                         setExpandedHeightInternal(newHeight);
                     }
                     break;

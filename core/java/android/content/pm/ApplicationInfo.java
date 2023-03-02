@@ -18,9 +18,11 @@ package android.content.pm;
 
 import static android.os.Build.VERSION_CODES.DONUT;
 
+import android.Manifest;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.compat.annotation.UnsupportedAppUsage;
@@ -1543,12 +1545,14 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      * the application, e.g. the target SDK version.
      * @hide
      */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     public static final int HIDDEN_API_ENFORCEMENT_DEFAULT = -1;
     /**
      * No API enforcement; the app can access the entire internal private API. Only for use by
      * system apps.
      * @hide
      */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     public static final int HIDDEN_API_ENFORCEMENT_DISABLED = 0;
     /**
      * No API enforcement, but enable the detection logic and warnings. Observed behaviour is the
@@ -1556,11 +1560,13 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      * APIs are accessed.
      * @hide
      * */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     public static final int HIDDEN_API_ENFORCEMENT_JUST_WARN = 1;
     /**
      * Dark grey list enforcement. Enforces the dark grey and black lists
      * @hide
      */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     public static final int HIDDEN_API_ENFORCEMENT_ENABLED = 2;
 
     private static final int HIDDEN_API_ENFORCEMENT_MIN = HIDDEN_API_ENFORCEMENT_DEFAULT;
@@ -2270,6 +2276,8 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      *
      * @hide
      */
+    @SystemApi
+    @RequiresPermission(Manifest.permission.DELETE_PACKAGES)
     public boolean hasFragileUserData() {
         return (privateFlags & PRIVATE_FLAG_HAS_FRAGILE_USER_DATA) != 0;
     }
@@ -2504,8 +2512,13 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         return (privateFlags & ApplicationInfo.PRIVATE_FLAG_SIGNED_WITH_PLATFORM_KEY) != 0;
     }
 
-    /** @hide */
+    /**
+     * @return {@code true} if the application is permitted to hold privileged permissions.
+     *
+     * @hide */
     @TestApi
+    @SystemApi
+    @RequiresPermission(Manifest.permission.INSTALL_PACKAGES)
     public boolean isPrivilegedApp() {
         return (privateFlags & ApplicationInfo.PRIVATE_FLAG_PRIVILEGED) != 0;
     }

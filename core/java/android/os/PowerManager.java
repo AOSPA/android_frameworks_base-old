@@ -526,6 +526,13 @@ public final class PowerManager {
     public static final int GO_TO_SLEEP_FLAG_NO_DOZE = 1 << 0;
 
     /**
+     * Go to sleep flag: Sleep softly, go to sleep only if there's no wakelock explicitly keeping
+     * the device awake.
+     * @hide
+     */
+    public static final int GO_TO_SLEEP_FLAG_SOFT_SLEEP = 1 << 1;
+
+    /**
      * @hide
      */
     @IntDef(prefix = { "BRIGHTNESS_CONSTRAINT_TYPE" }, value = {
@@ -533,10 +540,7 @@ public final class PowerManager {
             BRIGHTNESS_CONSTRAINT_TYPE_MAXIMUM,
             BRIGHTNESS_CONSTRAINT_TYPE_DEFAULT,
             BRIGHTNESS_CONSTRAINT_TYPE_DIM,
-            BRIGHTNESS_CONSTRAINT_TYPE_DOZE,
-            BRIGHTNESS_CONSTRAINT_TYPE_MINIMUM_VR,
-            BRIGHTNESS_CONSTRAINT_TYPE_MAXIMUM_VR,
-            BRIGHTNESS_CONSTRAINT_TYPE_DEFAULT_VR
+            BRIGHTNESS_CONSTRAINT_TYPE_DOZE
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface BrightnessConstraint{}
@@ -571,24 +575,6 @@ public final class PowerManager {
     public static final int BRIGHTNESS_CONSTRAINT_TYPE_DOZE = 4;
 
     /**
-     * Brightness constraint type: minimum allowed value.
-     * @hide
-     */
-    public static final int BRIGHTNESS_CONSTRAINT_TYPE_MINIMUM_VR = 5;
-
-    /**
-     * Brightness constraint type: minimum allowed value.
-     * @hide
-     */
-    public static final int BRIGHTNESS_CONSTRAINT_TYPE_MAXIMUM_VR = 6;
-
-    /**
-     * Brightness constraint type: minimum allowed value.
-     * @hide
-     */
-    public static final int BRIGHTNESS_CONSTRAINT_TYPE_DEFAULT_VR = 7;
-
-    /**
      * @hide
      */
     @IntDef(prefix = { "WAKE_REASON_" }, value = {
@@ -605,7 +591,10 @@ public final class PowerManager {
             WAKE_REASON_DISPLAY_GROUP_TURNED_ON,
             WAKE_REASON_UNFOLD_DEVICE,
             WAKE_REASON_DREAM_FINISHED,
-            WAKE_REASON_TILT
+            WAKE_REASON_TILT,
+            WAKE_REASON_TAP,
+            WAKE_REASON_LIFT,
+            WAKE_REASON_BIOMETRIC,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface WakeReason{}
@@ -657,8 +646,9 @@ public final class PowerManager {
     public static final int WAKE_REASON_PLUGGED_IN = 3;
 
     /**
-     * Wake up reason code: Waking up due to a user performed gesture (e.g. double tapping on the
-     * screen).
+     * Wake up reason code: Waking up due to a user performed gesture. This includes user
+     * interactions with UI on the screen such as the notification shade. This does not include
+     * {@link WAKE_REASON_TAP} or {@link WAKE_REASON_LIFT}.
      * @hide
      */
     public static final int WAKE_REASON_GESTURE = 4;
@@ -724,6 +714,25 @@ public final class PowerManager {
      * @hide
      */
     public static final int WAKE_REASON_TILT = 14;
+    /**
+     * Wake up reason code: Waking up due to the user single or double tapping on the screen. This
+     * wake reason is used when the user is not tapping on a specific UI element; rather, the device
+     * wakes up due to a generic tap on the screen.
+     * @hide
+     */
+    public static final int WAKE_REASON_TAP = 15;
+
+    /**
+     * Wake up reason code: Waking up due to a user performed lift gesture.
+     * @hide
+     */
+    public static final int WAKE_REASON_LIFT = 16;
+
+    /**
+     * Wake up reason code: Waking up due to a user interacting with a biometric.
+     * @hide
+     */
+    public static final int WAKE_REASON_BIOMETRIC = 17;
 
     /**
      * Convert the wake reason to a string for debugging purposes.
@@ -746,6 +755,9 @@ public final class PowerManager {
             case WAKE_REASON_UNFOLD_DEVICE: return "WAKE_REASON_UNFOLD_DEVICE";
             case WAKE_REASON_DREAM_FINISHED: return "WAKE_REASON_DREAM_FINISHED";
             case WAKE_REASON_TILT: return "WAKE_REASON_TILT";
+            case WAKE_REASON_TAP: return "WAKE_REASON_TAP";
+            case WAKE_REASON_LIFT: return "WAKE_REASON_LIFT";
+            case WAKE_REASON_BIOMETRIC: return "WAKE_REASON_BIOMETRIC";
             default: return Integer.toString(wakeReason);
         }
     }
@@ -1208,35 +1220,6 @@ public final class PowerManager {
     public int getDefaultScreenBrightnessSetting() {
         return mContext.getResources().getInteger(
                 com.android.internal.R.integer.config_screenBrightnessSettingDefault);
-    }
-
-    /**
-     * Gets the minimum supported screen brightness setting for VR Mode.
-     * @hide
-     */
-    public int getMinimumScreenBrightnessForVrSetting() {
-        return mContext.getResources().getInteger(
-                com.android.internal.R.integer.config_screenBrightnessForVrSettingMinimum);
-    }
-
-    /**
-     * Gets the maximum supported screen brightness setting for VR Mode.
-     * The screen may be allowed to become dimmer than this value but
-     * this is the maximum value that can be set by the user.
-     * @hide
-     */
-    public int getMaximumScreenBrightnessForVrSetting() {
-        return mContext.getResources().getInteger(
-                com.android.internal.R.integer.config_screenBrightnessForVrSettingMaximum);
-    }
-
-    /**
-     * Gets the default screen brightness for VR setting.
-     * @hide
-     */
-    public int getDefaultScreenBrightnessForVrSetting() {
-        return mContext.getResources().getInteger(
-                com.android.internal.R.integer.config_screenBrightnessForVrSettingDefault);
     }
 
     /**

@@ -50,7 +50,7 @@ interface IMediaRouterService {
     // MediaRouterService.java for readability.
 
     // Methods for MediaRouter2
-    void enforceMediaContentControlPermission();
+    boolean verifyPackageExists(String clientPackageName);
     List<MediaRoute2Info> getSystemRoutes();
     RoutingSessionInfo getSystemSessionInfo();
 

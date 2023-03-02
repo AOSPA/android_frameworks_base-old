@@ -37,16 +37,6 @@ sk_sp<SkMesh::IndexBuffer> genIndexBuffer(JNIEnv* env, jobject buffer, int size,
     return indexBuffer;
 }
 
-// TODO(b/260252882): undefine SK_LEGACY_MESH_MAKE and remove this.
-template <typename T>
-SkMesh get_mesh_from_result(T&& result) {
-#ifdef SK_LEGACY_MESH_MAKE
-    return result;
-#else
-    return result.mesh;
-#endif
-}
-
 static jlong make(JNIEnv* env, jobject, jlong meshSpec, jint mode, jobject vertexBuffer,
                   jboolean isDirect, jint vertexCount, jint vertexOffset, jint left, jint top,
                   jint right, jint bottom) {
@@ -54,9 +44,16 @@ static jlong make(JNIEnv* env, jobject, jlong meshSpec, jint mode, jobject verte
     sk_sp<SkMesh::VertexBuffer> skVertexBuffer =
             genVertexBuffer(env, vertexBuffer, vertexCount * skMeshSpec->stride(), isDirect);
     auto skRect = SkRect::MakeLTRB(left, top, right, bottom);
-    auto mesh = get_mesh_from_result(SkMesh::Make(skMeshSpec, SkMesh::Mode(mode), skVertexBuffer,
-                                                  vertexCount, vertexOffset, nullptr, skRect));
-    auto meshPtr = std::make_unique<MeshWrapper>(MeshWrapper{mesh, MeshUniformBuilder(skMeshSpec)});
+    auto meshResult = SkMesh::Make(
+            skMeshSpec, SkMesh::Mode(mode), skVertexBuffer, vertexCount, vertexOffset,
+            SkData::MakeWithCopy(skMeshSpec->uniforms().data(), skMeshSpec->uniformSize()), skRect);
+
+    if (!meshResult.error.isEmpty()) {
+        jniThrowException(env, "java/lang/IllegalArgumentException", meshResult.error.c_str());
+    }
+
+    auto meshPtr = std::make_unique<MeshWrapper>(
+            MeshWrapper{meshResult.mesh, MeshUniformBuilder(skMeshSpec)});
     return reinterpret_cast<jlong>(meshPtr.release());
 }
 
@@ -70,10 +67,17 @@ static jlong makeIndexed(JNIEnv* env, jobject, jlong meshSpec, jint mode, jobjec
     sk_sp<SkMesh::IndexBuffer> skIndexBuffer =
             genIndexBuffer(env, indexBuffer, indexCount * gIndexByteSize, isIndexDirect);
     auto skRect = SkRect::MakeLTRB(left, top, right, bottom);
-    auto mesh = get_mesh_from_result(SkMesh::MakeIndexed(
+
+    auto meshResult = SkMesh::MakeIndexed(
             skMeshSpec, SkMesh::Mode(mode), skVertexBuffer, vertexCount, vertexOffset,
-            skIndexBuffer, indexCount, indexOffset, nullptr, skRect));
-    auto meshPtr = std::make_unique<MeshWrapper>(MeshWrapper{mesh, MeshUniformBuilder(skMeshSpec)});
+            skIndexBuffer, indexCount, indexOffset,
+            SkData::MakeWithCopy(skMeshSpec->uniforms().data(), skMeshSpec->uniformSize()), skRect);
+
+    if (!meshResult.error.isEmpty()) {
+        jniThrowException(env, "java/lang/IllegalArgumentException", meshResult.error.c_str());
+    }
+    auto meshPtr = std::make_unique<MeshWrapper>(
+            MeshWrapper{meshResult.mesh, MeshUniformBuilder(skMeshSpec)});
     return reinterpret_cast<jlong>(meshPtr.release());
 }
 
@@ -81,15 +85,17 @@ static void updateMesh(JNIEnv* env, jobject, jlong meshWrapper, jboolean indexed
     auto wrapper = reinterpret_cast<MeshWrapper*>(meshWrapper);
     auto mesh = wrapper->mesh;
     if (indexed) {
-        wrapper->mesh = get_mesh_from_result(SkMesh::MakeIndexed(
-                sk_ref_sp(mesh.spec()), mesh.mode(), sk_ref_sp(mesh.vertexBuffer()),
-                mesh.vertexCount(), mesh.vertexOffset(), sk_ref_sp(mesh.indexBuffer()),
-                mesh.indexCount(), mesh.indexOffset(), wrapper->builder.fUniforms, mesh.bounds()));
+        wrapper->mesh = SkMesh::MakeIndexed(sk_ref_sp(mesh.spec()), mesh.mode(),
+                                            sk_ref_sp(mesh.vertexBuffer()), mesh.vertexCount(),
+                                            mesh.vertexOffset(), sk_ref_sp(mesh.indexBuffer()),
+                                            mesh.indexCount(), mesh.indexOffset(),
+                                            wrapper->builder.fUniforms, mesh.bounds())
+                                .mesh;
     } else {
-        wrapper->mesh = get_mesh_from_result(
-                SkMesh::Make(sk_ref_sp(mesh.spec()), mesh.mode(), sk_ref_sp(mesh.vertexBuffer()),
-                             mesh.vertexCount(), mesh.vertexOffset(), wrapper->builder.fUniforms,
-                             mesh.bounds()));
+        wrapper->mesh = SkMesh::Make(sk_ref_sp(mesh.spec()), mesh.mode(),
+                                     sk_ref_sp(mesh.vertexBuffer()), mesh.vertexCount(),
+                                     mesh.vertexOffset(), wrapper->builder.fUniforms, mesh.bounds())
+                                .mesh;
     }
 }
 
@@ -145,22 +151,22 @@ static void nativeUpdateFloatUniforms(JNIEnv* env, MeshUniformBuilder* builder,
     }
 }
 
-static void updateFloatUniforms(JNIEnv* env, jobject, jlong uniBuilder, jstring uniformName,
+static void updateFloatUniforms(JNIEnv* env, jobject, jlong meshWrapper, jstring uniformName,
                                 jfloat value1, jfloat value2, jfloat value3, jfloat value4,
                                 jint count) {
-    auto* builder = reinterpret_cast<MeshUniformBuilder*>(uniBuilder);
+    auto* wrapper = reinterpret_cast<MeshWrapper*>(meshWrapper);
     ScopedUtfChars name(env, uniformName);
     const float values[4] = {value1, value2, value3, value4};
-    nativeUpdateFloatUniforms(env, builder, name.c_str(), values, count, false);
+    nativeUpdateFloatUniforms(env, &wrapper->builder, name.c_str(), values, count, false);
 }
 
-static void updateFloatArrayUniforms(JNIEnv* env, jobject, jlong uniBuilder, jstring jUniformName,
+static void updateFloatArrayUniforms(JNIEnv* env, jobject, jlong meshWrapper, jstring jUniformName,
                                      jfloatArray jvalues, jboolean isColor) {
-    auto builder = reinterpret_cast<MeshUniformBuilder*>(uniBuilder);
+    auto wrapper = reinterpret_cast<MeshWrapper*>(meshWrapper);
     ScopedUtfChars name(env, jUniformName);
     AutoJavaFloatArray autoValues(env, jvalues, 0, kRO_JNIAccess);
-    nativeUpdateFloatUniforms(env, builder, name.c_str(), autoValues.ptr(), autoValues.length(),
-                              isColor);
+    nativeUpdateFloatUniforms(env, &wrapper->builder, name.c_str(), autoValues.ptr(),
+                              autoValues.length(), isColor);
 }
 
 static void nativeUpdateIntUniforms(JNIEnv* env, MeshUniformBuilder* builder,
@@ -177,20 +183,21 @@ static void nativeUpdateIntUniforms(JNIEnv* env, MeshUniformBuilder* builder,
     }
 }
 
-static void updateIntUniforms(JNIEnv* env, jobject, jlong uniBuilder, jstring uniformName,
+static void updateIntUniforms(JNIEnv* env, jobject, jlong meshWrapper, jstring uniformName,
                               jint value1, jint value2, jint value3, jint value4, jint count) {
-    auto builder = reinterpret_cast<MeshUniformBuilder*>(uniBuilder);
+    auto wrapper = reinterpret_cast<MeshWrapper*>(meshWrapper);
     ScopedUtfChars name(env, uniformName);
     const int values[4] = {value1, value2, value3, value4};
-    nativeUpdateIntUniforms(env, builder, name.c_str(), values, count);
+    nativeUpdateIntUniforms(env, &wrapper->builder, name.c_str(), values, count);
 }
 
-static void updateIntArrayUniforms(JNIEnv* env, jobject, jlong uniBuilder, jstring uniformName,
+static void updateIntArrayUniforms(JNIEnv* env, jobject, jlong meshWrapper, jstring uniformName,
                                    jintArray values) {
-    auto builder = reinterpret_cast<MeshUniformBuilder*>(uniBuilder);
+    auto wrapper = reinterpret_cast<MeshWrapper*>(meshWrapper);
     ScopedUtfChars name(env, uniformName);
     AutoJavaIntArray autoValues(env, values, 0);
-    nativeUpdateIntUniforms(env, builder, name.c_str(), autoValues.ptr(), autoValues.length());
+    nativeUpdateIntUniforms(env, &wrapper->builder, name.c_str(), autoValues.ptr(),
+                            autoValues.length());
 }
 
 static void MeshWrapper_destroy(MeshWrapper* wrapper) {

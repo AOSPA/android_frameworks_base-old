@@ -16,7 +16,12 @@
 
 package com.android.server.pm;
 
+import static android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND;
+import static android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND_SERVICE;
+
 import android.annotation.WorkerThread;
+import android.app.ActivityManager;
+import android.app.ActivityManager.RunningAppProcessInfo;
 import android.app.ActivityThread;
 import android.app.job.JobInfo;
 import android.app.job.JobParameters;
@@ -28,9 +33,16 @@ import android.content.pm.PackageInstaller.InstallConstraints;
 import android.content.pm.PackageInstaller.InstallConstraintsResult;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.RemoteException;
+import android.os.SystemClock;
+import android.os.SystemProperties;
+import android.text.format.DateUtils;
 import android.util.Slog;
 
+import com.android.internal.util.Preconditions;
+
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -73,12 +85,31 @@ public class GentleUpdateHelper {
         public final List<String> packageNames;
         public final InstallConstraints constraints;
         public final CompletableFuture<InstallConstraintsResult> future;
+        private final long mFinishTime;
+
+        /**
+         * Note {@code timeoutMillis} will be clamped to 0 ~ one week to avoid overflow.
+         */
         PendingInstallConstraintsCheck(List<String> packageNames,
                 InstallConstraints constraints,
-                CompletableFuture<InstallConstraintsResult> future) {
+                CompletableFuture<InstallConstraintsResult> future,
+                long timeoutMillis) {
             this.packageNames = packageNames;
             this.constraints = constraints;
             this.future = future;
+
+            timeoutMillis = Math.max(0, Math.min(DateUtils.WEEK_IN_MILLIS, timeoutMillis));
+            mFinishTime = SystemClock.elapsedRealtime() + timeoutMillis;
+        }
+        public boolean isTimedOut() {
+            return SystemClock.elapsedRealtime() >= mFinishTime;
+        }
+        /**
+         * The remaining time before this pending check is timed out.
+         */
+        public long getRemainingTimeMillis() {
+            long timeout = mFinishTime - SystemClock.elapsedRealtime();
+            return Math.max(timeout, 0);
         }
     }
 
@@ -87,6 +118,7 @@ public class GentleUpdateHelper {
     private final AppStateHelper mAppStateHelper;
     // Worker thread only
     private final ArrayDeque<PendingInstallConstraintsCheck> mPendingChecks = new ArrayDeque<>();
+    private final ArrayList<CompletableFuture<Boolean>> mPendingIdleFutures = new ArrayList<>();
     private boolean mHasPendingIdleJob;
 
     GentleUpdateHelper(Context context, Looper looper, AppStateHelper appStateHelper) {
@@ -95,33 +127,68 @@ public class GentleUpdateHelper {
         mAppStateHelper = appStateHelper;
     }
 
+    void systemReady() {
+        var am = mContext.getSystemService(ActivityManager.class);
+        // Monitor top-visible apps
+        am.addOnUidImportanceListener(this::onUidImportance, IMPORTANCE_FOREGROUND);
+        // Monitor foreground apps
+        am.addOnUidImportanceListener(this::onUidImportance, IMPORTANCE_FOREGROUND_SERVICE);
+    }
+
     /**
      * Checks if install constraints are satisfied for the given packages.
      */
     CompletableFuture<InstallConstraintsResult> checkInstallConstraints(
-            List<String> packageNames, InstallConstraints constraints) {
-        var future = new CompletableFuture<InstallConstraintsResult>();
+            List<String> packageNames, InstallConstraints constraints,
+            long timeoutMillis) {
+        var resultFuture = new CompletableFuture<InstallConstraintsResult>();
         mHandler.post(() -> {
             var pendingCheck = new PendingInstallConstraintsCheck(
-                    packageNames, constraints, future);
-            if (constraints.isRequireDeviceIdle()) {
-                mPendingChecks.add(pendingCheck);
-                // JobScheduler doesn't provide queries about whether the device is idle.
-                // We schedule 2 tasks to determine device idle. If the idle job is executed
-                // before the delayed runnable, we know the device is idle.
-                // Note #processPendingCheck will be no-op for the task executed later.
-                scheduleIdleJob();
-                mHandler.postDelayed(() -> processPendingCheck(pendingCheck, false),
-                        PENDING_CHECK_MILLIS);
-            } else {
-                processPendingCheck(pendingCheck, false);
-            }
+                    packageNames, constraints, resultFuture, timeoutMillis);
+            var deviceIdleFuture = constraints.isRequireDeviceIdle()
+                    ? checkDeviceIdle() : CompletableFuture.completedFuture(false);
+            deviceIdleFuture.thenAccept(isIdle -> {
+                Preconditions.checkState(mHandler.getLooper().isCurrentThread());
+                if (!processPendingCheck(pendingCheck, isIdle)) {
+                    // Not resolved. Schedule a job for re-check
+                    mPendingChecks.add(pendingCheck);
+                    scheduleIdleJob();
+                    // Ensure the pending check is resolved after timeout, no matter constraints
+                    // satisfied or not.
+                    mHandler.postDelayed(() -> processPendingCheck(
+                            pendingCheck, false), pendingCheck.getRemainingTimeMillis());
+                }
+            });
         });
+        return resultFuture;
+    }
+
+    /**
+     * Checks if the device is idle or not.
+     * @return A future resolved to {@code true} if the device is idle, or {@code false} if not.
+     */
+    @WorkerThread
+    private CompletableFuture<Boolean> checkDeviceIdle() {
+        // JobScheduler doesn't provide queries about whether the device is idle.
+        // We schedule 2 tasks here and the task which resolves
+        // the future first will determine whether the device is idle or not.
+        var future = new CompletableFuture<Boolean>();
+        mPendingIdleFutures.add(future);
+        scheduleIdleJob();
+        mHandler.postDelayed(() -> future.complete(false), PENDING_CHECK_MILLIS);
         return future;
     }
 
     @WorkerThread
     private void scheduleIdleJob() {
+        // Simulate idle jobs during test. Otherwise we need to wait for
+        // more than 30 mins for JS to trigger the job.
+        boolean isIdle = SystemProperties.getBoolean("debug.pm.gentle_update_test.is_idle", false);
+        if (isIdle) {
+            mHandler.post(this::runIdleJob);
+            return;
+        }
+
         if (mHasPendingIdleJob) {
             // No need to schedule the job again
             return;
@@ -140,32 +207,85 @@ public class GentleUpdateHelper {
     private void runIdleJob() {
         mHasPendingIdleJob = false;
         processPendingChecksInIdle();
+
+        for (var f : mPendingIdleFutures) {
+            f.complete(true);
+        }
+        mPendingIdleFutures.clear();
     }
 
     @WorkerThread
-    private void processPendingCheck(PendingInstallConstraintsCheck pendingCheck, boolean isIdle) {
+    private boolean areConstraintsSatisfied(List<String> packageNames,
+            InstallConstraints constraints, boolean isIdle) {
+        return (!constraints.isRequireDeviceIdle() || isIdle)
+                && (!constraints.isRequireAppNotForeground()
+                || !mAppStateHelper.hasForegroundApp(packageNames))
+                && (!constraints.isRequireAppNotInteracting()
+                || !mAppStateHelper.hasInteractingApp(packageNames))
+                && (!constraints.isRequireAppNotTopVisible()
+                || !mAppStateHelper.hasTopVisibleApp(packageNames))
+                && (!constraints.isRequireNotInCall()
+                || !mAppStateHelper.isInCall());
+    }
+
+    @WorkerThread
+    private boolean processPendingCheck(
+            PendingInstallConstraintsCheck pendingCheck, boolean isIdle) {
         var future = pendingCheck.future;
         if (future.isDone()) {
-            return;
+            return true;
         }
         var constraints = pendingCheck.constraints;
         var packageNames = mAppStateHelper.getDependencyPackages(pendingCheck.packageNames);
-        var constraintsSatisfied = (!constraints.isRequireDeviceIdle() || isIdle)
-                && (!constraints.isRequireAppNotForeground()
-                        || !mAppStateHelper.hasForegroundApp(packageNames))
-                && (!constraints.isRequireAppNotInteracting()
-                        || !mAppStateHelper.hasInteractingApp(packageNames))
-                && (!constraints.isRequireAppNotTopVisible()
-                        || !mAppStateHelper.hasTopVisibleApp(packageNames))
-                && (!constraints.isRequireNotInCall()
-                        || !mAppStateHelper.isInCall());
-        future.complete(new InstallConstraintsResult((constraintsSatisfied)));
+        var satisfied = areConstraintsSatisfied(packageNames, constraints, isIdle);
+        if (satisfied || pendingCheck.isTimedOut()) {
+            future.complete(new InstallConstraintsResult((satisfied)));
+            return true;
+        }
+        return false;
     }
 
     @WorkerThread
     private void processPendingChecksInIdle() {
-        while (!mPendingChecks.isEmpty()) {
-            processPendingCheck(mPendingChecks.remove(), true);
+        int size = mPendingChecks.size();
+        for (int i = 0; i < size; ++i) {
+            var pendingCheck = mPendingChecks.remove();
+            if (!processPendingCheck(pendingCheck, true)) {
+                // Not resolved. Put it back in the queue.
+                mPendingChecks.add(pendingCheck);
+            }
+        }
+        if (!mPendingChecks.isEmpty()) {
+            // Schedule a job for remaining pending checks
+            scheduleIdleJob();
+        }
+    }
+
+    @WorkerThread
+    private void onUidImportance(String packageName,
+            @RunningAppProcessInfo.Importance int importance) {
+        int size = mPendingChecks.size();
+        for (int i = 0; i < size; ++i) {
+            var pendingCheck = mPendingChecks.remove();
+            var dependencyPackages =
+                    mAppStateHelper.getDependencyPackages(pendingCheck.packageNames);
+            if (!dependencyPackages.contains(packageName)
+                    || !processPendingCheck(pendingCheck, false)) {
+                mPendingChecks.add(pendingCheck);
+            }
+        }
+        if (!mPendingChecks.isEmpty()) {
+            // Schedule a job for remaining pending checks
+            scheduleIdleJob();
+        }
+    }
+
+    private void onUidImportance(int uid, @RunningAppProcessInfo.Importance int importance) {
+        var pm = ActivityThread.getPackageManager();
+        try {
+            var packageName = pm.getNameForUid(uid);
+            mHandler.post(() -> onUidImportance(packageName, importance));
+        } catch (RemoteException ignore) {
         }
     }
 }

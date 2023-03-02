@@ -29,6 +29,9 @@ import android.view.View;
 import android.view.View.OnKeyListener;
 import android.view.ViewTreeObserver;
 import android.widget.FrameLayout;
+import android.window.OnBackAnimationCallback;
+
+import androidx.annotation.NonNull;
 
 import com.android.keyguard.KeyguardSecurityContainer.SecurityCallback;
 import com.android.keyguard.KeyguardSecurityModel.SecurityMode;
@@ -67,8 +70,12 @@ public class KeyguardHostViewController extends ViewController<KeyguardHostView>
     private final KeyguardUpdateMonitorCallback mUpdateCallback =
             new KeyguardUpdateMonitorCallback() {
                 @Override
-                public void onTrustGrantedForCurrentUser(boolean dismissKeyguard,
-                        TrustGrantFlags flags, String message) {
+                public void onTrustGrantedForCurrentUser(
+                        boolean dismissKeyguard,
+                        boolean newlyUnlocked,
+                        TrustGrantFlags flags,
+                        String message
+                ) {
                     if (dismissKeyguard) {
                         if (!mView.isVisibleToUser()) {
                             // The trust agent dismissed the keyguard without the user proving
@@ -387,6 +394,14 @@ public class KeyguardHostViewController extends ViewController<KeyguardHostView>
             return true;
         }
         return false;
+    }
+
+    /**
+     * @return the {@link OnBackAnimationCallback} to animate this view during a back gesture.
+     */
+    @NonNull
+    public OnBackAnimationCallback getBackCallback() {
+        return mKeyguardSecurityContainerController.getBackCallback();
     }
 
     /**

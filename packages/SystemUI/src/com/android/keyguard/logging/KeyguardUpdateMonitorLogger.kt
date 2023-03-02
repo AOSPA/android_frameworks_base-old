@@ -132,6 +132,12 @@ class KeyguardUpdateMonitorLogger @Inject constructor(
         logBuffer.log(TAG, DEBUG, { int1 = faceRunningState }, { "faceRunningState: $int1" })
     }
 
+    fun logFaceUnlockPossible(isFaceUnlockPossible: Boolean) {
+        logBuffer.log(TAG, DEBUG,
+                { bool1 = isFaceUnlockPossible },
+                {"isUnlockWithFacePossible: $bool1"})
+    }
+
     fun logFingerprintAuthForWrongUser(authUserId: Int) {
         logBuffer.log(TAG, DEBUG,
                 { int1 = authUserId },
@@ -379,14 +385,17 @@ class KeyguardUpdateMonitorLogger @Inject constructor(
 
     fun logTrustGrantedWithFlags(
             flags: Int,
+            newlyUnlocked: Boolean,
             userId: Int,
             message: String?
     ) {
         logBuffer.log(TAG, DEBUG, {
             int1 = flags
+            bool1 = newlyUnlocked
             int2 = userId
             str1 = message
-        }, { "trustGrantedWithFlags[user=$int2] flags=${TrustGrantFlags(int1)} message=$str1" })
+        }, { "trustGrantedWithFlags[user=$int2] newlyUnlocked=$bool1 " +
+                "flags=${TrustGrantFlags(int1)} message=$str1" })
     }
 
     fun logTrustChanged(

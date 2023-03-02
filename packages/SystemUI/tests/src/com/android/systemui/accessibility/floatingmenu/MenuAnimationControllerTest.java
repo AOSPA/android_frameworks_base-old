@@ -20,8 +20,10 @@ import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyZeroInteractions;
 
 import android.graphics.PointF;
 import android.testing.AndroidTestingRunner;
@@ -29,7 +31,12 @@ import android.testing.TestableLooper;
 import android.view.View;
 import android.view.ViewPropertyAnimator;
 import android.view.WindowManager;
+import android.view.accessibility.AccessibilityManager;
 
+import androidx.dynamicanimation.animation.DynamicAnimation;
+import androidx.dynamicanimation.animation.FlingAnimation;
+import androidx.dynamicanimation.animation.SpringAnimation;
+import androidx.dynamicanimation.animation.SpringForce;
 import androidx.test.filters.SmallTest;
 
 import com.android.systemui.Prefs;
@@ -37,8 +44,15 @@ import com.android.systemui.SysuiTestCase;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
+
+import java.util.Optional;
 
 /** Tests for {@link MenuAnimationController}. */
 @RunWith(AndroidTestingRunner.class)
@@ -47,30 +61,39 @@ import org.junit.runner.RunWith;
 public class MenuAnimationControllerTest extends SysuiTestCase {
 
     private boolean mLastIsMoveToTucked;
+    private ArgumentCaptor<DynamicAnimation.OnAnimationEndListener> mEndListenerCaptor;
     private ViewPropertyAnimator mViewPropertyAnimator;
     private MenuView mMenuView;
-    private MenuAnimationController mMenuAnimationController;
+    private TestMenuAnimationController mMenuAnimationController;
+
+    @Rule
+    public MockitoRule mockito = MockitoJUnit.rule();
+
+    @Mock
+    private AccessibilityManager mAccessibilityManager;
 
     @Before
     public void setUp() throws Exception {
         final WindowManager stubWindowManager = mContext.getSystemService(WindowManager.class);
         final MenuViewAppearance stubMenuViewAppearance = new MenuViewAppearance(mContext,
                 stubWindowManager);
-        final MenuViewModel stubMenuViewModel = new MenuViewModel(mContext);
+        final MenuViewModel stubMenuViewModel = new MenuViewModel(mContext, mAccessibilityManager);
 
         mMenuView = spy(new MenuView(mContext, stubMenuViewModel, stubMenuViewAppearance));
         mViewPropertyAnimator = spy(mMenuView.animate());
         doReturn(mViewPropertyAnimator).when(mMenuView).animate();
 
-        mMenuAnimationController = new MenuAnimationController(mMenuView);
+        mMenuAnimationController = new TestMenuAnimationController(mMenuView);
         mLastIsMoveToTucked = Prefs.getBoolean(mContext,
                 Prefs.Key.HAS_ACCESSIBILITY_FLOATING_MENU_TUCKED, /* defaultValue= */ false);
+        mEndListenerCaptor = ArgumentCaptor.forClass(DynamicAnimation.OnAnimationEndListener.class);
     }
 
     @After
     public void tearDown() throws Exception {
         Prefs.putBoolean(mContext, Prefs.Key.HAS_ACCESSIBILITY_FLOATING_MENU_TUCKED,
                 mLastIsMoveToTucked);
+        mEndListenerCaptor.getAllValues().clear();
     }
 
     @Test
@@ -121,5 +144,116 @@ public class MenuAnimationControllerTest extends SysuiTestCase {
                 Prefs.Key.HAS_ACCESSIBILITY_FLOATING_MENU_TUCKED, /* defaultValue= */ true);
 
         assertThat(isMoveToTucked).isFalse();
+    }
+
+    @Test
+    public void startTuckedAnimationPreview_hasAnimation() {
+        mMenuView.clearAnimation();
+
+        mMenuAnimationController.startTuckedAnimationPreview();
+
+        assertThat(mMenuView.getAnimation()).isNotNull();
+    }
+
+    @Test
+    public void startSpringAnimationsAndEndOneAnimation_notTriggerEndAction() {
+        final Runnable onSpringAnimationsEndCallback = mock(Runnable.class);
+        mMenuAnimationController.setSpringAnimationsEndAction(onSpringAnimationsEndCallback);
+
+        setupAndRunSpringAnimations();
+        final Optional<DynamicAnimation> anyAnimation =
+                mMenuAnimationController.mPositionAnimations.values().stream().findAny();
+        anyAnimation.ifPresent(this::skipAnimationToEnd);
+
+        verifyZeroInteractions(onSpringAnimationsEndCallback);
+    }
+
+    @Test
+    public void startAndEndSpringAnimations_triggerEndAction() {
+        final Runnable onSpringAnimationsEndCallback = mock(Runnable.class);
+        mMenuAnimationController.setSpringAnimationsEndAction(onSpringAnimationsEndCallback);
+
+        setupAndRunSpringAnimations();
+        mMenuAnimationController.mPositionAnimations.values().forEach(this::skipAnimationToEnd);
+
+        verify(onSpringAnimationsEndCallback).run();
+    }
+
+    @Test
+    public void flingThenSpringAnimationsAreEnded_triggerEndAction() {
+        final Runnable onSpringAnimationsEndCallback = mock(Runnable.class);
+        mMenuAnimationController.setSpringAnimationsEndAction(onSpringAnimationsEndCallback);
+
+        mMenuAnimationController.flingMenuThenSpringToEdge(/* x= */ 0, /* velocityX= */
+                100, /* velocityY= */ 100);
+        mMenuAnimationController.mPositionAnimations.values()
+                .forEach(animation -> verify((FlingAnimation) animation).addEndListener(
+                        mEndListenerCaptor.capture()));
+        mEndListenerCaptor.getAllValues()
+                .forEach(listener -> listener.onAnimationEnd(mock(DynamicAnimation.class),
+                        /* canceled */ false, /* endValue */ 0, /* endVelocity */ 0));
+        mMenuAnimationController.mPositionAnimations.values().forEach(this::skipAnimationToEnd);
+
+        verify(onSpringAnimationsEndCallback).run();
+    }
+
+    @Test
+    public void existFlingIsRunningAndTheOtherAreEnd_notTriggerEndAction() {
+        final Runnable onSpringAnimationsEndCallback = mock(Runnable.class);
+        mMenuAnimationController.setSpringAnimationsEndAction(onSpringAnimationsEndCallback);
+
+        mMenuAnimationController.flingMenuThenSpringToEdge(/* x= */ 0, /* velocityX= */
+                200, /* velocityY= */ 200);
+        mMenuAnimationController.mPositionAnimations.values()
+                .forEach(animation -> verify((FlingAnimation) animation).addEndListener(
+                        mEndListenerCaptor.capture()));
+        final Optional<DynamicAnimation.OnAnimationEndListener> anyAnimation =
+                mEndListenerCaptor.getAllValues().stream().findAny();
+        anyAnimation.ifPresent(
+                listener -> listener.onAnimationEnd(mock(DynamicAnimation.class), /* canceled */
+                        false, /* endValue */ 0, /* endVelocity */ 0));
+        mMenuAnimationController.mPositionAnimations.values()
+                .stream()
+                .filter(animation -> animation instanceof SpringAnimation)
+                .forEach(this::skipAnimationToEnd);
+
+        verifyZeroInteractions(onSpringAnimationsEndCallback);
+    }
+
+    private void setupAndRunSpringAnimations() {
+        final float stiffness = 700f;
+        final float dampingRatio = 0.85f;
+        final float velocity = 100f;
+        final float finalPosition = 300f;
+
+        mMenuAnimationController.springMenuWith(DynamicAnimation.TRANSLATION_X, new SpringForce()
+                .setStiffness(stiffness)
+                .setDampingRatio(dampingRatio), velocity, finalPosition);
+        mMenuAnimationController.springMenuWith(DynamicAnimation.TRANSLATION_Y, new SpringForce()
+                .setStiffness(stiffness)
+                .setDampingRatio(dampingRatio), velocity, finalPosition);
+    }
+
+    private void skipAnimationToEnd(DynamicAnimation animation) {
+        final SpringAnimation springAnimation = ((SpringAnimation) animation);
+        // The doAnimationFrame function is used for skipping animation to the end.
+        springAnimation.doAnimationFrame(100);
+        springAnimation.skipToEnd();
+        springAnimation.doAnimationFrame(200);
+    }
+
+    /**
+     * Wrapper class for testing.
+     */
+    private static class TestMenuAnimationController extends MenuAnimationController {
+        TestMenuAnimationController(MenuView menuView) {
+            super(menuView);
+        }
+
+        @Override
+        FlingAnimation createFlingAnimation(MenuView menuView,
+                MenuPositionProperty menuPositionProperty) {
+            return spy(super.createFlingAnimation(menuView, menuPositionProperty));
+        }
     }
 }

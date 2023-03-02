@@ -25,8 +25,8 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import com.android.settingslib.spa.framework.compose.LocalNavController
 
-const val INJECT_ENTRY_NAME = "INJECT"
-const val ROOT_ENTRY_NAME = "ROOT"
+private const val INJECT_ENTRY_NAME = "INJECT"
+private const val ROOT_ENTRY_NAME = "ROOT"
 
 interface EntryData {
     val pageId: String?
@@ -151,7 +151,7 @@ data class SettingsEntry(
     }
 
     @Composable
-    fun provideLocalEntryData(arguments: Bundle): ProvidedValue<EntryData> {
+    private fun provideLocalEntryData(arguments: Bundle): ProvidedValue<EntryData> {
         val controller = LocalNavController.current
         return LocalEntryDataProvider provides remember {
             object : EntryData {
@@ -185,6 +185,8 @@ class SettingsEntryBuilder(private val name: String, private val owner: Settings
     private var sliceDataFn: SliceDataGetter = { _: Uri, _: Bundle? -> null }
 
     fun build(): SettingsEntry {
+        val page = fromPage ?: owner
+        val isEnabled = page.isEnabled()
         return SettingsEntry(
             id = id(),
             name = name,
@@ -196,10 +198,10 @@ class SettingsEntryBuilder(private val name: String, private val owner: Settings
             toPage = toPage,
 
             // attributes
-            isAllowSearch = isAllowSearch,
+            isAllowSearch = isEnabled && isAllowSearch,
             isSearchDataDynamic = isSearchDataDynamic,
             hasMutableStatus = hasMutableStatus,
-            hasSliceSupport = hasSliceSupport,
+            hasSliceSupport = isEnabled && hasSliceSupport,
 
             // functions
             statusDataImpl = statusDataFn,

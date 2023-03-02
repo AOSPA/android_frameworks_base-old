@@ -44,6 +44,7 @@ import android.hardware.input.IInputDeviceBatteryState;
 import android.hardware.input.IInputDevicesChangedListener;
 import android.hardware.input.IInputManager;
 import android.hardware.input.IInputSensorEventListener;
+import android.hardware.input.IKeyboardBacklightListener;
 import android.hardware.input.ITabletModeChangedListener;
 import android.hardware.input.InputDeviceIdentifier;
 import android.hardware.input.InputManager;
@@ -69,6 +70,7 @@ import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ShellCallback;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.VibrationEffect;
 import android.os.vibrator.StepSegment;
@@ -156,6 +158,11 @@ public class InputManagerService extends IInputManager.Stub
     private static final int DEFAULT_VIBRATION_MAGNITUDE = 192;
     private static final AdditionalDisplayInputProperties
             DEFAULT_ADDITIONAL_DISPLAY_INPUT_PROPERTIES = new AdditionalDisplayInputProperties();
+
+    // To disable Keyboard backlight control via Framework, run:
+    // 'adb shell setprop persist.input.keyboard_backlight_control.enabled false' (requires restart)
+    private static final boolean KEYBOARD_BACKLIGHT_CONTROL_ENABLED = SystemProperties.getBoolean(
+            "persist.input.keyboard.backlight_control.enabled", true);
 
     private final NativeInputManagerService mNative;
 
@@ -247,6 +254,18 @@ public class InputManagerService extends IInputManager.Stub
     private final Map<String, Integer> mRuntimeAssociations = new ArrayMap<>();
     @GuardedBy("mAssociationsLock")
     private final Map<String, String> mUniqueIdAssociations = new ArrayMap<>();
+    // The map from input port (String) to the keyboard layout identifiers (comma separated string
+    // containing language tag and layout type) associated with the corresponding keyboard device.
+    // Currently only accessed by InputReader.
+    @GuardedBy("mAssociationsLock")
+    private final Map<String, String> mKeyboardLayoutAssociations = new ArrayMap<>();
+
+    // Stores input ports associated with device types. For example, adding an association
+    // {"123", "touchNavigation"} here would mean that a touch device appearing at port "123" would
+    // enumerate as a "touch navigation" device rather than the default "touchpad as a mouse
+    // pointer" device.
+    @GuardedBy("mAssociationsLock")
+    private final Map<String, String> mDeviceTypeAssociations = new ArrayMap<>();
 
     // Guards per-display input properties and properties relating to the mouse pointer.
     // Threads can wait on this lock to be notified the next time the display on which the mouse
@@ -292,7 +311,7 @@ public class InputManagerService extends IInputManager.Stub
     private final BatteryController mBatteryController;
 
     // Manages Keyboard backlight
-    private final KeyboardBacklightController mKeyboardBacklightController;
+    private final KeyboardBacklightControllerInterface mKeyboardBacklightController;
 
     // Manages Keyboard modifier keys remapping
     private final KeyRemapper mKeyRemapper;
@@ -409,8 +428,10 @@ public class InputManagerService extends IInputManager.Stub
         mKeyboardLayoutManager = new KeyboardLayoutManager(mContext, mNative, mDataStore,
                 injector.getLooper());
         mBatteryController = new BatteryController(mContext, mNative, injector.getLooper());
-        mKeyboardBacklightController = new KeyboardBacklightController(mContext, mNative,
-                mDataStore, injector.getLooper());
+        mKeyboardBacklightController =
+                KEYBOARD_BACKLIGHT_CONTROL_ENABLED ? new KeyboardBacklightController(mContext,
+                        mNative, mDataStore, injector.getLooper())
+                        : new KeyboardBacklightControllerInterface() {};
         mKeyRemapper = new KeyRemapper(mContext, mNative, mDataStore, injector.getLooper());
 
         mUseDevInputEventForAudioJack =
@@ -1193,7 +1214,7 @@ public class InputManagerService extends IInputManager.Stub
     @Override // Binder call
     public String getKeyboardLayoutForInputDevice(InputDeviceIdentifier identifier,
             @UserIdInt int userId, @NonNull InputMethodInfo imeInfo,
-            @NonNull InputMethodSubtype imeSubtype) {
+            @Nullable InputMethodSubtype imeSubtype) {
         return mKeyboardLayoutManager.getKeyboardLayoutForInputDevice(identifier, userId,
                 imeInfo, imeSubtype);
     }
@@ -1202,16 +1223,16 @@ public class InputManagerService extends IInputManager.Stub
     @Override // Binder call
     public void setKeyboardLayoutForInputDevice(InputDeviceIdentifier identifier,
             @UserIdInt int userId, @NonNull InputMethodInfo imeInfo,
-            @NonNull InputMethodSubtype imeSubtype, String keyboardLayoutDescriptor) {
+            @Nullable InputMethodSubtype imeSubtype, String keyboardLayoutDescriptor) {
         super.setKeyboardLayoutForInputDevice_enforcePermission();
         mKeyboardLayoutManager.setKeyboardLayoutForInputDevice(identifier, userId, imeInfo,
                 imeSubtype, keyboardLayoutDescriptor);
     }
 
     @Override // Binder call
-    public String[] getKeyboardLayoutListForInputDevice(InputDeviceIdentifier identifier,
+    public KeyboardLayout[] getKeyboardLayoutListForInputDevice(InputDeviceIdentifier identifier,
             @UserIdInt int userId, @NonNull InputMethodInfo imeInfo,
-            @NonNull InputMethodSubtype imeSubtype) {
+            @Nullable InputMethodSubtype imeSubtype) {
         return mKeyboardLayoutManager.getKeyboardLayoutListForInputDevice(identifier, userId,
                 imeInfo, imeSubtype);
     }
@@ -1894,8 +1915,7 @@ public class InputManagerService extends IInputManager.Stub
         if (!checkCallingPermission(
                 android.Manifest.permission.ASSOCIATE_INPUT_DEVICE_TO_DISPLAY,
                 "removeUniqueIdAssociation()")) {
-            throw new SecurityException(
-                    "Requires ASSOCIATE_INPUT_DEVICE_TO_DISPLAY permission");
+            throw new SecurityException("Requires ASSOCIATE_INPUT_DEVICE_TO_DISPLAY permission");
         }
 
         Objects.requireNonNull(inputPort);
@@ -1903,6 +1923,44 @@ public class InputManagerService extends IInputManager.Stub
             mUniqueIdAssociations.remove(inputPort);
         }
         mNative.changeUniqueIdAssociation();
+    }
+
+    void setTypeAssociationInternal(@NonNull String inputPort, @NonNull String type) {
+        Objects.requireNonNull(inputPort);
+        Objects.requireNonNull(type);
+        synchronized (mAssociationsLock) {
+            mDeviceTypeAssociations.put(inputPort, type);
+        }
+        mNative.changeTypeAssociation();
+    }
+
+    void unsetTypeAssociationInternal(@NonNull String inputPort) {
+        Objects.requireNonNull(inputPort);
+        synchronized (mAssociationsLock) {
+            mDeviceTypeAssociations.remove(inputPort);
+        }
+        mNative.changeTypeAssociation();
+    }
+
+    private void addKeyboardLayoutAssociation(@NonNull String inputPort,
+            @NonNull String languageTag, @NonNull String layoutType) {
+        Objects.requireNonNull(inputPort);
+        Objects.requireNonNull(languageTag);
+        Objects.requireNonNull(layoutType);
+
+        synchronized (mAssociationsLock) {
+            mKeyboardLayoutAssociations.put(inputPort,
+                    TextUtils.formatSimple("%s,%s", languageTag, layoutType));
+        }
+        mNative.changeKeyboardLayoutAssociation();
+    }
+
+    private void removeKeyboardLayoutAssociation(@NonNull String inputPort) {
+        Objects.requireNonNull(inputPort);
+        synchronized (mAssociationsLock) {
+            mKeyboardLayoutAssociations.remove(inputPort);
+        }
+        mNative.changeKeyboardLayoutAssociation();
     }
 
     @Override // Binder call
@@ -2178,6 +2236,24 @@ public class InputManagerService extends IInputManager.Stub
     }
 
     @Override
+    @EnforcePermission(Manifest.permission.MONITOR_KEYBOARD_BACKLIGHT)
+    public void registerKeyboardBacklightListener(IKeyboardBacklightListener listener) {
+        super.registerKeyboardBacklightListener_enforcePermission();
+        Objects.requireNonNull(listener);
+        mKeyboardBacklightController.registerKeyboardBacklightListener(listener,
+                Binder.getCallingPid());
+    }
+
+    @Override
+    @EnforcePermission(Manifest.permission.MONITOR_KEYBOARD_BACKLIGHT)
+    public void unregisterKeyboardBacklightListener(IKeyboardBacklightListener listener) {
+        super.unregisterKeyboardBacklightListener_enforcePermission();
+        Objects.requireNonNull(listener);
+        mKeyboardBacklightController.unregisterKeyboardBacklightListener(listener,
+                Binder.getCallingPid());
+    }
+
+    @Override
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         if (!DumpUtils.checkDumpPermission(mContext, TAG, pw)) return;
         IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ");
@@ -2219,6 +2295,13 @@ public class InputManagerService extends IInputManager.Stub
                 mUniqueIdAssociations.forEach((k, v) -> {
                     pw.print("  port: " + k);
                     pw.println("  uniqueId: " + v);
+                });
+            }
+            if (!mDeviceTypeAssociations.isEmpty()) {
+                pw.println("Type Associations:");
+                mDeviceTypeAssociations.forEach((k, v) -> {
+                    pw.print("  port: " + k);
+                    pw.println("  type: " + v);
                 });
             }
         }
@@ -2628,6 +2711,29 @@ public class InputManagerService extends IInputManager.Stub
         }
 
         return flatten(associations);
+    }
+
+    // Native callback
+    @SuppressWarnings("unused")
+    @VisibleForTesting
+    String[] getDeviceTypeAssociations() {
+        final Map<String, String> associations;
+        synchronized (mAssociationsLock) {
+            associations = new HashMap<>(mDeviceTypeAssociations);
+        }
+
+        return flatten(associations);
+    }
+
+    // Native callback
+    @SuppressWarnings("unused")
+    @VisibleForTesting
+    private String[] getKeyboardLayoutAssociations() {
+        final Map<String, String> configs = new ArrayMap<>();
+        synchronized (mAssociationsLock) {
+            configs.putAll(mKeyboardLayoutAssociations);
+        }
+        return flatten(configs);
     }
 
     /**
@@ -3165,6 +3271,7 @@ public class InputManagerService extends IInputManager.Stub
         public void setInteractive(boolean interactive) {
             mNative.setInteractive(interactive);
             mBatteryController.onInteractiveChanged(interactive);
+            mKeyboardBacklightController.onInteractiveChanged(interactive);
         }
 
         @Override
@@ -3248,10 +3355,12 @@ public class InputManagerService extends IInputManager.Stub
         public void onInputMethodSubtypeChangedForKeyboardLayoutMapping(@UserIdInt int userId,
                 @Nullable InputMethodSubtypeHandle subtypeHandle,
                 @Nullable InputMethodSubtype subtype) {
-            if (DEBUG) {
-                Slog.i(TAG, "InputMethodSubtype changed: userId=" + userId
-                        + " subtypeHandle=" + subtypeHandle);
-            }
+            mKeyboardLayoutManager.onInputMethodSubtypeChanged(userId, subtypeHandle, subtype);
+        }
+
+        @Override
+        public void notifyUserActivity() {
+            mKeyboardBacklightController.notifyUserActivity();
         }
 
         @Override
@@ -3262,6 +3371,33 @@ public class InputManagerService extends IInputManager.Stub
         @Override
         public void decrementKeyboardBacklight(int deviceId) {
             mKeyboardBacklightController.decrementKeyboardBacklight(deviceId);
+        }
+
+        @Override
+        public void setTypeAssociation(@NonNull String inputPort, @NonNull String type) {
+            setTypeAssociationInternal(inputPort, type);
+        }
+
+        @Override
+        public void unsetTypeAssociation(@NonNull String inputPort) {
+            unsetTypeAssociationInternal(inputPort);
+        }
+
+        @Override
+        public void addKeyboardLayoutAssociation(@NonNull String inputPort,
+                @NonNull String languageTag, @NonNull String layoutType) {
+            InputManagerService.this.addKeyboardLayoutAssociation(inputPort,
+                    languageTag, layoutType);
+        }
+
+        @Override
+        public void removeKeyboardLayoutAssociation(@NonNull String inputPort) {
+            InputManagerService.this.removeKeyboardLayoutAssociation(inputPort);
+        }
+
+        @Override
+        public void setStylusButtonMotionEventsEnabled(boolean enabled) {
+            mNative.setStylusButtonMotionEventsEnabled(enabled);
         }
     }
 
@@ -3352,5 +3488,16 @@ public class InputManagerService extends IInputManager.Stub
             }
             applyAdditionalDisplayInputPropertiesLocked(properties);
         }
+    }
+
+    interface KeyboardBacklightControllerInterface {
+        default void incrementKeyboardBacklight(int deviceId) {}
+        default void decrementKeyboardBacklight(int deviceId) {}
+        default void registerKeyboardBacklightListener(IKeyboardBacklightListener l, int pid) {}
+        default void unregisterKeyboardBacklightListener(IKeyboardBacklightListener l, int pid) {}
+        default void onInteractiveChanged(boolean isInteractive) {}
+        default void notifyUserActivity() {}
+        default void systemRunning() {}
+        default void dump(PrintWriter pw) {}
     }
 }

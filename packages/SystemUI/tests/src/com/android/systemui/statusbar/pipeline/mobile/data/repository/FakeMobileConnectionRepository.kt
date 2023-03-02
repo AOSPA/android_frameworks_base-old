@@ -16,19 +16,29 @@
 
 package com.android.systemui.statusbar.pipeline.mobile.data.repository
 
+import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectionModel
+import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameModel
+import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionRepository.Companion.DEFAULT_NUM_LEVELS
 import kotlinx.coroutines.flow.MutableStateFlow
 
 // TODO(b/261632894): remove this in favor of the real impl or DemoMobileConnectionRepository
-class FakeMobileConnectionRepository(override val subId: Int) : MobileConnectionRepository {
+class FakeMobileConnectionRepository(
+    override val subId: Int,
+    override val tableLogBuffer: TableLogBuffer,
+) : MobileConnectionRepository {
     private val _connectionInfo = MutableStateFlow(MobileConnectionModel())
     override val connectionInfo = _connectionInfo
+
+    override val numberOfLevels = MutableStateFlow(DEFAULT_NUM_LEVELS)
 
     private val _dataEnabled = MutableStateFlow(true)
     override val dataEnabled = _dataEnabled
 
-    private val _isDefaultDataSubscription = MutableStateFlow(true)
-    override val isDefaultDataSubscription = _isDefaultDataSubscription
+    override val cdmaRoaming = MutableStateFlow(false)
+
+    override val networkName =
+        MutableStateFlow<NetworkNameModel>(NetworkNameModel.Default("default"))
 
     fun setConnectionInfo(model: MobileConnectionModel) {
         _connectionInfo.value = model
@@ -36,9 +46,5 @@ class FakeMobileConnectionRepository(override val subId: Int) : MobileConnection
 
     fun setDataEnabled(enabled: Boolean) {
         _dataEnabled.value = enabled
-    }
-
-    fun setIsDefaultDataSubscription(isDefault: Boolean) {
-        _isDefaultDataSubscription.value = isDefault
     }
 }

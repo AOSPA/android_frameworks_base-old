@@ -132,6 +132,7 @@ public class GlobalSettingsValidators {
                 new DiscreteValueValidator(new String[] {"0", "1"}));
         VALIDATORS.put(Global.LOW_POWER_MODE_TRIGGER_LEVEL, PERCENTAGE_INTEGER_VALIDATOR);
         VALIDATORS.put(Global.LOW_POWER_MODE_TRIGGER_LEVEL_MAX, PERCENTAGE_INTEGER_VALIDATOR);
+        VALIDATORS.put(Global.LOW_POWER_MODE_REMINDER_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(
                 Global.AUTOMATIC_POWER_SAVE_MODE,
                 new DiscreteValueValidator(new String[] {"0", "1"}));
@@ -305,6 +306,13 @@ public class GlobalSettingsValidators {
         VALIDATORS.put(Global.Wearable.COMPANION_OS_VERSION, ANY_INTEGER_VALIDATOR);
         VALIDATORS.put(Global.Wearable.ENABLE_ALL_LANGUAGES, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.Wearable.OEM_SETUP_VERSION, ANY_INTEGER_VALIDATOR);
+        VALIDATORS.put(
+                Global.Wearable.OEM_SETUP_COMPLETED_STATUS,
+                new DiscreteValueValidator(
+                        new String[] {
+                                String.valueOf(Global.Wearable.OEM_SETUP_COMPLETED_FAILURE),
+                                String.valueOf(Global.Wearable.OEM_SETUP_COMPLETED_SUCCESS),
+                        }));
         VALIDATORS.put(Global.Wearable.MASTER_GESTURES_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.Wearable.UNGAZE_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(
@@ -351,5 +359,6 @@ public class GlobalSettingsValidators {
                                 String.valueOf(Global.Wearable.EARLY_UPDATES_STATUS_SKIPPED),
                                 String.valueOf(Global.Wearable.EARLY_UPDATES_STATUS_ABORTED),
                           }));
+        VALIDATORS.put(Global.Wearable.DYNAMIC_COLOR_THEME_ENABLED, BOOLEAN_VALIDATOR);
     }
 }

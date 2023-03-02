@@ -16,20 +16,15 @@
 
 package com.android.server.biometrics.sensors.fingerprint.aidl;
 
-import static android.hardware.biometrics.BiometricFingerprintConstants.FINGERPRINT_ACQUIRED_START;
-import static android.hardware.biometrics.BiometricFingerprintConstants.FINGERPRINT_ACQUIRED_VENDOR;
-
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.TaskStackListener;
 import android.content.Context;
 import android.hardware.biometrics.BiometricAuthenticator;
-import android.hardware.biometrics.BiometricConstants;
 import android.hardware.biometrics.BiometricFingerprintConstants;
 import android.hardware.biometrics.BiometricFingerprintConstants.FingerprintAcquired;
 import android.hardware.biometrics.BiometricManager.Authenticators;
 import android.hardware.biometrics.common.ICancellationSignal;
-import android.hardware.biometrics.common.OperationContext;
 import android.hardware.biometrics.fingerprint.PointerContext;
 import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
 import android.hardware.fingerprint.ISidefpsController;
@@ -47,6 +42,7 @@ import com.android.internal.R;
 import com.android.server.biometrics.log.BiometricContext;
 import com.android.server.biometrics.log.BiometricLogger;
 import com.android.server.biometrics.log.CallbackWithProbe;
+import com.android.server.biometrics.log.OperationContextExt;
 import com.android.server.biometrics.log.Probe;
 import com.android.server.biometrics.sensors.AuthSessionCoordinator;
 import com.android.server.biometrics.sensors.AuthenticationClient;
@@ -94,7 +90,6 @@ class FingerprintAuthenticationClient extends AuthenticationClient<AidlSession>
     private long mSideFpsLastAcquireStartTime;
     private Runnable mAuthSuccessRunnable;
     private final Clock mClock;
-    private boolean mDidFinishSfps;
 
     FingerprintAuthenticationClient(
             @NonNull Context context,
@@ -204,9 +199,8 @@ class FingerprintAuthenticationClient extends AuthenticationClient<AidlSession>
 
     @Override
     protected void handleLifecycleAfterAuth(boolean authenticated) {
-        if (authenticated && !mDidFinishSfps) {
+        if (authenticated) {
             mCallback.onClientFinished(this, true /* success */);
-            mDidFinishSfps = true;
         }
     }
 
@@ -216,13 +210,11 @@ class FingerprintAuthenticationClient extends AuthenticationClient<AidlSession>
         return false;
     }
 
-    public void handleAuthenticate(
+    @Override
+    public void onAuthenticated(
             BiometricAuthenticator.Identifier identifier,
             boolean authenticated,
             ArrayList<Byte> token) {
-        if (authenticated && mSensorProps.isAnySidefpsType()) {
-            Slog.i(TAG, "(sideFPS): No power press detected, sending auth");
-        }
         super.onAuthenticated(identifier, authenticated, token);
         if (authenticated) {
             mState = STATE_STOPPED;
@@ -233,74 +225,13 @@ class FingerprintAuthenticationClient extends AuthenticationClient<AidlSession>
     }
 
     @Override
-    public void onAuthenticated(
-            BiometricAuthenticator.Identifier identifier,
-            boolean authenticated,
-            ArrayList<Byte> token) {
-
-        mHandler.post(
-                () -> {
-                    long delay = 0;
-                    if (authenticated && mSensorProps.isAnySidefpsType()) {
-                        delay = isKeyguard() ? mWaitForAuthKeyguard : mWaitForAuthBp;
-
-                        if (mSideFpsLastAcquireStartTime != -1) {
-                            delay = Math.max(0,
-                                    delay - (mClock.millis() - mSideFpsLastAcquireStartTime));
-                        }
-
-                        Slog.i(TAG, "(sideFPS) Auth succeeded, sideFps "
-                                + "waiting for power until: " + delay + "ms");
-                    }
-
-                    if (mHandler.hasMessages(MESSAGE_FINGER_UP)) {
-                        Slog.i(TAG, "Finger up detected, sending auth");
-                        delay = 0;
-                    }
-
-                    mAuthSuccessRunnable =
-                            () -> handleAuthenticate(identifier, authenticated, token);
-                    mHandler.postDelayed(
-                            mAuthSuccessRunnable,
-                            MESSAGE_AUTH_SUCCESS,
-                            delay);
-                });
-    }
-
-    @Override
     public void onAcquired(@FingerprintAcquired int acquiredInfo, int vendorCode) {
         // For UDFPS, notify SysUI with acquiredInfo, so that the illumination can be turned off
         // for most ACQUIRED messages. See BiometricFingerprintConstants#FingerprintAcquired
         mSensorOverlays.ifUdfps(controller -> controller.onAcquired(getSensorId(), acquiredInfo));
         super.onAcquired(acquiredInfo, vendorCode);
-        if (mSensorProps.isAnySidefpsType()) {
-            if (acquiredInfo == FINGERPRINT_ACQUIRED_START) {
-                mSideFpsLastAcquireStartTime = mClock.millis();
-            }
-            final boolean shouldLookForVendor =
-                    mSkipWaitForPowerAcquireMessage == FINGERPRINT_ACQUIRED_VENDOR;
-            final boolean acquireMessageMatch = acquiredInfo == mSkipWaitForPowerAcquireMessage;
-            final boolean vendorMessageMatch = vendorCode == mSkipWaitForPowerVendorAcquireMessage;
-            final boolean ignorePowerPress =
-                    acquireMessageMatch && (!shouldLookForVendor || vendorMessageMatch);
-
-            if (ignorePowerPress) {
-                Slog.d(TAG, "(sideFPS) onFingerUp");
-                mHandler.post(() -> {
-                    if (mHandler.hasMessages(MESSAGE_AUTH_SUCCESS)) {
-                        Slog.d(TAG, "(sideFPS) skipping wait for power");
-                        mHandler.removeMessages(MESSAGE_AUTH_SUCCESS);
-                        mHandler.post(mAuthSuccessRunnable);
-                    } else {
-                        mHandler.postDelayed(() -> {
-                        }, MESSAGE_FINGER_UP, mFingerUpIgnoresPower);
-                    }
-                });
-            }
-        }
         PerformanceTracker pt = PerformanceTracker.getInstanceForSensorId(getSensorId());
         pt.incrementAcquireForUser(getTargetUserId(), isCryptoOperation());
-
     }
 
     @Override
@@ -333,7 +264,7 @@ class FingerprintAuthenticationClient extends AuthenticationClient<AidlSession>
     private ICancellationSignal doAuthenticate() throws RemoteException {
         final AidlSession session = getFreshDaemon();
 
-        final OperationContext opContext = getOperationContext();
+        final OperationContextExt opContext = getOperationContext();
         getBiometricContext().subscribe(opContext, ctx -> {
             if (session.hasContextMethods()) {
                 try {
@@ -356,7 +287,8 @@ class FingerprintAuthenticationClient extends AuthenticationClient<AidlSession>
         }
 
         if (session.hasContextMethods()) {
-            return session.getSession().authenticateWithContext(mOperationId, opContext);
+            return session.getSession().authenticateWithContext(
+                    mOperationId, opContext.toAidlContext());
         } else {
             return session.getSession().authenticate(mOperationId);
         }
@@ -494,22 +426,5 @@ class FingerprintAuthenticationClient extends AuthenticationClient<AidlSession>
     }
 
     @Override
-    public void onPowerPressed() {
-        if (mSensorProps.isAnySidefpsType()) {
-            Slog.i(TAG, "(sideFPS): onPowerPressed");
-            mHandler.post(() -> {
-                if (mDidFinishSfps) {
-                    return;
-                }
-                Slog.i(TAG, "(sideFPS): finishing auth");
-                // Ignore auths after a power has been detected
-                mHandler.removeMessages(MESSAGE_AUTH_SUCCESS);
-                // Do not call onError() as that will send an additional callback to coex.
-                mDidFinishSfps = true;
-                onErrorInternal(BiometricConstants.BIOMETRIC_ERROR_POWER_PRESSED, 0, true);
-                stopHalOperation();
-                mSensorOverlays.hide(getSensorId());
-            });
-        }
-    }
+    public void onPowerPressed() { }
 }

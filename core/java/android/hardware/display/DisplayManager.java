@@ -50,6 +50,8 @@ import android.util.SparseArray;
 import android.view.Display;
 import android.view.Surface;
 
+import com.android.internal.R;
+
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
@@ -139,6 +141,7 @@ public final class DisplayManager {
             VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED,
             VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED,
             VIRTUAL_DISPLAY_FLAG_OWN_FOCUS,
+            VIRTUAL_DISPLAY_FLAG_STEAL_TOP_FOCUS_DISABLED,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface VirtualDisplayFlag {}
@@ -428,6 +431,18 @@ public final class DisplayManager {
      */
     public static final int VIRTUAL_DISPLAY_FLAG_DEVICE_DISPLAY_GROUP = 1 << 15;
 
+
+    /**
+     * Virtual display flags: Indicates that the display should not become the top focused display
+     * by stealing the top focus from another display.
+     *
+     * @see Display#FLAG_STEAL_TOP_FOCUS_DISABLED
+     * @see #createVirtualDisplay
+     * @see #VIRTUAL_DISPLAY_FLAG_OWN_FOCUS
+     * @hide
+     */
+    @SystemApi
+    public static final int VIRTUAL_DISPLAY_FLAG_STEAL_TOP_FOCUS_DISABLED = 1 << 16;
 
     /** @hide */
     @IntDef(prefix = {"MATCH_CONTENT_FRAMERATE_"}, value = {
@@ -1307,6 +1322,22 @@ public final class DisplayManager {
     @RequiresPermission(Manifest.permission.OVERRIDE_DISPLAY_MODE_REQUESTS)
     public boolean shouldAlwaysRespectAppRequestedMode() {
         return mGlobal.shouldAlwaysRespectAppRequestedMode();
+    }
+
+    /**
+     * Returns whether device supports seamless refresh rate switching.
+     *
+     * Match content frame rate setting has three options: seamless, non-seamless and never.
+     * The seamless option does nothing if the device does not support seamless refresh rate
+     * switching. This API is used in such a case to hide the seamless option.
+     *
+     * @see DisplayManager#setRefreshRateSwitchingType
+     * @see DisplayManager#getMatchContentFrameRateUserPreference
+     * @hide
+     */
+    public boolean supportsSeamlessRefreshRateSwitching() {
+        return mContext.getResources().getBoolean(
+                R.bool.config_supportsSeamlessRefreshRateSwitching);
     }
 
     /**

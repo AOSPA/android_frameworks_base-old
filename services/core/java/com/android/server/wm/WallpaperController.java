@@ -370,7 +370,7 @@ class WallpaperController {
 
     boolean updateWallpaperOffset(WindowState wallpaperWin, boolean sync) {
         // Size of the display the wallpaper is rendered on.
-        final Rect lastWallpaperBounds = wallpaperWin.getLastReportedBounds();
+        final Rect lastWallpaperBounds = wallpaperWin.getParentFrame();
         // Full size of the wallpaper (usually larger than bounds above to parallax scroll when
         // swiping through Launcher pages).
         final Rect wallpaperFrame = wallpaperWin.getFrame();
@@ -756,9 +756,7 @@ class WallpaperController {
     private void updateWallpaperTokens(boolean visible) {
         for (int curTokenNdx = mWallpaperTokens.size() - 1; curTokenNdx >= 0; curTokenNdx--) {
             final WallpaperWindowToken token = mWallpaperTokens.get(curTokenNdx);
-            if (token.updateWallpaperWindows(visible)) {
-                token.mDisplayContent.assignWindowLayers(false /* setLayoutNeeded */);
-            }
+            token.updateWallpaperWindows(visible);
         }
     }
 

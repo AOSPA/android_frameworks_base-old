@@ -24,6 +24,7 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.IRemoteCallback;
 import android.os.PersistableBundle;
 import android.os.RemoteException;
 import android.util.Singleton;
@@ -53,6 +54,15 @@ public class ActivityClient {
     public void activityResumed(IBinder token, boolean handleSplashScreenExit) {
         try {
             getActivityClientController().activityResumed(token, handleSplashScreenExit);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
+    }
+
+    /** Reports {@link android.app.servertransaction.RefreshCallbackItem} is executed. */
+    public void activityRefreshed(IBinder token) {
+        try {
+            getActivityClientController().activityRefreshed(token);
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();
         }
@@ -372,6 +382,14 @@ public class ActivityClient {
         }
     }
 
+    void requestMultiwindowFullscreen(IBinder token, int request, IRemoteCallback callback) {
+        try {
+            getActivityClientController().requestMultiwindowFullscreen(token, request, callback);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
+    }
+
     void startLockTaskModeByToken(IBinder token) {
         try {
             getActivityClientController().startLockTaskModeByToken(token);
@@ -540,6 +558,14 @@ public class ActivityClient {
     void reportSplashScreenAttached(IBinder token) {
         try {
             getActivityClientController().splashScreenAttached(token);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
+    }
+
+    void enableTaskLocaleOverride(IBinder token) {
+        try {
+            getActivityClientController().enableTaskLocaleOverride(token);
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();
         }

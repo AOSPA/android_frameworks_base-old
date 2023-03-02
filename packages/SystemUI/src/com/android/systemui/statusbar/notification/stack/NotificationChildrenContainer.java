@@ -367,7 +367,7 @@ public class NotificationChildrenContainer extends ViewGroup
         }
 
         if (mUseRoundnessSourceTypes) {
-            row.requestRoundnessReset(FROM_PARENT);
+            row.requestRoundnessReset(FROM_PARENT, /* animate = */ false);
             applyRoundnessAndInvalidate();
         }
     }
@@ -616,9 +616,8 @@ public class NotificationChildrenContainer extends ViewGroup
      * Update the state of all its children based on a linear layout algorithm.
      *
      * @param parentState  the state of the parent
-     * @param ambientState the ambient state containing ambient information
      */
-    public void updateState(ExpandableViewState parentState, AmbientState ambientState) {
+    public void updateState(ExpandableViewState parentState) {
         int childCount = mAttachedChildren.size();
         int yPosition = mNotificationHeaderMargin + mCurrentHeaderTranslation;
         boolean firstChild = true;
@@ -661,9 +660,17 @@ public class NotificationChildrenContainer extends ViewGroup
             childState.height = intrinsicHeight;
             childState.setYTranslation(yPosition + launchTransitionCompensation);
             childState.hidden = false;
-            // When the group is expanded, the children cast the shadows rather than the parent
-            // so use the parent's elevation here.
-            if (childrenExpandedAndNotAnimating && mEnableShadowOnChildNotifications) {
+            if (child.isExpandAnimationRunning() || mContainingNotification.hasExpandingChild()) {
+                // Not modifying translationZ during launch animation. The translationZ of the
+                // expanding child is handled inside ExpandableNotificationRow and the translationZ
+                // of the other children inside the group should remain unchanged. In particular,
+                // they should not take over the translationZ of the parent, since the parent has
+                // a positive translationZ set only for the expanding child to be drawn above other
+                // notifications.
+                childState.setZTranslation(child.getTranslationZ());
+            } else if (childrenExpandedAndNotAnimating && mEnableShadowOnChildNotifications) {
+                // When the group is expanded, the children cast the shadows rather than the parent
+                // so use the parent's elevation here.
                 childState.setZTranslation(parentState.getZTranslation());
             } else {
                 childState.setZTranslation(0);
@@ -716,9 +723,15 @@ public class NotificationChildrenContainer extends ViewGroup
                 mHeaderViewState = new ViewState();
             }
             mHeaderViewState.initFrom(mNotificationHeader);
-            mHeaderViewState.setZTranslation(childrenExpandedAndNotAnimating
-                    ? parentState.getZTranslation()
-                    : 0);
+
+            if (mContainingNotification.hasExpandingChild()) {
+                // Not modifying translationZ during expand animation.
+                mHeaderViewState.setZTranslation(mNotificationHeader.getTranslationZ());
+            } else if (childrenExpandedAndNotAnimating) {
+                mHeaderViewState.setZTranslation(parentState.getZTranslation());
+            } else {
+                mHeaderViewState.setZTranslation(0);
+            }
             mHeaderViewState.setYTranslation(mCurrentHeaderTranslation);
             mHeaderViewState.setAlpha(mHeaderVisibleAmount);
             // The hiding is done automatically by the alpha, otherwise we'll pick it up again
@@ -1418,6 +1431,22 @@ public class NotificationChildrenContainer extends ViewGroup
     @Override
     public void applyRoundnessAndInvalidate() {
         boolean last = true;
+        if (mUseRoundnessSourceTypes) {
+            if (mNotificationHeaderWrapper != null) {
+                mNotificationHeaderWrapper.requestTopRoundness(
+                        /* value = */ getTopRoundness(),
+                        /* sourceType = */ FROM_PARENT,
+                        /* animate = */ false
+                );
+            }
+            if (mNotificationHeaderWrapperLowPriority != null) {
+                mNotificationHeaderWrapperLowPriority.requestTopRoundness(
+                        /* value = */ getTopRoundness(),
+                        /* sourceType = */ FROM_PARENT,
+                        /* animate = */ false
+                );
+            }
+        }
         for (int i = mAttachedChildren.size() - 1; i >= 0; i--) {
             ExpandableNotificationRow child = mAttachedChildren.get(i);
             if (child.getVisibility() == View.GONE) {
@@ -1427,7 +1456,8 @@ public class NotificationChildrenContainer extends ViewGroup
                 child.requestRoundness(
                         /* top = */ 0f,
                         /* bottom = */ last ? getBottomRoundness() : 0f,
-                        FROM_PARENT);
+                        /* sourceType = */ FROM_PARENT,
+                        /* animate = */ false);
             } else {
                 child.requestRoundness(
                         /* top = */ 0f,

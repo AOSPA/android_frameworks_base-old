@@ -21,6 +21,8 @@ import static android.accessibilityservice.AccessibilityTrace.FLAGS_WINDOW_MANAG
 import static android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
 
 import static com.android.internal.util.function.pooled.PooledLambda.obtainMessage;
+import static com.android.server.accessibility.AbstractAccessibilityServiceConnection.DISPLAY_TYPE_DEFAULT;
+import static com.android.server.accessibility.AbstractAccessibilityServiceConnection.DISPLAY_TYPE_PROXY;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -154,6 +156,30 @@ public class AccessibilityWindowManager {
     }
 
     /**
+     * Returns {@code true} if the window belongs to a display of {@code displayTypes}.
+     */
+    public boolean windowIdBelongsToDisplayType(int focusedWindowId, int displayTypes) {
+        // UIAutomation wants focus from any display type.
+        final int displayTypeMask = DISPLAY_TYPE_PROXY | DISPLAY_TYPE_DEFAULT;
+        if ((displayTypes & displayTypeMask) == displayTypeMask) {
+            return true;
+        }
+        synchronized (mLock) {
+            final int count = mDisplayWindowsObservers.size();
+            for (int i = 0; i < count; i++) {
+                final DisplayWindowsObserver observer = mDisplayWindowsObservers.valueAt(i);
+                if (observer != null
+                        && observer.findA11yWindowInfoByIdLocked(focusedWindowId) != null) {
+                    return observer.mIsProxy
+                            ? ((displayTypes & DISPLAY_TYPE_PROXY) != 0)
+                            : (displayTypes & DISPLAY_TYPE_DEFAULT) != 0;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * This class implements {@link WindowManagerInternal.WindowsForAccessibilityCallback} to
      * receive {@link WindowInfo}s from window manager when there's an accessibility change in
      * window and holds window lists information per display.
@@ -169,6 +195,7 @@ public class AccessibilityWindowManager {
         private List<AccessibilityWindowInfo> mWindows;
         private boolean mTrackingWindows = false;
         private boolean mHasWatchOutsideTouchWindow;
+        private boolean mIsProxy;
 
         /**
          * Constructor for DisplayWindowsObserver.
@@ -427,6 +454,7 @@ public class AccessibilityWindowManager {
                 return;
             }
             windowInfo.title = attributes.getWindowTitle();
+            windowInfo.locales = attributes.getLocales();
         }
 
         private boolean shouldUpdateWindowsLocked(boolean forceSend,
@@ -753,6 +781,7 @@ public class AccessibilityWindowManager {
             reportedWindow.setPictureInPicture(window.inPictureInPicture);
             reportedWindow.setDisplayId(window.displayId);
             reportedWindow.setTaskId(window.taskId);
+            reportedWindow.setLocales(window.locales);
 
             final int parentId = findWindowIdLocked(userId, window.parentToken);
             if (parentId >= 0) {
@@ -985,11 +1014,14 @@ public class AccessibilityWindowManager {
      *
      * @param displayId The logical display id.
      */
-    public void startTrackingWindows(int displayId) {
+    public void startTrackingWindows(int displayId, boolean proxyed) {
         synchronized (mLock) {
             DisplayWindowsObserver observer = mDisplayWindowsObservers.get(displayId);
             if (observer == null) {
                 observer = new DisplayWindowsObserver(displayId);
+            }
+            if (proxyed && !observer.mIsProxy) {
+                observer.mIsProxy = true;
             }
             if (observer.isTrackingWindowsLocked()) {
                 return;
@@ -1011,6 +1043,19 @@ public class AccessibilityWindowManager {
             if (observer != null) {
                 observer.stopTrackingWindowsLocked();
                 mDisplayWindowsObservers.remove(displayId);
+            }
+        }
+    }
+
+    /**
+     * Stops tracking a display as belonging to a proxy.
+     * @param displayId
+     */
+    public void stopTrackingDisplayProxy(int displayId) {
+        synchronized (mLock) {
+            DisplayWindowsObserver observer = mDisplayWindowsObservers.get(displayId);
+            if (observer != null) {
+                observer.mIsProxy = false;
             }
         }
     }
@@ -1728,15 +1773,21 @@ public class AccessibilityWindowManager {
     /**
      * Returns the display list including all displays which are tracking windows.
      *
+     * @param displayTypes the types of displays to retrieve
      * @return The display list.
      */
-    public ArrayList<Integer> getDisplayListLocked() {
+    public ArrayList<Integer> getDisplayListLocked(
+            @AbstractAccessibilityServiceConnection.DisplayTypes int displayTypes) {
         final ArrayList<Integer> displayList = new ArrayList<>();
         final int count = mDisplayWindowsObservers.size();
         for (int i = 0; i < count; i++) {
             final DisplayWindowsObserver observer = mDisplayWindowsObservers.valueAt(i);
             if (observer != null) {
-                displayList.add(observer.mDisplayId);
+                if (!observer.mIsProxy && (displayTypes & DISPLAY_TYPE_DEFAULT) != 0) {
+                    displayList.add(observer.mDisplayId);
+                } else if (observer.mIsProxy && (displayTypes & DISPLAY_TYPE_PROXY) != 0) {
+                    displayList.add(observer.mDisplayId);
+                }
             }
         }
         return displayList;

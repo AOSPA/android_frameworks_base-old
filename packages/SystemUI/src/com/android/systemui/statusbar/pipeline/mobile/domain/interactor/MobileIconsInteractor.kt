@@ -23,6 +23,7 @@ import com.android.settingslib.SignalIcon.MobileIconGroup
 import com.android.settingslib.mobile.TelephonyIcons
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
+import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectivityModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.SubscriptionModel
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionRepository
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionsRepository
@@ -31,14 +32,17 @@ import com.android.systemui.util.CarrierConfigTracker
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.transformLatest
 
 /**
  * Business layer logic for the set of mobile subscription icons.
@@ -55,6 +59,24 @@ interface MobileIconsInteractor {
     val filteredSubscriptions: Flow<List<SubscriptionModel>>
     /** True if the active mobile data subscription has data enabled */
     val activeDataConnectionHasDataEnabled: StateFlow<Boolean>
+
+    /** True if the RAT icon should always be displayed and false otherwise. */
+    val alwaysShowDataRatIcon: StateFlow<Boolean>
+
+    /** True if the CDMA level should be preferred over the primary level. */
+    val alwaysUseCdmaLevel: StateFlow<Boolean>
+
+    /** Tracks the subscriptionId set as the default for data connections */
+    val defaultDataSubId: StateFlow<Int>
+
+    /**
+     * The connectivity of the default mobile network. Note that this can differ from what is
+     * reported from [MobileConnectionsRepository] in some cases. E.g., when the active subscription
+     * changes but the groupUuid remains the same, we keep the old validation information for 2
+     * seconds to avoid icon flickering.
+     */
+    val defaultMobileNetworkConnectivity: StateFlow<MobileConnectivityModel>
+
     /** The icon mapping from network type to [MobileIconGroup] for the default subscription */
     val defaultMobileIconMapping: StateFlow<Map<String, MobileIconGroup>>
     /** Fallback [MobileIconGroup] in the case where there is no icon in the mapping */
@@ -147,6 +169,48 @@ constructor(
             }
         }
 
+    override val defaultDataSubId = mobileConnectionsRepo.defaultDataSubId
+
+    /**
+     * Copied from the old pipeline. We maintain a 2s period of time where we will keep the
+     * validated bit from the old active network (A) while data is changing to the new one (B).
+     *
+     * This condition only applies if
+     * 1. A and B are in the same subscription group (e.c. for CBRS data switching) and
+     * 2. A was validated before the switch
+     *
+     * The goal of this is to minimize the flickering in the UI of the cellular indicator
+     */
+    private val forcingCellularValidation =
+        mobileConnectionsRepo.activeSubChangedInGroupEvent
+            .filter { mobileConnectionsRepo.defaultMobileNetworkConnectivity.value.isValidated }
+            .transformLatest {
+                emit(true)
+                delay(2000)
+                emit(false)
+            }
+            .stateIn(scope, SharingStarted.WhileSubscribed(), false)
+
+    override val defaultMobileNetworkConnectivity: StateFlow<MobileConnectivityModel> =
+        combine(
+                mobileConnectionsRepo.defaultMobileNetworkConnectivity,
+                forcingCellularValidation,
+            ) { networkConnectivity, forceValidation ->
+                return@combine if (forceValidation) {
+                    MobileConnectivityModel(
+                        isValidated = true,
+                        isConnected = networkConnectivity.isConnected
+                    )
+                } else {
+                    networkConnectivity
+                }
+            }
+            .stateIn(
+                scope,
+                SharingStarted.WhileSubscribed(),
+                mobileConnectionsRepo.defaultMobileNetworkConnectivity.value
+            )
+
     /**
      * Mapping from network type to [MobileIconGroup] using the config generated for the default
      * subscription Id. This mapping is the same for every subscription.
@@ -157,6 +221,16 @@ constructor(
             SharingStarted.WhileSubscribed(),
             initialValue = mapOf()
         )
+
+    override val alwaysShowDataRatIcon: StateFlow<Boolean> =
+        mobileConnectionsRepo.defaultDataSubRatConfig
+            .mapLatest { it.alwaysShowDataRatIcon }
+            .stateIn(scope, SharingStarted.WhileSubscribed(), false)
+
+    override val alwaysUseCdmaLevel: StateFlow<Boolean> =
+        mobileConnectionsRepo.defaultDataSubRatConfig
+            .mapLatest { it.alwaysShowCdmaRssi }
+            .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
     /** If there is no mapping in [defaultMobileIconMapping], then use this default icon group */
     override val defaultMobileIconGroup: StateFlow<MobileIconGroup> =
@@ -188,8 +262,12 @@ constructor(
         MobileIconInteractorImpl(
             scope,
             activeDataConnectionHasDataEnabled,
+            alwaysShowDataRatIcon,
+            alwaysUseCdmaLevel,
+            defaultMobileNetworkConnectivity,
             defaultMobileIconMapping,
             defaultMobileIconGroup,
+            defaultDataSubId,
             isDefaultConnectionFailed,
             mobileConnectionsRepo.getRepoForSubId(subId),
         )

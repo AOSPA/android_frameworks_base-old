@@ -36,16 +36,9 @@ class ShadeLogger @Inject constructor(@ShadeLog private val buffer: LogBuffer) {
         buffer.log(TAG, LogLevel.DEBUG, msg)
     }
 
-    private inline fun log(
-        logLevel: LogLevel,
-        initializer: LogMessage.() -> Unit,
-        noinline printer: LogMessage.() -> String
-    ) {
-        buffer.log(TAG, logLevel, initializer, printer)
-    }
-
     fun onQsInterceptMoveQsTrackingEnabled(h: Float) {
-        log(
+        buffer.log(
+            TAG,
             LogLevel.VERBOSE,
             { double1 = h.toDouble() },
             { "onQsIntercept: move action, QS tracking enabled. h = $double1" }
@@ -62,7 +55,8 @@ class ShadeLogger @Inject constructor(@ShadeLog private val buffer: LogBuffer) {
         keyguardShowing: Boolean,
         qsExpansionEnabled: Boolean
     ) {
-        log(
+        buffer.log(
+            TAG,
             LogLevel.VERBOSE,
             {
                 int1 = initialTouchY.toInt()
@@ -82,7 +76,8 @@ class ShadeLogger @Inject constructor(@ShadeLog private val buffer: LogBuffer) {
     }
 
     fun logMotionEvent(event: MotionEvent, message: String) {
-        log(
+        buffer.log(
+            TAG,
             LogLevel.VERBOSE,
             {
                 str1 = message
@@ -98,6 +93,30 @@ class ShadeLogger @Inject constructor(@ShadeLog private val buffer: LogBuffer) {
         )
     }
 
+    fun logMotionEventStatusBarState(event: MotionEvent, statusBarState: Int, message: String) {
+        buffer.log(
+                TAG,
+                LogLevel.VERBOSE,
+                {
+                    str1 = message
+                    long1 = event.eventTime
+                    long2 = event.downTime
+                    int1 = event.action
+                    int2 = statusBarState
+                    double1 = event.y.toDouble()
+                },
+                {
+                    "$str1\neventTime=$long1,downTime=$long2,y=$double1,action=$int1," +
+                            "statusBarState=${when (int2) {
+                                0 -> "SHADE"
+                                1 -> "KEYGUARD"
+                                2 -> "SHADE_LOCKED"
+                                else -> "UNKNOWN:$int2"
+                            }}"
+                }
+        )
+    }
+
     fun logExpansionChanged(
             message: String,
             fraction: Float,
@@ -105,16 +124,33 @@ class ShadeLogger @Inject constructor(@ShadeLog private val buffer: LogBuffer) {
             tracking: Boolean,
             dragDownPxAmount: Float,
     ) {
-        log(LogLevel.VERBOSE, {
-            str1 = message
-            double1 = fraction.toDouble()
-            bool1 = expanded
-            bool2 = tracking
-            long1 = dragDownPxAmount.toLong()
-        }, {
-            "$str1 fraction=$double1,expanded=$bool1," +
+        buffer.log(
+            TAG,
+            LogLevel.VERBOSE,
+            {
+                str1 = message
+                double1 = fraction.toDouble()
+                bool1 = expanded
+                bool2 = tracking
+                long1 = dragDownPxAmount.toLong()
+            },
+            {
+                "$str1 fraction=$double1,expanded=$bool1," +
                     "tracking=$bool2," + "dragDownPxAmount=$dragDownPxAmount"
-        })
+            }
+        )
+    }
+
+    fun logHasVibrated(hasVibratedOnOpen: Boolean, fraction: Float) {
+        buffer.log(
+            TAG,
+            LogLevel.VERBOSE,
+            {
+                bool1 = hasVibratedOnOpen
+                double1 = fraction.toDouble()
+            },
+            { "hasVibratedOnOpen=$bool1, expansionFraction=$double1" }
+        )
     }
 
     fun logQsExpansionChanged(
@@ -127,41 +163,75 @@ class ShadeLogger @Inject constructor(@ShadeLog private val buffer: LogBuffer) {
             qsAnimatorExpand: Boolean,
             animatingQs: Boolean
     ) {
-        log(LogLevel.VERBOSE, {
-            str1 = message
-            bool1 = qsExpanded
-            int1 = qsMinExpansionHeight
-            int2 = qsMaxExpansionHeight
-            bool2 = stackScrollerOverscrolling
-            bool3 = dozing
-            bool4 = qsAnimatorExpand
-            // 0 = false, 1 = true
-            long1 = animatingQs.compareTo(false).toLong()
-        }, {
-            "$str1 qsExpanded=$bool1,qsMinExpansionHeight=$int1,qsMaxExpansionHeight=$int2," +
+        buffer.log(
+            TAG,
+            LogLevel.VERBOSE,
+            {
+                str1 = message
+                bool1 = qsExpanded
+                int1 = qsMinExpansionHeight
+                int2 = qsMaxExpansionHeight
+                bool2 = stackScrollerOverscrolling
+                bool3 = dozing
+                bool4 = qsAnimatorExpand
+                // 0 = false, 1 = true
+                long1 = animatingQs.compareTo(false).toLong()
+            },
+            {
+                "$str1 qsExpanded=$bool1,qsMinExpansionHeight=$int1,qsMaxExpansionHeight=$int2," +
                     "stackScrollerOverscrolling=$bool2,dozing=$bool3,qsAnimatorExpand=$bool4," +
                     "animatingQs=$long1"
-        })
+            }
+        )
     }
 
     fun logSingleTapUp(isDozing: Boolean, singleTapEnabled: Boolean, isNotDocked: Boolean) {
-        log(LogLevel.DEBUG, {
-            bool1 = isDozing
-            bool2 = singleTapEnabled
-            bool3 = isNotDocked
-        }, {
-            "PulsingGestureListener#onSingleTapUp all of this must true for single " +
-              "tap to be detected: isDozing: $bool1, singleTapEnabled: $bool2, isNotDocked: $bool3"
+        buffer.log(
+            TAG,
+            LogLevel.DEBUG,
+            {
+                bool1 = isDozing
+                bool2 = singleTapEnabled
+                bool3 = isNotDocked
+            },
+            {
+                "PulsingGestureListener#onSingleTapUp all of this must true for single " +
+               "tap to be detected: isDozing: $bool1, singleTapEnabled: $bool2, isNotDocked: $bool3"
         })
     }
 
     fun logSingleTapUpFalsingState(proximityIsNotNear: Boolean, isNotFalseTap: Boolean) {
-        log(LogLevel.DEBUG, {
-            bool1 = proximityIsNotNear
-            bool2 = isNotFalseTap
-        }, {
-            "PulsingGestureListener#onSingleTapUp all of this must true for single " +
+        buffer.log(
+            TAG,
+            LogLevel.DEBUG,
+            {
+                bool1 = proximityIsNotNear
+                bool2 = isNotFalseTap
+            },
+            {
+                "PulsingGestureListener#onSingleTapUp all of this must true for single " +
                     "tap to be detected: proximityIsNotNear: $bool1, isNotFalseTap: $bool2"
-        })
+            }
+        )
+    }
+
+    fun logNotInterceptingTouchInstantExpanding(
+            instantExpanding: Boolean,
+            notificationsDragEnabled: Boolean,
+            touchDisabled: Boolean
+    ) {
+        buffer.log(
+            TAG,
+            LogLevel.VERBOSE,
+            {
+                bool1 = instantExpanding
+                bool2 = notificationsDragEnabled
+                bool3 = touchDisabled
+            },
+            {
+                "NPVC not intercepting touch, instantExpanding: $bool1, " +
+                    "!notificationsDragEnabled: $bool2, touchDisabled: $bool3"
+            }
+        )
     }
 }

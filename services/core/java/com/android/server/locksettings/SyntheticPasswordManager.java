@@ -24,13 +24,14 @@ import android.annotation.Nullable;
 import android.app.admin.PasswordMetrics;
 import android.content.Context;
 import android.content.pm.UserInfo;
-import android.hardware.weaver.V1_0.IWeaver;
-import android.hardware.weaver.V1_0.WeaverConfig;
-import android.hardware.weaver.V1_0.WeaverReadResponse;
-import android.hardware.weaver.V1_0.WeaverReadStatus;
-import android.hardware.weaver.V1_0.WeaverStatus;
+import android.hardware.weaver.IWeaver;
+import android.hardware.weaver.WeaverConfig;
+import android.hardware.weaver.WeaverReadResponse;
+import android.hardware.weaver.WeaverReadStatus;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
+import android.os.ServiceManager;
+import android.os.ServiceSpecificException;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.security.GateKeeper;
@@ -58,9 +59,6 @@ import libcore.util.HexEncoding;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.nio.ByteBuffer;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -112,7 +110,7 @@ import java.util.Set;
  *       WEAVER_SLOT: Contains the Weaver slot number used by this protector.  Only exists if the
  *                    protector uses Weaver.
  */
-public class SyntheticPasswordManager {
+class SyntheticPasswordManager {
     private static final String SP_BLOB_NAME = "spblob";
     private static final String SP_E0_NAME = "e0";
     private static final String SP_P1_NAME = "p1";
@@ -284,8 +282,10 @@ public class SyntheticPasswordManager {
          */
         static SyntheticPassword create() {
             SyntheticPassword result = new SyntheticPassword(SYNTHETIC_PASSWORD_VERSION_V3);
-            byte[] escrowSplit0 = secureRandom(SYNTHETIC_PASSWORD_SECURITY_STRENGTH);
-            byte[] escrowSplit1 = secureRandom(SYNTHETIC_PASSWORD_SECURITY_STRENGTH);
+            byte[] escrowSplit0 =
+                    SecureRandomUtils.randomBytes(SYNTHETIC_PASSWORD_SECURITY_STRENGTH);
+            byte[] escrowSplit1 =
+                    SecureRandomUtils.randomBytes(SYNTHETIC_PASSWORD_SECURITY_STRENGTH);
             result.recreate(escrowSplit0, escrowSplit1);
             byte[] encrypteEscrowSplit0 = SyntheticPasswordCrypto.encrypt(result.mSyntheticPassword,
                     PERSONALIZATION_E0, escrowSplit0);
@@ -347,7 +347,7 @@ public class SyntheticPasswordManager {
             result.scryptLogR = PASSWORD_SCRYPT_LOG_R;
             result.scryptLogP = PASSWORD_SCRYPT_LOG_P;
             result.credentialType = credentialType;
-            result.salt = secureRandom(PASSWORD_SALT_LENGTH);
+            result.salt = SecureRandomUtils.randomBytes(PASSWORD_SALT_LENGTH);
             return result;
         }
 
@@ -394,7 +394,7 @@ public class SyntheticPasswordManager {
         }
     }
 
-    static class SyntheticPasswordBlob {
+    private static class SyntheticPasswordBlob {
         byte mVersion;
         byte mProtectorType;
         byte[] mContent;
@@ -431,7 +431,7 @@ public class SyntheticPasswordManager {
     static final int TOKEN_TYPE_STRONG = 0;
     static final int TOKEN_TYPE_WEAK = 1;
 
-    static class TokenData {
+    private static class TokenData {
         byte[] secdiscardableOnDisk;
         byte[] weaverSecret;
         byte[] aggregatedSecret;
@@ -464,37 +464,67 @@ public class SyntheticPasswordManager {
     }
 
     @VisibleForTesting
-    protected IWeaver getWeaverService() throws RemoteException {
+    protected android.hardware.weaver.V1_0.IWeaver getWeaverHidlService() throws RemoteException {
         try {
-            return IWeaver.getService(/* retry */ true);
+            return android.hardware.weaver.V1_0.IWeaver.getService(/* retry */ true);
         } catch (NoSuchElementException e) {
-            Slog.i(TAG, "Device does not support weaver");
             return null;
         }
+    }
+
+    private IWeaver getWeaverService() {
+        // Try to get the AIDL service first
+        try {
+            IWeaver aidlWeaver = IWeaver.Stub.asInterface(
+                    ServiceManager.waitForDeclaredService(IWeaver.DESCRIPTOR + "/default"));
+            if (aidlWeaver != null) {
+                Slog.i(TAG, "Using AIDL weaver service");
+                return aidlWeaver;
+            }
+        } catch (SecurityException e) {
+            Slog.w(TAG, "Does not have permissions to get AIDL weaver service");
+        }
+
+        // If the AIDL service can't be found, look for the HIDL service
+        try {
+            android.hardware.weaver.V1_0.IWeaver hidlWeaver = getWeaverHidlService();
+            if (hidlWeaver != null) {
+                Slog.i(TAG, "Using HIDL weaver service");
+                return new WeaverHidlAdapter(hidlWeaver);
+            }
+        } catch (RemoteException e) {
+            Slog.w(TAG, "Failed to get HIDL weaver service.", e);
+        }
+        Slog.w(TAG, "Device does not support weaver");
+        return null;
     }
 
     public synchronized void initWeaverService() {
         if (mWeaver != null) {
             return;
         }
-        try {
-            mWeaverConfig = null;
-            mWeaver = getWeaverService();
-            if (mWeaver != null) {
-                mWeaver.getConfig((int status, WeaverConfig config) -> {
-                    if (status == WeaverStatus.OK && config.slots > 0) {
-                        mWeaverConfig = config;
-                    } else {
-                        Slog.e(TAG, "Failed to get weaver config, status " + status
-                                + " slots: " + config.slots);
-                        mWeaver = null;
-                    }
-                });
-                mPasswordSlotManager.refreshActiveSlots(getUsedWeaverSlots());
-            }
-        } catch (RemoteException e) {
-            Slog.e(TAG, "Failed to get weaver service", e);
+
+        IWeaver weaver = getWeaverService();
+        if (weaver == null) {
+            return;
         }
+
+        // Get the config
+        WeaverConfig weaverConfig = null;
+        try {
+            weaverConfig = weaver.getConfig();
+        } catch (RemoteException e) {
+            Slog.e(TAG, "Failed to get weaver config", e);
+        }
+        if (weaverConfig == null || weaverConfig.slots <= 0) {
+            Slog.e(TAG, "Failed to initialize weaver config");
+            return;
+        }
+
+        mWeaver = weaver;
+        mWeaverConfig = weaverConfig;
+        mPasswordSlotManager.refreshActiveSlots(getUsedWeaverSlots());
+        Slog.i(TAG, "Weaver service initialized");
     }
 
     private synchronized boolean isWeaverAvailable() {
@@ -522,19 +552,31 @@ public class SyntheticPasswordManager {
             throw new IllegalArgumentException("Invalid key size for weaver");
         }
         if (value == null) {
-            value = secureRandom(mWeaverConfig.valueSize);
+            value = SecureRandomUtils.randomBytes(mWeaverConfig.valueSize);
         }
         try {
-            int writeStatus = mWeaver.write(slot, toByteArrayList(key), toByteArrayList(value));
-            if (writeStatus != WeaverStatus.OK) {
-                Slog.e(TAG, "weaver write failed, slot: " + slot + " status: " + writeStatus);
-                return null;
-            }
+            mWeaver.write(slot, key, value);
         } catch (RemoteException e) {
-            Slog.e(TAG, "weaver write failed", e);
+            Slog.e(TAG, "weaver write binder call failed, slot: " + slot, e);
+            return null;
+        } catch (ServiceSpecificException e) {
+            Slog.e(TAG, "weaver write failed, slot: " + slot, e);
             return null;
         }
         return value;
+    }
+
+    /**
+     * Create a VerifyCredentialResponse from a timeout base on the WeaverReadResponse.
+     * This checks the received timeout(long) to make sure it sure it fits in an int before
+     * using it. If it doesn't fit, we use Integer.MAX_VALUE.
+     */
+    private static VerifyCredentialResponse responseFromTimeout(WeaverReadResponse response) {
+        int timeout =
+                response.timeout > Integer.MAX_VALUE || response.timeout < 0
+                ? Integer.MAX_VALUE
+                : (int) response.timeout;
+        return VerifyCredentialResponse.fromTimeout(timeout);
     }
 
     /**
@@ -551,46 +593,39 @@ public class SyntheticPasswordManager {
         } else if (key.length != mWeaverConfig.keySize) {
             throw new IllegalArgumentException("Invalid key size for weaver");
         }
-        final VerifyCredentialResponse[] response = new VerifyCredentialResponse[1];
+        final WeaverReadResponse readResponse;
         try {
-            mWeaver.read(slot, toByteArrayList(key),
-                    (int status, WeaverReadResponse readResponse) -> {
-                    switch (status) {
-                        case WeaverReadStatus.OK:
-                            response[0] = new VerifyCredentialResponse.Builder().setGatekeeperHAT(
-                                    fromByteArrayList(readResponse.value)).build();
-                            break;
-                        case WeaverReadStatus.THROTTLE:
-                            response[0] = VerifyCredentialResponse
-                                    .fromTimeout(readResponse.timeout);
-                            Slog.e(TAG, "weaver read failed (THROTTLE), slot: " + slot);
-                            break;
-                        case WeaverReadStatus.INCORRECT_KEY:
-                            if (readResponse.timeout == 0) {
-                                response[0] = VerifyCredentialResponse.ERROR;
-                                Slog.e(TAG, "weaver read failed (INCORRECT_KEY), slot: " + slot);
-                            } else {
-                                response[0] = VerifyCredentialResponse
-                                        .fromTimeout(readResponse.timeout);
-                                Slog.e(TAG, "weaver read failed (INCORRECT_KEY/THROTTLE), slot: "
-                                        + slot);
-                            }
-                            break;
-                        case WeaverReadStatus.FAILED:
-                            response[0] = VerifyCredentialResponse.ERROR;
-                            Slog.e(TAG, "weaver read failed (FAILED), slot: " + slot);
-                            break;
-                        default:
-                            response[0] = VerifyCredentialResponse.ERROR;
-                            Slog.e(TAG, "weaver read unknown status " + status + ", slot: " + slot);
-                            break;
-                    }
-                });
+            readResponse = mWeaver.read(slot, key);
         } catch (RemoteException e) {
-            response[0] = VerifyCredentialResponse.ERROR;
             Slog.e(TAG, "weaver read failed, slot: " + slot, e);
+            return VerifyCredentialResponse.ERROR;
         }
-        return response[0];
+
+        switch (readResponse.status) {
+            case WeaverReadStatus.OK:
+                return new VerifyCredentialResponse.Builder()
+                                      .setGatekeeperHAT(readResponse.value)
+                                      .build();
+            case WeaverReadStatus.THROTTLE:
+                Slog.e(TAG, "weaver read failed (THROTTLE), slot: " + slot);
+                return responseFromTimeout(readResponse);
+            case WeaverReadStatus.INCORRECT_KEY:
+                if (readResponse.timeout == 0) {
+                    Slog.e(TAG, "weaver read failed (INCORRECT_KEY), slot: " + slot);
+                    return VerifyCredentialResponse.ERROR;
+                } else {
+                    Slog.e(TAG, "weaver read failed (INCORRECT_KEY/THROTTLE), slot: " + slot);
+                    return responseFromTimeout(readResponse);
+                }
+            case WeaverReadStatus.FAILED:
+                Slog.e(TAG, "weaver read failed (FAILED), slot: " + slot);
+                return VerifyCredentialResponse.ERROR;
+            default:
+                Slog.e(TAG,
+                        "weaver read unknown status " + readResponse.status
+                                + ", slot: " + slot);
+                return VerifyCredentialResponse.ERROR;
+        }
     }
 
     public void removeUser(IGateKeeperService gatekeeper, int userId) {
@@ -865,7 +900,7 @@ public class SyntheticPasswordManager {
             protectorSecret = transformUnderSecdiscardable(stretchedLskf,
                     createSecdiscardable(protectorId, userId));
             // No need to pass in quality since the credential type already encodes sufficient info
-            synchronizeFrpPassword(pwd, 0, userId);
+            synchronizeGatekeeperFrpPassword(pwd, 0, userId);
         }
         if (!credential.isNone()) {
             saveState(PASSWORD_DATA_NAME, pwd.toBytes(), protectorId, userId);
@@ -881,7 +916,7 @@ public class SyntheticPasswordManager {
             LockscreenCredential userCredential,
             ICheckCredentialProgressCallback progressCallback) {
         PersistentData persistentData = mStorage.readPersistentDataBlock();
-        if (persistentData.type == PersistentData.TYPE_SP) {
+        if (persistentData.type == PersistentData.TYPE_SP_GATEKEEPER) {
             PasswordData pwd = PasswordData.fromBytes(persistentData.payload);
             byte[] stretchedLskf = stretchLskf(userCredential, pwd);
 
@@ -906,7 +941,7 @@ public class SyntheticPasswordManager {
 
             return weaverVerify(weaverSlot, stretchedLskfToWeaverKey(stretchedLskf)).stripPayload();
         } else {
-            Slog.e(TAG, "persistentData.type must be TYPE_SP or TYPE_SP_WEAVER, but is "
+            Slog.e(TAG, "persistentData.type must be TYPE_SP_GATEKEEPER or TYPE_SP_WEAVER, but is "
                     + persistentData.type);
             return VerifyCredentialResponse.ERROR;
         }
@@ -925,7 +960,7 @@ public class SyntheticPasswordManager {
             if (weaverSlot != INVALID_WEAVER_SLOT) {
                 synchronizeWeaverFrpPassword(pwd, requestedQuality, userInfo.id, weaverSlot);
             } else {
-                synchronizeFrpPassword(pwd, requestedQuality, userInfo.id);
+                synchronizeGatekeeperFrpPassword(pwd, requestedQuality, userInfo.id);
             }
         }
     }
@@ -959,13 +994,13 @@ public class SyntheticPasswordManager {
         return true;
     }
 
-    private void synchronizeFrpPassword(@Nullable PasswordData pwd, int requestedQuality,
+    private void synchronizeGatekeeperFrpPassword(@Nullable PasswordData pwd, int requestedQuality,
             int userId) {
         if (shouldSynchronizeFrpCredential(pwd, userId)) {
             Slogf.d(TAG, "Syncing Gatekeeper-based FRP credential tied to user %d", userId);
             if (!isNoneCredential(pwd)) {
-                mStorage.writePersistentDataBlock(PersistentData.TYPE_SP, userId, requestedQuality,
-                        pwd.toBytes());
+                mStorage.writePersistentDataBlock(PersistentData.TYPE_SP_GATEKEEPER, userId,
+                        requestedQuality, pwd.toBytes());
             } else {
                 mStorage.writePersistentDataBlock(PersistentData.TYPE_NONE, userId, 0, null);
             }
@@ -1004,9 +1039,9 @@ public class SyntheticPasswordManager {
         }
         TokenData tokenData = new TokenData();
         tokenData.mType = type;
-        final byte[] secdiscardable = secureRandom(SECDISCARDABLE_LENGTH);
+        final byte[] secdiscardable = SecureRandomUtils.randomBytes(SECDISCARDABLE_LENGTH);
         if (isWeaverAvailable()) {
-            tokenData.weaverSecret = secureRandom(mWeaverConfig.valueSize);
+            tokenData.weaverSecret = SecureRandomUtils.randomBytes(mWeaverConfig.valueSize);
             tokenData.secdiscardableOnDisk = SyntheticPasswordCrypto.encrypt(tokenData.weaverSecret,
                             PERSONALIZATION_WEAVER_TOKEN, secdiscardable);
         } else {
@@ -1189,7 +1224,7 @@ public class SyntheticPasswordManager {
                             pwd.credentialType = credential.getType();
                             saveState(PASSWORD_DATA_NAME, pwd.toBytes(), protectorId, userId);
                             syncState(userId);
-                            synchronizeFrpPassword(pwd, 0, userId);
+                            synchronizeGatekeeperFrpPassword(pwd, 0, userId);
                         } else {
                             Slog.w(TAG, "Fail to re-enroll user password for user " + userId);
                             // continue the flow anyway
@@ -1475,7 +1510,7 @@ public class SyntheticPasswordManager {
      * been created.
      */
     private byte[] createSecdiscardable(long protectorId, int userId) {
-        byte[] data = secureRandom(SECDISCARDABLE_LENGTH);
+        byte[] data = SecureRandomUtils.randomBytes(SECDISCARDABLE_LENGTH);
         saveSecdiscardable(protectorId, data, userId);
         return data;
     }
@@ -1588,27 +1623,18 @@ public class SyntheticPasswordManager {
         SyntheticPasswordCrypto.destroyProtectorKey(keyAlias);
     }
 
-    public static long generateProtectorId() {
-        SecureRandom rng = new SecureRandom();
-        long result;
-        do {
-            result = rng.nextLong();
-        } while (result == NULL_PROTECTOR_ID);
-        return result;
+    private static long generateProtectorId() {
+        while (true) {
+            final long result = SecureRandomUtils.randomLong();
+            if (result != NULL_PROTECTOR_ID) {
+                return result;
+            }
+        }
     }
 
     @VisibleForTesting
     static int fakeUserId(int userId) {
         return 100000 + userId;
-    }
-
-    protected static byte[] secureRandom(int length) {
-        try {
-            return SecureRandom.getInstance("SHA1PRNG").generateSeed(length);
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-            return null;
-        }
     }
 
     private String getProtectorKeyAlias(long protectorId) {
@@ -1650,31 +1676,17 @@ public class SyntheticPasswordManager {
         return Arrays.copyOf(key, mWeaverConfig.keySize);
     }
 
+    @VisibleForTesting
     protected long sidFromPasswordHandle(byte[] handle) {
         return nativeSidFromPasswordHandle(handle);
     }
 
+    @VisibleForTesting
     protected byte[] scrypt(byte[] password, byte[] salt, int n, int r, int p, int outLen) {
         return new Scrypt().scrypt(password, salt, n, r, p, outLen);
     }
 
-    native long nativeSidFromPasswordHandle(byte[] handle);
-
-    protected static ArrayList<Byte> toByteArrayList(byte[] data) {
-        ArrayList<Byte> result = new ArrayList<Byte>(data.length);
-        for (int i = 0; i < data.length; i++) {
-            result.add(data[i]);
-        }
-        return result;
-    }
-
-    protected static byte[] fromByteArrayList(ArrayList<Byte> data) {
-        byte[] result = new byte[data.size()];
-        for (int i = 0; i < data.size(); i++) {
-            result[i] = data.get(i);
-        }
-        return result;
-    }
+    private native long nativeSidFromPasswordHandle(byte[] handle);
 
     @VisibleForTesting
     static byte[] bytesToHex(byte[] bytes) {

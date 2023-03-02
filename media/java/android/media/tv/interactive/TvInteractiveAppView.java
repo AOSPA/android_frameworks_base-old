@@ -25,7 +25,9 @@ import android.content.res.XmlResourceParser;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.media.PlaybackParams;
 import android.media.tv.TvInputManager;
+import android.media.tv.TvRecordingInfo;
 import android.media.tv.TvTrackInfo;
 import android.media.tv.TvView;
 import android.media.tv.interactive.TvInteractiveAppManager.Session;
@@ -512,6 +514,19 @@ public class TvInteractiveAppView extends ViewGroup {
     }
 
     /**
+     * Sends current video bounds to related TV interactive app.
+     * @hide
+     */
+    public void sendCurrentVideoBounds(@NonNull Rect bounds) {
+        if (DEBUG) {
+            Log.d(TAG, "sendCurrentVideoBounds");
+        }
+        if (mSession != null) {
+            mSession.sendCurrentVideoBounds(bounds);
+        }
+    }
+
+    /**
      * Sends current channel URI to related TV interactive app.
      *
      * @param channelUri The current channel URI; {@code null} if there is no currently tuned
@@ -581,10 +596,41 @@ public class TvInteractiveAppView extends ViewGroup {
     }
 
     /**
+     * Sends the requested {@link android.media.tv.TvRecordingInfo}.
+     *
+     * @param recordingInfo The recording info requested {@code null} if no recording found.
+     * @hide
+     */
+    public void sendTvRecordingInfo(@Nullable TvRecordingInfo recordingInfo) {
+        if (DEBUG) {
+            Log.d(TAG, "sendTvRecordingInfo");
+        }
+        if (mSession != null) {
+            mSession.sendTvRecordingInfo(recordingInfo);
+        }
+    }
+
+    /**
+     * Sends the requested {@link android.media.tv.TvRecordingInfo}.
+     *
+     * @param recordingInfoList The list of recording info requested.
+     * @hide
+     */
+    public void sendTvRecordingInfoList(@Nullable List<TvRecordingInfo> recordingInfoList) {
+        if (DEBUG) {
+            Log.d(TAG, "sendTvRecordingInfoList");
+        }
+        if (mSession != null) {
+            mSession.sendTvRecordingInfoList(recordingInfoList);
+        }
+    }
+
+    /**
      * Alerts the TV interactive app that a recording has been started.
      *
      * @param recordingId The ID of the recording started. This ID is created and maintained by the
      *                    TV app and is used to identify the recording in the future.
+     * @see TvInteractiveAppView#notifyRecordingStopped(String)
      */
     public void notifyRecordingStarted(@NonNull String recordingId) {
         if (DEBUG) {
@@ -601,7 +647,6 @@ public class TvInteractiveAppView extends ViewGroup {
      * @param recordingId The ID of the recording stopped. This ID is created and maintained
      *                    by the TV app when a recording is started.
      * @see TvInteractiveAppView#notifyRecordingStarted(String)
-     * @hide
      */
     public void notifyRecordingStopped(@NonNull String recordingId) {
         if (DEBUG) {
@@ -650,6 +695,75 @@ public class TvInteractiveAppView extends ViewGroup {
         }
         if (mSession != null) {
             mSession.notifyError(errMsg, params);
+        }
+    }
+
+    /**
+     * Notifies the corresponding {@link TvInteractiveAppService} when a time shift
+     * {@link android.media.PlaybackParams} is set or changed.
+     *
+     * @see TvView#timeShiftSetPlaybackParams(PlaybackParams)
+     * @hide
+     */
+    public void notifyTimeShiftPlaybackParams(@NonNull PlaybackParams params) {
+        if (DEBUG) {
+            Log.d(TAG, "notifyTimeShiftPlaybackParams params=" + params);
+        }
+        if (mSession != null) {
+            mSession.notifyTimeShiftPlaybackParams(params);
+        }
+    }
+
+    /**
+     * Notifies the corresponding {@link TvInteractiveAppService} when time shift
+     * status is changed.
+     *
+     * @see TvView.TvInputCallback#onTimeShiftStatusChanged(String, int)
+     * @see android.media.tv.TvInputService.Session#notifyTimeShiftStatusChanged(int)
+     * @hide
+     */
+    public void notifyTimeShiftStatusChanged(
+            @NonNull String inputId, @TvInputManager.TimeShiftStatus int status) {
+        if (DEBUG) {
+            Log.d(TAG,
+                    "notifyTimeShiftStatusChanged inputId=" + inputId + "; status=" + status);
+        }
+        if (mSession != null) {
+            mSession.notifyTimeShiftStatusChanged(inputId, status);
+        }
+    }
+
+    /**
+     * Notifies the corresponding {@link TvInteractiveAppService} when time shift
+     * start position is changed.
+     *
+     * @see TvView.TimeShiftPositionCallback#onTimeShiftStartPositionChanged(String, long)
+     * @hide
+     */
+    public void notifyTimeShiftStartPositionChanged(@NonNull String inputId, long timeMs) {
+        if (DEBUG) {
+            Log.d(TAG, "notifyTimeShiftStartPositionChanged inputId=" + inputId
+                    + "; timeMs=" + timeMs);
+        }
+        if (mSession != null) {
+            mSession.notifyTimeShiftStartPositionChanged(inputId, timeMs);
+        }
+    }
+
+    /**
+     * Notifies the corresponding {@link TvInteractiveAppService} when time shift
+     * current position is changed.
+     *
+     * @see TvView.TimeShiftPositionCallback#onTimeShiftCurrentPositionChanged(String, long)
+     * @hide
+     */
+    public void notifyTimeShiftCurrentPositionChanged(@NonNull String inputId, long timeMs) {
+        if (DEBUG) {
+            Log.d(TAG, "notifyTimeShiftCurrentPositionChanged inputId=" + inputId
+                    + "; timeMs=" + timeMs);
+        }
+        if (mSession != null) {
+            mSession.notifyTimeShiftCurrentPositionChanged(inputId, timeMs);
         }
     }
 
@@ -777,6 +891,21 @@ public class TvInteractiveAppView extends ViewGroup {
         }
 
         /**
+         * This is called when a time shift command is requested to be processed by the related TV
+         * input.
+         *
+         * @param iAppServiceId The ID of the TV interactive app service bound to this view.
+         * @param cmdType type of the command
+         * @param parameters parameters of the command
+         * @hide
+         */
+        public void onTimeShiftCommandRequest(
+                @NonNull String iAppServiceId,
+                @NonNull @TvInteractiveAppService.TimeShiftCommandType String cmdType,
+                @NonNull Bundle parameters) {
+        }
+
+        /**
          * This is called when the state of corresponding interactive app is changed.
          *
          * @param iAppServiceId The ID of the TV interactive app service bound to this view.
@@ -825,6 +954,16 @@ public class TvInteractiveAppView extends ViewGroup {
          * @param iAppServiceId The ID of the TV interactive app service bound to this view.
          */
         public void onSetVideoBounds(@NonNull String iAppServiceId, @NonNull Rect rect) {
+        }
+
+        /**
+         * This is called when {@link TvInteractiveAppService.Session#requestCurrentVideoBounds()}
+         * is called.
+         *
+         * @param iAppServiceId The ID of the TV interactive app service bound to this view.
+         * @hide
+         */
+        public void onRequestCurrentVideoBounds(@NonNull String iAppServiceId) {
         }
 
         /**
@@ -877,7 +1016,8 @@ public class TvInteractiveAppView extends ViewGroup {
          * is called.
          *
          * @param iAppServiceId The ID of the TV interactive app service bound to this view.
-         * @param programUri The program URI to record
+         * @param programUri The URI of the program to record
+         *
          */
         public void onRequestStartRecording(
                 @NonNull String iAppServiceId,
@@ -885,12 +1025,14 @@ public class TvInteractiveAppView extends ViewGroup {
         }
 
         /**
-         * This is called when {@link TvInteractiveAppService.Session#requestStopRecording()}
+         * This is called when {@link TvInteractiveAppService.Session#requestStopRecording(String)}
          * is called.
          *
          * @param iAppServiceId The ID of the TV interactive app service bound to this view.
-         * @param recordingId The ID of the recording to stop.
-         * @hide
+         * @param recordingId The ID of the recording to stop. This is provided by the TV app in
+         *                    {@link #notifyRecordingStarted(String)}
+         * @see #notifyRecordingStarted(String)
+         * @see #notifyRecordingStopped(String)
          */
         public void onRequestStopRecording(
                 @NonNull String iAppServiceId,
@@ -1034,6 +1176,33 @@ public class TvInteractiveAppView extends ViewGroup {
         }
 
         @Override
+        public void onTimeShiftCommandRequest(
+                Session session,
+                @TvInteractiveAppService.TimeShiftCommandType String cmdType,
+                Bundle parameters) {
+            if (DEBUG) {
+                Log.d(TAG, "onTimeShiftCommandRequest (cmdType=" + cmdType + ", parameters="
+                        + parameters.toString() + ")");
+            }
+            if (this != mSessionCallback) {
+                Log.w(TAG, "onTimeShiftCommandRequest - session not created");
+                return;
+            }
+            synchronized (mCallbackLock) {
+                if (mCallbackExecutor != null) {
+                    mCallbackExecutor.execute(() -> {
+                        synchronized (mCallbackLock) {
+                            if (mCallback != null) {
+                                mCallback.onTimeShiftCommandRequest(
+                                        mIAppServiceId, cmdType, parameters);
+                            }
+                        }
+                    });
+                }
+            }
+        }
+
+        @Override
         public void onSessionStateChanged(
                 Session session,
                 @TvInteractiveAppManager.InteractiveAppState int state,
@@ -1111,6 +1280,28 @@ public class TvInteractiveAppView extends ViewGroup {
                         synchronized (mCallbackLock) {
                             if (mCallback != null) {
                                 mCallback.onSetVideoBounds(mIAppServiceId, rect);
+                            }
+                        }
+                    });
+                }
+            }
+        }
+
+        @Override
+        public void onRequestCurrentVideoBounds(Session session) {
+            if (DEBUG) {
+                Log.d(TAG, "onRequestCurrentVideoBounds");
+            }
+            if (this != mSessionCallback) {
+                Log.w(TAG, "onRequestCurrentVideoBounds - session not created");
+                return;
+            }
+            synchronized (mCallbackLock) {
+                if (mCallbackExecutor != null) {
+                    mCallbackExecutor.execute(() -> {
+                        synchronized (mCallbackLock) {
+                            if (mCallback != null) {
+                                mCallback.onRequestCurrentVideoBounds(mIAppServiceId);
                             }
                         }
                     });

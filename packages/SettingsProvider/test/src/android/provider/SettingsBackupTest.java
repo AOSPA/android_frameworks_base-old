@@ -100,8 +100,6 @@ public class SettingsBackupTest {
                     Settings.System.MIN_REFRESH_RATE, // depends on hardware capabilities
                     Settings.System.PEAK_REFRESH_RATE, // depends on hardware capabilities
                     Settings.System.SCREEN_BRIGHTNESS_FLOAT,
-                    Settings.System.SCREEN_BRIGHTNESS_FOR_VR,
-                    Settings.System.SCREEN_BRIGHTNESS_FOR_VR_FLOAT,
                     Settings.System.SCREEN_AUTO_BRIGHTNESS_ADJ,
                     Settings.System.MULTI_AUDIO_FOCUS_ENABLED // form-factor/OEM specific
                     );
@@ -427,6 +425,7 @@ public class SettingsBackupTest {
                     Settings.Global.RESTRICTED_NETWORKING_MODE,
                     Settings.Global.REQUIRE_PASSWORD_TO_DECRYPT,
                     Settings.Global.SAFE_BOOT_DISALLOWED,
+                    Settings.Global.SECURE_FRP_MODE,
                     Settings.Global.SELINUX_STATUS,
                     Settings.Global.SELINUX_UPDATE_CONTENT_URL,
                     Settings.Global.SELINUX_UPDATE_METADATA_URL,
@@ -646,6 +645,7 @@ public class SettingsBackupTest {
                     Settings.Global.Wearable.ENABLE_ALL_LANGUAGES,
                     Settings.Global.Wearable.SETUP_LOCALE,
                     Settings.Global.Wearable.OEM_SETUP_VERSION,
+                    Settings.Global.Wearable.OEM_SETUP_COMPLETED_STATUS,
                     Settings.Global.Wearable.MASTER_GESTURES_ENABLED,
                     Settings.Global.Wearable.UNGAZE_ENABLED,
                     Settings.Global.Wearable.BURN_IN_PROTECTION_ENABLED,
@@ -696,6 +696,7 @@ public class SettingsBackupTest {
                  Settings.Secure.BACKUP_AUTO_RESTORE,
                  Settings.Secure.BACKUP_ENABLED,
                  Settings.Secure.BACKUP_PROVISIONED,
+                 Settings.Secure.BACKUP_SCHEDULING_ENABLED,
                  Settings.Secure.BACKUP_TRANSPORT,
                  Settings.Secure.CALL_SCREENING_DEFAULT_COMPONENT,
                  Settings.Secure.CAMERA_LIFT_TRIGGER_ENABLED, // Candidate for backup?

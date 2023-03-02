@@ -23,6 +23,7 @@ import static com.android.server.pm.ApexManager.ActiveApexInfo;
 import static com.android.server.pm.InstructionSets.getAppDexInstructionSets;
 import static com.android.server.pm.PackageManagerService.DEBUG_DEXOPT;
 import static com.android.server.pm.PackageManagerService.PLATFORM_PACKAGE_NAME;
+import static com.android.server.pm.PackageManagerService.REASON_BOOT_AFTER_MAINLINE_UPDATE;
 import static com.android.server.pm.PackageManagerService.REASON_BOOT_AFTER_OTA;
 import static com.android.server.pm.PackageManagerService.REASON_CMDLINE;
 import static com.android.server.pm.PackageManagerService.REASON_FIRST_BOOT;
@@ -32,15 +33,14 @@ import static com.android.server.pm.PackageManagerServiceCompilerMapping.getComp
 import static com.android.server.pm.PackageManagerServiceCompilerMapping.getDefaultCompilerFilter;
 import static com.android.server.pm.PackageManagerServiceUtils.REMOVE_IF_APEX_PKG;
 import static com.android.server.pm.PackageManagerServiceUtils.REMOVE_IF_NULL_PKG;
+import static com.android.server.pm.PackageManagerServiceUtils.getPackageManagerLocal;
 
 import static dalvik.system.DexFile.isProfileGuidedCompilerFilter;
 
-import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.RequiresPermission;
-import android.app.ActivityManager;
 import android.app.AppGlobals;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
 import android.content.pm.SharedLibraryInfo;
@@ -51,20 +51,21 @@ import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
-import android.provider.DeviceConfig;
 import android.text.TextUtils;
 import android.util.ArraySet;
 import android.util.Log;
 import android.util.Slog;
 
-import com.android.internal.R;
-import com.android.internal.annotations.GuardedBy;
 import com.android.internal.logging.MetricsLogger;
 import com.android.server.LocalManagerRegistry;
 import com.android.server.art.ArtManagerLocal;
+import com.android.server.art.DexUseManagerLocal;
+import com.android.server.art.ReasonMapping;
 import com.android.server.art.model.ArtFlags;
-import com.android.server.art.model.OptimizeParams;
-import com.android.server.art.model.OptimizeResult;
+import com.android.server.art.model.DexoptParams;
+import com.android.server.art.model.DexoptResult;
+import com.android.server.pm.Installer.InstallerException;
+import com.android.server.pm.Installer.LegacyDexoptDisabledException;
 import com.android.server.pm.PackageDexOptimizer.DexOptResult;
 import com.android.server.pm.dex.DexManager;
 import com.android.server.pm.dex.DexoptOptions;
@@ -81,7 +82,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
@@ -94,17 +94,9 @@ public final class DexOptHelper {
 
     private final PackageManagerService mPm;
 
-    public boolean isDexOptDialogShown() {
-        synchronized (mLock) {
-            return mDexOptDialogShown;
-        }
-    }
-
-    // TODO: Is this lock really necessary?
-    private final Object mLock = new Object();
-
-    @GuardedBy("mLock")
-    private boolean mDexOptDialogShown;
+    // Start time for the boot dexopt in performPackageDexOptUpgradeIfNeeded when ART Service is
+    // used, to make it available to the onDexoptDone callback.
+    private volatile long mBootDexoptStartTime;
 
     DexOptHelper(PackageManagerService pm) {
         mPm = pm;
@@ -123,21 +115,23 @@ public final class DexOptHelper {
      * which are (in order) {@code numberOfPackagesOptimized}, {@code numberOfPackagesSkipped}
      * and {@code numberOfPackagesFailed}.
      */
-    public int[] performDexOptUpgrade(List<AndroidPackage> pkgs, boolean showDialog,
-            final int compilationReason, boolean bootComplete) {
-
+    public int[] performDexOptUpgrade(List<PackageStateInternal> packageStates,
+            final int compilationReason, boolean bootComplete)
+            throws LegacyDexoptDisabledException {
+        Installer.checkLegacyDexoptDisabled();
         int numberOfPackagesVisited = 0;
         int numberOfPackagesOptimized = 0;
         int numberOfPackagesSkipped = 0;
         int numberOfPackagesFailed = 0;
-        final int numberOfPackagesToDexopt = pkgs.size();
+        final int numberOfPackagesToDexopt = packageStates.size();
 
-        for (AndroidPackage pkg : pkgs) {
+        for (var packageState : packageStates) {
+            var pkg = packageState.getAndroidPackage();
             numberOfPackagesVisited++;
 
             boolean useProfileForDexopt = false;
 
-            if ((mPm.isFirstBoot() || mPm.isDeviceUpgrading()) && pkg.isSystem()) {
+            if ((mPm.isFirstBoot() || mPm.isDeviceUpgrading()) && packageState.isSystem()) {
                 // Copy over initial preopt profiles since we won't get any JIT samples for methods
                 // that are already compiled.
                 File profileFile = new File(getPrebuildProfilePath(pkg));
@@ -156,7 +150,7 @@ public final class DexOptHelper {
                             // even if things are already compiled.
                             // useProfileForDexopt = true;
                         }
-                    } catch (Exception e) {
+                    } catch (InstallerException | RuntimeException e) {
                         Log.e(TAG, "Failed to copy profile " + profileFile.getAbsolutePath() + " ",
                                 e);
                     }
@@ -191,7 +185,7 @@ public final class DexOptHelper {
                                 } else {
                                     useProfileForDexopt = true;
                                 }
-                            } catch (Exception e) {
+                            } catch (InstallerException | RuntimeException e) {
                                 Log.e(TAG, "Failed to copy profile "
                                         + profileFile.getAbsolutePath() + " ", e);
                             }
@@ -213,18 +207,6 @@ public final class DexOptHelper {
                         + numberOfPackagesToDexopt + ": " + pkg.getPackageName());
             }
 
-            if (showDialog) {
-                try {
-                    ActivityManager.getService().showBootMessage(
-                            mPm.mContext.getResources().getString(R.string.android_upgrading_apk,
-                                    numberOfPackagesVisited, numberOfPackagesToDexopt), true);
-                } catch (RemoteException e) {
-                }
-                synchronized (mLock) {
-                    mDexOptDialogShown = true;
-                }
-            }
-
             int pkgCompilationReason = compilationReason;
             if (useProfileForDexopt) {
                 // Use background dexopt mode to try and use the profile. Note that this does not
@@ -232,8 +214,9 @@ public final class DexOptHelper {
                 pkgCompilationReason = PackageManagerService.REASON_BACKGROUND_DEXOPT;
             }
 
+            // TODO(b/251903639): Do this when ART Service is used, or remove it from here.
             if (SystemProperties.getBoolean(mPm.PRECOMPILE_LAYOUTS, false)) {
-                mPm.mArtManagerService.compileLayouts(pkg);
+                mPm.mArtManagerService.compileLayouts(packageState, pkg);
             }
 
             int dexoptFlags = bootComplete ? DexoptOptions.DEXOPT_BOOT_COMPLETE : 0;
@@ -282,7 +265,8 @@ public final class DexOptHelper {
      * Checks if system UI package (typically "com.android.systemui") needs to be re-compiled, and
      * compiles it if needed.
      */
-    private void checkAndDexOptSystemUi() {
+    private void checkAndDexOptSystemUi(int reason) throws LegacyDexoptDisabledException {
+        Installer.checkLegacyDexoptDisabled();
         Computer snapshot = mPm.snapshotComputer();
         String sysUiPackageName =
                 mPm.mContext.getString(com.android.internal.R.string.config_systemUi);
@@ -291,10 +275,6 @@ public final class DexOptHelper {
             Log.w(TAG, "System UI package " + sysUiPackageName + " is not found for dexopting");
             return;
         }
-
-        // It could also be after mainline update, but we're not introducing a new reason just for
-        // this special case.
-        int reason = REASON_BOOT_AFTER_OTA;
 
         String defaultCompilerFilter = getCompilerFilterForReason(reason);
         String targetCompilerFilter =
@@ -318,7 +298,7 @@ public final class DexOptHelper {
                             Log.e(TAG, "Failed to copy profile " + profileFile.getAbsolutePath());
                         }
                     }
-                } catch (Exception e) {
+                } catch (InstallerException | RuntimeException e) {
                     Log.e(TAG, "Failed to copy profile " + profileFile.getAbsolutePath(), e);
                 }
             }
@@ -338,54 +318,68 @@ public final class DexOptHelper {
                 compilerFilter, null /* splitName */, dexoptFlags));
     }
 
-    @RequiresPermission(Manifest.permission.READ_DEVICE_CONFIG)
+    /**
+     * Called during startup to do any boot time dexopting. This can occasionally be time consuming
+     * (30+ seconds) and the function will block until it is complete.
+     */
     public void performPackageDexOptUpgradeIfNeeded() {
         PackageManagerServiceUtils.enforceSystemOrRoot(
                 "Only the system can request package update");
 
-        // The default is "true".
-        if (!"false".equals(DeviceConfig.getProperty("runtime", "dexopt_system_ui_on_boot"))) {
-            // System UI is important to user experience, so we check it after a mainline update or
-            // an OTA. It may need to be re-compiled in these cases.
-            if (hasBcpApexesChanged() || mPm.isDeviceUpgrading()) {
-                checkAndDexOptSystemUi();
-            }
-        }
-
-        // We need to re-extract after an OTA.
-        boolean causeUpgrade = mPm.isDeviceUpgrading();
-
-        // First boot or factory reset.
-        // Note: we also handle devices that are upgrading to N right now as if it is their
-        //       first boot, as they do not have profile data.
-        boolean causeFirstBoot = mPm.isFirstBoot() || mPm.isPreNUpgrade();
-
-        if (!causeUpgrade && !causeFirstBoot) {
+        int reason;
+        if (mPm.isFirstBoot()) {
+            reason = REASON_FIRST_BOOT; // First boot or factory reset.
+        } else if (mPm.isDeviceUpgrading()) {
+            reason = REASON_BOOT_AFTER_OTA;
+        } else if (hasBcpApexesChanged()) {
+            reason = REASON_BOOT_AFTER_MAINLINE_UPDATE;
+        } else {
             return;
         }
 
-        final Computer snapshot = mPm.snapshotComputer();
-        List<PackageStateInternal> pkgSettings =
-                getPackagesForDexopt(snapshot.getPackageStates().values(), mPm);
-
-        List<AndroidPackage> pkgs = new ArrayList<>(pkgSettings.size());
-        for (int index = 0; index < pkgSettings.size(); index++) {
-            pkgs.add(pkgSettings.get(index).getPkg());
-        }
-
         final long startTime = System.nanoTime();
-        final int[] stats = performDexOptUpgrade(pkgs, mPm.isPreNUpgrade() /* showDialog */,
-                causeFirstBoot ? REASON_FIRST_BOOT : REASON_BOOT_AFTER_OTA,
-                false /* bootComplete */);
 
+        if (useArtService()) {
+            mBootDexoptStartTime = startTime;
+            getArtManagerLocal().onBoot(DexoptOptions.convertToArtServiceDexoptReason(reason),
+                    null /* progressCallbackExecutor */, null /* progressCallback */);
+        } else {
+            try {
+                // System UI is important to user experience, so we check it after a mainline update
+                // or an OTA. It may need to be re-compiled in these cases.
+                checkAndDexOptSystemUi(reason);
+
+                if (reason != REASON_BOOT_AFTER_OTA && reason != REASON_FIRST_BOOT) {
+                    return;
+                }
+
+                final Computer snapshot = mPm.snapshotComputer();
+
+                // TODO(b/251903639): Align this with how ART Service selects packages for boot
+                // compilation.
+                List<PackageStateInternal> pkgSettings =
+                        getPackagesForDexopt(snapshot.getPackageStates().values(), mPm);
+
+                final int[] stats =
+                        performDexOptUpgrade(pkgSettings, reason, false /* bootComplete */);
+                reportBootDexopt(startTime, stats[0], stats[1], stats[2]);
+            } catch (LegacyDexoptDisabledException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    private void reportBootDexopt(long startTime, int numDexopted, int numSkipped, int numFailed) {
         final int elapsedTimeSeconds =
                 (int) TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - startTime);
 
         final Computer newSnapshot = mPm.snapshotComputer();
 
-        MetricsLogger.histogram(mPm.mContext, "opt_dialog_num_dexopted", stats[0]);
-        MetricsLogger.histogram(mPm.mContext, "opt_dialog_num_skipped", stats[1]);
-        MetricsLogger.histogram(mPm.mContext, "opt_dialog_num_failed", stats[2]);
+        MetricsLogger.histogram(mPm.mContext, "opt_dialog_num_dexopted", numDexopted);
+        MetricsLogger.histogram(mPm.mContext, "opt_dialog_num_skipped", numSkipped);
+        MetricsLogger.histogram(mPm.mContext, "opt_dialog_num_failed", numFailed);
+        // TODO(b/251903639): getOptimizablePackages calls PackageDexOptimizer.canOptimizePackage
+        // which duplicates logic in ART Service (com.android.server.art.Utils.canDexoptPackage).
         MetricsLogger.histogram(mPm.mContext, "opt_dialog_num_total",
                 getOptimizablePackages(newSnapshot).size());
         MetricsLogger.histogram(mPm.mContext, "opt_dialog_time_s", elapsedTimeSeconds);
@@ -415,12 +409,21 @@ public final class DexOptHelper {
             return true;
         }
 
+        @DexOptResult int dexoptStatus;
         if (options.isDexoptOnlySecondaryDex()) {
-            return mPm.getDexManager().dexoptSecondaryDex(options);
+            if (useArtService()) {
+                dexoptStatus = performDexOptWithArtService(options, 0 /* extraFlags */);
+            } else {
+                try {
+                    return mPm.getDexManager().dexoptSecondaryDex(options);
+                } catch (LegacyDexoptDisabledException e) {
+                    throw new RuntimeException(e);
+                }
+            }
         } else {
-            int dexoptStatus = performDexOptWithStatus(options);
-            return dexoptStatus != PackageDexOptimizer.DEX_OPT_FAILED;
+            dexoptStatus = performDexOptWithStatus(options);
         }
+        return dexoptStatus != PackageDexOptimizer.DEX_OPT_FAILED;
     }
 
     /**
@@ -449,9 +452,8 @@ public final class DexOptHelper {
     // if the package can now be considered up to date for the given filter.
     @DexOptResult
     private int performDexOptInternal(DexoptOptions options) {
-        Optional<Integer> artSrvRes = performDexOptWithArtService(options);
-        if (artSrvRes.isPresent()) {
-            return artSrvRes.get();
+        if (useArtService()) {
+            return performDexOptWithArtService(options, ArtFlags.FLAG_SHOULD_INCLUDE_DEPENDENCIES);
         }
 
         AndroidPackage p;
@@ -473,82 +475,44 @@ public final class DexOptHelper {
         final long callingId = Binder.clearCallingIdentity();
         try {
             return performDexOptInternalWithDependenciesLI(p, pkgSetting, options);
+        } catch (LegacyDexoptDisabledException e) {
+            throw new RuntimeException(e);
         } finally {
             Binder.restoreCallingIdentity(callingId);
         }
     }
 
     /**
-     * Performs dexopt on the given package using ART Service.
-     *
-     * @return a {@link DexOptResult}, or empty if the request isn't supported so that it is
-     *     necessary to fall back to the legacy code paths.
+     * Performs dexopt on the given package using ART Service. May only be called when ART Service
+     * is enabled, i.e. when {@link useArtService} returns true.
      */
-    private Optional<Integer> performDexOptWithArtService(DexoptOptions options) {
-        ArtManagerLocal artManager = getArtManagerLocal();
-        if (artManager == null) {
-            return Optional.empty();
-        }
-
+    @DexOptResult
+    private int performDexOptWithArtService(DexoptOptions options,
+            /*@DexoptFlags*/ int extraFlags) {
         try (PackageManagerLocal.FilteredSnapshot snapshot =
                         getPackageManagerLocal().withFilteredSnapshot()) {
             PackageState ops = snapshot.getPackageState(options.getPackageName());
             if (ops == null) {
-                return Optional.of(PackageDexOptimizer.DEX_OPT_FAILED);
+                return PackageDexOptimizer.DEX_OPT_FAILED;
             }
             AndroidPackage oap = ops.getAndroidPackage();
             if (oap == null) {
-                return Optional.of(PackageDexOptimizer.DEX_OPT_FAILED);
+                return PackageDexOptimizer.DEX_OPT_FAILED;
             }
-            if (oap.isApex()) {
-                return Optional.of(PackageDexOptimizer.DEX_OPT_SKIPPED);
-            }
-
-            // TODO(b/245301593): Delete the conditional when ART Service supports
-            // FLAG_SHOULD_INCLUDE_DEPENDENCIES and we can just set it unconditionally.
-            /*@OptimizeFlags*/ int extraFlags = ops.getUsesLibraries().isEmpty()
-                    ? 0
-                    : ArtFlags.FLAG_SHOULD_INCLUDE_DEPENDENCIES;
-
-            OptimizeParams params = options.convertToOptimizeParams(extraFlags);
-            if (params == null) {
-                return Optional.empty();
-            }
-
-            // TODO(b/251903639): Either remove controlDexOptBlocking, or don't ignore it here.
-            OptimizeResult result;
-            try {
-                result = artManager.optimizePackage(snapshot, options.getPackageName(), params);
-            } catch (UnsupportedOperationException e) {
-                reportArtManagerFallback(options.getPackageName(), e.toString());
-                return Optional.empty();
-            }
-
-            // TODO(b/251903639): Move this to ArtManagerLocal.addOptimizePackageDoneCallback when
-            // it is implemented.
-            for (OptimizeResult.PackageOptimizeResult pkgRes : result.getPackageOptimizeResults()) {
-                PackageState ps = snapshot.getPackageState(pkgRes.getPackageName());
-                AndroidPackage ap = ps != null ? ps.getAndroidPackage() : null;
-                if (ap != null) {
-                    CompilerStats.PackageStats stats = mPm.getOrCreateCompilerPackageStats(ap);
-                    for (OptimizeResult.DexContainerFileOptimizeResult dexRes :
-                            pkgRes.getDexContainerFileOptimizeResults()) {
-                        stats.setCompileTime(
-                                dexRes.getDexContainerFile(), dexRes.getDex2oatWallTimeMillis());
-                    }
-                }
-            }
-
-            return Optional.of(convertToDexOptResult(result));
+            DexoptParams params = options.convertToDexoptParams(extraFlags);
+            DexoptResult result =
+                    getArtManagerLocal().dexoptPackage(snapshot, options.getPackageName(), params);
+            return convertToDexOptResult(result);
         }
     }
 
     @DexOptResult
     private int performDexOptInternalWithDependenciesLI(
-            AndroidPackage p, @NonNull PackageStateInternal pkgSetting, DexoptOptions options) {
-        // System server gets a special path.
+            AndroidPackage p, @NonNull PackageStateInternal pkgSetting, DexoptOptions options)
+            throws LegacyDexoptDisabledException {
         if (PLATFORM_PACKAGE_NAME.equals(p.getPackageName())) {
-            return mPm.getDexManager().dexoptSystemServer(options);
+            // This needs to be done in odrefresh in early boot, for security reasons.
+            throw new IllegalArgumentException("Cannot dexopt the system server");
         }
 
         // Select the dex optimizer based on the force parameter.
@@ -616,15 +580,18 @@ public final class DexOptHelper {
                 getDefaultCompilerFilter(), null /* splitName */,
                 DexoptOptions.DEXOPT_FORCE | DexoptOptions.DEXOPT_BOOT_COMPLETE);
 
-        // performDexOptWithArtService ignores the snapshot and takes its own, so it can race with
-        // the package checks above, but at worst the effect is only a bit less friendly error
-        // below.
-        Optional<Integer> artSrvRes = performDexOptWithArtService(options);
-        int res;
-        if (artSrvRes.isPresent()) {
-            res = artSrvRes.get();
+        @DexOptResult int res;
+        if (useArtService()) {
+            // performDexOptWithArtService ignores the snapshot and takes its own, so it can race
+            // with the package checks above, but at worst the effect is only a bit less friendly
+            // error below.
+            res = performDexOptWithArtService(options, ArtFlags.FLAG_SHOULD_INCLUDE_DEPENDENCIES);
         } else {
-            res = performDexOptInternalWithDependenciesLI(pkg, packageState, options);
+            try {
+                res = performDexOptInternalWithDependenciesLI(pkg, packageState, options);
+            } catch (LegacyDexoptDisabledException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
@@ -669,8 +636,8 @@ public final class DexOptHelper {
         return installerPkg.getUid() == Binder.getCallingUid();
     }
 
-    public boolean performDexOptSecondary(String packageName, String compilerFilter,
-            boolean force) {
+    public boolean performDexOptSecondary(
+            String packageName, String compilerFilter, boolean force) {
         int flags = DexoptOptions.DEXOPT_ONLY_SECONDARY_DEX
                 | DexoptOptions.DEXOPT_CHECK_FOR_PROFILES_UPDATES
                 | DexoptOptions.DEXOPT_BOOT_COMPLETE
@@ -872,7 +839,7 @@ public final class DexOptHelper {
         }
     }
 
-    /*package*/ void controlDexOptBlocking(boolean block) {
+    /*package*/ void controlDexOptBlocking(boolean block) throws LegacyDexoptDisabledException {
         mPm.mPackageDexOptimizer.controlDexOptBlocking(block);
     }
 
@@ -914,30 +881,98 @@ public final class DexOptHelper {
         return false;
     }
 
-    private @NonNull PackageManagerLocal getPackageManagerLocal() {
+    /**
+     * Returns true if ART Service should be used for package optimization.
+     */
+    public static boolean useArtService() {
+        return SystemProperties.getBoolean("dalvik.vm.useartservice", false);
+    }
+
+    /**
+     * Returns {@link DexUseManagerLocal} if ART Service should be used for package optimization.
+     */
+    public static @Nullable DexUseManagerLocal getDexUseManagerLocal() {
+        if (!useArtService()) {
+            return null;
+        }
         try {
-            return LocalManagerRegistry.getManagerOrThrow(PackageManagerLocal.class);
+            return LocalManagerRegistry.getManagerOrThrow(DexUseManagerLocal.class);
         } catch (ManagerNotFoundException e) {
             throw new RuntimeException(e);
         }
     }
 
-    /**
-     * Called whenever we need to fall back from ART Service to the legacy dexopt code.
-     */
-    public static void reportArtManagerFallback(String packageName, String reason) {
-        // STOPSHIP(b/251903639): Minimize these calls to avoid platform getting shipped with code
-        // paths that will always bypass ART Service.
-        Slog.i(TAG, "Falling back to old PackageManager dexopt for " + packageName + ": " + reason);
+    private class DexoptDoneHandler implements ArtManagerLocal.DexoptDoneCallback {
+        /**
+         * Called after every package dexopt operation done by {@link ArtManagerLocal} (when ART
+         * Service is in use).
+         */
+        @Override
+        public void onDexoptDone(@NonNull DexoptResult result) {
+            switch (result.getReason()) {
+                case ReasonMapping.REASON_FIRST_BOOT:
+                case ReasonMapping.REASON_BOOT_AFTER_OTA:
+                case ReasonMapping.REASON_BOOT_AFTER_MAINLINE_UPDATE:
+                    int numDexopted = 0;
+                    int numSkipped = 0;
+                    int numFailed = 0;
+                    for (DexoptResult.PackageDexoptResult pkgRes :
+                            result.getPackageDexoptResults()) {
+                        switch (pkgRes.getStatus()) {
+                            case DexoptResult.DEXOPT_PERFORMED:
+                                numDexopted += 1;
+                                break;
+                            case DexoptResult.DEXOPT_SKIPPED:
+                                numSkipped += 1;
+                                break;
+                            case DexoptResult.DEXOPT_FAILED:
+                                numFailed += 1;
+                                break;
+                        }
+                    }
+
+                    reportBootDexopt(mBootDexoptStartTime, numDexopted, numSkipped, numFailed);
+                    break;
+            }
+
+            for (DexoptResult.PackageDexoptResult pkgRes : result.getPackageDexoptResults()) {
+                CompilerStats.PackageStats stats =
+                        mPm.getOrCreateCompilerPackageStats(pkgRes.getPackageName());
+                for (DexoptResult.DexContainerFileDexoptResult dexRes :
+                        pkgRes.getDexContainerFileDexoptResults()) {
+                    stats.setCompileTime(
+                            dexRes.getDexContainerFile(), dexRes.getDex2oatWallTimeMillis());
+                }
+            }
+
+            synchronized (mPm.mLock) {
+                mPm.getPackageUsage().maybeWriteAsync(mPm.mSettings.getPackagesLocked());
+                mPm.mCompilerStats.maybeWriteAsync();
+            }
+        }
     }
 
     /**
-     * Returns {@link ArtManagerLocal} if one is found and should be used for package optimization.
+     * Initializes {@link ArtManagerLocal} before {@link getArtManagerLocal} is called.
      */
-    private @Nullable ArtManagerLocal getArtManagerLocal() {
-        if (!"true".equals(SystemProperties.get("dalvik.vm.useartservice", ""))) {
-            return null;
+    public static void initializeArtManagerLocal(
+            @NonNull Context systemContext, @NonNull PackageManagerService pm) {
+        if (!useArtService()) {
+            return;
         }
+
+        ArtManagerLocal artManager = new ArtManagerLocal(systemContext);
+        artManager.addDexoptDoneCallback(false /* onlyIncludeUpdates */, Runnable::run,
+                pm.getDexOptHelper().new DexoptDoneHandler());
+        LocalManagerRegistry.addManager(ArtManagerLocal.class, artManager);
+
+        artManager.scheduleBackgroundDexoptJob();
+    }
+
+    /**
+     * Returns the registered {@link ArtManagerLocal} instance, or else throws an unchecked error.
+     */
+    public static @NonNull ArtManagerLocal getArtManagerLocal() {
         try {
             return LocalManagerRegistry.getManagerOrThrow(ArtManagerLocal.class);
         } catch (ManagerNotFoundException e) {
@@ -946,25 +981,25 @@ public final class DexOptHelper {
     }
 
     /**
-     * Converts an ART Service {@link OptimizeResult} to {@link DexOptResult}.
+     * Converts an ART Service {@link DexoptResult} to {@link DexOptResult}.
      *
      * For interfacing {@link ArtManagerLocal} with legacy dex optimization code in PackageManager.
      */
     @DexOptResult
-    private static int convertToDexOptResult(OptimizeResult result) {
-        /*@OptimizeStatus*/ int status = result.getFinalStatus();
+    private static int convertToDexOptResult(DexoptResult result) {
+        /*@DexoptResultStatus*/ int status = result.getFinalStatus();
         switch (status) {
-            case OptimizeResult.OPTIMIZE_SKIPPED:
+            case DexoptResult.DEXOPT_SKIPPED:
                 return PackageDexOptimizer.DEX_OPT_SKIPPED;
-            case OptimizeResult.OPTIMIZE_FAILED:
+            case DexoptResult.DEXOPT_FAILED:
                 return PackageDexOptimizer.DEX_OPT_FAILED;
-            case OptimizeResult.OPTIMIZE_PERFORMED:
+            case DexoptResult.DEXOPT_PERFORMED:
                 return PackageDexOptimizer.DEX_OPT_PERFORMED;
-            case OptimizeResult.OPTIMIZE_CANCELLED:
+            case DexoptResult.DEXOPT_CANCELLED:
                 return PackageDexOptimizer.DEX_OPT_CANCELLED;
             default:
-                throw new IllegalArgumentException("OptimizeResult for "
-                        + result.getPackageOptimizeResults().get(0).getPackageName()
+                throw new IllegalArgumentException("DexoptResult for "
+                        + result.getPackageDexoptResults().get(0).getPackageName()
                         + " has unsupported status " + status);
         }
     }

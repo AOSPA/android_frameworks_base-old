@@ -76,6 +76,8 @@ public abstract class JobServiceEngine {
     private static final int MSG_UPDATE_ESTIMATED_NETWORK_BYTES = 6;
     /** Message that the client wants to give JobScheduler a notification to tie to the job. */
     private static final int MSG_SET_NOTIFICATION = 7;
+    /** Message that the network to use has changed. */
+    private static final int MSG_INFORM_OF_NETWORK_CHANGE = 8;
 
     private final IJobService mBinder;
 
@@ -124,6 +126,16 @@ public abstract class JobServiceEngine {
             if (service != null) {
                 Message m = Message.obtain(service.mHandler, MSG_EXECUTE_JOB, jobParams);
                 m.sendToTarget();
+            }
+        }
+
+        @Override
+        public void onNetworkChanged(JobParameters jobParams) throws RemoteException {
+            JobServiceEngine service = mService.get();
+            if (service != null) {
+                service.mHandler.removeMessages(MSG_INFORM_OF_NETWORK_CHANGE);
+                service.mHandler.obtainMessage(MSG_INFORM_OF_NETWORK_CHANGE, jobParams)
+                        .sendToTarget();
             }
         }
 
@@ -271,6 +283,16 @@ public abstract class JobServiceEngine {
                     args.recycle();
                     break;
                 }
+                case MSG_INFORM_OF_NETWORK_CHANGE: {
+                    final JobParameters params = (JobParameters) msg.obj;
+                    try {
+                        JobServiceEngine.this.onNetworkChanged(params);
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error while executing job: " + params.getJobId());
+                        throw new RuntimeException(e);
+                    }
+                    break;
+                }
                 default:
                     Log.e(TAG, "Unrecognised message received.");
                     break;
@@ -386,6 +408,15 @@ public abstract class JobServiceEngine {
     }
 
     /**
+     * Engine's report that the network for the job has changed.
+     *
+     * @see JobService#onNetworkChanged(JobParameters)
+     */
+    public void onNetworkChanged(@NonNull JobParameters params) {
+        Log.w(TAG, "onNetworkChanged() not implemented. Must override in a subclass.");
+    }
+
+    /**
      * Engine's request to get how much data has been downloaded.
      *
      * @hide
@@ -418,11 +449,12 @@ public abstract class JobServiceEngine {
     /**
      * Call in to engine to report data transfer progress.
      *
-     * @hide
      * @see JobService#updateTransferredNetworkBytes(JobParameters, long, long)
+     * @see JobService#updateTransferredNetworkBytes(JobParameters, JobWorkItem, long, long)
      */
     public void updateTransferredNetworkBytes(@NonNull JobParameters params,
-            @Nullable JobWorkItem item, long downloadBytes, long uploadBytes) {
+            @Nullable JobWorkItem item,
+            @BytesLong long downloadBytes, @BytesLong long uploadBytes) {
         if (params == null) {
             throw new NullPointerException("params");
         }
@@ -437,11 +469,11 @@ public abstract class JobServiceEngine {
     /**
      * Call in to engine to report data transfer progress.
      *
-     * @hide
+     * @see JobService#updateEstimatedNetworkBytes(JobParameters, long, long)
      * @see JobService#updateEstimatedNetworkBytes(JobParameters, JobWorkItem, long, long)
      */
     public void updateEstimatedNetworkBytes(@NonNull JobParameters params,
-            @NonNull JobWorkItem item,
+            @Nullable JobWorkItem item,
             @BytesLong long downloadBytes, @BytesLong long uploadBytes) {
         if (params == null) {
             throw new NullPointerException("params");
@@ -457,7 +489,6 @@ public abstract class JobServiceEngine {
     /**
      * Give JobScheduler a notification to tie to this job's lifecycle.
      *
-     * @hide
      * @see JobService#setNotification(JobParameters, int, Notification, int)
      */
     public void setNotification(@NonNull JobParameters params, int notificationId,

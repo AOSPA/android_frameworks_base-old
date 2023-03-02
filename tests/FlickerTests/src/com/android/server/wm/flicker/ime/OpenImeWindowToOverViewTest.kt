@@ -17,7 +17,7 @@
 package com.android.server.wm.flicker.ime
 
 import android.platform.test.annotations.Presubmit
-import android.platform.test.annotations.RequiresDevice
+import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.BaseTest
 import com.android.server.wm.flicker.FlickerBuilder
 import com.android.server.wm.flicker.FlickerTest
@@ -46,7 +46,7 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-class OpenImeWindowToOverViewTest(flicker: FlickerTest) : BaseTest(flicker) {
+open class OpenImeWindowToOverViewTest(flicker: FlickerTest) : BaseTest(flicker) {
     private val imeTestApp = ImeAppAutoFocusHelper(instrumentation, flicker.scenario.startRotation)
 
     /** {@inheritDoc} */

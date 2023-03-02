@@ -7,7 +7,9 @@ val aidlStub: TestFile = java(
     """
         package android.test;
         public interface ITest extends android.os.IInterface {
-            public static abstract class Stub extends android.os.Binder implements android.test.ITest {}
+            public static abstract class Stub extends android.os.Binder implements android.test.ITest {
+                protected void test_enforcePermission() throws SecurityException {}
+            }
             public void test() throws android.os.RemoteException;
         }
     """
@@ -23,6 +25,8 @@ val contextStub: TestFile = java(
             public void enforceCallingPermission(@android.content.pm.PermissionName String permission, String message) {}
             @android.content.pm.PermissionMethod(orSelf = true)
             public int checkCallingOrSelfPermission(@android.content.pm.PermissionName String permission, String message) {}
+            @android.content.pm.PermissionMethod
+            public int checkCallingPermission(@android.content.pm.PermissionName String permission, String message) {}
         }
     """
 ).indented()

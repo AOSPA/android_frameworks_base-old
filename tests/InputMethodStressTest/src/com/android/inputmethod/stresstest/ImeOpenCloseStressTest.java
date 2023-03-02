@@ -16,6 +16,8 @@
 
 package com.android.inputmethod.stresstest;
 
+import static android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED;
+
 import static com.android.inputmethod.stresstest.ImeStressTestUtil.INPUT_METHOD_MANAGER_HIDE_ON_CREATE;
 import static com.android.inputmethod.stresstest.ImeStressTestUtil.INPUT_METHOD_MANAGER_SHOW_ON_CREATE;
 import static com.android.inputmethod.stresstest.ImeStressTestUtil.REQUEST_FOCUS_ON_CREATE;
@@ -67,10 +69,11 @@ public final class ImeOpenCloseStressTest {
     private static final int NUM_TEST_ITERATIONS = 10;
 
     @Rule public UnlockScreenRule mUnlockScreenRule = new UnlockScreenRule();
-
-    @Rule
-    public ScreenCaptureRule mScreenCaptureRule =
+    @Rule public ScreenCaptureRule mScreenCaptureRule =
             new ScreenCaptureRule("/sdcard/InputMethodStressTest");
+    @Rule public DisableLockScreenRule mDisableLockScreenRule = new DisableLockScreenRule();
+    @Rule public ScreenOrientationRule mScreenOrientationRule =
+            new ScreenOrientationRule(true /* isPortrait */);
 
     private final Instrumentation mInstrumentation;
     private final int mSoftInputFlags;
@@ -208,8 +211,23 @@ public final class ImeOpenCloseStressTest {
         verifyShowBehavior(activity);
     }
 
+    /**
+     * Test IME hidden by calling show and hide IME consecutively with
+     * {@link android.view.inputmethod.InputMethodManager} APIs in
+     * {@link android.app.Activity#onCreate}.
+     *
+     * <p> Note for developers: Use {@link WindowManager.LayoutParams#SOFT_INPUT_STATE_UNCHANGED}
+     * window flag to avoid some softInputMode visibility flags may take presence over
+     * {@link android.view.inputmethod.InputMethodManager} APIs (e.g. use showSoftInput to show
+     * IME in {@link android.app.Activity#onCreate} but being hidden by
+     * {@link WindowManager.LayoutParams#SOFT_INPUT_STATE_ALWAYS_HIDDEN} window flag after the
+     * activity window focused).</p>
+     */
     @Test
     public void testShowHideWithInputMethodManager_onCreate() {
+        if (mSoftInputFlags != SOFT_INPUT_STATE_UNCHANGED) {
+            return;
+        }
         // Show and hide with InputMethodManager at onCreate()
         Intent intent =
                 createIntent(
@@ -221,10 +239,7 @@ public final class ImeOpenCloseStressTest {
                                 INPUT_METHOD_MANAGER_HIDE_ON_CREATE));
         TestActivity activity = TestActivity.start(intent);
 
-        // TODO: The Ime is expected to show first and then hide. But show or hide
-        // with InputMethodManager at onCreate() would always fail because the window
-        // has not gained focus, so the actual behavior will be the same as auto-show.
-        // verifyHideBehavior(activity);
+        verifyHideBehavior(activity);
     }
 
     @Test
@@ -351,8 +366,7 @@ public final class ImeOpenCloseStressTest {
         // Wait until IMMS / IMS handles messages.
         SystemClock.sleep(1000);
         mInstrumentation.waitForIdleSync();
-        // TODO(b/248456059): Ime should be hidden but is shown.
-        // verifyHideBehavior(activity);
+        verifyHideBehavior(activity);
 
         mInstrumentation.runOnMainSync(activity::showImeWithWindowInsetsController);
         verifyShowBehavior(activity);
@@ -419,9 +433,23 @@ public final class ImeOpenCloseStressTest {
         verifyShowBehaviorNotRequestFocus(activity);
     }
 
+    /**
+     * Test IME hidden by calling show and hide IME consecutively with
+     * {@link android.view.WindowInsetsController} APIs in {@link android.app.Activity#onCreate}.
+     *
+     * <p> Note for developers: Use {@link WindowManager.LayoutParams#SOFT_INPUT_STATE_UNCHANGED}
+     * window flag to avoid some softInputMode visibility flags may take presence over
+     * {@link android.view.WindowInsetsController} APIs (e.g. use showSoftInput to show
+     * IME in {@link android.app.Activity#onCreate} but being hidden by
+     * {@link WindowManager.LayoutParams#SOFT_INPUT_STATE_ALWAYS_HIDDEN} window flag after the
+     * activity window focused).</p>
+     */
     @Test
     public void testHideWithWindowInsetsController_onCreate_requestFocus() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return;
+        }
+        if (mSoftInputFlags != SOFT_INPUT_STATE_UNCHANGED) {
             return;
         }
         // Show and hide with InputMethodManager at onCreate()
@@ -435,8 +463,7 @@ public final class ImeOpenCloseStressTest {
                                 WINDOW_INSETS_CONTROLLER_HIDE_ON_CREATE));
         TestActivity activity = TestActivity.start(intent);
 
-        // TODO(b/248456059): Ime should be hidden but is shown.
-        //verifyHideBehavior(activity);
+        verifyHideBehavior(activity);
     }
 
     @Test
@@ -485,7 +512,6 @@ public final class ImeOpenCloseStressTest {
 
         UiDevice uiDevice = UiDevice.getInstance(mInstrumentation);
 
-        uiDevice.freezeRotation();
         uiDevice.setOrientationRight();
         uiDevice.waitForIdle();
         Thread.sleep(1000);
@@ -502,7 +528,6 @@ public final class ImeOpenCloseStressTest {
 
         uiDevice.setOrientationNatural();
         uiDevice.waitForIdle();
-        uiDevice.unfreezeRotation();
     }
 
     private static void verifyShowBehavior(TestActivity activity) {

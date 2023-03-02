@@ -51,9 +51,11 @@ class IntSet private constructor(
     fun copy(): IntSet = IntSet(array.clone())
 }
 
+fun IntSet(values: IntArray): IntSet = IntSet().apply{ this += values }
+
 inline fun IntSet.allIndexed(predicate: (Int, Int) -> Boolean): Boolean {
-    for (index in 0 until size) {
-        if (!predicate(index, elementAt(index))) {
+    forEachIndexed { index, element ->
+        if (!predicate(index, element)) {
             return false
         }
     }
@@ -61,8 +63,8 @@ inline fun IntSet.allIndexed(predicate: (Int, Int) -> Boolean): Boolean {
 }
 
 inline fun IntSet.anyIndexed(predicate: (Int, Int) -> Boolean): Boolean {
-    for (index in 0 until size) {
-        if (predicate(index, elementAt(index))) {
+    forEachIndexed { index, element ->
+        if (predicate(index, element)) {
             return true
         }
     }
@@ -71,6 +73,12 @@ inline fun IntSet.anyIndexed(predicate: (Int, Int) -> Boolean): Boolean {
 
 inline fun IntSet.forEachIndexed(action: (Int, Int) -> Unit) {
     for (index in 0 until size) {
+        action(index, elementAt(index))
+    }
+}
+
+inline fun IntSet.forEachReversedIndexed(action: (Int, Int) -> Unit) {
+    for (index in lastIndex downTo 0) {
         action(index, elementAt(index))
     }
 }
@@ -87,8 +95,8 @@ inline operator fun IntSet.minusAssign(element: Int) {
 }
 
 inline fun IntSet.noneIndexed(predicate: (Int, Int) -> Boolean): Boolean {
-    for (index in 0 until size) {
-        if (predicate(index, elementAt(index))) {
+    forEachIndexed { index, element ->
+        if (predicate(index, element)) {
             return false
         }
     }
@@ -103,18 +111,32 @@ inline operator fun IntSet.plusAssign(element: Int) {
     add(element)
 }
 
-inline fun IntSet.removeAllIndexed(predicate: (Int, Int) -> Boolean) {
-    for (index in lastIndex downTo 0) {
-        if (predicate(index, elementAt(index))) {
-            removeAt(index)
-        }
-    }
+operator fun IntSet.plusAssign(set: IntSet) {
+    set.forEachIndexed { _, it -> this += it }
 }
 
-inline fun IntSet.retainAllIndexed(predicate: (Int, Int) -> Boolean) {
-    for (index in lastIndex downTo 0) {
-        if (!predicate(index, elementAt(index))) {
+operator fun IntSet.plusAssign(array: IntArray) {
+    array.forEach { this += it }
+}
+
+inline fun IntSet.removeAllIndexed(predicate: (Int, Int) -> Boolean): Boolean {
+    var isChanged = false
+    forEachReversedIndexed { index, element ->
+        if (predicate(index, element)) {
             removeAt(index)
+            isChanged = true
         }
     }
+    return isChanged
+}
+
+inline fun IntSet.retainAllIndexed(predicate: (Int, Int) -> Boolean): Boolean {
+    var isChanged = false
+    forEachReversedIndexed { index, element ->
+        if (!predicate(index, element)) {
+            removeAt(index)
+            isChanged = true
+        }
+    }
+    return isChanged
 }

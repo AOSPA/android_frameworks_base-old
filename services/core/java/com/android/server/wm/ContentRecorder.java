@@ -16,9 +16,11 @@
 
 package com.android.server.wm;
 
+import static android.content.Context.MEDIA_PROJECTION_SERVICE;
 import static android.content.res.Configuration.ORIENTATION_UNDEFINED;
 import static android.view.ContentRecordingSession.RECORD_CONTENT_DISPLAY;
 import static android.view.ContentRecordingSession.RECORD_CONTENT_TASK;
+import static android.view.ViewProtoEnums.DISPLAY_STATE_OFF;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_CONTENT_RECORDING;
 
@@ -27,8 +29,10 @@ import android.annotation.Nullable;
 import android.content.res.Configuration;
 import android.graphics.Point;
 import android.graphics.Rect;
-import android.media.projection.MediaProjectionManager;
+import android.media.projection.IMediaProjectionManager;
 import android.os.IBinder;
+import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.provider.DeviceConfig;
 import android.view.ContentRecordingSession;
 import android.view.Display;
@@ -83,13 +87,7 @@ final class ContentRecorder implements WindowContainerListener {
     private int mLastOrientation = ORIENTATION_UNDEFINED;
 
     ContentRecorder(@NonNull DisplayContent displayContent) {
-        this(displayContent, () -> {
-            MediaProjectionManager mpm = displayContent.mWmService.mContext.getSystemService(
-                    MediaProjectionManager.class);
-            if (mpm != null) {
-                mpm.stopActiveProjection();
-            }
-        });
+        this(displayContent, new RemoteMediaProjectionManagerWrapper());
     }
 
     @VisibleForTesting
@@ -214,6 +212,7 @@ final class ContentRecorder implements WindowContainerListener {
      * Stops recording on this DisplayContent, and updates the session details.
      */
     void stopRecording() {
+        unregisterListener();
         if (mRecordedSurface != null) {
             // Do not wait for the mirrored surface to be garbage collected, but clean up
             // immediately.
@@ -230,7 +229,7 @@ final class ContentRecorder implements WindowContainerListener {
      * Ensure recording does not fall back to the display stack; ensure the recording is stopped
      * and the client notified by tearing down the virtual display.
      */
-    void stopMediaProjection() {
+    private void stopMediaProjection() {
         ProtoLog.v(WM_DEBUG_CONTENT_RECORDING,
                 "Stop MediaProjection on virtual display %d", mDisplayContent.getDisplayId());
         if (mMediaProjectionManager != null) {
@@ -248,6 +247,16 @@ final class ContentRecorder implements WindowContainerListener {
         mContentRecordingSession = null;
         mDisplayContent.mWmService.mContentRecordingController.setContentRecordingSessionLocked(
                 null, mDisplayContent.mWmService);
+    }
+
+    private void unregisterListener() {
+        Task recordedTask = mRecordedWindowContainer != null
+                ? mRecordedWindowContainer.asTask() : null;
+        if (recordedTask == null || !isRecordingContentTask()) {
+            return;
+        }
+        recordedTask.unregisterWindowContainerListener(this);
+        mRecordedWindowContainer = null;
     }
 
     /**
@@ -303,6 +312,18 @@ final class ContentRecorder implements WindowContainerListener {
                         .reparent(mDisplayContent.getOverlayLayer(), null);
         // Retrieve the size of the DisplayArea to mirror.
         updateMirroredSurface(transaction, mRecordedWindowContainer.getBounds(), surfaceSize);
+
+        // Notify the client about the visibility of the mirrored region, now that we have begun
+        // capture.
+        if (mContentRecordingSession.getContentToRecord() == RECORD_CONTENT_TASK) {
+            mMediaProjectionManager.notifyActiveProjectionCapturedContentVisibilityChanged(
+                    mRecordedWindowContainer.asTask().isVisibleRequested());
+        } else {
+            int currentDisplayState =
+                    mRecordedWindowContainer.asDisplayContent().getDisplay().getState();
+            mMediaProjectionManager.notifyActiveProjectionCapturedContentVisibilityChanged(
+                    currentDisplayState != DISPLAY_STATE_OFF);
+        }
 
         // No need to clean up. In SurfaceFlinger, parents hold references to their children. The
         // mirrored SurfaceControl is alive since the parent DisplayContent SurfaceControl is
@@ -392,6 +413,7 @@ final class ContentRecorder implements WindowContainerListener {
      */
     private void handleStartRecordingFailed() {
         final boolean shouldExitTaskRecording = isRecordingContentTask();
+        unregisterListener();
         clearContentRecordingSession();
         if (shouldExitTaskRecording) {
             // Clean up the cached session first to ensure recording doesn't re-start, since
@@ -445,6 +467,9 @@ final class ContentRecorder implements WindowContainerListener {
                 .setPosition(mRecordedSurface, shiftedX /* x */, shiftedY /* y */)
                 .apply();
         mLastRecordedBounds = new Rect(recordedContentBounds);
+        // Request to notify the client about the resize.
+        mMediaProjectionManager.notifyActiveProjectionCapturedContentResized(
+                mLastRecordedBounds.width(), mLastRecordedBounds.height());
     }
 
     /**
@@ -478,12 +503,7 @@ final class ContentRecorder implements WindowContainerListener {
                 "Recorded task is removed, so stop recording on display %d",
                 mDisplayContent.getDisplayId());
 
-        Task recordedTask = mRecordedWindowContainer != null
-                ? mRecordedWindowContainer.asTask() : null;
-        if (recordedTask == null || !isRecordingContentTask()) {
-            return;
-        }
-        recordedTask.unregisterWindowContainerListener(this);
+        unregisterListener();
         // Stop mirroring and teardown.
         clearContentRecordingSession();
         // Clean up the cached session first to ensure recording doesn't re-start, since
@@ -501,8 +521,86 @@ final class ContentRecorder implements WindowContainerListener {
         mLastOrientation = mergedOverrideConfiguration.orientation;
     }
 
+    // WindowContainerListener
+    @Override
+    public void onVisibleRequestedChanged(boolean isVisibleRequested) {
+        // Check still recording just to be safe.
+        if (isCurrentlyRecording() && mLastRecordedBounds != null) {
+            mMediaProjectionManager.notifyActiveProjectionCapturedContentVisibilityChanged(
+                    isVisibleRequested);
+        }
+    }
+
     @VisibleForTesting interface MediaProjectionManagerWrapper {
         void stopActiveProjection();
+        void notifyActiveProjectionCapturedContentResized(int width, int height);
+        void notifyActiveProjectionCapturedContentVisibilityChanged(boolean isVisible);
+    }
+
+    private static final class RemoteMediaProjectionManagerWrapper implements
+            MediaProjectionManagerWrapper {
+        @Nullable private IMediaProjectionManager mIMediaProjectionManager = null;
+
+        @Override
+        public void stopActiveProjection() {
+            fetchMediaProjectionManager();
+            if (mIMediaProjectionManager == null) {
+                return;
+            }
+            try {
+                mIMediaProjectionManager.stopActiveProjection();
+            } catch (RemoteException e) {
+                ProtoLog.e(WM_DEBUG_CONTENT_RECORDING,
+                        "Unable to tell MediaProjectionManagerService to stop the active "
+                                + "projection: %s",
+                        e);
+            }
+        }
+
+        @Override
+        public void notifyActiveProjectionCapturedContentResized(int width, int height) {
+            fetchMediaProjectionManager();
+            if (mIMediaProjectionManager == null) {
+                return;
+            }
+            try {
+                mIMediaProjectionManager.notifyActiveProjectionCapturedContentResized(width,
+                        height);
+            } catch (RemoteException e) {
+                ProtoLog.e(WM_DEBUG_CONTENT_RECORDING,
+                        "Unable to tell MediaProjectionManagerService about resizing the active "
+                                + "projection: %s",
+                        e);
+            }
+        }
+
+        @Override
+        public void notifyActiveProjectionCapturedContentVisibilityChanged(boolean isVisible) {
+            fetchMediaProjectionManager();
+            if (mIMediaProjectionManager == null) {
+                return;
+            }
+            try {
+                mIMediaProjectionManager.notifyActiveProjectionCapturedContentVisibilityChanged(
+                        isVisible);
+            } catch (RemoteException e) {
+                ProtoLog.e(WM_DEBUG_CONTENT_RECORDING,
+                        "Unable to tell MediaProjectionManagerService about visibility change on "
+                                + "the active projection: %s",
+                        e);
+            }
+        }
+
+        private void fetchMediaProjectionManager() {
+            if (mIMediaProjectionManager != null) {
+                return;
+            }
+            IBinder b = ServiceManager.getService(MEDIA_PROJECTION_SERVICE);
+            if (b == null) {
+                return;
+            }
+            mIMediaProjectionManager = IMediaProjectionManager.Stub.asInterface(b);
+        }
     }
 
     private boolean isRecordingContentTask() {

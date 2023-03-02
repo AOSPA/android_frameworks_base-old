@@ -51,6 +51,7 @@ interface IUserManager {
     String[] getPreInstallableSystemPackages(in String userType);
     void setUserEnabled(int userId);
     void setUserAdmin(int userId);
+    void revokeUserAdmin(int userId);
     void evictCredentialEncryptionKey(int userId);
     boolean removeUser(int userId);
     boolean removeUserEvenWhenDisallowed(int userId);
@@ -101,7 +102,7 @@ interface IUserManager {
     Bundle getDefaultGuestRestrictions();
     int removeUserWhenPossible(int userId, boolean overrideDevicePolicy);
     boolean markGuestForDeletion(int userId);
-    UserInfo findCurrentGuestUser();
+    List<UserInfo> getGuestUsers();
     boolean isQuietModeEnabled(int userId);
     UserHandle createUserWithAttributes(in String userName, in String userType, int flags,
             in Bitmap userIcon,
@@ -141,4 +142,8 @@ interface IUserManager {
     long getUserStartRealtime();
     long getUserUnlockRealtime();
     boolean setUserEphemeral(int userId, boolean enableEphemeral);
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(anyOf = {android.Manifest.permission.MANAGE_USERS, android.Manifest.permission.CREATE_USERS})")
+    void setBootUser(int userId);
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(anyOf = {android.Manifest.permission.MANAGE_USERS, android.Manifest.permission.CREATE_USERS})")
+    int getBootUser();
 }

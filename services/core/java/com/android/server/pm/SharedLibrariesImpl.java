@@ -17,6 +17,7 @@
 package com.android.server.pm;
 
 import static android.content.pm.PackageManager.INSTALL_FAILED_MISSING_SHARED_LIBRARY;
+import static android.content.pm.PackageManager.INSTALL_FAILED_SHARED_LIBRARY_BAD_CERTIFICATE_DIGEST;
 
 import static com.android.server.pm.PackageManagerService.PLATFORM_PACKAGE_NAME;
 import static com.android.server.pm.PackageManagerService.SCAN_BOOTING;
@@ -358,7 +359,7 @@ public final class SharedLibrariesImpl implements SharedLibrariesRead, Watchable
                     continue;
                 }
 
-                if (ps.getPkg().isSystem()) {
+                if (ps.isSystem()) {
                     continue;
                 }
 
@@ -408,7 +409,7 @@ public final class SharedLibrariesImpl implements SharedLibrariesRead, Watchable
         final int versionCount = versionedLib.size();
         for (int i = 0; i < versionCount; i++) {
             final long libVersion = versionedLib.keyAt(i);
-            if (libVersion < pkg.getStaticSharedLibVersion()) {
+            if (libVersion < pkg.getStaticSharedLibraryVersion()) {
                 previousLibVersion = Math.max(previousLibVersion, libVersion);
             }
         }
@@ -468,7 +469,7 @@ public final class SharedLibrariesImpl implements SharedLibrariesRead, Watchable
                 }
             } else if (pkg.getStaticSharedLibraryName() != null) {
                 SharedLibraryInfo definedLibrary = getSharedLibraryInfo(
-                        pkg.getStaticSharedLibraryName(), pkg.getStaticSharedLibVersion());
+                        pkg.getStaticSharedLibraryName(), pkg.getStaticSharedLibraryVersion());
                 if (definedLibrary != null) {
                     action.accept(definedLibrary, libInfo);
                 }
@@ -722,8 +723,8 @@ public final class SharedLibrariesImpl implements SharedLibrariesRead, Watchable
                     // it is better for the user to reinstall than to be in an limbo
                     // state. Also libs disappearing under an app should never happen
                     // - just in case.
-                    if (!pkg.isSystem() || pkgSetting.getPkgState().isUpdatedSystemApp()) {
-                        final int flags = pkgSetting.getPkgState().isUpdatedSystemApp()
+                    if (!pkgSetting.isSystem() || pkgSetting.isUpdatedSystemApp()) {
+                        final int flags = pkgSetting.isUpdatedSystemApp()
                                 ? PackageManager.DELETE_KEEP_DATA : 0;
                         synchronized (mPm.mInstallLock) {
                             mDeletePackageHelper.deletePackageLIF(pkg.getPackageName(), null, true,
@@ -842,13 +843,15 @@ public final class SharedLibrariesImpl implements SharedLibrariesRead, Watchable
         if (installRequest.getStaticSharedLibraryInfo() != null) {
             return Collections.singletonList(installRequest.getStaticSharedLibraryInfo());
         }
-        final boolean hasDynamicLibraries = parsedPackage != null && parsedPackage.isSystem()
+        boolean isSystemApp = installRequest.getScannedPackageSetting() != null
+                && installRequest.getScannedPackageSetting().isSystem();
+        final boolean hasDynamicLibraries = parsedPackage != null && isSystemApp
                 && installRequest.getDynamicSharedLibraryInfos() != null;
         if (!hasDynamicLibraries) {
             return null;
         }
         final boolean isUpdatedSystemApp = installRequest.getScannedPackageSetting() != null
-                && installRequest.getScannedPackageSetting().getPkgState().isUpdatedSystemApp();
+                && installRequest.getScannedPackageSetting().isUpdatedSystemApp();
         // We may not yet have disabled the updated package yet, so be sure to grab the
         // current setting if that's the case.
         final PackageSetting updatedSystemPs = isUpdatedSystemApp
@@ -1033,8 +1036,17 @@ public final class SharedLibrariesImpl implements SharedLibrariesRead, Watchable
                     } else {
                         // lib signing cert could have rotated beyond the one expected, check to see
                         // if the new one has been blessed by the old
-                        byte[] digestBytes = HexEncoding.decode(
-                                expectedCertDigests[0], false /* allowSingleChar */);
+                        final byte[] digestBytes;
+                        try {
+                            digestBytes = HexEncoding.decode(
+                                    expectedCertDigests[0], false /* allowSingleChar */);
+                        } catch (IllegalArgumentException e) {
+                            throw new PackageManagerException(
+                                    INSTALL_FAILED_SHARED_LIBRARY_BAD_CERTIFICATE_DIGEST,
+                                    "Package " + packageName + " declares bad certificate digest "
+                                            + "for " + libraryType + " library " + libName
+                                            + "; failing!");
+                        }
                         if (!libPkg.hasSha256Certificate(digestBytes)) {
                             throw new PackageManagerException(INSTALL_FAILED_MISSING_SHARED_LIBRARY,
                                     "Package " + packageName + " requires differently signed "

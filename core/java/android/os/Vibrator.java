@@ -212,11 +212,35 @@ public abstract class Vibrator {
      *
      * @return True if the hardware can control the frequency of the vibrations independently of
      * the vibration amplitude, false otherwise.
+     * @hide
      */
+    @TestApi
     public boolean hasFrequencyControl() {
         // We currently can only control frequency of the vibration using the compose PWLE method.
         return getInfo().hasCapability(
                 IVibrator.CAP_FREQUENCY_CONTROL | IVibrator.CAP_COMPOSE_PWLE_EFFECTS);
+    }
+
+    /**
+     * Checks whether or not the vibrator supports all components of a given {@link VibrationEffect}
+     * (i.e. the vibrator can play the given effect as intended).
+     *
+     * <p>If this method returns {@code true}, then the VibrationEffect should play as expected.
+     * If {@code false}, playing the VibrationEffect might still make a vibration, but the vibration
+     * may be significantly degraded from the intention.
+     *
+     * <p>This method aggregates the results of feature check methods such as
+     * {@link #hasAmplitudeControl}, {@link #areAllPrimitivesSupported(int...)}, etc, depending
+     * on the features that are actually used by the VibrationEffect.
+     *
+     * @param effect the {@link VibrationEffect} to check if it is supported
+     * @return {@code true} if the vibrator can play the given {@code effect} as intended,
+     *         {@code false} otherwise.
+     *
+     * @hide
+     */
+    public boolean areVibrationFeaturesSupported(@NonNull VibrationEffect effect) {
+        return effect.areVibrationFeaturesSupported(this);
     }
 
     /**
@@ -262,7 +286,9 @@ public abstract class Vibrator {
      * frequency control. If this vibrator is a composite of multiple physical devices then this
      * will return a profile supported in all devices, or null if the intersection is empty or not
      * available.
+     * @hide
      */
+    @TestApi
     @Nullable
     public VibratorFrequencyProfile getFrequencyProfile() {
         VibratorInfo.FrequencyProfile frequencyProfile = getInfo().getFrequencyProfile();

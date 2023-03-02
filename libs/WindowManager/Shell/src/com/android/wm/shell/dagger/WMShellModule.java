@@ -49,7 +49,9 @@ import com.android.wm.shell.common.TransactionPool;
 import com.android.wm.shell.common.annotations.ShellBackgroundThread;
 import com.android.wm.shell.common.annotations.ShellMainThread;
 import com.android.wm.shell.desktopmode.DesktopModeController;
+import com.android.wm.shell.desktopmode.DesktopModeStatus;
 import com.android.wm.shell.desktopmode.DesktopModeTaskRepository;
+import com.android.wm.shell.desktopmode.DesktopTasksController;
 import com.android.wm.shell.draganddrop.DragAndDropController;
 import com.android.wm.shell.freeform.FreeformComponents;
 import com.android.wm.shell.freeform.FreeformTaskListener;
@@ -93,6 +95,7 @@ import com.android.wm.shell.unfold.animation.UnfoldTaskAnimator;
 import com.android.wm.shell.unfold.qualifier.UnfoldShellTransition;
 import com.android.wm.shell.unfold.qualifier.UnfoldTransition;
 import com.android.wm.shell.windowdecor.CaptionWindowDecorViewModel;
+import com.android.wm.shell.windowdecor.DesktopModeWindowDecorViewModel;
 import com.android.wm.shell.windowdecor.WindowDecorViewModel;
 
 import java.util.ArrayList;
@@ -189,15 +192,26 @@ public abstract class WMShellModule {
             ShellTaskOrganizer taskOrganizer,
             DisplayController displayController,
             SyncTransactionQueue syncQueue,
-            Optional<DesktopModeController> desktopModeController) {
-        return new CaptionWindowDecorViewModel(
+            Optional<DesktopModeController> desktopModeController,
+            Optional<DesktopTasksController> desktopTasksController) {
+        if (DesktopModeStatus.isAnyEnabled()) {
+            return new DesktopModeWindowDecorViewModel(
                     context,
                     mainHandler,
                     mainChoreographer,
                     taskOrganizer,
                     displayController,
                     syncQueue,
-                    desktopModeController);
+                    desktopModeController,
+                    desktopTasksController);
+        }
+        return new CaptionWindowDecorViewModel(
+                    context,
+                    mainHandler,
+                    mainChoreographer,
+                    taskOrganizer,
+                    displayController,
+                    syncQueue);
     }
 
     //
@@ -611,6 +625,22 @@ public abstract class WMShellModule {
         return new DesktopModeController(context, shellInit, shellController, shellTaskOrganizer,
                 rootTaskDisplayAreaOrganizer, transitions, desktopModeTaskRepository, mainHandler,
                 mainExecutor);
+    }
+
+    @WMSingleton
+    @Provides
+    @DynamicOverride
+    static DesktopTasksController provideDesktopTasksController(
+            Context context,
+            ShellInit shellInit,
+            ShellController shellController,
+            ShellTaskOrganizer shellTaskOrganizer,
+            Transitions transitions,
+            @DynamicOverride DesktopModeTaskRepository desktopModeTaskRepository,
+            @ShellMainThread ShellExecutor mainExecutor
+    ) {
+        return new DesktopTasksController(context, shellInit, shellController, shellTaskOrganizer,
+                transitions, desktopModeTaskRepository, mainExecutor);
     }
 
     @WMSingleton

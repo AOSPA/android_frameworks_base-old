@@ -37,7 +37,7 @@ oneway interface IOverviewProxy {
     /**
      * Sent when overview is to be shown.
      */
-    void onOverviewShown(boolean triggeredFromAltTab) = 7;
+    void onOverviewShown(boolean triggeredFromAltTab, boolean forward) = 7;
 
     /**
      * Sent when overview is to be hidden.
@@ -46,8 +46,9 @@ oneway interface IOverviewProxy {
 
     /**
      * Sent when device assistant changes its default assistant whether it is available or not.
+     * @param longPressHomeEnabled if 3-button nav assistant can be invoked or not
      */
-    void onAssistantAvailable(boolean available) = 13;
+    void onAssistantAvailable(boolean available, boolean longPressHomeEnabled) = 13;
 
     /**
      * Sent when the assistant changes how visible it is to the user.

@@ -81,30 +81,16 @@ internal class TogglePermissionAppInfoPageProvider(
             navArgument(USER_ID) { type = NavType.IntType },
         )
 
+        /**
+         * Gets the route prefix to this page.
+         *
+         * Expose route prefix to enable enter from non-SPA pages.
+         */
+        fun getRoutePrefix(permissionType: String) = "$PAGE_NAME/$permissionType"
+
         @Composable
         fun navigator(permissionType: String, app: ApplicationInfo) =
             navigator(route = "$PAGE_NAME/$permissionType/${app.toRoute()}")
-
-        @Composable
-        fun <T : AppRecord> EntryItem(
-            permissionType: String,
-            app: ApplicationInfo,
-            listModel: TogglePermissionAppListModel<T>,
-        ) {
-            val context = LocalContext.current
-            val internalListModel = remember {
-                TogglePermissionInternalAppListModel(context, listModel)
-            }
-            val record = remember { listModel.transformItem(app) }
-            if (!remember { listModel.isChangeable(record) }) return
-            Preference(
-                object : PreferenceModel {
-                    override val title = stringResource(listModel.pageTitleResId)
-                    override val summary = internalListModel.getSummary(record)
-                    override val onClick = navigator(permissionType, app)
-                }
-            )
-        }
 
         fun buildPageData(permissionType: String): SettingsPage {
             return SettingsPage.create(
@@ -114,6 +100,32 @@ internal class TogglePermissionAppInfoPageProvider(
             )
         }
     }
+}
+
+@Composable
+internal fun <T : AppRecord> TogglePermissionAppListModel<T>.TogglePermissionAppInfoPageEntryItem(
+    permissionType: String,
+    app: ApplicationInfo,
+) {
+    val record = remember { transformItem(app) }
+    if (!remember { isChangeable(record) }) return
+    val context = LocalContext.current
+    val internalListModel = remember {
+        TogglePermissionInternalAppListModel(
+            context = context,
+            permissionType = permissionType,
+            listModel = this,
+            restrictionsProviderFactory = ::RestrictionsProviderImpl,
+        )
+    }
+    Preference(
+        object : PreferenceModel {
+            override val title = stringResource(pageTitleResId)
+            override val summary = internalListModel.getSummary(record)
+            override val onClick =
+                TogglePermissionAppInfoPageProvider.navigator(permissionType, app)
+        }
+    )
 }
 
 @VisibleForTesting
@@ -129,6 +141,7 @@ internal fun TogglePermissionAppListModel<out AppRecord>.TogglePermissionAppInfo
         packageName = packageName,
         userId = userId,
         footerText = stringResource(footerResId),
+        footerContent = footerContent(),
         packageManagers = packageManagers,
     ) {
         val model = createSwitchModel(applicationInfo)

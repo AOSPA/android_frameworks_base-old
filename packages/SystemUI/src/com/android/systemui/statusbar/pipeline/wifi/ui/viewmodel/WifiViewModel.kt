@@ -37,10 +37,10 @@ import com.android.systemui.statusbar.pipeline.airplane.ui.viewmodel.AirplaneMod
 import com.android.systemui.statusbar.pipeline.shared.ConnectivityConstants
 import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger
 import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger.Companion.logOutputChange
+import com.android.systemui.statusbar.pipeline.shared.data.model.DataActivityModel
 import com.android.systemui.statusbar.pipeline.wifi.data.model.WifiNetworkModel
 import com.android.systemui.statusbar.pipeline.wifi.domain.interactor.WifiInteractor
 import com.android.systemui.statusbar.pipeline.wifi.shared.WifiConstants
-import com.android.systemui.statusbar.pipeline.wifi.shared.model.WifiActivityModel
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -82,6 +82,8 @@ constructor(
     /** Returns the icon to use based on the given network. */
     private fun WifiNetworkModel.icon(): WifiIcon {
         return when (this) {
+            is WifiNetworkModel.Unavailable -> WifiIcon.Hidden
+            is WifiNetworkModel.Invalid -> WifiIcon.Hidden
             is WifiNetworkModel.CarrierMerged -> WifiIcon.Hidden
             is WifiNetworkModel.Inactive -> WifiIcon.Visible(
                 res = WIFI_NO_NETWORK,
@@ -89,27 +91,23 @@ constructor(
                     "${context.getString(WIFI_NO_CONNECTION)},${context.getString(NO_INTERNET)}"
                 )
             )
-            is WifiNetworkModel.Active ->
-                when (this.level) {
-                    null -> WifiIcon.Hidden
-                    else -> {
-                        val levelDesc = context.getString(WIFI_CONNECTION_STRENGTH[this.level])
-                        when {
-                            this.isValidated ->
-                                WifiIcon.Visible(
-                                    WIFI_FULL_ICONS[this.level],
-                                    ContentDescription.Loaded(levelDesc)
-                                )
-                            else ->
-                                WifiIcon.Visible(
-                                    WIFI_NO_INTERNET_ICONS[this.level],
-                                    ContentDescription.Loaded(
-                                        "$levelDesc,${context.getString(NO_INTERNET)}"
-                                    )
-                                )
-                        }
-                    }
+            is WifiNetworkModel.Active -> {
+                val levelDesc = context.getString(WIFI_CONNECTION_STRENGTH[this.level])
+                when {
+                    this.isValidated ->
+                        WifiIcon.Visible(
+                            WIFI_FULL_ICONS[this.level],
+                            ContentDescription.Loaded(levelDesc),
+                        )
+                    else ->
+                        WifiIcon.Visible(
+                            WIFI_NO_INTERNET_ICONS[this.level],
+                            ContentDescription.Loaded(
+                                "$levelDesc,${context.getString(NO_INTERNET)}"
+                            ),
+                        )
                 }
+            }
         }
     }
 
@@ -147,8 +145,8 @@ constructor(
             )
 
     /** The wifi activity status. Null if we shouldn't display the activity status. */
-    private val activity: Flow<WifiActivityModel?> =
-        if (!wifiConstants.shouldShowActivityConfig) {
+    private val activity: Flow<DataActivityModel?> =
+        if (!connectivityConstants.shouldShowActivityConfig) {
             flowOf(null)
         } else {
             combine(interactor.activity, interactor.ssid) { activity, ssid ->
