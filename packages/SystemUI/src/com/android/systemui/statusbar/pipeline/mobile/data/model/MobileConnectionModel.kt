@@ -99,6 +99,10 @@ data class MobileConnectionModel(
     val voiceNetworkType: Int = TelephonyManager.NETWORK_TYPE_UNKNOWN,
     val dataNetworkType: Int = TelephonyManager.NETWORK_TYPE_UNKNOWN,
     val fiveGServiceState: FiveGServiceState = FiveGServiceState(),
+    val originNetworkType: Int = TelephonyManager.NETWORK_TYPE_UNKNOWN,
+    val voiceCapable: Boolean = false,
+    val videoCapable: Boolean = false,
+    val imsRegistered: Boolean = false,
 ) : Diffable<MobileConnectionModel> {
     override fun logDiffs(prevVal: MobileConnectionModel, row: TableRowLogger) {
         if (prevVal.dataConnectionState != dataConnectionState) {
@@ -164,6 +168,22 @@ data class MobileConnectionModel(
         if (prevVal.fiveGServiceState.nrIconType != fiveGServiceState.nrIconType) {
             row.logChange(COL_NR_ICON_TYPE, fiveGServiceState.nrIconType)
         }
+
+        if (prevVal.originNetworkType != originNetworkType) {
+            row.logChange(COL_ORIGIN_NETWORK_TYPE, originNetworkType)
+        }
+
+        if (prevVal.voiceCapable != voiceCapable) {
+            row.logChange(COL_VOICE_CAPABLE, voiceCapable)
+        }
+
+        if (prevVal.videoCapable != videoCapable) {
+            row.logChange(COL_VIDEO_CAPABLE, videoCapable)
+        }
+
+        if (prevVal.imsRegistered != imsRegistered) {
+            row.logChange(COL_IMS_REGISTERED, imsRegistered)
+        }
     }
 
     override fun logFull(row: TableRowLogger) {
@@ -183,6 +203,10 @@ data class MobileConnectionModel(
         row.logChange(COL_VOICE_NETWORK_TYPE, voiceNetworkType)
         row.logChange(COL_DATA_NETWORK_TYPE, dataNetworkType)
         row.logChange(COL_NR_ICON_TYPE, fiveGServiceState.nrIconType)
+        row.logChange(COL_ORIGIN_NETWORK_TYPE, originNetworkType)
+        row.logChange(COL_VOICE_CAPABLE, voiceCapable)
+        row.logChange(COL_VIDEO_CAPABLE, videoCapable)
+        row.logChange(COL_IMS_REGISTERED, imsRegistered)
     }
 
     @VisibleForTesting
@@ -203,5 +227,9 @@ data class MobileConnectionModel(
         const val COL_VOICE_NETWORK_TYPE = "VoiceNetworkType"
         const val COL_DATA_NETWORK_TYPE = "DataNetworkType"
         const val COL_NR_ICON_TYPE = "NrIconType"
+        const val COL_ORIGIN_NETWORK_TYPE = "OriginNetworkType"
+        const val COL_VOICE_CAPABLE = "voiceCapable"
+        const val COL_VIDEO_CAPABLE = "videoCapable"
+        const val COL_IMS_REGISTERED = "imsRegistered"
     }
 }

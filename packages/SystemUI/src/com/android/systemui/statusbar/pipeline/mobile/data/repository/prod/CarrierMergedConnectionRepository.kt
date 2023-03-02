@@ -131,6 +131,8 @@ class CarrierMergedConnectionRepository(
 
     override val dataEnabled: StateFlow<Boolean> = wifiRepository.isWifiEnabled
 
+    override val imsInfo = MutableStateFlow(MobileConnectionModel())
+
     companion object {
         /**
          * Creates an instance of [MobileConnectionModel] that represents a carrier merged network
