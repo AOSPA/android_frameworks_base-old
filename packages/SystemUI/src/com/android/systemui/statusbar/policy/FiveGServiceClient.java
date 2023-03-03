@@ -47,11 +47,13 @@ import com.android.internal.annotations.VisibleForTesting;
 import java.lang.Exception;
 import java.util.ArrayList;
 import java.lang.ref.WeakReference;
+import javax.inject.Inject;
 
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
 import com.android.settingslib.mobile.TelephonyIcons;
 import com.android.settingslib.SignalIcon.MobileIconGroup;
 import com.android.systemui.R;
+import com.android.systemui.dagger.SysUISingleton;
 
 import com.qti.extphone.Client;
 import com.qti.extphone.ExtTelephonyManager;
@@ -62,6 +64,7 @@ import com.qti.extphone.Status;
 import com.qti.extphone.ServiceCallback;
 import com.qti.extphone.Token;
 
+@SysUISingleton
 public class FiveGServiceClient {
     private static final String TAG = "FiveGServiceClient";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG)||true;
@@ -89,12 +92,19 @@ public class FiveGServiceClient {
     private boolean mIsConnectInProgress = false;
 
     public static class FiveGServiceState{
+        private static final String COL_NR_ICON_TYPE = "NrIconType";
         private int mNrIconType;
         private MobileIconGroup mIconGroup;
 
         public FiveGServiceState(){
             mNrIconType = NrIconType.INVALID;
             mIconGroup = TelephonyIcons.UNKNOWN;
+        }
+
+        @VisibleForTesting
+        public FiveGServiceState(int nrIconType){
+            mNrIconType = nrIconType;
+            mIconGroup = getNrIconGroup(nrIconType, 0);
         }
 
         public boolean isNrIconTypeValid() {
@@ -107,7 +117,7 @@ public class FiveGServiceClient {
         }
 
         @VisibleForTesting
-        int getNrIconType() {
+        public int getNrIconType() {
             return mNrIconType;
         }
 
@@ -130,6 +140,7 @@ public class FiveGServiceClient {
         }
     }
 
+    @Inject
     public FiveGServiceClient(Context context) {
         mContext = context;
         mPackageName = mContext.getPackageName();
@@ -291,7 +302,7 @@ public class FiveGServiceClient {
         state.mIconGroup = getNrIconGroup(state.mNrIconType, phoneId);
     }
 
-    private MobileIconGroup getNrIconGroup(int nrIconType , int phoneId) {
+    private static MobileIconGroup getNrIconGroup(int nrIconType , int phoneId) {
         MobileIconGroup iconGroup = TelephonyIcons.UNKNOWN;
         switch (nrIconType){
             case NrIconType.TYPE_5G_BASIC:

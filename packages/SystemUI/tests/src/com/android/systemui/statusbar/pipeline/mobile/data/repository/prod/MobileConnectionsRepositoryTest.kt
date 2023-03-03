@@ -46,6 +46,7 @@ import com.android.systemui.statusbar.pipeline.mobile.util.FakeMobileMappingsPro
 import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger
 import com.android.systemui.statusbar.pipeline.wifi.data.repository.FakeWifiRepository
 import com.android.systemui.statusbar.pipeline.wifi.shared.model.WifiNetworkModel
+import com.android.systemui.statusbar.policy.FiveGServiceClient
 import com.android.systemui.util.mockito.any
 import com.android.systemui.util.mockito.argumentCaptor
 import com.android.systemui.util.mockito.eq
@@ -93,6 +94,8 @@ class MobileConnectionsRepositoryTest : SysuiTestCase() {
     private val mobileMappings = FakeMobileMappingsProxy()
 
     private val scope = CoroutineScope(IMMEDIATE)
+
+    private val fiveGServiceClient = FiveGServiceClient(mContext)
 
     @Before
     fun setUp() {
@@ -142,6 +145,7 @@ class MobileConnectionsRepositoryTest : SysuiTestCase() {
                 mobileMappingsProxy = mobileMappings,
                 scope = scope,
                 carrierConfigRepository = carrierConfigRepository,
+                fiveGServiceClient = fiveGServiceClient,
             )
         carrierMergedFactory =
             CarrierMergedConnectionRepository.Factory(

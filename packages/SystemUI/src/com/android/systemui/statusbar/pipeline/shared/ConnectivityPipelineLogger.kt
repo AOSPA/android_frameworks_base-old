@@ -243,6 +243,18 @@ constructor(
         )
     }
 
+    fun logOnNrIconTypeChanged(nrIconType: Int, subId: Int) {
+        buffer.log(
+            SB_LOGGING_TAG,
+            LogLevel.INFO,
+            {
+                int1 = subId
+                str1 = nrIconType.toString()
+            },
+            { "onNrIconTypeChanged: subId=$int1 nrIconType=$str1" },
+        )
+    }
+
     companion object {
         const val SB_LOGGING_TAG = "SbConnectivity"
 

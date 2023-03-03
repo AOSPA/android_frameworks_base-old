@@ -31,6 +31,7 @@ import com.android.systemui.log.table.Diffable
 import com.android.systemui.log.table.TableRowLogger
 import com.android.systemui.statusbar.pipeline.mobile.data.model.DataConnectionState.Disconnected
 import com.android.systemui.statusbar.pipeline.shared.data.model.DataActivityModel
+import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState
 
 /**
  * Data class containing all of the relevant information for a particular line of service, known as
@@ -97,6 +98,7 @@ data class MobileConnectionModel(
     val lteRsrpLevel: Int = CellSignalStrength.SIGNAL_STRENGTH_NONE_OR_UNKNOWN,
     val voiceNetworkType: Int = TelephonyManager.NETWORK_TYPE_UNKNOWN,
     val dataNetworkType: Int = TelephonyManager.NETWORK_TYPE_UNKNOWN,
+    val fiveGServiceState: FiveGServiceState = FiveGServiceState(),
 ) : Diffable<MobileConnectionModel> {
     override fun logDiffs(prevVal: MobileConnectionModel, row: TableRowLogger) {
         if (prevVal.dataConnectionState != dataConnectionState) {
@@ -158,6 +160,10 @@ data class MobileConnectionModel(
         if (prevVal.dataNetworkType != dataNetworkType) {
             row.logChange(COL_DATA_NETWORK_TYPE, dataNetworkType)
         }
+
+        if (prevVal.fiveGServiceState.nrIconType != fiveGServiceState.nrIconType) {
+            row.logChange(COL_NR_ICON_TYPE, fiveGServiceState.nrIconType)
+        }
     }
 
     override fun logFull(row: TableRowLogger) {
@@ -176,6 +182,7 @@ data class MobileConnectionModel(
         row.logChange(COL_LTE_RSRP_LEVEL, lteRsrpLevel)
         row.logChange(COL_VOICE_NETWORK_TYPE, voiceNetworkType)
         row.logChange(COL_DATA_NETWORK_TYPE, dataNetworkType)
+        row.logChange(COL_NR_ICON_TYPE, fiveGServiceState.nrIconType)
     }
 
     @VisibleForTesting
@@ -195,5 +202,6 @@ data class MobileConnectionModel(
         const val COL_LTE_RSRP_LEVEL = "LteRsrpLevel"
         const val COL_VOICE_NETWORK_TYPE = "VoiceNetworkType"
         const val COL_DATA_NETWORK_TYPE = "DataNetworkType"
+        const val COL_NR_ICON_TYPE = "NrIconType"
     }
 }

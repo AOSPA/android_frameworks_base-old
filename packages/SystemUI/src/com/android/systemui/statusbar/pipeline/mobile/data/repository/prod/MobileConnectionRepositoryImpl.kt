@@ -28,6 +28,8 @@ import android.telephony.SignalStrength.SIGNAL_STRENGTH_GOOD
 import android.telephony.SignalStrength.SIGNAL_STRENGTH_MODERATE
 import android.telephony.SignalStrength.SIGNAL_STRENGTH_POOR
 import android.telephony.SignalStrength.SIGNAL_STRENGTH_NONE_OR_UNKNOWN
+import android.telephony.SubscriptionInfo
+import android.telephony.SubscriptionManager
 import android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID
 import android.telephony.TelephonyCallback
 import android.telephony.TelephonyDisplayInfo
@@ -56,6 +58,9 @@ import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConn
 import com.android.systemui.statusbar.pipeline.mobile.util.MobileMappingsProxy
 import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger
 import com.android.systemui.statusbar.pipeline.shared.data.model.toMobileDataActivityModel
+import com.android.systemui.statusbar.policy.FiveGServiceClient
+import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState
+import com.android.systemui.statusbar.policy.FiveGServiceClient.IFiveGStateListener
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -94,6 +99,7 @@ class MobileConnectionRepositoryImpl(
     logger: ConnectivityPipelineLogger,
     override val tableLogBuffer: TableLogBuffer,
     scope: CoroutineScope,
+    private val fiveGServiceClient: FiveGServiceClient,
 ) : MobileConnectionRepository {
     init {
         if (telephonyManager.subscriptionId != subId) {
@@ -125,7 +131,8 @@ class MobileConnectionRepositoryImpl(
                         TelephonyCallback.DataActivityListener,
                         TelephonyCallback.CarrierNetworkListener,
                         TelephonyCallback.DisplayInfoListener,
-                        TelephonyCallback.DataEnabledListener {
+                        TelephonyCallback.DataEnabledListener,
+                        FiveGServiceClient.IFiveGStateListener {
                         override fun onServiceStateChanged(serviceState: ServiceState) {
                             logger.logOnServiceStateChanged(serviceState, subId)
                             trySend(CallbackEvent.OnServiceStateChanged(serviceState))
@@ -165,9 +172,18 @@ class MobileConnectionRepositoryImpl(
                             logger.logOnDataEnabledChanged(enabled, subId)
                             trySend(CallbackEvent.OnDataEnabledChanged(enabled))
                         }
+
+                        override fun onStateChanged(serviceState: FiveGServiceState) {
+                            logger.logOnNrIconTypeChanged(serviceState.nrIconType, subId)
+                            trySend(CallbackEvent.OnNrIconTypeChanged(serviceState.nrIconType))
+                        }
                     }
                 telephonyManager.registerTelephonyCallback(bgDispatcher.asExecutor(), callback)
-                awaitClose { telephonyManager.unregisterTelephonyCallback(callback) }
+                fiveGServiceClient.registerListener(getSlotIndex(subId), callback)
+                awaitClose {
+                    telephonyManager.unregisterTelephonyCallback(callback)
+                    fiveGServiceClient.unregisterListener(getSlotIndex(subId))
+                }
             }
             .shareIn(scope, SharingStarted.WhileSubscribed())
 
@@ -246,13 +262,15 @@ class MobileConnectionRepositoryImpl(
                         telephonyDisplayInfo.overrideNetworkType == OVERRIDE_NETWORK_TYPE_NONE
                     ) {
                         DefaultNetworkType(
-                            mobileMappingsProxy.toIconKey(telephonyDisplayInfo.networkType)
+                            mobileMappingsProxy.toIconKey(telephonyDisplayInfo.networkType),
+                            telephonyDisplayInfo.networkType
                         )
                     } else {
                         OverrideNetworkType(
                             mobileMappingsProxy.toIconKeyOverride(
                                 telephonyDisplayInfo.overrideNetworkType
-                            )
+                            ),
+                            telephonyDisplayInfo.overrideNetworkType
                         )
                     }
                 prevState.copy(resolvedNetworkType = networkType)
@@ -260,6 +278,10 @@ class MobileConnectionRepositoryImpl(
             is CallbackEvent.OnDataEnabledChanged -> {
                 // Not part of this object, handled in a separate flow
                 prevState
+            }
+            is CallbackEvent.OnNrIconTypeChanged -> {
+                val newServiceState = FiveGServiceState(callbackEvent.nrIconType)
+                prevState.copy(fiveGServiceState = newServiceState)
             }
         }
 
@@ -312,6 +334,20 @@ class MobileConnectionRepositoryImpl(
             .stateIn(scope, SharingStarted.WhileSubscribed(), initial)
     }
 
+    private fun getSlotIndex(subId: Int): Int {
+        var subscriptionManager: SubscriptionManager =
+                context.getSystemService(SubscriptionManager::class.java)
+        var list: List<SubscriptionInfo> = subscriptionManager.completeActiveSubscriptionInfoList
+        var slotIndex: Int = 0
+        for (subscriptionInfo in list.iterator()) {
+            if (subscriptionInfo.subscriptionId == subId) {
+                slotIndex = subscriptionInfo.simSlotIndex
+                break
+            }
+        }
+        return slotIndex
+    }
+
     class Factory
     @Inject
     constructor(
@@ -323,6 +359,7 @@ class MobileConnectionRepositoryImpl(
         private val mobileMappingsProxy: MobileMappingsProxy,
         @Background private val bgDispatcher: CoroutineDispatcher,
         @Application private val scope: CoroutineScope,
+        private val fiveGServiceClient: FiveGServiceClient,
     ) {
         fun build(
             subId: Int,
@@ -343,6 +380,7 @@ class MobileConnectionRepositoryImpl(
                 logger,
                 mobileLogger,
                 scope,
+                fiveGServiceClient,
             )
         }
     }
@@ -360,4 +398,5 @@ private sealed interface CallbackEvent {
     data class OnCarrierNetworkChange(val active: Boolean) : CallbackEvent
     data class OnDisplayInfoChanged(val telephonyDisplayInfo: TelephonyDisplayInfo) : CallbackEvent
     data class OnDataEnabledChanged(val enabled: Boolean) : CallbackEvent
+    data class OnNrIconTypeChanged(val nrIconType: Int) : CallbackEvent
 }
