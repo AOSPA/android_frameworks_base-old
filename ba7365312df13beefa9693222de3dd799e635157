@@ -34,6 +34,24 @@
       "parentUuid": "66133d16_ce070a7c",
       "revId": "ba7365312df13beefa9693222de3dd799e635157",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "771d13d3_4511c2fb",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000715
+      },
+      "writtenOn": "2023-03-03T03:30:32Z",
+      "side": 1,
+      "message": "A 680 should be able to handle this, I\u0027ve seen 660s manage ripple. What\u0027s stopping spes.\n\nI am however, in favor of a userfacing toggle that allows user to enable or disable it.",
+      "parentUuid": "e8b89844_064335fc",
+      "revId": "ba7365312df13beefa9693222de3dd799e635157",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
