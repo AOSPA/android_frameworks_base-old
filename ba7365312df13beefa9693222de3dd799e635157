@@ -16,6 +16,24 @@
       "message": "Devices which can\u0027t handle ripple are living on life support, supporting these devices in any way just leads to a terrible experience for the user. The ripple charging animation is expected by many as a part of the Android experience since 12. I don\u0027t think we should do this.",
       "revId": "ba7365312df13beefa9693222de3dd799e635157",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "e8b89844_064335fc",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000737
+      },
+      "writtenOn": "2023-03-03T03:13:04Z",
+      "side": 1,
+      "message": "spes it\u0027s a recent device, but with a weak SoC, sdm680. And users are asking me to do this",
+      "parentUuid": "66133d16_ce070a7c",
+      "revId": "ba7365312df13beefa9693222de3dd799e635157",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
