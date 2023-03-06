@@ -686,6 +686,8 @@ public class MediaRecorder implements AudioRouting,
         public static final int LPCM = 12;
         /** @hide MPEGH audio codec */
         public static final int MPEGH = 13;
+        /** @hide High Efficiency AAC V2 (HE-AAC V2) audio codec */
+        public static final int HE_AAC_V2 = 14;
     }
 
     /**
