@@ -34,6 +34,7 @@ import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConn
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.prod.MobileTelephonyHelpers.getTelephonyCallbackForType
 import com.android.systemui.statusbar.pipeline.wifi.data.repository.FakeWifiRepository
 import com.android.systemui.statusbar.pipeline.wifi.shared.model.WifiNetworkModel
+import com.android.systemui.statusbar.policy.FiveGServiceClient
 import com.android.systemui.util.mockito.any
 import com.android.systemui.util.mockito.eq
 import com.android.systemui.util.mockito.mock
@@ -606,6 +607,7 @@ class FullMobileConnectionRepositoryTest : SysuiTestCase() {
                 logger = mock(),
                 tableLogBuffer,
                 testScope.backgroundScope,
+                FiveGServiceClient(mContext),
             )
         whenever(
                 mobileFactory.build(

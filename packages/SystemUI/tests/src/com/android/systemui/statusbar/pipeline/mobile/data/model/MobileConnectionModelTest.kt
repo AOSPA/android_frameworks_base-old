@@ -33,6 +33,7 @@ import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectio
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectionModel.Companion.COL_LTE_RSRP_LEVEL
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectionModel.Companion.COL_VOICE_NETWORK_TYPE
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectionModel.Companion.COL_DATA_NETWORK_TYPE
+import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectionModel.Companion.COL_NR_ICON_TYPE
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 
@@ -84,6 +85,8 @@ class MobileConnectionModelTest : SysuiTestCase() {
             .contains(Pair(COL_VOICE_NETWORK_TYPE, connection.voiceNetworkType.toString()))
         assertThat(logger.changes)
             .contains(Pair(COL_DATA_NETWORK_TYPE, connection.dataNetworkType.toString()))
+        assertThat(logger.changes)
+            .contains(Pair(COL_NR_ICON_TYPE, connection.fiveGServiceState.nrIconType.toString()))
     }
 
     @Test

@@ -28,23 +28,28 @@ import com.android.systemui.statusbar.pipeline.mobile.util.MobileMappingsProxy
  */
 sealed interface ResolvedNetworkType {
     val lookupKey: String
+    val networkType: Int
 
     object UnknownNetworkType : ResolvedNetworkType {
         override val lookupKey: String = "unknown"
+        override val networkType: Int = 0
     }
 
     data class DefaultNetworkType(
         override val lookupKey: String,
+        override val networkType: Int = 0,
     ) : ResolvedNetworkType
 
     data class OverrideNetworkType(
         override val lookupKey: String,
+        override val networkType: Int = 0,
     ) : ResolvedNetworkType
 
     /** Represents the carrier merged network. See [CarrierMergedConnectionRepository]. */
     object CarrierMergedNetworkType : ResolvedNetworkType {
         // Effectively unused since [iconGroupOverride] is used instead.
         override val lookupKey: String = "cwf"
+        override val networkType: Int = 0
 
         val iconGroupOverride: SignalIcon.MobileIconGroup = TelephonyIcons.CARRIER_MERGED_WIFI
     }

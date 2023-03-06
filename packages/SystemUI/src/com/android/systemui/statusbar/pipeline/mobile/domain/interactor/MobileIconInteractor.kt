@@ -17,8 +17,10 @@
 package com.android.systemui.statusbar.pipeline.mobile.domain.interactor
 
 import android.telephony.CarrierConfigManager
+import android.telephony.TelephonyDisplayInfo
 import android.telephony.TelephonyManager
 import com.android.settingslib.SignalIcon.MobileIconGroup
+import com.android.settingslib.mobile.MobileMappings
 import com.android.settingslib.mobile.TelephonyIcons.NOT_DEFAULT_DATA
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.log.table.TableLogBuffer
@@ -27,6 +29,8 @@ import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectio
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectivityModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.ResolvedNetworkType
+import com.android.systemui.statusbar.pipeline.mobile.data.model.ResolvedNetworkType.DefaultNetworkType
+import com.android.systemui.statusbar.pipeline.mobile.data.model.ResolvedNetworkType.OverrideNetworkType
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionRepository
 import com.android.systemui.statusbar.pipeline.shared.data.model.DataActivityModel
 import kotlinx.coroutines.CoroutineScope
@@ -194,7 +198,7 @@ class MobileIconInteractorImpl(
                 when (info.resolvedNetworkType) {
                     is ResolvedNetworkType.CarrierMergedNetworkType ->
                         info.resolvedNetworkType.iconGroupOverride
-                    else -> mapping[info.resolvedNetworkType.lookupKey] ?: defaultGroup
+                    else -> getMobileIconGroup(info, mapping) ?: defaultGroup
                 }
             }
             .distinctUntilChanged()
@@ -270,5 +274,39 @@ class MobileIconInteractorImpl(
             || connectionInfo.dataNetworkType == TelephonyManager.NETWORK_TYPE_LTE_CA
             || connectionInfo.voiceNetworkType == TelephonyManager.NETWORK_TYPE_LTE
             || connectionInfo.voiceNetworkType == TelephonyManager.NETWORK_TYPE_LTE_CA)
+    }
+
+    private fun getMobileIconGroup(info: MobileConnectionModel,
+                                   mapping: Map<String, MobileIconGroup>): MobileIconGroup ?{
+        return if (info.fiveGServiceState.isNrIconTypeValid) {
+            info.fiveGServiceState.iconGroup
+        } else {
+            when (info.resolvedNetworkType) {
+                is DefaultNetworkType ->
+                    mapping[info.resolvedNetworkType.lookupKey]
+                is OverrideNetworkType ->
+                    mapping[getLookupKey(info)]
+                else ->
+                    mapping[MobileMappings.toIconKey(info.voiceNetworkType)]
+            }
+        }
+    }
+
+    private fun getLookupKey(connectionInfo: MobileConnectionModel): String {
+        return if (isNsa(connectionInfo)) {
+            if (connectionInfo.dataNetworkType == TelephonyManager.NETWORK_TYPE_UNKNOWN) {
+                MobileMappings.toIconKey(connectionInfo.voiceNetworkType)
+            }else {
+                MobileMappings.toIconKey(connectionInfo.dataNetworkType)
+            }
+        }else {
+            connectionInfo.resolvedNetworkType.lookupKey
+        }
+    }
+
+    private fun isNsa(connectionInfo: MobileConnectionModel): Boolean {
+        val networkType = connectionInfo.resolvedNetworkType.networkType
+        return networkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA_MMWAVE
+                || networkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA
     }
 }
