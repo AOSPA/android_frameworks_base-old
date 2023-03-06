@@ -68,6 +68,8 @@ class MobileIconInteractorTest : SysuiTestCase() {
                 mobileIconsInteractor.isDefaultConnectionFailed,
                 mobileIconsInteractor.isForceHidden,
                 connectionRepository,
+                mobileIconsInteractor.alwaysUseRsrpLevelForLte,
+                mobileIconsInteractor.hideNoInternetState,
             )
     }
 
@@ -561,6 +563,36 @@ class MobileIconInteractorTest : SysuiTestCase() {
             assertThat(latest).isTrue()
 
             mobileIconsInteractor.isForceHidden.value = false
+            assertThat(latest).isFalse()
+
+            job.cancel()
+        }
+
+    @Test
+    fun alwaysUseRsrpLevelForLte_matchesParent() =
+        runBlocking(IMMEDIATE) {
+            var latest: Boolean? = null
+            val job = underTest.alwaysUseRsrpLevelForLte.onEach { latest = it }.launchIn(this)
+
+            mobileIconsInteractor.alwaysUseRsrpLevelForLte.value = true
+            assertThat(latest).isTrue()
+
+            mobileIconsInteractor.alwaysUseRsrpLevelForLte.value = false
+            assertThat(latest).isFalse()
+
+            job.cancel()
+        }
+
+    @Test
+    fun hideNoInternetState_matchesParent() =
+        runBlocking(IMMEDIATE) {
+            var latest: Boolean? = null
+            val job = underTest.hideNoInternetState.onEach { latest = it }.launchIn(this)
+
+            mobileIconsInteractor.hideNoInternetState.value = true
+            assertThat(latest).isTrue()
+
+            mobileIconsInteractor.hideNoInternetState.value = false
             assertThat(latest).isFalse()
 
             job.cancel()

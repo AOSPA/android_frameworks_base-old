@@ -30,6 +30,9 @@ import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectio
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectionModel.Companion.COL_PRIMARY_LEVEL
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectionModel.Companion.COL_RESOLVED_NETWORK_TYPE
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectionModel.Companion.COL_ROAMING
+import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectionModel.Companion.COL_LTE_RSRP_LEVEL
+import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectionModel.Companion.COL_VOICE_NETWORK_TYPE
+import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectionModel.Companion.COL_DATA_NETWORK_TYPE
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 
@@ -74,6 +77,13 @@ class MobileConnectionModelTest : SysuiTestCase() {
             )
         assertThat(logger.changes)
             .contains(Pair(COL_RESOLVED_NETWORK_TYPE, connection.resolvedNetworkType.toString()))
+
+        assertThat(logger.changes)
+            .contains(Pair(COL_LTE_RSRP_LEVEL, connection.lteRsrpLevel.toString()))
+        assertThat(logger.changes)
+            .contains(Pair(COL_VOICE_NETWORK_TYPE, connection.voiceNetworkType.toString()))
+        assertThat(logger.changes)
+            .contains(Pair(COL_DATA_NETWORK_TYPE, connection.dataNetworkType.toString()))
     }
 
     @Test

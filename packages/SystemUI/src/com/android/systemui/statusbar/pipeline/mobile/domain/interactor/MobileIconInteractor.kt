@@ -17,11 +17,13 @@
 package com.android.systemui.statusbar.pipeline.mobile.domain.interactor
 
 import android.telephony.CarrierConfigManager
+import android.telephony.TelephonyManager
 import com.android.settingslib.SignalIcon.MobileIconGroup
 import com.android.settingslib.mobile.TelephonyIcons.NOT_DEFAULT_DATA
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.statusbar.pipeline.mobile.data.model.DataConnectionState.Connected
+import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectionModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectivityModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.ResolvedNetworkType
@@ -114,6 +116,12 @@ interface MobileIconInteractor {
 
     /** See [MobileIconsInteractor.isForceHidden]. */
     val isForceHidden: Flow<Boolean>
+
+    /** True if the rsrp level should be preferred over the primary level for LTE. */
+    val alwaysUseRsrpLevelForLte: StateFlow<Boolean>
+
+    /** True if the no internet icon should be hidden.  */
+    val hideNoInternetState: StateFlow<Boolean>
 }
 
 /** Interactor for a single mobile connection. This connection _should_ have one subscription ID */
@@ -131,6 +139,8 @@ class MobileIconInteractorImpl(
     override val isDefaultConnectionFailed: StateFlow<Boolean>,
     override val isForceHidden: Flow<Boolean>,
     connectionRepository: MobileConnectionRepository,
+    override val alwaysUseRsrpLevelForLte: StateFlow<Boolean>,
+    override val hideNoInternetState: StateFlow<Boolean>,
 ) : MobileIconInteractor {
     private val connectionInfo = connectionRepository.connectionInfo
 
@@ -217,8 +227,19 @@ class MobileIconInteractorImpl(
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
     override val level: StateFlow<Int> =
-        combine(connectionInfo, alwaysUseCdmaLevel) { connection, alwaysUseCdmaLevel ->
+        combine(
+            connectionInfo,
+            alwaysUseCdmaLevel,
+            alwaysUseRsrpLevelForLte
+        ) { connection, alwaysUseCdmaLevel, alwaysUseRsrpLevelForLte ->
                 when {
+                    alwaysUseRsrpLevelForLte -> {
+                        if (isLteCamped(connection)) {
+                            connection.lteRsrpLevel
+                        } else {
+                            connection.primaryLevel
+                        }
+                    }
                     // GSM connections should never use the CDMA level
                     connection.isGsm -> connection.primaryLevel
                     alwaysUseCdmaLevel -> connection.cdmaLevel
@@ -243,4 +264,11 @@ class MobileIconInteractorImpl(
         connectionRepository.connectionInfo
             .mapLatest { it.isInService }
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
+
+    private fun isLteCamped(connectionInfo: MobileConnectionModel): Boolean {
+        return (connectionInfo.dataNetworkType == TelephonyManager.NETWORK_TYPE_LTE
+            || connectionInfo.dataNetworkType == TelephonyManager.NETWORK_TYPE_LTE_CA
+            || connectionInfo.voiceNetworkType == TelephonyManager.NETWORK_TYPE_LTE
+            || connectionInfo.voiceNetworkType == TelephonyManager.NETWORK_TYPE_LTE_CA)
+    }
 }
