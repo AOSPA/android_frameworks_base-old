@@ -101,6 +101,12 @@ interface MobileIconsInteractor {
      * subId. Will throw if the ID is invalid
      */
     fun createMobileConnectionInteractorForSubId(subId: Int): MobileIconInteractor
+
+    /** True if the LTE rsrp should be preferred over the primary level. */
+    val alwaysUseRsrpLevelForLte: StateFlow<Boolean>
+
+    /** True if the no internet icon should be hidden.  */
+    val hideNoInternetState: StateFlow<Boolean>
 }
 
 @Suppress("EXPERIMENTAL_IS_NOT_ENABLED")
@@ -296,6 +302,16 @@ constructor(
             .map { it.contains(ConnectivitySlot.MOBILE) }
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
+    override val alwaysUseRsrpLevelForLte: StateFlow<Boolean> =
+        mobileConnectionsRepo.defaultDataSubRatConfig
+            .mapLatest { it.showRsrpSignalLevelforLTE }
+            .stateIn(scope, SharingStarted.WhileSubscribed(), false)
+
+    override val hideNoInternetState: StateFlow<Boolean> =
+        mobileConnectionsRepo.defaultDataSubRatConfig
+            .mapLatest { it.hideNoInternetState }
+            .stateIn(scope, SharingStarted.WhileSubscribed(), false)
+
     /** Vends out new [MobileIconInteractor] for a particular subId */
     override fun createMobileConnectionInteractorForSubId(subId: Int): MobileIconInteractor =
         MobileIconInteractorImpl(
@@ -310,6 +326,8 @@ constructor(
             isDefaultConnectionFailed,
             isForceHidden,
             mobileConnectionsRepo.getRepoForSubId(subId),
+            alwaysUseRsrpLevelForLte,
+            hideNoInternetState,
         )
 
     companion object {

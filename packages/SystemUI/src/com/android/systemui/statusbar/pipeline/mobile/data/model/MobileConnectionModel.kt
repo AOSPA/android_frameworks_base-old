@@ -31,6 +31,7 @@ import com.android.systemui.log.table.Diffable
 import com.android.systemui.log.table.TableRowLogger
 import com.android.systemui.statusbar.pipeline.mobile.data.model.DataConnectionState.Disconnected
 import com.android.systemui.statusbar.pipeline.shared.data.model.DataActivityModel
+import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState
 
 /**
  * Data class containing all of the relevant information for a particular line of service, known as
@@ -92,6 +93,12 @@ data class MobileConnectionModel(
      * [TelephonyDisplayInfo.getNetworkType]. This is used to look up the proper network type icon
      */
     val resolvedNetworkType: ResolvedNetworkType = ResolvedNetworkType.UnknownNetworkType,
+
+    @IntRange(from = 0, to = 4)
+    val lteRsrpLevel: Int = CellSignalStrength.SIGNAL_STRENGTH_NONE_OR_UNKNOWN,
+    val voiceNetworkType: Int = TelephonyManager.NETWORK_TYPE_UNKNOWN,
+    val dataNetworkType: Int = TelephonyManager.NETWORK_TYPE_UNKNOWN,
+    val fiveGServiceState: FiveGServiceState = FiveGServiceState(),
 ) : Diffable<MobileConnectionModel> {
     override fun logDiffs(prevVal: MobileConnectionModel, row: TableRowLogger) {
         if (prevVal.dataConnectionState != dataConnectionState) {
@@ -141,6 +148,22 @@ data class MobileConnectionModel(
         if (prevVal.resolvedNetworkType != resolvedNetworkType) {
             row.logChange(COL_RESOLVED_NETWORK_TYPE, resolvedNetworkType.toString())
         }
+
+        if (prevVal.lteRsrpLevel != lteRsrpLevel) {
+            row.logChange(COL_LTE_RSRP_LEVEL, lteRsrpLevel)
+        }
+
+        if (prevVal.voiceNetworkType != voiceNetworkType) {
+            row.logChange(COL_VOICE_NETWORK_TYPE, voiceNetworkType)
+        }
+
+        if (prevVal.dataNetworkType != dataNetworkType) {
+            row.logChange(COL_DATA_NETWORK_TYPE, dataNetworkType)
+        }
+
+        if (prevVal.fiveGServiceState.nrIconType != fiveGServiceState.nrIconType) {
+            row.logChange(COL_NR_ICON_TYPE, fiveGServiceState.nrIconType)
+        }
     }
 
     override fun logFull(row: TableRowLogger) {
@@ -156,6 +179,10 @@ data class MobileConnectionModel(
         row.logChange(COL_ACTIVITY_DIRECTION_OUT, dataActivityDirection.hasActivityOut)
         row.logChange(COL_CARRIER_NETWORK_CHANGE, carrierNetworkChangeActive)
         row.logChange(COL_RESOLVED_NETWORK_TYPE, resolvedNetworkType.toString())
+        row.logChange(COL_LTE_RSRP_LEVEL, lteRsrpLevel)
+        row.logChange(COL_VOICE_NETWORK_TYPE, voiceNetworkType)
+        row.logChange(COL_DATA_NETWORK_TYPE, dataNetworkType)
+        row.logChange(COL_NR_ICON_TYPE, fiveGServiceState.nrIconType)
     }
 
     @VisibleForTesting
@@ -172,5 +199,9 @@ data class MobileConnectionModel(
         const val COL_ACTIVITY_DIRECTION_OUT = "DataActivity.Out"
         const val COL_CARRIER_NETWORK_CHANGE = "CarrierNetworkChangeActive"
         const val COL_RESOLVED_NETWORK_TYPE = "NetworkType"
+        const val COL_LTE_RSRP_LEVEL = "LteRsrpLevel"
+        const val COL_VOICE_NETWORK_TYPE = "VoiceNetworkType"
+        const val COL_DATA_NETWORK_TYPE = "DataNetworkType"
+        const val COL_NR_ICON_TYPE = "NrIconType"
     }
 }
