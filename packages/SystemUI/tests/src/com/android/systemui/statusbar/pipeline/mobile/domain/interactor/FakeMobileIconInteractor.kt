@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/*
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 package com.android.systemui.statusbar.pipeline.mobile.domain.interactor
 
 import android.telephony.CellSignalStrength
@@ -22,6 +28,7 @@ import com.android.settingslib.mobile.TelephonyIcons
 import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectionModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameModel
+import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkTypeIconCustomizationMode
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionRepository.Companion.DEFAULT_NUM_LEVELS
 import com.android.systemui.statusbar.pipeline.shared.data.model.DataActivityModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -88,6 +95,9 @@ class FakeMobileIconInteractor(
 
     override val voWifiAvailable = MutableStateFlow(false)
 
+    private val _networkTypeIconCustomization = MutableStateFlow(NetworkTypeIconCustomizationMode())
+    override val networkTypeIconCustomization = _networkTypeIconCustomization
+
     fun setIconGroup(group: SignalIcon.MobileIconGroup) {
         _iconGroup.value = group
     }
@@ -122,5 +132,10 @@ class FakeMobileIconInteractor(
 
     fun setHideNoInternetState(hideNoInternetState: Boolean) {
         _hideNoInternetState.value = hideNoInternetState
+    }
+
+    fun setNetworkTypeIconCustomization(
+        networkTypeIconCustomization: NetworkTypeIconCustomizationMode) {
+        _networkTypeIconCustomization.value = networkTypeIconCustomization
     }
 }

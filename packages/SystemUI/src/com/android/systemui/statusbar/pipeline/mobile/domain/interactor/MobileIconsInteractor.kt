@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/*
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 package com.android.systemui.statusbar.pipeline.mobile.domain.interactor
 
 import android.telephony.CarrierConfigManager
@@ -26,6 +32,7 @@ import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.log.table.logDiffsForTable
 import com.android.systemui.statusbar.pipeline.dagger.MobileSummaryLog
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectivityModel
+import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkTypeIconCustomizationMode
 import com.android.systemui.statusbar.pipeline.mobile.data.model.SubscriptionModel
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionRepository
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionsRepository
@@ -110,6 +117,8 @@ interface MobileIconsInteractor {
     val showVolteIcon: StateFlow<Boolean>
 
     val showVowifiIcon: StateFlow<Boolean>
+
+    val networkTypeIconCustomization: StateFlow<NetworkTypeIconCustomizationMode>
 }
 
 @Suppress("EXPERIMENTAL_IS_NOT_ENABLED")
@@ -314,6 +323,22 @@ constructor(
             .mapLatest { it.hideNoInternetState }
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
+    override val networkTypeIconCustomization: StateFlow<NetworkTypeIconCustomizationMode> =
+        mobileConnectionsRepo.defaultDataSubRatConfig
+            .mapLatest { defaultConfig ->
+                val enabled = defaultConfig.alwaysShowNetworkTypeIcon
+                    || defaultConfig.enableDdsRatIconEnhancement
+                    || defaultConfig.enableRatIconEnhancement
+                val state = NetworkTypeIconCustomizationMode(
+                    enabled,
+                    defaultConfig.alwaysShowNetworkTypeIcon,
+                    defaultConfig.enableDdsRatIconEnhancement,
+                    defaultConfig.enableRatIconEnhancement,
+                )
+                state
+            }
+            .stateIn(scope, SharingStarted.WhileSubscribed(), NetworkTypeIconCustomizationMode())
+
     /** Vends out new [MobileIconInteractor] for a particular subId */
     override fun createMobileConnectionInteractorForSubId(subId: Int): MobileIconInteractor =
         MobileIconInteractorImpl(
@@ -332,6 +357,7 @@ constructor(
             hideNoInternetState,
             showVolteIcon,
             showVowifiIcon,
+            networkTypeIconCustomization,
         )
 
     override val showVolteIcon: StateFlow<Boolean> =
