@@ -65,9 +65,6 @@ import com.android.settingslib.mobile.MobileStatusTracker.SubscriptionDefaults;
 import com.android.settingslib.mobile.TelephonyIcons;
 import com.android.settingslib.net.SignalStrengthUtil;
 import com.android.systemui.R;
-import com.android.systemui.statusbar.policy.FiveGServiceClient;
-import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState;
-import com.android.systemui.statusbar.policy.FiveGServiceClient.IFiveGStateListener;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.flags.Flags;
 import com.android.systemui.util.CarrierConfigTracker;
@@ -111,14 +108,6 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
     private int mMobileStatusHistoryIndex;
 
     private int mCallState = TelephonyManager.CALL_STATE_IDLE;
-
-    /****************************SideCar****************************/
-    @VisibleForTesting
-    FiveGStateListener mFiveGStateListener;
-    @VisibleForTesting
-    FiveGServiceState mFiveGState;
-    private FiveGServiceClient mClient;
-    /**********************************************************/
 
     private final MobileStatusTracker.Callback mMobileCallback =
             new MobileStatusTracker.Callback() {
@@ -191,8 +180,6 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
         mPhone = phone;
         mDefaults = defaults;
         mSubscriptionInfo = info;
-        mFiveGStateListener = new FiveGStateListener();
-        mFiveGState = new FiveGServiceState();
         mNetworkNameSeparator = getTextIfExists(
                 R.string.status_bar_network_name_separator).toString();
         mNetworkNameDefault = getTextIfExists(
@@ -670,14 +657,6 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             mCurrentState.iconGroup = mDefaultIcons;
         }
 
-        //Modem has centralized logic to display 5G icon based on carrier requirements
-        //For 5G icon display, only query NrIconType reported by modem
-        if ( mFiveGState.isNrIconTypeValid() ) {
-            mCurrentState.iconGroup = mFiveGState.getIconGroup();
-        }else {
-            mCurrentState.iconGroup = getNetworkTypeIconGroup();
-        }
-
         mCurrentState.dataConnected = mCurrentState.isDataConnected();
 
         mCurrentState.roaming = isRoaming();
@@ -710,8 +689,6 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
         if ( mConfig.alwaysShowNetworkTypeIcon ) {
             if(!mCurrentState.connected) {
                 mCurrentState.iconGroup = TelephonyIcons.UNKNOWN;
-            }else if (mFiveGState.isNrIconTypeValid()) {
-                mCurrentState.iconGroup = mFiveGState.getIconGroup();
             }else {
                 mCurrentState.iconGroup = getNetworkTypeIconGroup();
             }
@@ -827,17 +804,6 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
         mMobileStatusHistoryIndex = (mMobileStatusHistoryIndex + 1) % STATUS_HISTORY_SIZE;
     }
 
-    public void registerFiveGStateListener(FiveGServiceClient client) {
-        int phoneId = mSubscriptionInfo.getSimSlotIndex();
-        client.registerListener(phoneId, mFiveGStateListener);
-        mClient = client;
-    }
-
-    public void unregisterFiveGStateListener(FiveGServiceClient client) {
-        int phoneId = mSubscriptionInfo.getSimSlotIndex();
-        client.unregisterListener(phoneId);
-    }
-
     private MobileIconGroup getNetworkTypeIconGroup() {
         MobileIconGroup iconGroup = mDefaultIcons;
         int overrideNetworkType = mCurrentState.telephonyDisplayInfo.getOverrideNetworkType();
@@ -877,11 +843,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
 
     private MobileIconGroup getRatIconGroup() {
         MobileIconGroup iconGroup = mDefaultIcons;
-        if ( mFiveGState.isNrIconTypeValid() ) {
-            iconGroup = mFiveGState.getIconGroup();
-        }else {
-            iconGroup = getNetworkTypeIconGroup();
-        }
+        iconGroup = getNetworkTypeIconGroup();
         return iconGroup;
     }
 
@@ -929,21 +891,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
                     + (mMobileStatusHistoryIndex + STATUS_HISTORY_SIZE - i) + "): "
                     + mMobileStatusHistory[i & (STATUS_HISTORY_SIZE - 1)]);
         }
-        pw.println("  mFiveGState=" + mFiveGState + ",");
-
         dumpTableData(pw);
-    }
-
-    class FiveGStateListener implements IFiveGStateListener{
-
-        public void onStateChanged(FiveGServiceState state) {
-            if (DEBUG) {
-                Log.d(mTag, "onStateChanged: state=" + state);
-            }
-            mFiveGState = state;
-            updateTelephony();
-            notifyListeners();
-        }
     }
 
     private ImsMmTelManager.CapabilityCallback mCapabilityCallback
