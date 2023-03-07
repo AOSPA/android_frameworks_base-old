@@ -670,14 +670,6 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             mCurrentState.iconGroup = mDefaultIcons;
         }
 
-        //Modem has centralized logic to display 5G icon based on carrier requirements
-        //For 5G icon display, only query NrIconType reported by modem
-        if ( mFiveGState.isNrIconTypeValid() ) {
-            mCurrentState.iconGroup = mFiveGState.getIconGroup();
-        }else {
-            mCurrentState.iconGroup = getNetworkTypeIconGroup();
-        }
-
         mCurrentState.dataConnected = mCurrentState.isDataConnected();
 
         mCurrentState.roaming = isRoaming();
@@ -710,8 +702,6 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
         if ( mConfig.alwaysShowNetworkTypeIcon ) {
             if(!mCurrentState.connected) {
                 mCurrentState.iconGroup = TelephonyIcons.UNKNOWN;
-            }else if (mFiveGState.isNrIconTypeValid()) {
-                mCurrentState.iconGroup = mFiveGState.getIconGroup();
             }else {
                 mCurrentState.iconGroup = getNetworkTypeIconGroup();
             }
@@ -877,11 +867,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
 
     private MobileIconGroup getRatIconGroup() {
         MobileIconGroup iconGroup = mDefaultIcons;
-        if ( mFiveGState.isNrIconTypeValid() ) {
-            iconGroup = mFiveGState.getIconGroup();
-        }else {
-            iconGroup = getNetworkTypeIconGroup();
-        }
+        iconGroup = getNetworkTypeIconGroup();
         return iconGroup;
     }
 
