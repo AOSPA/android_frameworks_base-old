@@ -84,6 +84,10 @@ class FakeMobileIconInteractor(
 
     override val imsInfo = MutableStateFlow(MobileConnectionModel())
 
+    override val showVowifiIcon = MutableStateFlow(false)
+
+    override val voWifiAvailable = MutableStateFlow(false)
+
     fun setIconGroup(group: SignalIcon.MobileIconGroup) {
         _iconGroup.value = group
     }

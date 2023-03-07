@@ -98,4 +98,6 @@ class FakeMobileIconsInteractor(
         const val FIVE_G_OVERRIDE = OVERRIDE_NETWORK_TYPE_LTE_ADVANCED_PRO
     }
     override val showVolteIcon = MutableStateFlow(false)
+
+    override val showVowifiIcon = MutableStateFlow(false)
 }

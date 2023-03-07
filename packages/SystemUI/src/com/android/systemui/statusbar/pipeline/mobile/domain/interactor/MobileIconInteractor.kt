@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar.pipeline.mobile.domain.interactor
 
 import android.telephony.CarrierConfigManager
+import android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN
 import android.telephony.TelephonyDisplayInfo
 import android.telephony.TelephonyManager
 import com.android.settingslib.SignalIcon.MobileIconGroup
@@ -130,6 +131,10 @@ interface MobileIconInteractor {
     val imsInfo: StateFlow<MobileConnectionModel>
 
     val showVolteIcon: StateFlow<Boolean>
+
+    val showVowifiIcon: StateFlow<Boolean>
+
+    val voWifiAvailable: StateFlow<Boolean>
 }
 
 /** Interactor for a single mobile connection. This connection _should_ have one subscription ID */
@@ -150,7 +155,8 @@ class MobileIconInteractorImpl(
     override val alwaysUseRsrpLevelForLte: StateFlow<Boolean>,
     override val hideNoInternetState: StateFlow<Boolean>,
     override val showVolteIcon: StateFlow<Boolean>,
-) : MobileIconInteractor {
+    override val showVowifiIcon: StateFlow<Boolean>,
+    ) : MobileIconInteractor {
     private val connectionInfo = connectionRepository.connectionInfo
 
     override val tableLogBuffer: TableLogBuffer = connectionRepository.tableLogBuffer
@@ -274,6 +280,17 @@ class MobileIconInteractorImpl(
     override val isInService =
         connectionRepository.connectionInfo
             .mapLatest { it.isInService }
+            .stateIn(scope, SharingStarted.WhileSubscribed(), false)
+
+    override val voWifiAvailable: StateFlow<Boolean> =
+        combine(
+                imsInfo,
+                showVowifiIcon,
+            ) { imsInfo, showVowifiIcon ->
+                imsInfo.voiceCapable
+                        && imsInfo.imsRegistrationTech == REGISTRATION_TECH_IWLAN
+                        && showVowifiIcon
+            }
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
     private fun isLteCamped(connectionInfo: MobileConnectionModel): Boolean {
