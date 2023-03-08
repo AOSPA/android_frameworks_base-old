@@ -520,7 +520,7 @@
     <string name="okay" msgid="949938843324579502">"ठिक छ"</string>
     <string name="done" msgid="381184316122520313">"सम्पन्न भयो"</string>
     <string name="alarms_and_reminders_label" msgid="6918395649731424294">"अलार्म र रिमाइन्डरहरू"</string>
-    <string name="alarms_and_reminders_switch_title" msgid="4939393911531826222">"अलार्म तथा रिमाइन्डर सेट गर्न दिइयोस्"</string>
+    <string name="alarms_and_reminders_switch_title" msgid="4939393911531826222">"अलार्म तथा रिमाइन्डर सेट गर्ने अनुमति दिनुहोस्"</string>
     <string name="alarms_and_reminders_title" msgid="8819933264635406032">"अलार्म तथा रिमाइन्डर"</string>
     <string name="alarms_and_reminders_footer_title" msgid="6302587438389079695">"यो एपलाई अलार्म सेट गर्ने र समयमै पूरा गर्नु पर्ने कारबाहीहरूको रुटिन बनाउने अनुमति दिनुहोस्। यो अनुमति दिइएको छ भने यो एप ब्याकग्राउन्डमा चल्छ र धेरै ब्याट्री खपत हुन्छ।\n\nयो अनुमति दिइएको छैन भने सेट गरिएका अलार्म बज्दैनन् र यो एपले तय गरेका गतिविधि चल्दैनन्।"</string>
     <string name="keywords_alarms_and_reminders" msgid="6633360095891110611">"समयतालिका, अलार्म, रिमाइन्डर, घडी"</string>
@@ -540,17 +540,13 @@
     <string name="media_transfer_this_device_name" product="default" msgid="2357329267148436433">"यो फोन"</string>
     <string name="media_transfer_this_device_name" product="tablet" msgid="3714653244000242800">"यो ट्याब्लेट"</string>
     <string name="media_transfer_this_phone" msgid="7194341457812151531">"यो फोन"</string>
-    <!-- no translation found for media_output_status_unknown_error (5098565887497902222) -->
-    <skip />
+    <string name="media_output_status_unknown_error" msgid="5098565887497902222">"यो डिभाइसमा मिडिया प्ले गर्न मिल्दैन"</string>
     <string name="media_output_status_require_premium" msgid="8411255800047014822">"आफूले प्रयोग गर्न चाहेको खाता अपग्रेड गर्नुहोस्"</string>
     <string name="media_output_status_not_support_downloads" msgid="4523828729240373315">"डाउनलोड गरिएका सामग्री यहाँ प्ले गर्न मिल्दैन"</string>
     <string name="media_output_status_try_after_ad" msgid="8312579066856015441">"विज्ञापन सकिएपछि फेरि प्रयास गर्नुहोस्"</string>
-    <!-- no translation found for media_output_status_device_in_low_power_mode (8184631698321758451) -->
-    <skip />
-    <!-- no translation found for media_output_status_unauthorized (5880222828273853838) -->
-    <skip />
-    <!-- no translation found for media_output_status_track_unsupported (5576313219317709664) -->
-    <skip />
+    <string name="media_output_status_device_in_low_power_mode" msgid="8184631698321758451">"यो मिडिया यहाँ प्ले गर्न डिभाइस सक्रिय गर्नुहोस्"</string>
+    <string name="media_output_status_unauthorized" msgid="5880222828273853838">"यो डिभाइसलाई मिडिया प्ले गर्ने अनुमोदन दिइएको छैन"</string>
+    <string name="media_output_status_track_unsupported" msgid="5576313219317709664">"यो मिडिया यहाँ प्ले गर्न मिल्दैन"</string>
     <string name="profile_connect_timeout_subtext" msgid="4043408193005851761">"जोड्ने क्रममा समस्या भयो। यन्त्रलाई निष्क्रिय पारेर फेरि अन गर्नुहोस्"</string>
     <string name="media_transfer_wired_device_name" msgid="4447880899964056007">"तारयुक्त अडियो यन्त्र"</string>
     <string name="help_label" msgid="3528360748637781274">"मद्दत र प्रतिक्रिया"</string>

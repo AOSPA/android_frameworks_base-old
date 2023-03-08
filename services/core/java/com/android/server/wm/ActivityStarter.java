@@ -60,7 +60,6 @@ import static android.window.TaskFragmentOperation.OP_TYPE_START_ACTIVITY_IN_TAS
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_CONFIGURATION;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_TASKS;
-import static com.android.server.wm.ActivityRecord.State.FINISHING;
 import static com.android.server.wm.ActivityRecord.State.RESUMED;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_PERMISSIONS_REVIEW;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_RESULTS;
@@ -75,13 +74,16 @@ import static com.android.server.wm.ActivityTaskManagerService.ANIMATE;
 import static com.android.server.wm.ActivityTaskSupervisor.DEFER_RESUME;
 import static com.android.server.wm.ActivityTaskSupervisor.ON_TOP;
 import static com.android.server.wm.ActivityTaskSupervisor.PRESERVE_WINDOWS;
+import static com.android.server.wm.ActivityTaskSupervisor.getApplicationLabel;
 import static com.android.server.wm.BackgroundActivityStartController.BAL_ALLOW_ALLOWLISTED_COMPONENT;
 import static com.android.server.wm.BackgroundActivityStartController.BAL_ALLOW_ALLOWLISTED_UID;
-import static com.android.server.wm.BackgroundActivityStartController.BAL_ALLOW_BAL_PERMISSION;
 import static com.android.server.wm.BackgroundActivityStartController.BAL_ALLOW_DEFAULT;
 import static com.android.server.wm.BackgroundActivityStartController.BAL_ALLOW_PENDING_INTENT;
+import static com.android.server.wm.BackgroundActivityStartController.BAL_ALLOW_PERMISSION;
+import static com.android.server.wm.BackgroundActivityStartController.BAL_ALLOW_SAW_PERMISSION;
 import static com.android.server.wm.BackgroundActivityStartController.BAL_ALLOW_VISIBLE_WINDOW;
 import static com.android.server.wm.BackgroundActivityStartController.BAL_BLOCK;
+import static com.android.server.wm.BackgroundActivityStartController.balCodeToString;
 import static com.android.server.wm.LaunchParamsController.LaunchParamsModifier.PHASE_BOUNDS;
 import static com.android.server.wm.LaunchParamsController.LaunchParamsModifier.PHASE_DISPLAY;
 import static com.android.server.wm.Task.REPARENT_MOVE_ROOT_TASK_TO_FRONT;
@@ -125,6 +127,7 @@ import android.os.UserManager;
 import android.service.voice.IVoiceInteractionSession;
 import android.text.TextUtils;
 import android.util.BoostFramework;
+import android.util.Pair;
 import android.util.Pools.SynchronizedPool;
 import android.util.Slog;
 import android.widget.Toast;
@@ -149,6 +152,10 @@ import com.android.server.wm.TaskFragment.EmbeddingCheckResult;
 import java.io.PrintWriter;
 import java.text.DateFormat;
 import java.util.Date;
+import java.util.StringJoiner;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Controller for interpreting how and then launching an activity.
@@ -190,6 +197,7 @@ class ActivityStarter {
     ActivityRecord mStartActivity;
     private Intent mIntent;
     private int mCallingUid;
+    private int mRealCallingUid;
     private ActivityOptions mOptions;
 
     // If it is BAL_BLOCK, background activity can only be started in an existing task that contains
@@ -615,6 +623,7 @@ class ActivityStarter {
         mStartActivity = starter.mStartActivity;
         mIntent = starter.mIntent;
         mCallingUid = starter.mCallingUid;
+        mRealCallingUid = starter.mRealCallingUid;
         mOptions = starter.mOptions;
         mBalCode = starter.mBalCode;
 
@@ -1276,7 +1285,7 @@ class ActivityStarter {
 
         mLastStartActivityResult = startActivityUnchecked(r, sourceRecord, voiceSession,
                 request.voiceInteractor, startFlags, checkedOptions,
-                inTask, inTaskFragment, balCode, intentGrants);
+                inTask, inTaskFragment, balCode, intentGrants, realCallingUid);
 
         if (request.outActivity != null) {
             request.outActivity[0] = mLastStartActivityRecord;
@@ -1427,7 +1436,7 @@ class ActivityStarter {
             IVoiceInteractionSession voiceSession, IVoiceInteractor voiceInteractor,
             int startFlags, ActivityOptions options, Task inTask,
             TaskFragment inTaskFragment, @BalCode int balCode,
-            NeededUriGrants intentGrants) {
+            NeededUriGrants intentGrants, int realCallingUid) {
         int result = START_CANCELED;
         final Task startedActivityRootTask;
 
@@ -1447,7 +1456,7 @@ class ActivityStarter {
                 Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "startActivityInner");
                 result = startActivityInner(r, sourceRecord, voiceSession, voiceInteractor,
                         startFlags, options, inTask, inTaskFragment, balCode,
-                        intentGrants);
+                        intentGrants, realCallingUid);
             } finally {
                 Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
                 startedActivityRootTask = handleStartResult(r, options, result, newTransition,
@@ -1594,9 +1603,9 @@ class ActivityStarter {
             IVoiceInteractionSession voiceSession, IVoiceInteractor voiceInteractor,
             int startFlags, ActivityOptions options, Task inTask,
             TaskFragment inTaskFragment, @BalCode int balCode,
-            NeededUriGrants intentGrants) {
+            NeededUriGrants intentGrants, int realCallingUid) {
         setInitialState(r, options, inTask, inTaskFragment, startFlags, sourceRecord,
-                voiceSession, voiceInteractor, balCode);
+                voiceSession, voiceInteractor, balCode, realCallingUid);
 
         computeLaunchingTaskFlags();
         mIntent.setFlags(mLaunchFlags);
@@ -1908,60 +1917,69 @@ class ActivityStarter {
      * Log activity starts which violate one of the following rules of the
      * activity security model (ASM):
      * See go/activity-security for rationale behind the rules.
-     * We don't currently block, but these checks may later become blocks
      * 1. Within a task, only an activity matching a top UID of the task can start activities
      * 2. Only activities within a foreground task, which match a top UID of the task, can
      * create a new task or bring an existing one into the foreground
      */
     private boolean checkActivitySecurityModel(ActivityRecord r, boolean newTask, Task targetTask) {
-        // Intents with FLAG_ACTIVITY_NEW_TASK will always be considered as creating a new task
-        // even if the intent is delivered to an existing task.
-        boolean taskToFront = newTask
-                || (mLaunchFlags & FLAG_ACTIVITY_NEW_TASK) == FLAG_ACTIVITY_NEW_TASK;
-
-        if (mSourceRecord != null) {
-            boolean passesAsmChecks = true;
-            Task sourceTask = mSourceRecord.getTask();
-
-            // Don't allow launches into a new task if the current task is not foreground.
-            if (taskToFront) {
-                passesAsmChecks = sourceTask != null && sourceTask.isVisible();
-            }
-
-            Task taskToCheck = taskToFront ? sourceTask : targetTask;
-            passesAsmChecks = passesAsmChecks && ActivityTaskSupervisor
-                    .doesTopActivityMatchingUidExistForAsm(taskToCheck, mSourceRecord.getUid(),
-                            mSourceRecord);
-
-            if (passesAsmChecks) {
-                return true;
-            }
-        }
-
-        // BAL exception only allowed for new tasks
-        if (taskToFront) {
-            if (mBalCode == BAL_ALLOW_ALLOWLISTED_COMPONENT
-                    || mBalCode == BAL_ALLOW_BAL_PERMISSION
-                    || mBalCode == BAL_ALLOW_PENDING_INTENT) {
-                return true;
-            }
-        }
-
         // BAL Exception allowed in all cases
         if (mBalCode == BAL_ALLOW_ALLOWLISTED_UID) {
             return true;
         }
 
-        // TODO(b/230590090): Revisit this - ideally we would not rely on visibility, but rather
-        // have an explicit api for activities to opt-out of ASM protection if they need to.
-        if (mBalCode == BAL_ALLOW_VISIBLE_WINDOW) {
-            return true;
+        // Intents with FLAG_ACTIVITY_NEW_TASK will always be considered as creating a new task
+        // even if the intent is delivered to an existing task.
+        boolean taskToFront = newTask
+                || (mLaunchFlags & FLAG_ACTIVITY_NEW_TASK) == FLAG_ACTIVITY_NEW_TASK;
+
+        // BAL exception only allowed for new tasks
+        if (taskToFront) {
+            if (mBalCode == BAL_ALLOW_ALLOWLISTED_COMPONENT
+                    || mBalCode == BAL_ALLOW_PERMISSION
+                    || mBalCode == BAL_ALLOW_PENDING_INTENT
+                    || mBalCode == BAL_ALLOW_SAW_PERMISSION
+                    || mBalCode == BAL_ALLOW_VISIBLE_WINDOW) {
+                return true;
+            }
+        }
+
+        boolean shouldBlockActivityStart = true;
+        // Used for logging/toasts. Would we block the start if target sdk was U and feature was
+        // enabled?
+        boolean wouldBlockActivityStartIgnoringFlags = true;
+
+        if (mSourceRecord != null) {
+            boolean passesAsmChecks = true;
+            Task sourceTask = mSourceRecord.getTask();
+
+            // Allow launching into a new task (or a task matching the launched activity's
+            // affinity) only if the current task is foreground or mutating its own task.
+            // The latter can happen eg. if caller uses NEW_TASK flag and the activity being
+            // launched matches affinity of source task.
+            if (taskToFront) {
+                passesAsmChecks = sourceTask != null
+                        && (sourceTask.isVisible() || sourceTask == targetTask);
+            }
+
+            if (passesAsmChecks) {
+                Task taskToCheck = taskToFront ? sourceTask : targetTask;
+                // first == false means Should Block
+                // second == false means Would Block disregarding flags
+                Pair<Boolean, Boolean> pair = ActivityTaskSupervisor
+                        .doesTopActivityMatchingUidExistForAsm(taskToCheck, mSourceRecord.getUid(),
+                                mSourceRecord);
+                shouldBlockActivityStart = !pair.first;
+                wouldBlockActivityStartIgnoringFlags = !pair.second;
+            }
+
+            if (!wouldBlockActivityStartIgnoringFlags) {
+                return true;
+            }
         }
 
         // ASM rules have failed. Log why
         ActivityRecord targetTopActivity = targetTask == null ? null
-                : targetTask.getActivity(ar ->
-                        !ar.isState(FINISHING) && !ar.isAlwaysOnTop());
+                : targetTask.getActivity(ar -> !ar.finishing && !ar.isAlwaysOnTop());
 
         int action = newTask || mSourceRecord == null
                 ? FrameworkStatsLog.ACTIVITY_ACTION_BLOCKED__ACTION__ACTIVITY_START_NEW_TASK
@@ -1992,7 +2010,7 @@ class ActivityStarter {
                 /* action */
                 action,
                 /* version */
-                3,
+                ActivitySecurityModelFeatureFlags.ASM_VERSION,
                 /* multi_window - we have our source not in the target task, but both are visible */
                 targetTask != null && mSourceRecord != null
                         && !targetTask.equals(mSourceRecord.getTask()) && targetTask.isVisible(),
@@ -2000,30 +2018,100 @@ class ActivityStarter {
                 mBalCode
         );
 
-        boolean shouldBlockActivityStart =
-                ActivitySecurityModelFeatureFlags.shouldRestrictActivitySwitch(mCallingUid);
+        boolean blockActivityStartAndFeatureEnabled = ActivitySecurityModelFeatureFlags
+                    .shouldRestrictActivitySwitch(mCallingUid)
+                && shouldBlockActivityStart;
 
+        String launchedFromPackageName = r.launchedFromPackage;
         if (ActivitySecurityModelFeatureFlags.shouldShowToast(mCallingUid)) {
+            String toastText = ActivitySecurityModelFeatureFlags.DOC_LINK
+                    + (blockActivityStartAndFeatureEnabled ? " blocked " : " would block ")
+                    + getApplicationLabel(mService.mContext.getPackageManager(),
+                        launchedFromPackageName);
             UiThread.getHandler().post(() -> Toast.makeText(mService.mContext,
-                    "Activity start from " + r.launchedFromPackage
-                            + (shouldBlockActivityStart ? " " : " would be ")
-                            + "blocked by " + ActivitySecurityModelFeatureFlags.DOC_LINK,
-                    Toast.LENGTH_SHORT).show());
+                    toastText, Toast.LENGTH_LONG).show());
+
+            logDebugInfoForActivitySecurity("Launch", r, targetTask, targetTopActivity,
+                    blockActivityStartAndFeatureEnabled, /* taskToFront */ taskToFront);
         }
 
-
-        if (shouldBlockActivityStart) {
-            Slog.e(TAG, "Abort Launching r: " + r
+        if (blockActivityStartAndFeatureEnabled) {
+            Slog.e(TAG, "[ASM] Abort Launching r: " + r
                     + " as source: "
-                    + (mSourceRecord != null ? mSourceRecord : r.launchedFromPackage)
+                    + (mSourceRecord != null ? mSourceRecord : launchedFromPackageName)
                     + " is in background. New task: " + newTask
                     + ". Top activity: " + targetTopActivity
-                    + ". BAL Code: " + mBalCode);
+                    + ". BAL Code: " + balCodeToString(mBalCode));
 
             return false;
         }
 
         return true;
+    }
+
+    /** Only called when an activity launch may be blocked, which should happen very rarely */
+    private void logDebugInfoForActivitySecurity(String action, ActivityRecord r, Task targetTask,
+            ActivityRecord targetTopActivity, boolean blockActivityStartAndFeatureEnabled,
+            boolean taskToFront) {
+        final String prefix = "[ASM] ";
+        Function<ActivityRecord, String> recordToString = (ar) -> {
+            if (ar == null) {
+                return null;
+            }
+            return (ar == mSourceRecord ? " [source]=> "
+                    : ar == targetTopActivity ? " [ top  ]=> "
+                            : ar == r ? " [target]=> "
+                                    : "         => ")
+                    + ar
+                    + " :: visible=" + ar.isVisible()
+                    + ", finishing=" + ar.isFinishing()
+                    + ", alwaysOnTop=" + ar.isAlwaysOnTop()
+                    + ", taskFragment=" + ar.getTaskFragment();
+        };
+
+        StringJoiner joiner = new StringJoiner("\n");
+        joiner.add(prefix + "------ Activity Security " + action + " Debug Logging Start ------");
+        joiner.add(prefix + "Block Enabled: " + blockActivityStartAndFeatureEnabled);
+        joiner.add(prefix + "ASM Version: " + ActivitySecurityModelFeatureFlags.ASM_VERSION);
+
+        boolean targetTaskMatchesSourceTask = targetTask != null
+                && mSourceRecord != null && mSourceRecord.getTask() == targetTask;
+
+        if (mSourceRecord == null) {
+            joiner.add(prefix + "Source Package: " + r.launchedFromPackage);
+            String realCallingPackage = mService.mContext.getPackageManager().getNameForUid(
+                    mRealCallingUid);
+            joiner.add(prefix + "Real Calling Uid Package: " + realCallingPackage);
+        } else {
+            joiner.add(prefix + "Source Record: " + recordToString.apply(mSourceRecord));
+            if (targetTaskMatchesSourceTask) {
+                joiner.add(prefix + "Source/Target Task: " + mSourceRecord.getTask());
+                joiner.add(prefix + "Source/Target Task Stack: ");
+            } else {
+                joiner.add(prefix + "Source Task: " + mSourceRecord.getTask());
+                joiner.add(prefix + "Source Task Stack: ");
+            }
+            mSourceRecord.getTask().forAllActivities((Consumer<ActivityRecord>)
+                    ar -> joiner.add(prefix + recordToString.apply(ar)));
+        }
+
+        joiner.add(prefix + "Target Task Top: " + recordToString.apply(targetTopActivity));
+        if (!targetTaskMatchesSourceTask) {
+            joiner.add(prefix + "Target Task: " + targetTask);
+            if (targetTask != null) {
+                joiner.add(prefix + "Target Task Stack: ");
+                targetTask.forAllActivities((Consumer<ActivityRecord>)
+                        ar -> joiner.add(prefix + recordToString.apply(ar)));
+            }
+        }
+
+        joiner.add(prefix + "Target Record: " + recordToString.apply(r));
+        joiner.add(prefix + "Intent: " + mIntent);
+        joiner.add(prefix + "TaskToFront: " + taskToFront);
+        joiner.add(prefix + "BalCode: " + balCodeToString(mBalCode));
+
+        joiner.add(prefix + "------ Activity Security " + action + " Debug Logging End ------");
+        Slog.i(TAG, joiner.toString());
     }
 
     /**
@@ -2110,7 +2198,8 @@ class ActivityStarter {
                 reusedTask != null ? reusedTask.getTopNonFinishingActivity() : null, intentGrants);
 
         if (mAddingToTask) {
-            clearTopIfNeeded(targetTask, mCallingUid, mStartActivity.getUid(), mLaunchFlags);
+            clearTopIfNeeded(targetTask, mCallingUid, mRealCallingUid, mStartActivity.getUid(),
+                    mLaunchFlags);
             return START_SUCCESS;
         }
 
@@ -2143,51 +2232,60 @@ class ActivityStarter {
     }
 
     /**
-     * If the top activity uid does not match the launched activity, and the launch was not
-     * requested from the top uid, we want to clear out all non matching activities to prevent the
-     * top activity being sandwiched.
+     * If the top activity uid does not match the launching or launched activity, and the launch was
+     * not requested from the top uid, we want to clear out all non matching activities to prevent
+     * the top activity being sandwiched.
+     *
+     * Both creator and sender UID are considered for the launching activity.
      */
-    private void clearTopIfNeeded(@NonNull Task targetTask, int callingUid, int startingUid,
-            int launchFlags) {
+    private void clearTopIfNeeded(@NonNull Task targetTask, int callingUid, int realCallingUid,
+            int startingUid, int launchFlags) {
         if ((launchFlags & FLAG_ACTIVITY_NEW_TASK) != FLAG_ACTIVITY_NEW_TASK) {
             // Launch is from the same task, so must be a top or privileged UID
             return;
         }
 
-        ActivityRecord targetTaskTop = targetTask.getTopNonFinishingActivity();
-        if (targetTaskTop != null && targetTaskTop.getUid() != startingUid) {
-            boolean shouldBlockActivityStart = ActivitySecurityModelFeatureFlags
-                    .shouldRestrictActivitySwitch(callingUid);
-            int[] finishCount = new int[0];
-            if (shouldBlockActivityStart) {
-                ActivityRecord activity = targetTask.getActivity(
-                        ar -> !ar.finishing && ar.isUid(startingUid));
+        Predicate<ActivityRecord> isLaunchingOrLaunched = ar -> !ar.finishing
+                && (ar.isUid(startingUid) || ar.isUid(callingUid) || ar.isUid(realCallingUid));
 
-                if (activity == null) {
-                    // mStartActivity is not in task, so clear everything
-                    activity = mStartActivity;
-                }
+        // Return early if we know for sure we won't need to clear any activities by just checking
+        // the top activity.
+        ActivityRecord targetTaskTop = targetTask.getTopMostActivity();
+        if (targetTaskTop == null || isLaunchingOrLaunched.test(targetTaskTop)) {
+            return;
+        }
 
-                finishCount = new int[1];
-                if (activity != null) {
-                    targetTask.performClearTop(activity, launchFlags, finishCount);
-                }
-
-                if (finishCount[0] > 0) {
-                    Slog.w(TAG, "Clearing top n: " + finishCount[0] + " activities from task t: "
-                            + targetTask + " not matching top uid: " + callingUid);
-                }
+        // Find the first activity which matches a safe UID and is not finishing. Clear everything
+        // above it
+        boolean shouldBlockActivityStart = ActivitySecurityModelFeatureFlags
+                .shouldRestrictActivitySwitch(callingUid);
+        int[] finishCount = new int[0];
+        if (shouldBlockActivityStart) {
+            ActivityRecord activity = targetTask.getActivity(isLaunchingOrLaunched);
+            if (activity == null) {
+                // mStartActivity is not in task, so clear everything
+                activity = mStartActivity;
             }
 
-            if (ActivitySecurityModelFeatureFlags.shouldShowToast(callingUid)
-                    && (!shouldBlockActivityStart || finishCount[0] > 0)) {
-                UiThread.getHandler().post(() -> Toast.makeText(mService.mContext,
-                        (shouldBlockActivityStart
-                                ? "Top activities cleared by "
-                                : "Top activities would be cleared by ")
-                                + ActivitySecurityModelFeatureFlags.DOC_LINK,
-                        Toast.LENGTH_SHORT).show());
+            finishCount = new int[1];
+            targetTask.performClearTop(activity, launchFlags, finishCount);
+            if (finishCount[0] > 0) {
+                Slog.w(TAG, "Cleared top n: " + finishCount[0] + " activities from task t: "
+                        + targetTask + " not matching top uid: " + callingUid);
             }
+        }
+
+        if (ActivitySecurityModelFeatureFlags.shouldShowToast(callingUid)
+                && (!shouldBlockActivityStart || finishCount[0] > 0)) {
+            UiThread.getHandler().post(() -> Toast.makeText(mService.mContext,
+                    (shouldBlockActivityStart
+                            ? "Top activities cleared by "
+                            : "Top activities would be cleared by ")
+                            + ActivitySecurityModelFeatureFlags.DOC_LINK,
+                    Toast.LENGTH_LONG).show());
+
+            logDebugInfoForActivitySecurity("Clear Top", mStartActivity, targetTask, targetTaskTop,
+                    shouldBlockActivityStart, /* taskToFront */ true);
         }
     }
 
@@ -2380,6 +2478,7 @@ class ActivityStarter {
         mStartActivity = null;
         mIntent = null;
         mCallingUid = -1;
+        mRealCallingUid = -1;
         mOptions = null;
         mBalCode = BAL_ALLOW_DEFAULT;
 
@@ -2426,13 +2525,14 @@ class ActivityStarter {
     private void setInitialState(ActivityRecord r, ActivityOptions options, Task inTask,
             TaskFragment inTaskFragment, int startFlags,
             ActivityRecord sourceRecord, IVoiceInteractionSession voiceSession,
-            IVoiceInteractor voiceInteractor, @BalCode int balCode) {
+            IVoiceInteractor voiceInteractor, @BalCode int balCode, int realCallingUid) {
         reset(false /* clearRequest */);
 
         mStartActivity = r;
         mIntent = r.intent;
         mOptions = options;
         mCallingUid = r.launchedFromUid;
+        mRealCallingUid = realCallingUid;
         mSourceRecord = sourceRecord;
         mSourceRootTask = mSourceRecord != null ? mSourceRecord.getRootTask() : null;
         mVoiceSession = voiceSession;
@@ -2960,6 +3060,8 @@ class ActivityStarter {
             int embeddingCheckResult = canEmbedActivity(mInTaskFragment, mStartActivity, task);
             if (embeddingCheckResult == EMBEDDING_ALLOWED) {
                 newParent = mInTaskFragment;
+                mStartActivity.mRequestedLaunchingTaskFragmentToken =
+                        mInTaskFragment.getFragmentToken();
             } else {
                 // Start mStartActivity to task instead if it can't be embedded to mInTaskFragment.
                 sendCanNotEmbedActivityError(mInTaskFragment, embeddingCheckResult);

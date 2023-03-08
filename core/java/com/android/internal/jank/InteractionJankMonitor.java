@@ -37,6 +37,7 @@ import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_IN
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LAUNCHER_OPEN_ALL_APPS;
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LAUNCHER_QUICK_SWITCH;
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LAUNCHER_UNLOCK_ENTRANCE_ANIMATION;
+import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LOCKSCREEN_CLOCK_MOVE_ANIMATION;
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LOCKSCREEN_LAUNCH_CAMERA;
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LOCKSCREEN_OCCLUSION;
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LOCKSCREEN_PASSWORD_APPEAR;
@@ -127,6 +128,7 @@ import com.android.internal.util.PerfettoTrigger;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.time.Instant;
 import java.util.Locale;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -240,6 +242,7 @@ public class InteractionJankMonitor {
     public static final int CUJ_LAUNCHER_CLOSE_ALL_APPS_SWIPE = 67;
     public static final int CUJ_LAUNCHER_CLOSE_ALL_APPS_TO_HOME = 68;
     public static final int CUJ_IME_INSETS_ANIMATION = 69;
+    public static final int CUJ_LOCKSCREEN_CLOCK_MOVE_ANIMATION = 70;
 
     private static final int NO_STATSD_LOGGING = -1;
 
@@ -318,6 +321,7 @@ public class InteractionJankMonitor {
             UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LAUNCHER_CLOSE_ALL_APPS_SWIPE,
             UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LAUNCHER_CLOSE_ALL_APPS_TO_HOME,
             UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__IME_INSETS_ANIMATION,
+            UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LOCKSCREEN_CLOCK_MOVE_ANIMATION,
     };
 
     private static class InstanceHolder {
@@ -412,6 +416,7 @@ public class InteractionJankMonitor {
             CUJ_LAUNCHER_CLOSE_ALL_APPS_SWIPE,
             CUJ_LAUNCHER_CLOSE_ALL_APPS_TO_HOME,
             CUJ_IME_INSETS_ANIMATION,
+            CUJ_LOCKSCREEN_CLOCK_MOVE_ANIMATION,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface CujType {
@@ -574,8 +579,10 @@ public class InteractionJankMonitor {
     public boolean begin(@NonNull Configuration.Builder builder) {
         try {
             final Configuration config = builder.build();
-            EventLogTags.writeJankCujEventsBeginRequest(
-                    config.mCujType, SystemClock.elapsedRealtimeNanos(), SystemClock.uptimeNanos());
+            postEventLogToWorkerThread((unixNanos, elapsedNanos, realtimeNanos) -> {
+                EventLogTags.writeJankCujEventsBeginRequest(
+                        config.mCujType, unixNanos, elapsedNanos, realtimeNanos);
+            });
             final TrackerResult result = new TrackerResult();
             final boolean success = config.getHandler().runWithScissors(
                     () -> result.mResult = beginInternal(config), EXECUTOR_TASK_TIMEOUT);
@@ -649,8 +656,10 @@ public class InteractionJankMonitor {
      * @return boolean true if the tracker is ended successfully, false otherwise.
      */
     public boolean end(@CujType int cujType) {
-        EventLogTags.writeJankCujEventsEndRequest(cujType, SystemClock.elapsedRealtimeNanos(),
-                SystemClock.uptimeNanos());
+        postEventLogToWorkerThread((unixNanos, elapsedNanos, realtimeNanos) -> {
+            EventLogTags.writeJankCujEventsEndRequest(
+                    cujType, unixNanos, elapsedNanos, realtimeNanos);
+        });
         FrameTracker tracker = getTracker(cujType);
         // Skip this call since we haven't started a trace yet.
         if (tracker == null) return false;
@@ -688,8 +697,10 @@ public class InteractionJankMonitor {
      * @return boolean true if the tracker is cancelled successfully, false otherwise.
      */
     public boolean cancel(@CujType int cujType) {
-        EventLogTags.writeJankCujEventsCancelRequest(cujType, SystemClock.elapsedRealtimeNanos(),
-                SystemClock.uptimeNanos());
+        postEventLogToWorkerThread((unixNanos, elapsedNanos, realtimeNanos) -> {
+            EventLogTags.writeJankCujEventsCancelRequest(
+                    cujType, unixNanos, elapsedNanos, realtimeNanos);
+        });
         return cancel(cujType, REASON_CANCEL_NORMAL);
     }
 
@@ -946,6 +957,8 @@ public class InteractionJankMonitor {
                 return "LAUNCHER_CLOSE_ALL_APPS_TO_HOME";
             case CUJ_IME_INSETS_ANIMATION:
                 return "IME_INSETS_ANIMATION";
+            case CUJ_LOCKSCREEN_CLOCK_MOVE_ANIMATION:
+                return "CUJ_LOCKSCREEN_CLOCK_MOVE_ANIMATION";
         }
         return "UNKNOWN";
     }
@@ -1277,5 +1290,22 @@ public class InteractionJankMonitor {
         public int getReason() {
             return mReason;
         }
+    }
+
+    @FunctionalInterface
+    private interface TimeFunction {
+        void invoke(long unixNanos, long elapsedNanos, long realtimeNanos);
+    }
+
+    private void postEventLogToWorkerThread(TimeFunction logFunction) {
+        final Instant now = Instant.now();
+        final long unixNanos = TimeUnit.NANOSECONDS.convert(now.getEpochSecond(), TimeUnit.SECONDS)
+                + now.getNano();
+        final long elapsedNanos = SystemClock.elapsedRealtimeNanos();
+        final long realtimeNanos = SystemClock.uptimeNanos();
+
+        mWorker.getThreadHandler().post(() -> {
+            logFunction.invoke(unixNanos, elapsedNanos, realtimeNanos);
+        });
     }
 }

@@ -1365,6 +1365,20 @@ class ActivityClientController extends IActivityClientController.Stub {
         }
     }
 
+    public void setAllowCrossUidActivitySwitchFromBelow(IBinder token, boolean allowed) {
+        final long origId = Binder.clearCallingIdentity();
+        try {
+            synchronized (mGlobalLock) {
+                final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
+                if (r != null) {
+                    r.setAllowCrossUidActivitySwitchFromBelow(allowed);
+                }
+            }
+        } finally {
+            Binder.restoreCallingIdentity(origId);
+        }
+    }
+
     @Override
     public void reportActivityFullyDrawn(IBinder token, boolean restoredFromBundle) {
         final long origId = Binder.clearCallingIdentity();
@@ -1698,6 +1712,22 @@ class ActivityClientController extends IActivityClientController.Stub {
             if (r != null) {
                 r.getTask().mAlignActivityLocaleWithTask = true;
             }
+        }
+    }
+
+    /**
+     * Returns {@code true} if the activity was explicitly requested to be launched in its
+     * current TaskFragment.
+     *
+     * @see ActivityRecord#mRequestedLaunchingTaskFragmentToken
+     */
+    public boolean isRequestedToLaunchInTaskFragment(IBinder activityToken,
+            IBinder taskFragmentToken) {
+        synchronized (mGlobalLock) {
+            final ActivityRecord r = ActivityRecord.isInRootTaskLocked(activityToken);
+            if (r == null) return false;
+
+            return r.mRequestedLaunchingTaskFragmentToken == taskFragmentToken;
         }
     }
 }

@@ -131,6 +131,7 @@ import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Message;
 import android.os.Parcel;
+import android.os.ParcelFileDescriptor;
 import android.os.ParcelableException;
 import android.os.PersistableBundle;
 import android.os.Process;
@@ -5173,8 +5174,8 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         }
 
         @Override
-        public String getAppMetadataPath(String packageName, int userId) {
-            mContext.enforceCallingOrSelfPermission(GET_APP_METADATA, "getAppMetadataPath");
+        public ParcelFileDescriptor getAppMetadataFd(String packageName, int userId) {
+            mContext.enforceCallingOrSelfPermission(GET_APP_METADATA, "getAppMetadataFd");
             final int callingUid = Binder.getCallingUid();
             final Computer snapshot = snapshotComputer();
             final PackageStateInternal ps = snapshot.getPackageStateForInstalledAndFiltered(
@@ -5183,7 +5184,12 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                 throw new ParcelableException(
                         new PackageManager.NameNotFoundException(packageName));
             }
-            return new File(ps.getPathString(), APP_METADATA_FILE_NAME).getAbsolutePath();
+            try {
+                File file = new File(ps.getPath(), APP_METADATA_FILE_NAME);
+                return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY);
+            } catch (FileNotFoundException e) {
+                return null;
+            }
         }
 
         @Override
@@ -6694,24 +6700,16 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         @Deprecated
         public void legacyDumpProfiles(String packageName, boolean dumpClassesAndMethods)
                 throws LegacyDexoptDisabledException {
-            /* Only the shell, root, or the app user should be able to dump profiles. */
-            final int callingUid = Binder.getCallingUid();
             final Computer snapshot = snapshotComputer();
-            final String[] callerPackageNames = snapshot.getPackagesForUid(callingUid);
-            if (!PackageManagerServiceUtils.isRootOrShell(callingUid)
-                    && !ArrayUtils.contains(callerPackageNames, packageName)) {
-                throw new SecurityException("dumpProfiles");
-            }
-
             AndroidPackage pkg = snapshot.getPackage(packageName);
             if (pkg == null) {
                 throw new IllegalArgumentException("Unknown package: " + packageName);
             }
 
             synchronized (mInstallLock) {
-                Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "dump profiles");
+                Trace.traceBegin(Trace.TRACE_TAG_DALVIK, "dump profiles");
                 mArtManagerService.dumpProfiles(pkg, dumpClassesAndMethods);
-                Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
+                Trace.traceEnd(Trace.TRACE_TAG_DALVIK);
             }
         }
 

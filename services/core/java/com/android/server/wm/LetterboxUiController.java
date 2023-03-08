@@ -97,6 +97,7 @@ import android.view.InsetsState;
 import android.view.RoundedCorner;
 import android.view.SurfaceControl;
 import android.view.SurfaceControl.Transaction;
+import android.view.WindowInsets;
 import android.view.WindowManager;
 
 import com.android.internal.R;
@@ -130,12 +131,6 @@ final class LetterboxUiController {
     private final LetterboxConfiguration mLetterboxConfiguration;
 
     private final ActivityRecord mActivityRecord;
-
-    /**
-     * Taskbar expanded height. Used to determine when to crop an app window to display the
-     * rounded corners above the expanded taskbar.
-     */
-    private final float mExpandedTaskBarHeight;
 
     // TODO(b/265576778): Cache other overrides as well.
 
@@ -192,12 +187,6 @@ final class LetterboxUiController {
 
     // The app compat state for the opaque activity if any
     private int mInheritedAppCompatState = APP_COMPAT_STATE_CHANGED__STATE__UNKNOWN;
-
-    // If true it means that the opaque activity beneath a translucent one is in SizeCompatMode.
-    private boolean mIsInheritedInSizeCompatMode;
-
-    // This is the SizeCompatScale of the opaque activity beneath a translucent one
-    private float mInheritedSizeCompatScale;
 
     // The CompatDisplayInsets of the opaque activity beneath the translucent one.
     private ActivityRecord.CompatDisplayInsets mInheritedCompatDisplayInsets;
@@ -258,9 +247,6 @@ final class LetterboxUiController {
                         () -> mLetterboxConfiguration.isCameraCompatTreatmentEnabled(
                                 /* checkDeviceConfig */ true),
                         PROPERTY_CAMERA_COMPAT_ENABLE_REFRESH_VIA_PAUSE);
-
-        mExpandedTaskBarHeight =
-                getResources().getDimensionPixelSize(R.dimen.taskbar_frame_height);
 
         mBooleanPropertyAllowOrientationOverride =
                 readComponentProperty(packageManager, mActivityRecord.packageName,
@@ -648,10 +634,9 @@ final class LetterboxUiController {
         if (mLetterbox != null) {
             outBounds.set(mLetterbox.getInnerFrame());
             final WindowState w = mActivityRecord.findMainWindow();
-            if (w == null) {
-                return;
+            if (w != null) {
+                adjustBoundsForTaskbar(w, outBounds);
             }
-            adjustBoundsIfNeeded(w, outBounds);
         } else {
             outBounds.setEmpty();
         }
@@ -736,8 +721,21 @@ final class LetterboxUiController {
                     : mActivityRecord.inMultiWindowMode()
                             ? mActivityRecord.getTask().getBounds()
                             : mActivityRecord.getRootTask().getParent().getBounds();
+            // In case of translucent activities an option is to use the WindowState#getFrame() of
+            // the first opaque activity beneath. In some cases (e.g. an opaque activity is using
+            // non MATCH_PARENT layouts or a Dialog theme) this might not provide the correct
+            // information and in particular it might provide a value for a smaller area making
+            // the letterbox overlap with the translucent activity's frame.
+            // If we use WindowState#getFrame() for the translucent activity's letterbox inner
+            // frame, the letterbox will then be overlapped with the translucent activity's frame.
+            // Because the surface layer of letterbox is lower than an activity window, this
+            // won't crop the content, but it may affect other features that rely on values stored
+            // in mLetterbox, e.g. transitions, a status bar scrim and recents preview in Launcher
+            // For this reason we use ActivityRecord#getBounds() that the translucent activity
+            // inherits from the first opaque activity beneath and also takes care of the scaling
+            // in case of activities in size compat mode.
             final Rect innerFrame = hasInheritedLetterboxBehavior()
-                    ? mActivityRecord.getWindowConfiguration().getBounds() : w.getFrame();
+                    ? mActivityRecord.getBounds() : w.getFrame();
             mLetterbox.layout(spaceToFill, innerFrame, mTmpPoint);
         } else if (mLetterbox != null) {
             mLetterbox.hide();
@@ -864,10 +862,9 @@ final class LetterboxUiController {
         return mActivityRecord.mWmService.mContext.getResources();
     }
 
-    private void handleHorizontalDoubleTap(int x) {
-        // TODO(b/260857308): Investigate if enabling reachability for translucent activity
-        if (hasInheritedLetterboxBehavior() || !isHorizontalReachabilityEnabled()
-                || mActivityRecord.isInTransition()) {
+    @VisibleForTesting
+    void handleHorizontalDoubleTap(int x) {
+        if (!isHorizontalReachabilityEnabled() || mActivityRecord.isInTransition()) {
             return;
         }
 
@@ -905,10 +902,9 @@ final class LetterboxUiController {
         mActivityRecord.recomputeConfiguration();
     }
 
-    private void handleVerticalDoubleTap(int y) {
-        // TODO(b/260857308): Investigate if enabling reachability for translucent activity
-        if (hasInheritedLetterboxBehavior() || !isVerticalReachabilityEnabled()
-                || mActivityRecord.isInTransition()) {
+    @VisibleForTesting
+    void handleVerticalDoubleTap(int y) {
+        if (!isVerticalReachabilityEnabled() || mActivityRecord.isInTransition()) {
             return;
         }
 
@@ -963,8 +959,8 @@ final class LetterboxUiController {
                 && (parentConfiguration.orientation == ORIENTATION_LANDSCAPE
                         && mActivityRecord.getOrientationForReachability() == ORIENTATION_PORTRAIT)
                 // Check whether the activity fills the parent vertically.
-                && parentConfiguration.windowConfiguration.getBounds().height()
-                        == mActivityRecord.getBounds().height();
+                && parentConfiguration.windowConfiguration.getAppBounds().height()
+                        <= mActivityRecord.getBounds().height();
     }
 
     @VisibleForTesting
@@ -1001,7 +997,7 @@ final class LetterboxUiController {
 
     @VisibleForTesting
     boolean shouldShowLetterboxUi(WindowState mainWindow) {
-        return isSurfaceReadyAndVisible(mainWindow) && mainWindow.areAppWindowBoundsLetterboxed()
+        return isSurfaceVisible(mainWindow) && mainWindow.areAppWindowBoundsLetterboxed()
                 // Check for FLAG_SHOW_WALLPAPER explicitly instead of using
                 // WindowContainer#showWallpaper because the later will return true when this
                 // activity is using blurred wallpaper for letterbox background.
@@ -1009,11 +1005,8 @@ final class LetterboxUiController {
     }
 
     @VisibleForTesting
-    boolean isSurfaceReadyAndVisible(WindowState mainWindow) {
-        boolean surfaceReady = mainWindow.isDrawn() // Regular case
-                // Waiting for relayoutWindow to call preserveSurface
-                || mainWindow.isDragResizeChanged();
-        return surfaceReady && (mActivityRecord.isVisible()
+    boolean isSurfaceVisible(WindowState mainWindow) {
+        return mainWindow.isOnScreen() && (mActivityRecord.isVisible()
                 || mActivityRecord.isVisibleRequested());
     }
 
@@ -1086,7 +1079,12 @@ final class LetterboxUiController {
         // It is important to call {@link #adjustBoundsIfNeeded} before {@link cropBounds.offsetTo}
         // because taskbar bounds used in {@link #adjustBoundsIfNeeded}
         // are in screen coordinates
-        adjustBoundsIfNeeded(mainWindow, cropBounds);
+        adjustBoundsForTaskbar(mainWindow, cropBounds);
+
+        final float scale = mainWindow.mInvGlobalScale;
+        if (scale != 1f && scale > 0f) {
+            cropBounds.scale(scale);
+        }
 
         // ActivityRecord bounds are in screen coordinates while (0,0) for activity's surface
         // control is in the top left corner of an app window so offsetting bounds
@@ -1130,16 +1128,18 @@ final class LetterboxUiController {
     @VisibleForTesting
     @Nullable
     InsetsSource getExpandedTaskbarOrNull(final WindowState mainWindow) {
-        final InsetsSource taskbar = mainWindow.getInsetsState().peekSource(
-                InsetsState.ITYPE_EXTRA_NAVIGATION_BAR);
-        if (taskbar != null && taskbar.isVisible()
-                && taskbar.getFrame().height() >= mExpandedTaskBarHeight) {
-            return taskbar;
+        final InsetsState state = mainWindow.getInsetsState();
+        for (int i = state.sourceSize() - 1; i >= 0; i--) {
+            final InsetsSource source = state.sourceAt(i);
+            if (source.getType() == WindowInsets.Type.navigationBars()
+                    && source.insetsRoundedCornerFrame() && source.isVisible()) {
+                return source;
+            }
         }
         return null;
     }
 
-    private void adjustBoundsIfNeeded(final WindowState mainWindow, final Rect bounds) {
+    private void adjustBoundsForTaskbar(final WindowState mainWindow, final Rect bounds) {
         // Rounded corners should be displayed above the taskbar. When taskbar is hidden,
         // an insets frame is equal to a navigation bar which shouldn't affect position of
         // rounded corners since apps are expected to handle navigation bar inset.
@@ -1152,11 +1152,6 @@ final class LetterboxUiController {
         if (expandedTaskbarOrNull != null) {
             // Rounded corners should be displayed above the expanded taskbar.
             bounds.bottom = Math.min(bounds.bottom, expandedTaskbarOrNull.getFrame().top);
-        }
-
-        final float scale = mainWindow.mInvGlobalScale;
-        if (scale != 1f && scale > 0f) {
-            bounds.scale(scale);
         }
     }
 
@@ -1390,10 +1385,10 @@ final class LetterboxUiController {
             mLetterboxConfigListener.onRemoved();
             clearInheritedConfig();
         }
-        // In case mActivityRecord.getCompatDisplayInsets() is not null we don't apply the
+        // In case mActivityRecord.hasCompatDisplayInsetsWithoutOverride() we don't apply the
         // opaque activity constraints because we're expecting the activity is already letterboxed.
-        if (mActivityRecord.getTask() == null || mActivityRecord.getCompatDisplayInsets() != null
-                || mActivityRecord.fillsParent()) {
+        if (mActivityRecord.getTask() == null || mActivityRecord.fillsParent()
+                || mActivityRecord.hasCompatDisplayInsetsWithoutInheritance()) {
             return;
         }
         final ActivityRecord firstOpaqueActivityBeneath = mActivityRecord.getTask().getActivity(
@@ -1421,6 +1416,7 @@ final class LetterboxUiController {
                     // We need to initialize appBounds to avoid NPE. The actual value will
                     // be set ahead when resolving the Configuration for the activity.
                     mutatedConfiguration.windowConfiguration.setAppBounds(new Rect());
+                    inheritConfiguration(firstOpaqueActivityBeneath);
                     return mutatedConfiguration;
                 });
     }
@@ -1461,16 +1457,12 @@ final class LetterboxUiController {
         return mInheritedAppCompatState;
     }
 
-    float getInheritedSizeCompatScale() {
-        return mInheritedSizeCompatScale;
-    }
-
     @Configuration.Orientation
     int getInheritedOrientation() {
         return mInheritedOrientation;
     }
 
-    public ActivityRecord.CompatDisplayInsets getInheritedCompatDisplayInsets() {
+    ActivityRecord.CompatDisplayInsets getInheritedCompatDisplayInsets() {
         return mInheritedCompatDisplayInsets;
     }
 
@@ -1490,7 +1482,7 @@ final class LetterboxUiController {
      * @return The first not finishing opaque activity beneath the current translucent activity
      * if it exists and the strategy is enabled.
      */
-    private Optional<ActivityRecord> findOpaqueNotFinishingActivityBelow() {
+    Optional<ActivityRecord> findOpaqueNotFinishingActivityBelow() {
         if (!hasInheritedLetterboxBehavior() || mActivityRecord.getTask() == null) {
             return Optional.empty();
         }
@@ -1512,8 +1504,6 @@ final class LetterboxUiController {
         }
         mInheritedOrientation = firstOpaque.getRequestedConfigurationOrientation();
         mInheritedAppCompatState = firstOpaque.getAppCompatState();
-        mIsInheritedInSizeCompatMode = firstOpaque.inSizeCompatMode();
-        mInheritedSizeCompatScale = firstOpaque.getCompatScale();
         mInheritedCompatDisplayInsets = firstOpaque.getCompatDisplayInsets();
     }
 
@@ -1523,8 +1513,6 @@ final class LetterboxUiController {
         mInheritedMaxAspectRatio = UNDEFINED_ASPECT_RATIO;
         mInheritedOrientation = Configuration.ORIENTATION_UNDEFINED;
         mInheritedAppCompatState = APP_COMPAT_STATE_CHANGED__STATE__UNKNOWN;
-        mIsInheritedInSizeCompatMode = false;
-        mInheritedSizeCompatScale = 1f;
         mInheritedCompatDisplayInsets = null;
     }
 }

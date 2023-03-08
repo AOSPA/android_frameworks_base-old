@@ -36,6 +36,9 @@ import android.service.credentials.CallingAppInfo;
 import android.service.credentials.CredentialProviderInfo;
 import android.util.Log;
 
+import com.android.server.credentials.metrics.ApiName;
+import com.android.server.credentials.metrics.ApiStatus;
+
 import java.util.ArrayList;
 
 /**
@@ -135,27 +138,39 @@ public final class CreateRequestSession extends RequestSession<CreateCredentialR
 
     private void respondToClientWithResponseAndFinish(CreateCredentialResponse response) {
         Log.i(TAG, "respondToClientWithResponseAndFinish");
+        if (mRequestSessionStatus == RequestSessionStatus.COMPLETE) {
+            Log.i(TAG, "Request has already been completed. This is strange.");
+            return;
+        }
         if (isSessionCancelled()) {
             // TODO: Differentiate btw cancelled and false
-            logApiCalled(RequestType.CREATE_CREDENTIALS, /* isSuccessful */ true);
+            logApiCall(ApiName.CREATE_CREDENTIAL, /* apiStatus */
+                    ApiStatus.METRICS_API_STATUS_CLIENT_CANCELED);
             finishSession(/*propagateCancellation=*/true);
             return;
         }
         try {
             mClientCallback.onResponse(response);
-            logApiCalled(RequestType.CREATE_CREDENTIALS, /* isSuccessful */ true);
+            logApiCall(ApiName.CREATE_CREDENTIAL, /* apiStatus */
+                    ApiStatus.METRICS_API_STATUS_SUCCESS);
         } catch (RemoteException e) {
             Log.i(TAG, "Issue while responding to client: " + e.getMessage());
-            logApiCalled(RequestType.CREATE_CREDENTIALS, /* isSuccessful */ false);
+            logApiCall(ApiName.CREATE_CREDENTIAL, /* apiStatus */
+                    ApiStatus.METRICS_API_STATUS_FAILURE);
         }
         finishSession(/*propagateCancellation=*/false);
     }
 
     private void respondToClientWithErrorAndFinish(String errorType, String errorMsg) {
         Log.i(TAG, "respondToClientWithErrorAndFinish");
+        if (mRequestSessionStatus == RequestSessionStatus.COMPLETE) {
+            Log.i(TAG, "Request has already been completed. This is strange.");
+            return;
+        }
         if (isSessionCancelled()) {
             // TODO: Differentiate btw cancelled and false
-            logApiCalled(RequestType.CREATE_CREDENTIALS, /* isSuccessful */ true);
+            logApiCall(ApiName.CREATE_CREDENTIAL, /* apiStatus */
+                    ApiStatus.METRICS_API_STATUS_CLIENT_CANCELED);
             finishSession(/*propagateCancellation=*/true);
             return;
         }
@@ -164,8 +179,18 @@ public final class CreateRequestSession extends RequestSession<CreateCredentialR
         } catch (RemoteException e) {
             Log.i(TAG, "Issue while responding to client: " + e.getMessage());
         }
-        logApiCalled(RequestType.CREATE_CREDENTIALS, /* isSuccessful */ false);
+        logFailureOrUserCancel(errorType);
         finishSession(/*propagateCancellation=*/false);
+    }
+
+    private void logFailureOrUserCancel(String errorType) {
+        if (CreateCredentialException.TYPE_USER_CANCELED.equals(errorType)) {
+            logApiCall(ApiName.CREATE_CREDENTIAL,
+                    /* apiStatus */ ApiStatus.METRICS_API_STATUS_USER_CANCELED);
+        } else {
+            logApiCall(ApiName.CREATE_CREDENTIAL,
+                    /* apiStatus */ ApiStatus.METRICS_API_STATUS_FAILURE);
+        }
     }
 
     @Override

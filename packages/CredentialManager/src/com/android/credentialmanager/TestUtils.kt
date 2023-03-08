@@ -25,10 +25,15 @@ import android.credentials.Credential.TYPE_PASSWORD_CREDENTIAL
 import android.credentials.ui.AuthenticationEntry
 import android.credentials.ui.Entry
 import android.net.Uri
+import android.os.Bundle
 import android.provider.Settings
+import androidx.credentials.provider.BeginGetPasswordOption
+import androidx.credentials.provider.BeginGetPublicKeyCredentialOption
 import androidx.credentials.provider.CreateEntry
 import androidx.credentials.provider.PasswordCredentialEntry
 import androidx.credentials.provider.PublicKeyCredentialEntry
+import androidx.credentials.provider.RemoteCreateEntry
+import androidx.credentials.provider.RemoteCredentialEntry
 
 import java.time.Instant
 
@@ -66,6 +71,23 @@ class GetTestUtils {
                 subkey,
                 slice.build(),
                 status
+            )
+        }
+
+        internal fun newRemoteCredentialEntry(
+            context: Context,
+            key: String,
+            subkey: String,
+        ): Entry {
+            val intent = Intent(Settings.ACTION_SYNC_SETTINGS)
+            val pendingIntent =
+                PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+            return Entry(
+                key,
+                subkey,
+                RemoteCredentialEntry(pendingIntent, BeginGetPublicKeyCredentialOption(
+                    Bundle(), "id", "requestjson"
+                )).slice
             )
         }
 
@@ -120,7 +142,8 @@ class GetTestUtils {
                 intent, (PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
                 or PendingIntent.FLAG_ONE_SHOT)
             )
-            val passwordEntry = PasswordCredentialEntry.Builder(context, userName, pendingIntent)
+            val passwordEntry = PasswordCredentialEntry.Builder(
+                context, userName, pendingIntent, BeginGetPasswordOption(Bundle(), "id"))
                 .setDisplayName(userDisplayName).setLastUsedTime(lastUsedTime).build()
             return Entry(key, subkey, passwordEntry.slice, Intent())
         }
@@ -141,8 +164,12 @@ class GetTestUtils {
                 intent, (PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
                 or PendingIntent.FLAG_ONE_SHOT)
             )
-            val passkeyEntry = PublicKeyCredentialEntry.Builder(context, userName, pendingIntent)
-                .setDisplayName(userDisplayName).setLastUsedTime(lastUsedTime).build()
+            val passkeyEntry = PublicKeyCredentialEntry.Builder(
+                context,
+                userName,
+                pendingIntent,
+                BeginGetPublicKeyCredentialOption(Bundle(), "id", "requestjson")
+            ).setDisplayName(userDisplayName).setLastUsedTime(lastUsedTime).build()
             return Entry(key, subkey, passkeyEntry.slice, Intent())
         }
     }
@@ -201,6 +228,21 @@ class CreateTestUtils {
                     pendingIntent
                 ),
                 Intent()
+            )
+        }
+
+        internal fun newRemoteCreateEntry(
+            context: Context,
+            key: String,
+            subkey: String,
+        ): Entry {
+            val intent = Intent(Settings.ACTION_SYNC_SETTINGS)
+            val pendingIntent =
+                PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+            return Entry(
+                key,
+                subkey,
+                RemoteCreateEntry(pendingIntent).slice
             )
         }
     }

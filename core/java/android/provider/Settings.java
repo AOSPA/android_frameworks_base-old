@@ -40,7 +40,6 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.SearchManager;
 import android.app.WallpaperManager;
-import android.app.tare.EconomyManager;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.ContentResolver;
@@ -73,7 +72,6 @@ import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.os.DropBoxManager;
 import android.os.IBinder;
-import android.os.IpcDataCache;
 import android.os.LocaleList;
 import android.os.PowerManager;
 import android.os.PowerManager.AutoPowerSaveModeTriggers;
@@ -101,7 +99,6 @@ import android.widget.Editor;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.Preconditions;
-import com.android.internal.widget.ILockSettings;
 
 import java.io.IOException;
 import java.lang.annotation.ElementType;
@@ -118,6 +115,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 
 /**
  * The Settings provider contains global system-level device preferences.
@@ -125,9 +123,6 @@ import java.util.concurrent.Executor;
 public final class Settings {
     /** @hide */
     public static final boolean DEFAULT_OVERRIDEABLE_BY_RESTORE = false;
-
-    /** @hide default value of whether IpcDataCache is enabled or not */
-    public static final boolean IPC_DATA_CACHE_ENABLED = false;
 
     // Intent actions for Settings
 
@@ -2924,8 +2919,8 @@ public final class Settings {
 
     public static final String AUTHORITY = "settings";
 
-    static final String TAG = "Settings";
-    static final boolean LOCAL_LOGV = false;
+    private static final String TAG = "Settings";
+    private static final boolean LOCAL_LOGV = false;
 
     // Used in system server calling uid workaround in call()
     private static boolean sInSystemServer = false;
@@ -2983,19 +2978,22 @@ public final class Settings {
     }
 
     private static final class GenerationTracker {
-        private final MemoryIntArray mArray;
-        private final Runnable mErrorHandler;
+        @NonNull private final String mName;
+        @NonNull private final MemoryIntArray mArray;
+        @NonNull private final Consumer<String> mErrorHandler;
         private final int mIndex;
         private int mCurrentGeneration;
 
-        public GenerationTracker(@NonNull MemoryIntArray array, int index,
-                int generation, Runnable errorHandler) {
+        GenerationTracker(@NonNull String name, @NonNull MemoryIntArray array, int index,
+                int generation, Consumer<String> errorHandler) {
+            mName = name;
             mArray = array;
             mIndex = index;
             mErrorHandler = errorHandler;
             mCurrentGeneration = generation;
         }
 
+        // This method also updates the obsolete generation code stored locally
         public boolean isGenerationChanged() {
             final int currentGeneration = readCurrentGeneration();
             if (currentGeneration >= 0) {
@@ -3016,9 +3014,7 @@ public final class Settings {
                 return mArray.get(mIndex);
             } catch (IOException e) {
                 Log.e(TAG, "Error getting current generation", e);
-                if (mErrorHandler != null) {
-                    mErrorHandler.run();
-                }
+                mErrorHandler.accept(mName);
             }
             return -1;
         }
@@ -3028,17 +3024,14 @@ public final class Settings {
                 mArray.close();
             } catch (IOException e) {
                 Log.e(TAG, "Error closing backing array", e);
-                if (mErrorHandler != null) {
-                    mErrorHandler.run();
-                }
             }
         }
     }
 
-    static final class ContentProviderHolder {
+    private static final class ContentProviderHolder {
         private final Object mLock = new Object();
 
-        final Uri mUri;
+        private final Uri mUri;
         @GuardedBy("mLock")
         @UnsupportedAppUsage
         private IContentProvider mContentProvider;
@@ -3065,14 +3058,14 @@ public final class Settings {
     }
 
     // Thread-safe.
-    static class NameValueCache {
+    private static class NameValueCache {
         private static final boolean DEBUG = false;
 
-        static final String[] SELECT_VALUE_PROJECTION = new String[] {
+        private static final String[] SELECT_VALUE_PROJECTION = new String[] {
                 Settings.NameValueTable.VALUE
         };
 
-        static final String NAME_EQ_PLACEHOLDER = "name=?";
+        private static final String NAME_EQ_PLACEHOLDER = "name=?";
 
         // Must synchronize on 'this' to access mValues and mValuesVersion.
         private final ArrayMap<String, String> mValues = new ArrayMap<>();
@@ -3093,16 +3086,21 @@ public final class Settings {
         private final ArraySet<String> mAllFields;
         private final ArrayMap<String, Integer> mReadableFieldsWithMaxTargetSdk;
 
-        private final String mSettingsType;
-
-        // Caches for settings key -> value, only for the current user
-        private final IpcDataCache<SettingsIpcDataCache.GetQuery, String> mValueCache;
-        // Cache for settings namespace -> list of settings, only for the current user
-        private final IpcDataCache<SettingsIpcDataCache.ListQuery, HashMap<String, String>>
-                mNamespaceCache;
-
+        // Mapping from the name of a setting (or the prefix of a namespace) to a generation tracker
         @GuardedBy("this")
-        private GenerationTracker mGenerationTracker;
+        private ArrayMap<String, GenerationTracker> mGenerationTrackers = new ArrayMap<>();
+
+        private Consumer<String> mGenerationTrackerErrorHandler = (String name) -> {
+            synchronized (NameValueCache.this) {
+                Log.e(TAG, "Error accessing generation tracker - removing");
+                final GenerationTracker tracker = mGenerationTrackers.get(name);
+                if (tracker != null) {
+                    tracker.destroy();
+                    mGenerationTrackers.remove(name);
+                }
+                mValues.remove(name);
+            }
+        };
 
         <T extends NameValueTable> NameValueCache(Uri uri, String getCommand,
                 String setCommand, String deleteCommand, ContentProviderHolder providerHolder,
@@ -3126,11 +3124,6 @@ public final class Settings {
             mReadableFieldsWithMaxTargetSdk = new ArrayMap<>();
             getPublicSettingsForClass(callerClass, mAllFields, mReadableFields,
                     mReadableFieldsWithMaxTargetSdk);
-            mSettingsType = callerClass.getSimpleName().toLowerCase();
-            mValueCache = IPC_DATA_CACHE_ENABLED ? SettingsIpcDataCache.createValueCache(
-                    mProviderHolder, mCallGetCommand, mUri, mSettingsType) : null;
-            mNamespaceCache = IPC_DATA_CACHE_ENABLED ? SettingsIpcDataCache.createListCache(
-                    mProviderHolder, mCallListCommand, mSettingsType) : null;
         }
 
         public boolean putStringForUser(ContentResolver cr, String name, String value,
@@ -3196,6 +3189,43 @@ public final class Settings {
 
         @UnsupportedAppUsage
         public String getStringForUser(ContentResolver cr, String name, final int userHandle) {
+            final boolean isSelf = (userHandle == UserHandle.myUserId());
+            int currentGeneration = -1;
+            boolean needsGenerationTracker = false;
+
+            if (isSelf) {
+                synchronized (NameValueCache.this) {
+                    final GenerationTracker generationTracker = mGenerationTrackers.get(name);
+                    if (generationTracker != null) {
+                        if (generationTracker.isGenerationChanged()) {
+                            if (DEBUG) {
+                                Log.i(TAG, "Generation changed for setting:" + name
+                                        + " type:" + mUri.getPath()
+                                        + " in package:" + cr.getPackageName()
+                                        + " and user:" + userHandle);
+                            }
+                            mValues.remove(name);
+                        } else if (mValues.containsKey(name)) {
+                            if (DEBUG) {
+                                Log.i(TAG, "Cache hit for setting:" + name);
+                            }
+                            return mValues.get(name);
+                        }
+                        currentGeneration = generationTracker.getCurrentGeneration();
+                    } else {
+                        needsGenerationTracker = true;
+                    }
+                }
+            } else {
+                if (DEBUG || LOCAL_LOGV) {
+                    Log.v(TAG, "get setting for user " + userHandle
+                            + " by user " + UserHandle.myUserId() + " so skipping cache");
+                }
+            }
+            if (DEBUG) {
+                Log.i(TAG, "Cache miss for setting:" + name + " for user:" + userHandle);
+            }
+
             // Check if the target settings key is readable. Reject if the caller is not system and
             // is trying to access a settings key defined in the Settings.Secure, Settings.System or
             // Settings.Global and is not annotated as @Readable.
@@ -3229,55 +3259,6 @@ public final class Settings {
                 }
             }
 
-            if (IPC_DATA_CACHE_ENABLED) {
-                if (userHandle != UserHandle.myUserId()) {
-                    if (LOCAL_LOGV) {
-                        Log.v(TAG, "get setting for user " + userHandle
-                                + " by user " + UserHandle.myUserId()
-                                + " so skipping cache");
-                    }
-                    try {
-                        return SettingsIpcDataCache.getValueFromContentProviderCall(
-                                mProviderHolder, mCallGetCommand, mUri, userHandle, cr, name);
-                    } catch (RemoteException e) {
-                        return null;
-                    }
-                }
-
-                try {
-                    return mValueCache.query(new SettingsIpcDataCache.GetQuery(cr, name));
-                } catch (RuntimeException e) {
-                    // Failed to query the server
-                    return null;
-                }
-            }
-
-            // Fall back to old cache mechanism
-            final boolean isSelf = (userHandle == UserHandle.myUserId());
-            int currentGeneration = -1;
-            if (isSelf) {
-                synchronized (NameValueCache.this) {
-                    if (mGenerationTracker != null) {
-                        if (mGenerationTracker.isGenerationChanged()) {
-                            if (DEBUG) {
-                                Log.i(TAG, "Generation changed for type:"
-                                        + mUri.getPath() + " in package:"
-                                        + cr.getPackageName() +" and user:" + userHandle);
-                            }
-                            mValues.clear();
-                        } else if (mValues.containsKey(name)) {
-                            return mValues.get(name);
-                        }
-                        if (mGenerationTracker != null) {
-                            currentGeneration = mGenerationTracker.getCurrentGeneration();
-                        }
-                    }
-                }
-            } else {
-                if (LOCAL_LOGV) Log.v(TAG, "get setting for user " + userHandle
-                        + " by user " + UserHandle.myUserId() + " so skipping cache");
-            }
-
             IContentProvider cp = mProviderHolder.getProvider(cr);
 
             // Try the fast path first, not using query().  If this
@@ -3286,24 +3267,17 @@ public final class Settings {
             // interface.
             if (mCallGetCommand != null) {
                 try {
-                    Bundle args = null;
+                    Bundle args = new Bundle();
                     if (!isSelf) {
-                        args = new Bundle();
                         args.putInt(CALL_METHOD_USER_KEY, userHandle);
                     }
-                    boolean needsGenerationTracker = false;
-                    synchronized (NameValueCache.this) {
-                        if (isSelf && mGenerationTracker == null) {
-                            needsGenerationTracker = true;
-                            if (args == null) {
-                                args = new Bundle();
-                            }
-                            args.putString(CALL_METHOD_TRACK_GENERATION_KEY, null);
-                            if (DEBUG) {
-                                Log.i(TAG, "Requested generation tracker for type: "+ mUri.getPath()
-                                        + " in package:" + cr.getPackageName() +" and user:"
-                                        + userHandle);
-                            }
+                    if (needsGenerationTracker) {
+                        args.putString(CALL_METHOD_TRACK_GENERATION_KEY, null);
+                        if (DEBUG) {
+                            Log.i(TAG, "Requested generation tracker for setting:" + name
+                                    + " type:" + mUri.getPath()
+                                    + " in package:" + cr.getPackageName()
+                                    + " and user:" + userHandle);
                         }
                     }
                     Bundle b;
@@ -3340,33 +3314,24 @@ public final class Settings {
                                         final int generation = b.getInt(
                                                 CALL_METHOD_GENERATION_KEY, 0);
                                         if (DEBUG) {
-                                            Log.i(TAG, "Received generation tracker for type:"
-                                                    + mUri.getPath() + " in package:"
-                                                    + cr.getPackageName() + " and user:"
-                                                    + userHandle + " with index:" + index);
+                                            Log.i(TAG, "Received generation tracker for setting:"
+                                                    + name
+                                                    + " type:" + mUri.getPath()
+                                                    + " in package:" + cr.getPackageName()
+                                                    + " and user:" + userHandle
+                                                    + " with index:" + index);
                                         }
-                                        if (mGenerationTracker != null) {
-                                            mGenerationTracker.destroy();
-                                        }
-                                        mGenerationTracker = new GenerationTracker(array, index,
-                                                generation, () -> {
-                                            synchronized (NameValueCache.this) {
-                                                Log.e(TAG, "Error accessing generation"
-                                                        + " tracker - removing");
-                                                if (mGenerationTracker != null) {
-                                                    GenerationTracker generationTracker =
-                                                            mGenerationTracker;
-                                                    mGenerationTracker = null;
-                                                    generationTracker.destroy();
-                                                    mValues.clear();
-                                                }
-                                            }
-                                        });
+                                        mGenerationTrackers.put(name, new GenerationTracker(name,
+                                                array, index, generation,
+                                                mGenerationTrackerErrorHandler));
                                         currentGeneration = generation;
                                     }
                                 }
-                                if (mGenerationTracker != null && currentGeneration ==
-                                        mGenerationTracker.getCurrentGeneration()) {
+                                if (mGenerationTrackers.get(name) != null && currentGeneration
+                                        == mGenerationTrackers.get(name).getCurrentGeneration()) {
+                                    if (DEBUG) {
+                                        Log.i(TAG, "Updating cache for setting:" + name);
+                                    }
                                     mValues.put(name, value);
                                 }
                             }
@@ -3409,14 +3374,13 @@ public final class Settings {
 
                 String value = c.moveToNext() ? c.getString(0) : null;
                 synchronized (NameValueCache.this) {
-                    if (mGenerationTracker != null
-                            && currentGeneration == mGenerationTracker.getCurrentGeneration()) {
+                    if (mGenerationTrackers.get(name) != null && currentGeneration
+                            == mGenerationTrackers.get(name).getCurrentGeneration()) {
+                        if (DEBUG) {
+                            Log.i(TAG, "Updating cache for setting:" + name + " using query");
+                        }
                         mValues.put(name, value);
                     }
-                }
-                if (LOCAL_LOGV) {
-                    Log.v(TAG, "cache miss [" + mUri.getLastPathSegment() + "]: " +
-                            name + " = " + (value == null ? "(null)" : value));
                 }
                 return value;
             } catch (RemoteException e) {
@@ -3449,52 +3413,31 @@ public final class Settings {
                 List<String> names) {
             String namespace = prefix.substring(0, prefix.length() - 1);
             Config.enforceReadPermission(namespace);
+            ArrayMap<String, String> keyValues = new ArrayMap<>();
+            int currentGeneration = -1;
+            boolean needsGenerationTracker = false;
 
-            if (mCallListCommand == null) {
-                // No list command specified, return empty map
-                return new ArrayMap<>();
-            }
-
-            if (IPC_DATA_CACHE_ENABLED) {
-                ArrayMap<String, String> results = new ArrayMap<>();
-                HashMap<String, String> flagsToValues;
-                try {
-                    flagsToValues = mNamespaceCache.query(
-                            new SettingsIpcDataCache.ListQuery(cr, prefix));
-                } catch (RuntimeException e) {
-                    // Failed to query the server, return an empty map
-                    return results;
-                }
-
-                if (flagsToValues != null) {
-                    if (!names.isEmpty()) {
-                        for (Map.Entry<String, String> flag : flagsToValues.entrySet()) {
-                            if (names.contains(flag.getKey())) {
-                                results.put(flag.getKey(), flag.getValue());
+            synchronized (NameValueCache.this) {
+                final GenerationTracker generationTracker = mGenerationTrackers.get(prefix);
+                if (generationTracker != null) {
+                    if (generationTracker.isGenerationChanged()) {
+                        if (DEBUG) {
+                            Log.i(TAG, "Generation changed for prefix:" + prefix
+                                    + " type:" + mUri.getPath()
+                                    + " in package:" + cr.getPackageName());
+                        }
+                        for (int i = 0; i < mValues.size(); ++i) {
+                            String key = mValues.keyAt(i);
+                            if (key.startsWith(prefix)) {
+                                mValues.remove(key);
                             }
                         }
                     } else {
-                        results.putAll(flagsToValues);
-                    }
-                }
-                return results;
-            }
-
-            // Fall back to old cache mechanism
-            ArrayMap<String, String> keyValues = new ArrayMap<>();
-            int currentGeneration = -1;
-
-            synchronized (NameValueCache.this) {
-                if (mGenerationTracker != null) {
-                    if (mGenerationTracker.isGenerationChanged()) {
-                        if (DEBUG) {
-                            Log.i(TAG, "Generation changed for type:" + mUri.getPath()
-                                    + " in package:" + cr.getPackageName());
-                        }
-                        mValues.clear();
-                    } else {
                         boolean prefixCached = mValues.containsKey(prefix);
                         if (prefixCached) {
+                            if (DEBUG) {
+                                Log.i(TAG, "Cache hit for prefix:" + prefix);
+                            }
                             if (!names.isEmpty()) {
                                 for (String name : names) {
                                     if (mValues.containsKey(name)) {
@@ -3514,27 +3457,30 @@ public final class Settings {
                             return keyValues;
                         }
                     }
-                    if (mGenerationTracker != null) {
-                        currentGeneration = mGenerationTracker.getCurrentGeneration();
-                    }
+                    currentGeneration = generationTracker.getCurrentGeneration();
+                } else {
+                    needsGenerationTracker = true;
                 }
             }
 
-
+            if (mCallListCommand == null) {
+                // No list command specified, return empty map
+                return keyValues;
+            }
+            if (DEBUG) {
+                Log.i(TAG, "Cache miss for prefix:" + prefix);
+            }
             IContentProvider cp = mProviderHolder.getProvider(cr);
 
             try {
                 Bundle args = new Bundle();
                 args.putString(Settings.CALL_METHOD_PREFIX_KEY, prefix);
-                boolean needsGenerationTracker = false;
-                synchronized (NameValueCache.this) {
-                    if (mGenerationTracker == null) {
-                        needsGenerationTracker = true;
-                        args.putString(CALL_METHOD_TRACK_GENERATION_KEY, null);
-                        if (DEBUG) {
-                            Log.i(TAG, "Requested generation tracker for type: "
-                                    + mUri.getPath() + " in package:" + cr.getPackageName());
-                        }
+                if (needsGenerationTracker) {
+                    args.putString(CALL_METHOD_TRACK_GENERATION_KEY, null);
+                    if (DEBUG) {
+                        Log.i(TAG, "Requested generation tracker for prefix:" + prefix
+                                + " type: " + mUri.getPath()
+                                + " in package:" + cr.getPackageName());
                     }
                 }
 
@@ -3587,32 +3533,22 @@ public final class Settings {
                             final int generation = b.getInt(
                                     CALL_METHOD_GENERATION_KEY, 0);
                             if (DEBUG) {
-                                Log.i(TAG, "Received generation tracker for type:"
-                                        + mUri.getPath() + " in package:"
-                                        + cr.getPackageName() + " with index:" + index);
+                                Log.i(TAG, "Received generation tracker for prefix:" + prefix
+                                        + " type:" + mUri.getPath()
+                                        + " in package:" + cr.getPackageName()
+                                        + " with index:" + index);
                             }
-                            if (mGenerationTracker != null) {
-                                mGenerationTracker.destroy();
-                            }
-                            mGenerationTracker = new GenerationTracker(array, index,
-                                    generation, () -> {
-                                synchronized (NameValueCache.this) {
-                                    Log.e(TAG, "Error accessing generation tracker"
-                                            + " - removing");
-                                    if (mGenerationTracker != null) {
-                                        GenerationTracker generationTracker =
-                                                mGenerationTracker;
-                                        mGenerationTracker = null;
-                                        generationTracker.destroy();
-                                        mValues.clear();
-                                    }
-                                }
-                            });
+                            mGenerationTrackers.put(prefix,
+                                    new GenerationTracker(prefix, array, index, generation,
+                                            mGenerationTrackerErrorHandler));
                             currentGeneration = generation;
                         }
                     }
-                    if (mGenerationTracker != null && currentGeneration
-                            == mGenerationTracker.getCurrentGeneration()) {
+                    if (mGenerationTrackers.get(prefix) != null && currentGeneration
+                            == mGenerationTrackers.get(prefix).getCurrentGeneration()) {
+                        if (DEBUG) {
+                            Log.i(TAG, "Updating cache for prefix:" + prefix);
+                        }
                         // cache the complete list of flags for the namespace
                         mValues.putAll(flagsToValues);
                         // Adding the prefix as a signal that the prefix is cached.
@@ -3626,25 +3562,13 @@ public final class Settings {
             }
         }
 
-        public void clearCachesForTest() {
-            if (IPC_DATA_CACHE_ENABLED) {
-                mValueCache.clear();
-                mNamespaceCache.clear();
-                return;
-            }
-            // Fall back to old cache mechanism
+        public void clearGenerationTrackerForTest() {
             synchronized (NameValueCache.this) {
-                if (mGenerationTracker != null) {
-                    mGenerationTracker.destroy();
+                for (int i = 0; i < mGenerationTrackers.size(); i++) {
+                    mGenerationTrackers.valueAt(i).destroy();
                 }
+                mGenerationTrackers.clear();
                 mValues.clear();
-                mGenerationTracker = null;
-            }
-        }
-
-        public void invalidateCache() {
-            if (IPC_DATA_CACHE_ENABLED) {
-                SettingsIpcDataCache.invalidateCache(mSettingsType);
             }
         }
     }
@@ -3923,12 +3847,7 @@ public final class Settings {
         /** @hide */
         public static void clearProviderForTest() {
             sProviderHolder.clearProviderForTest();
-            sNameValueCache.clearCachesForTest();
-        }
-
-        /** @hide */
-        public static void invalidateValueCache() {
-            sNameValueCache.invalidateCache();
+            sNameValueCache.clearGenerationTrackerForTest();
         }
 
         /** @hide */
@@ -6282,9 +6201,6 @@ public final class Settings {
                 sProviderHolder,
                 Secure.class);
 
-        private static ILockSettings sLockSettings = null;
-
-        private static boolean sIsSystemProcess;
         @UnsupportedAppUsage
         private static final HashSet<String> MOVED_TO_LOCK_SETTINGS;
         @UnsupportedAppUsage
@@ -6419,12 +6335,7 @@ public final class Settings {
         /** @hide */
         public static void clearProviderForTest() {
             sProviderHolder.clearProviderForTest();
-            sNameValueCache.clearCachesForTest();
-        }
-
-        /** @hide */
-        public static void invalidateValueCache() {
-            sNameValueCache.invalidateCache();
+            sNameValueCache.clearGenerationTrackerForTest();
         }
 
         /** @hide */
@@ -6454,35 +6365,25 @@ public final class Settings {
                 return Global.getStringForUser(resolver, name, userHandle);
             }
 
-            if (MOVED_TO_LOCK_SETTINGS.contains(name)) {
-                synchronized (Secure.class) {
-                    if (sLockSettings == null) {
-                        sLockSettings = ILockSettings.Stub.asInterface(
-                                (IBinder) ServiceManager.getService("lock_settings"));
-                        sIsSystemProcess = Process.myUid() == Process.SYSTEM_UID;
-                    }
-                }
-                if (sLockSettings != null && !sIsSystemProcess) {
-                    // No context; use the ActivityThread's context as an approximation for
-                    // determining the target API level.
-                    Application application = ActivityThread.currentApplication();
+            if (MOVED_TO_LOCK_SETTINGS.contains(name) && Process.myUid() != Process.SYSTEM_UID) {
+                // No context; use the ActivityThread's context as an approximation for
+                // determining the target API level.
+                Application application = ActivityThread.currentApplication();
 
-                    boolean isPreMnc = application != null
-                            && application.getApplicationInfo() != null
-                            && application.getApplicationInfo().targetSdkVersion
-                            <= VERSION_CODES.LOLLIPOP_MR1;
-                    if (isPreMnc) {
-                        try {
-                            return sLockSettings.getString(name, "0", userHandle);
-                        } catch (RemoteException re) {
-                            // Fall through
-                        }
-                    } else {
-                        throw new SecurityException("Settings.Secure." + name
-                                + " is deprecated and no longer accessible."
-                                + " See API documentation for potential replacements.");
-                    }
+                boolean isPreMnc = application != null
+                    && application.getApplicationInfo() != null
+                    && application.getApplicationInfo().targetSdkVersion
+                    <= VERSION_CODES.LOLLIPOP_MR1;
+                if (isPreMnc) {
+                    // Old apps used to get the three deprecated LOCK_PATTERN_* settings from
+                    // ILockSettings.getString().  For security reasons, we now just return a
+                    // stubbed-out value.  Note: the only one of these three settings actually known
+                    // to have been used was LOCK_PATTERN_ENABLED, and ILockSettings.getString()
+                    // already always returned "0" for that starting in Android 11.
+                    return "0";
                 }
+                throw new SecurityException("Settings.Secure." + name + " is deprecated and no" +
+                        " longer accessible. See API documentation for potential replacements.");
             }
 
             return sNameValueCache.getStringForUser(resolver, name, userHandle);
@@ -10334,7 +10235,7 @@ public final class Settings {
 
         /**
          * If active unlock triggers on unlock intents, then also request active unlock on
-         * these wake-up reasons. See PowerManager.WakeReason for value mappings.
+         * these wake-up reasons. See {@link PowerManager.WakeReason} for value mappings.
          * WakeReasons should be separated by a pipe. For example: "0|3" or "0". If this
          * setting should be disabled, then this should be set to an empty string. A null value
          * will use the system default value (WAKE_REASON_UNFOLD_DEVICE).
@@ -10342,6 +10243,17 @@ public final class Settings {
          */
         public static final String ACTIVE_UNLOCK_WAKEUPS_CONSIDERED_UNLOCK_INTENTS =
                 "active_unlock_wakeups_considered_unlock_intents";
+
+        /**
+         * If active unlock triggers and succeeds on these wakeups, force dismiss keyguard on
+         * these wake reasons. See {@link PowerManager#WakeReason} for value mappings.
+         * WakeReasons should be separated by a pipe. For example: "0|3" or "0". If this
+         * setting should be disabled, then this should be set to an empty string. A null value
+         * will use the system default value (WAKE_REASON_UNFOLD_DEVICE).
+         * @hide
+         */
+        public static final String ACTIVE_UNLOCK_WAKEUPS_TO_FORCE_DISMISS_KEYGUARD =
+                "active_unlock_wakeups_to_force_dismiss_keyguard";
 
         /**
          * Whether the assist gesture should be enabled.
@@ -10875,6 +10787,15 @@ public final class Settings {
         @Readable
         public static final String LOW_POWER_WARNING_ACKNOWLEDGED =
                 "low_power_warning_acknowledged";
+
+        /**
+         * Whether the "first time extra battery saver warning" dialog needs to be shown
+         * (0: default) or not (1).
+         *
+         * @hide
+         */
+        public static final String EXTRA_LOW_POWER_WARNING_ACKNOWLEDGED =
+                "extra_low_power_warning_acknowledged";
 
         /**
          * 0 (default) Auto battery saver suggestion has not been suppressed. 1) it has been
@@ -14824,35 +14745,13 @@ public final class Settings {
                 = "forced_app_standby_for_small_battery_enabled";
 
         /**
-         * Whether to enable the TARE subsystem as a whole or not.
-         * 1 means enable, 0 means disable.
+         * Whether to enable the TARE subsystem or not.
+         * Valid values are
+         * {@link android.app.tare.EconomyManager#ENABLE_TARE_ON EconomyManager.ENABLE_TARE_*}.
          *
          * @hide
          */
         public static final String ENABLE_TARE = "enable_tare";
-
-        /**
-         * Default value for {@link #ENABLE_TARE}.
-         *
-         * @hide
-         */
-        public static final int DEFAULT_ENABLE_TARE = EconomyManager.DEFAULT_ENABLE_TARE_MODE;
-
-        /**
-         * Whether to enable the TARE AlarmManager economic policy or not.
-         * 1 means enable, 0 means disable.
-         *
-         * @hide
-         */
-        public static final String ENABLE_TARE_ALARM_MANAGER = "enable_tare_alarm_manager";
-
-        /**
-         * Default value for {@link #ENABLE_TARE_ALARM_MANAGER}.
-         *
-         * @hide
-         */
-        public static final int DEFAULT_ENABLE_TARE_ALARM_MANAGER =
-                        EconomyManager.DEFAULT_ENABLE_POLICY_ALARM ? 1 : 0;
 
         /**
          * Settings for AlarmManager's TARE EconomicPolicy (list of its economic factors).
@@ -14862,22 +14761,6 @@ public final class Settings {
          * @hide
          */
         public static final String TARE_ALARM_MANAGER_CONSTANTS = "tare_alarm_manager_constants";
-
-        /**
-         * Whether to enable the TARE JobScheduler economic policy or not.
-         * 1 means enable, 0 means disable.
-         *
-         * @hide
-         */
-        public static final String ENABLE_TARE_JOB_SCHEDULER = "enable_tare_job_scheduler";
-
-        /**
-         * Default value for {@link #ENABLE_TARE_JOB_SCHEDULER}.
-         *
-         * @hide
-         */
-        public static final int DEFAULT_ENABLE_TARE_JOB_SCHEDULER =
-                EconomyManager.DEFAULT_ENABLE_POLICY_JOB_SCHEDULER ? 1 : 0;
 
         /**
          * Settings for JobScheduler's TARE EconomicPolicy (list of its economic factors).
@@ -15340,6 +15223,12 @@ public final class Settings {
         @TestApi
         @Readable
         public static final String LOW_POWER_MODE = "low_power";
+
+        /**
+         * If 1 extra low power mode is enabled.
+         * @hide
+         */
+        public static final String EXTRA_LOW_POWER_MODE = "extra_low_power";
 
         /**
          * If 1, battery saver ({@link #LOW_POWER_MODE}) will be re-activated after the device
@@ -16712,12 +16601,7 @@ public final class Settings {
         /** @hide */
         public static void clearProviderForTest() {
             sProviderHolder.clearProviderForTest();
-            sNameValueCache.clearCachesForTest();
-        }
-
-        /** @hide */
-        public static void invalidateValueCache() {
-            sNameValueCache.invalidateCache();
+            sNameValueCache.clearGenerationTrackerForTest();
         }
 
         /** @hide */
@@ -18623,6 +18507,40 @@ public final class Settings {
              * @hide
              */
             public static final int ACCESSIBILITY_VIBRATION_WATCH_SPEED_VERY_FAST = 4;
+
+            /**
+             * The key to indicate the data migration status on device upgrade in Wear Services.
+             * @hide
+             */
+            public static final String UPGRADE_DATA_MIGRATION_STATUS =
+                    "upgrade_data_migration_status";
+
+            /**
+             * Constant indicating that the data migration is not needed.
+             *
+             * The value should be provided with setting name {@link
+             * #UPGRADE_DATA_MIGRATION_STATUS}.
+             * @hide
+             */
+            public static final int UPGRADE_DATA_MIGRATION_NOT_NEEDED = 0;
+
+            /**
+             * Constant indicating that the data migration is not yet finished.
+             *
+             * The value should be provided with setting name {@link
+             * #UPGRADE_DATA_MIGRATION_STATUS}.
+             * @hide
+             */
+            public static final int UPGRADE_DATA_MIGRATION_PENDING = 1;
+
+            /**
+             * Constant indicating that the data migration is finished.
+             *
+             * The value should be provided with setting name {@link
+             * #UPGRADE_DATA_MIGRATION_STATUS}.
+             * @hide
+             */
+            public static final int UPGRADE_DATA_MIGRATION_DONE = 2;
         }
     }
 
@@ -19063,17 +18981,7 @@ public final class Settings {
         /** @hide */
         public static void clearProviderForTest() {
             sProviderHolder.clearProviderForTest();
-            sNameValueCache.clearCachesForTest();
-        }
-
-        /** @hide */
-        public static void invalidateValueCache() {
-            sNameValueCache.invalidateCache();
-        }
-
-        /** @hide */
-        public static void invalidateNamespaceCache() {
-            sNameValueCache.invalidateCache();
+            sNameValueCache.clearGenerationTrackerForTest();
         }
 
         private static void handleMonitorCallback(

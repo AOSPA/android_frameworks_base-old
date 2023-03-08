@@ -138,25 +138,11 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
     private boolean mTransitioningToFullShade;
 
     /**
-     * Is there currently an unocclusion animation running. Used to avoid bright flickers
-     * of the notification scrim.
-     */
-    private boolean mUnOcclusionAnimationRunning;
-
-    /**
      * The percentage of the bouncer which is hidden. If 1, the bouncer is completely hidden. If
      * 0, the bouncer is visible.
      */
     @FloatRange(from = 0, to = 1)
     private float mBouncerHiddenFraction = KeyguardBouncerConstants.EXPANSION_HIDDEN;
-
-    /**
-     * Set whether an unocclusion animation is currently running on the notification panel. Used
-     * to avoid bright flickers of the notification scrim.
-     */
-    public void setUnocclusionAnimationRunning(boolean unocclusionAnimationRunning) {
-        mUnOcclusionAnimationRunning = unocclusionAnimationRunning;
-    }
 
     @IntDef(prefix = {"VISIBILITY_"}, value = {
             TRANSPARENT,
@@ -359,9 +345,16 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
         }
     }
 
-    /**
-     * Sets corner radius of scrims.
-     */
+    // TODO(b/270984686) recompute scrim height accurately, based on shade contents.
+    /** Set corner radius of the bottom edge of the Notification scrim. */
+    public void setNotificationBottomRadius(float radius) {
+        if (mNotificationsScrim == null) {
+            return;
+        }
+        mNotificationsScrim.setBottomEdgeRadius(radius);
+    }
+
+    /** Sets corner radius of scrims. */
     public void setScrimCornerRadius(int radius) {
         if (mScrimBehind == null || mNotificationsScrim == null) {
             return;
@@ -525,15 +518,17 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
         scheduleUpdate();
     }
 
+    /** This is used by the predictive back gesture animation to scale the Shade. */
+    public void applyBackScaling(float scale) {
+        mNotificationsScrim.setScaleX(scale);
+        mNotificationsScrim.setScaleY(scale);
+    }
+
     public void onTrackingStarted() {
         mDarkenWhileDragging = !mKeyguardStateController.canDismissLockScreen();
         if (!mKeyguardUnlockAnimationController.isPlayingCannedUnlockAnimation()) {
             mAnimatingPanelExpansionOnUnlock = false;
         }
-    }
-
-    public void onExpandingFinished() {
-        setUnocclusionAnimationRunning(false);
     }
 
     @VisibleForTesting
@@ -874,13 +869,6 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
                     && !mClipsQsScrim);
             if (mKeyguardOccluded || hideNotificationScrim) {
                 mNotificationsAlpha = 0;
-            }
-            if (mUnOcclusionAnimationRunning && mState == ScrimState.KEYGUARD) {
-                // We're unoccluding the keyguard and don't want to have a bright flash.
-                mNotificationsAlpha = ScrimState.KEYGUARD.getNotifAlpha();
-                mNotificationsTint = ScrimState.KEYGUARD.getNotifTint();
-                mBehindAlpha = ScrimState.KEYGUARD.getBehindAlpha();
-                mBehindTint = ScrimState.KEYGUARD.getBehindTint();
             }
         }
         if (mState != ScrimState.UNLOCKED) {

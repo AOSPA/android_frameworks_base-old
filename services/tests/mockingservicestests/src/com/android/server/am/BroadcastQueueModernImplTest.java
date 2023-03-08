@@ -16,6 +16,10 @@
 
 package com.android.server.am;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
+import static com.android.internal.util.FrameworkStatsLog.BROADCAST_DELIVERY_EVENT_REPORTED;
+import static com.android.internal.util.FrameworkStatsLog.BROADCAST_DELIVERY_EVENT_REPORTED__PROC_START_TYPE__PROCESS_START_TYPE_COLD;
+import static com.android.internal.util.FrameworkStatsLog.BROADCAST_DELIVERY_EVENT_REPORTED__RECEIVER_TYPE__MANIFEST;
 import static com.android.server.am.BroadcastProcessQueue.REASON_CONTAINS_ALARM;
 import static com.android.server.am.BroadcastProcessQueue.REASON_CONTAINS_FOREGROUND;
 import static com.android.server.am.BroadcastProcessQueue.REASON_CONTAINS_INTERACTIVE;
@@ -44,8 +48,12 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 
 import android.annotation.NonNull;
 import android.app.Activity;
@@ -70,13 +78,15 @@ import android.util.Pair;
 
 import androidx.test.filters.SmallTest;
 
+import com.android.internal.util.FrameworkStatsLog;
+import com.android.server.ExtendedMockitoRule;
+import com.android.server.am.BroadcastQueueTest.SyncBarrier;
+
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
-import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-import org.mockito.junit.MockitoJUnitRunner;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintWriter;
@@ -85,8 +95,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @SmallTest
-@RunWith(MockitoJUnitRunner.class)
-public class BroadcastQueueModernImplTest {
+public final class BroadcastQueueModernImplTest {
     private static final int TEST_UID = android.os.Process.FIRST_APPLICATION_UID;
     private static final int TEST_UID2 = android.os.Process.FIRST_APPLICATION_UID + 1;
 
@@ -105,10 +114,13 @@ public class BroadcastQueueModernImplTest {
 
     BroadcastProcessQueue mHead;
 
+    @Rule
+    public final ExtendedMockitoRule mExtendedMockitoRule = new ExtendedMockitoRule.Builder(this)
+            .spyStatic(FrameworkStatsLog.class)
+            .build();
+
     @Before
     public void setUp() throws Exception {
-        MockitoAnnotations.initMocks(this);
-
         mHandlerThread = new HandlerThread(getClass().getSimpleName());
         mHandlerThread.start();
 
@@ -747,40 +759,6 @@ public class BroadcastQueueModernImplTest {
     }
 
     /**
-     * Verify that sending a broadcast that removes any matching pending
-     * broadcasts is applied as expected.
-     */
-    @Test
-    public void testRemoveMatchingFilter() {
-        final Intent screenOn = new Intent(Intent.ACTION_SCREEN_ON);
-        final BroadcastOptions optionsOn = BroadcastOptions.makeBasic();
-        optionsOn.setRemoveMatchingFilter(new IntentFilter(Intent.ACTION_SCREEN_OFF));
-
-        final Intent screenOff = new Intent(Intent.ACTION_SCREEN_OFF);
-        final BroadcastOptions optionsOff = BroadcastOptions.makeBasic();
-        optionsOff.setRemoveMatchingFilter(new IntentFilter(Intent.ACTION_SCREEN_ON));
-
-        // Halt all processing so that we get a consistent view
-        mHandlerThread.getLooper().getQueue().postSyncBarrier();
-
-        mImpl.enqueueBroadcastLocked(makeBroadcastRecord(screenOn, optionsOn));
-        mImpl.enqueueBroadcastLocked(makeBroadcastRecord(screenOff, optionsOff));
-        mImpl.enqueueBroadcastLocked(makeBroadcastRecord(screenOn, optionsOn));
-        mImpl.enqueueBroadcastLocked(makeBroadcastRecord(screenOff, optionsOff));
-
-        // While we're here, give our health check some test coverage
-        mImpl.checkHealthLocked();
-
-        // Marching through the queue we should only have one SCREEN_OFF
-        // broadcast, since that's the last state we dispatched
-        final BroadcastProcessQueue queue = mImpl.getProcessQueue(PACKAGE_GREEN,
-                getUidForPackage(PACKAGE_GREEN));
-        queue.makeActiveNextPending();
-        assertEquals(Intent.ACTION_SCREEN_OFF, queue.getActive().intent.getAction());
-        assertTrue(queue.isEmpty());
-    }
-
-    /**
      * Verify that sending a broadcast with DELIVERY_GROUP_POLICY_MOST_RECENT works as expected.
      */
     @Test
@@ -1079,6 +1057,28 @@ public class BroadcastQueueModernImplTest {
                 assertEquals(errMsg, BroadcastRecord.DELIVERY_SKIPPED, record.getDeliveryState(i));
             }
         }
+    }
+
+    @Test
+    public void testBroadcastDeliveryEventReported() throws Exception {
+        final Intent timeTick = new Intent(Intent.ACTION_TIME_TICK);
+        final BroadcastOptions optionsTimeTick = BroadcastOptions.makeBasic();
+        optionsTimeTick.setDeliveryGroupPolicy(BroadcastOptions.DELIVERY_GROUP_POLICY_MOST_RECENT);
+
+        // Halt all processing so that we get a consistent view
+        try (SyncBarrier b = new SyncBarrier(mHandlerThread)) {
+            mImpl.enqueueBroadcastLocked(makeBroadcastRecord(timeTick, optionsTimeTick));
+            mImpl.enqueueBroadcastLocked(makeBroadcastRecord(timeTick, optionsTimeTick));
+        }
+        mImpl.waitForIdle(null);
+
+        // Verify that there is only one delivery event reported since one of the broadcasts
+        // should have been skipped.
+        verify(() -> FrameworkStatsLog.write(eq(BROADCAST_DELIVERY_EVENT_REPORTED),
+                eq(getUidForPackage(PACKAGE_GREEN)), anyInt(), eq(Intent.ACTION_TIME_TICK),
+                eq(BROADCAST_DELIVERY_EVENT_REPORTED__RECEIVER_TYPE__MANIFEST),
+                eq(BROADCAST_DELIVERY_EVENT_REPORTED__PROC_START_TYPE__PROCESS_START_TYPE_COLD),
+                anyLong(), anyLong(), anyLong(), anyInt()), times(1));
     }
 
     private Intent createPackageChangedIntent(int uid, List<String> componentNameList) {

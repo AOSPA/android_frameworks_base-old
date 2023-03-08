@@ -177,7 +177,8 @@ public class VisualQueryDetector {
     public interface Callback {
 
         /**
-         * Called when the {@link VisualQueryDetectionService} starts to stream partial queries.
+         * Called when the {@link VisualQueryDetectionService} starts to stream partial queries
+         * with {@link VisualQueryDetectionService#streamQuery(String)}.
          *
          * @param partialQuery The partial query in a text form being streamed.
          */
@@ -185,12 +186,13 @@ public class VisualQueryDetector {
 
         /**
          * Called when the {@link VisualQueryDetectionService} decides to abandon the streamed
-         * partial queries.
+         * partial queries with {@link VisualQueryDetectionService#rejectQuery()}.
          */
         void onQueryRejected();
 
         /**
-         *  Called when the {@link VisualQueryDetectionService} finishes streaming partial queries.
+         *  Called when the {@link VisualQueryDetectionService} finishes streaming partial queries
+         *  with {@link VisualQueryDetectionService#finishQuery()}.
          */
         void onQueryFinished();
 
@@ -216,14 +218,13 @@ public class VisualQueryDetector {
         /**
          * Called when the detection fails due to an error.
          */
-        //TODO(b/265390855): Replace this callback with the new onError(DetectorError) design.
-        void onError();
+        void onFailure(@NonNull DetectorFailure detectorFailure);
     }
 
     private class VisualQueryDetectorInitializationDelegate extends AbstractDetector {
 
         VisualQueryDetectorInitializationDelegate() {
-            super(mManagerService, null);
+            super(mManagerService, mExecutor, /* callback= */ null);
         }
 
         @Override
@@ -294,12 +295,11 @@ public class VisualQueryDetector {
 
         /** Called when the detection fails due to an error. */
         @Override
-        public void onError() {
-            Slog.v(TAG, "BinderCallback#onError");
+        public void onDetectionFailure(DetectorFailure detectorFailure) {
+            Slog.v(TAG, "BinderCallback#onDetectionFailure");
             Binder.withCleanCallingIdentity(() -> mExecutor.execute(
-                    () -> mCallback.onError()));
+                    () -> mCallback.onFailure(detectorFailure)));
         }
-
     }
 
 
@@ -372,6 +372,10 @@ public class VisualQueryDetector {
         public void onError(int status) throws RemoteException {
             Slog.v(TAG, "Initialization Error: (" + status + ")");
             // Do nothing
+        }
+
+        @Override
+        public void onDetectionFailure(DetectorFailure detectorFailure) throws RemoteException {
         }
     }
 }

@@ -630,11 +630,110 @@ public class ActivityManager {
             PROCESS_CAPABILITY_FOREGROUND_LOCATION,
             PROCESS_CAPABILITY_FOREGROUND_CAMERA,
             PROCESS_CAPABILITY_FOREGROUND_MICROPHONE,
-            PROCESS_CAPABILITY_NETWORK,
+            PROCESS_CAPABILITY_POWER_RESTRICTED_NETWORK,
             PROCESS_CAPABILITY_BFSL,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ProcessCapability {}
+
+    /**
+     * Used to log FGS API events from CAMERA API
+     * @hide
+     */
+    @SystemApi
+    public static final int FOREGROUND_SERVICE_API_TYPE_CAMERA = 1;
+
+    /**
+     * Used to log FGS API events from BLUETOOTH API, used
+     * with FGS type of CONNECTED_DEVICE
+     * @hide
+     */
+    @SystemApi
+    public static final int FOREGROUND_SERVICE_API_TYPE_BLUETOOTH = 2;
+    /**
+     * Used to log FGS API events from Location API.
+     * @hide
+     */
+    @SystemApi
+    public static final int FOREGROUND_SERVICE_API_TYPE_LOCATION = 3;
+    /**
+     * Used to log FGS API events from media playback API
+     * @hide
+     */
+    @SystemApi
+    public static final int FOREGROUND_SERVICE_API_TYPE_MEDIA_PLAYBACK = 4;
+    /**
+     * Used to log FGS API events from Audio API
+     * @hide
+     */
+    public static final int FOREGROUND_SERVICE_API_TYPE_AUDIO = 5;
+    /**
+     * Used to log FGS API events from microphone API
+     * @hide
+     */
+    @SystemApi
+    public static final int FOREGROUND_SERVICE_API_TYPE_MICROPHONE = 6;
+    /**
+     * Used to log FGS API events from phone API
+     * @hide
+     */
+    @SystemApi
+    public static final int FOREGROUND_SERVICE_API_TYPE_PHONE_CALL = 7;
+    /**
+     * Used to log FGS API events from USB API
+     * @hide
+     */
+    @SystemApi
+    public static final int FOREGROUND_SERVICE_API_TYPE_USB = 8;
+    /**
+     * Used to log FGS API events from CDM API
+     * @hide
+     */
+    @SystemApi
+    public static final int FOREGROUND_SERVICE_API_TYPE_CDM = 9;
+
+    /**
+     * Constants used to denote what API type
+     * is creating an API event for logging.
+     * @hide
+     */
+    @IntDef(flag = false, prefix = { "FOREGROUND_SERVICE_API_TYPE_" }, value = {
+            FOREGROUND_SERVICE_API_TYPE_CAMERA,
+            FOREGROUND_SERVICE_API_TYPE_BLUETOOTH,
+            FOREGROUND_SERVICE_API_TYPE_LOCATION,
+            FOREGROUND_SERVICE_API_TYPE_MEDIA_PLAYBACK,
+            FOREGROUND_SERVICE_API_TYPE_AUDIO,
+            FOREGROUND_SERVICE_API_TYPE_MICROPHONE,
+            FOREGROUND_SERVICE_API_TYPE_PHONE_CALL,
+            FOREGROUND_SERVICE_API_TYPE_USB,
+            FOREGROUND_SERVICE_API_TYPE_CDM,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface ForegroundServiceApiType {}
+
+    /**
+     * Used to log a start event for an FGS API
+     * @hide
+     */
+    @SystemApi
+    public static final int FOREGROUND_SERVICE_API_EVENT_BEGIN = 1;
+    /**
+     * Used to log a stop event for an FGS API
+     * @hide
+     */
+    @SystemApi
+    public static final int FOREGROUND_SERVICE_API_EVENT_END = 2;
+    /**
+     * Constants used to denote API state
+     * during an API event for logging.
+     * @hide
+     */
+    @IntDef(flag = false, prefix = { "FOREGROUND_SERVICE_API_EVENT_" }, value = {
+            FOREGROUND_SERVICE_API_EVENT_BEGIN,
+            FOREGROUND_SERVICE_API_EVENT_END,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface ForegroundServiceApiEvent {}
 
     /** @hide Process does not have any capability */
     @SystemApi
@@ -652,9 +751,17 @@ public class ActivityManager {
     @SystemApi
     public static final int PROCESS_CAPABILITY_FOREGROUND_MICROPHONE = 1 << 2;
 
-    /** @hide Process can access network despite any power saving resrictions */
+    /** @hide Process can access network despite any power saving restrictions */
     @TestApi
-    public static final int PROCESS_CAPABILITY_NETWORK = 1 << 3;
+    public static final int PROCESS_CAPABILITY_POWER_RESTRICTED_NETWORK = 1 << 3;
+    /**
+     * @hide
+     * @deprecated Use {@link #PROCESS_CAPABILITY_POWER_RESTRICTED_NETWORK} instead.
+     */
+    @TestApi
+    @Deprecated
+    public static final int PROCESS_CAPABILITY_NETWORK =
+            PROCESS_CAPABILITY_POWER_RESTRICTED_NETWORK;
 
     /**
      * Flag used to indicate whether an app is allowed to start a foreground service from the
@@ -684,7 +791,7 @@ public class ActivityManager {
     public static final int PROCESS_CAPABILITY_ALL = PROCESS_CAPABILITY_FOREGROUND_LOCATION
             | PROCESS_CAPABILITY_FOREGROUND_CAMERA
             | PROCESS_CAPABILITY_FOREGROUND_MICROPHONE
-            | PROCESS_CAPABILITY_NETWORK
+            | PROCESS_CAPABILITY_POWER_RESTRICTED_NETWORK
             | PROCESS_CAPABILITY_BFSL;
 
     /**
@@ -703,7 +810,7 @@ public class ActivityManager {
         pw.print((caps & PROCESS_CAPABILITY_FOREGROUND_LOCATION) != 0 ? 'L' : '-');
         pw.print((caps & PROCESS_CAPABILITY_FOREGROUND_CAMERA) != 0 ? 'C' : '-');
         pw.print((caps & PROCESS_CAPABILITY_FOREGROUND_MICROPHONE) != 0 ? 'M' : '-');
-        pw.print((caps & PROCESS_CAPABILITY_NETWORK) != 0 ? 'N' : '-');
+        pw.print((caps & PROCESS_CAPABILITY_POWER_RESTRICTED_NETWORK) != 0 ? 'N' : '-');
         pw.print((caps & PROCESS_CAPABILITY_BFSL) != 0 ? 'F' : '-');
     }
 
@@ -712,7 +819,7 @@ public class ActivityManager {
         sb.append((caps & PROCESS_CAPABILITY_FOREGROUND_LOCATION) != 0 ? 'L' : '-');
         sb.append((caps & PROCESS_CAPABILITY_FOREGROUND_CAMERA) != 0 ? 'C' : '-');
         sb.append((caps & PROCESS_CAPABILITY_FOREGROUND_MICROPHONE) != 0 ? 'M' : '-');
-        sb.append((caps & PROCESS_CAPABILITY_NETWORK) != 0 ? 'N' : '-');
+        sb.append((caps & PROCESS_CAPABILITY_POWER_RESTRICTED_NETWORK) != 0 ? 'N' : '-');
         sb.append((caps & PROCESS_CAPABILITY_BFSL) != 0 ? 'F' : '-');
     }
 
@@ -3688,6 +3795,8 @@ public class ActivityManager {
      *
      * @return a list of {@link ApplicationStartInfo} records matching the criteria, sorted in
      *         the order from most recent to least recent.
+     *
+     * @hide
      */
     @NonNull
     public List<ApplicationStartInfo> getHistoricalProcessStartReasons(
@@ -3719,7 +3828,6 @@ public class ActivityManager {
      * @hide
      */
     @NonNull
-    @SystemApi
     @RequiresPermission(Manifest.permission.DUMP)
     public List<ApplicationStartInfo> getExternalHistoricalProcessStartReasons(
             @NonNull String packageName, @IntRange(from = 0) int maxNum) {
@@ -3736,6 +3844,8 @@ public class ActivityManager {
      * Callback to receive {@link ApplicationStartInfo} object once recording of startup related
      * metrics is complete.
      * Use with {@link #setApplicationStartInfoCompleteListener}.
+     *
+     * @hide
      */
     public interface ApplicationStartInfoCompleteListener {
         /** {@link ApplicationStartInfo} is complete, no more info will be added. */
@@ -3761,6 +3871,8 @@ public class ActivityManager {
      *                    complete. Will replace existing listener if one is already attached.
      *
      * @throws IllegalArgumentException if executor or listener are null.
+     *
+     * @hide
      */
     public void setApplicationStartInfoCompleteListener(@NonNull final Executor executor,
             @NonNull final ApplicationStartInfoCompleteListener listener) {
@@ -3783,6 +3895,8 @@ public class ActivityManager {
 
     /**
      * Removes the callback set by {@link #setApplicationStartInfoCompleteListener} if there is one.
+     *
+     * @hide
      */
     public void removeApplicationStartInfoCompleteListener() {
         try {
@@ -5491,6 +5605,35 @@ public class ActivityManager {
             return getService().isProcessFrozen(pid);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Internal method for logging API starts. Used with
+     * FGS metrics logging. Is called by APIs that are
+     * used with FGS to log an API event (eg when
+     * the camera starts).
+     * @hide
+     *
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.LOG_PROCESS_ACTIVITIES)
+    public void noteForegroundResourceUse(@ForegroundServiceApiType int apiType,
+            @ForegroundServiceApiEvent int apiEvent, int uid, int pid) {
+        try {
+            switch (apiEvent) {
+                case FOREGROUND_SERVICE_API_EVENT_BEGIN:
+                    getService().logFgsApiBegin(apiType, uid, pid);
+                    break;
+                case FOREGROUND_SERVICE_API_EVENT_END:
+                    getService().logFgsApiEnd(apiType, uid, pid);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Argument of "
+                            + apiType + " not supported for foreground resource use logging");
+            }
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
         }
     }
 

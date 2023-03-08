@@ -451,7 +451,7 @@ private fun Modifier.bottomSheetSwipeable(
 }
 
 @Composable
-private fun Scrim(
+internal fun Scrim(
     color: Color,
     onDismiss: () -> Unit,
     visible: Boolean
@@ -505,5 +505,5 @@ object ModalBottomSheetDefaults {
      */
     val scrimColor: Color
         @Composable
-        get() = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.32f)
+        get() = MaterialTheme.colorScheme.scrim
 }
