@@ -48,6 +48,7 @@ import com.android.systemui.dump.DumpManager;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.flags.FlagsModule;
 import com.android.systemui.fragments.FragmentService;
+import com.android.systemui.keyboard.KeyboardModule;
 import com.android.systemui.keyguard.data.BouncerViewModule;
 import com.android.systemui.log.dagger.LogModule;
 import com.android.systemui.mediaprojection.appselector.MediaProjectionModule;
@@ -151,6 +152,7 @@ import dagger.Provides;
             SystemPropertiesFlagsModule.class,
             FooterActionsModule.class,
             GarbageMonitorModule.class,
+            KeyboardModule.class,
             LogModule.class,
             MediaProjectionModule.class,
             MotionToolModule.class,
@@ -253,6 +255,11 @@ public abstract class SystemUIModule {
 
     @BindsOptionalOf
     abstract FingerprintInteractiveToAuthProvider optionalFingerprintInteractiveToAuthProvider();
+
+    @BindsOptionalOf
+    //TODO(b/269430792 remove full qualifier. Full qualifier is used to avoid merge conflict.)
+    abstract com.android.systemui.statusbar.events.SystemStatusAnimationScheduler
+    optionalSystemStatusAnimationScheduler();
 
     @SysUISingleton
     @Binds

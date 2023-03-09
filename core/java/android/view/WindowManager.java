@@ -108,6 +108,7 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.os.SystemProperties;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.proto.ProtoOutputStream;
@@ -129,6 +130,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
+import java.util.function.IntConsumer;
 
 /**
  * The interface that apps use to talk to the window manager.
@@ -452,6 +454,11 @@ public interface WindowManager extends ViewManager {
      */
     int TRANSIT_WAKE = 11;
     /**
+     * The screen is turning off. This is used as a message to stop all animations.
+     * @hide
+     */
+    int TRANSIT_SLEEP = 12;
+    /**
      * The first slot for custom transition types. Callers (like Shell) can make use of custom
      * transition types for dealing with special cases. These types are effectively ignored by
      * Core and will just be passed along as part of TransitionInfo objects. An example is
@@ -460,7 +467,7 @@ public interface WindowManager extends ViewManager {
      * implementation.
      * @hide
      */
-    int TRANSIT_FIRST_CUSTOM = 12;
+    int TRANSIT_FIRST_CUSTOM = 13;
 
     /**
      * @hide
@@ -478,6 +485,7 @@ public interface WindowManager extends ViewManager {
             TRANSIT_KEYGUARD_UNOCCLUDE,
             TRANSIT_PIP,
             TRANSIT_WAKE,
+            TRANSIT_SLEEP,
             TRANSIT_FIRST_CUSTOM
     })
     @Retention(RetentionPolicy.SOURCE)
@@ -1104,6 +1112,26 @@ public interface WindowManager extends ViewManager {
     public static final String PARCEL_KEY_SHORTCUTS_ARRAY = "shortcuts_array";
 
     /**
+     * Whether the device supports the WindowManager Extensions.
+     * OEMs can enable this by having their device config to inherit window_extensions.mk, such as:
+     * <pre>
+     * $(call inherit-product, $(SRC_TARGET_DIR)/product/window_extensions.mk)
+     * </pre>
+     * @hide
+     */
+    boolean WINDOW_EXTENSIONS_ENABLED =
+            SystemProperties.getBoolean("persist.wm.extensions.enabled", false);
+
+    /**
+     * @see #WINDOW_EXTENSIONS_ENABLED
+     * @hide
+     */
+    @TestApi
+    static boolean hasWindowExtensionsEnabled() {
+        return WINDOW_EXTENSIONS_ENABLED;
+    }
+
+    /**
      * Application-level
      * {@link android.content.pm.PackageManager.Property PackageManager.Property}
      * tag that specifies whether OEMs are permitted to provide activity
@@ -1358,6 +1386,38 @@ public interface WindowManager extends ViewManager {
     }
 
     /**
+     * Adds a listener to start monitoring the proposed rotation of the current associated context.
+     * It reports the current recommendation for the rotation that takes various factors (e.g.
+     * sensor, context, device state, etc) into account. The proposed rotation might not be applied
+     * by the system automatically due to the application's active preference to lock the
+     * orientation (e.g. with {@link android.app.Activity#setRequestedOrientation(int)}). This
+     * listener gives application an opportunity to selectively react to device orientation changes.
+     * The newly added listener will be called with current proposed rotation. Note that the context
+     * of this window manager instance must be a {@link android.annotation.UiContext}.
+     *
+     * @param executor The executor on which callback method will be invoked.
+     * @param listener Called when the proposed rotation for the context is being delivered.
+     *                 The reported rotation can be {@link Surface#ROTATION_0},
+     *                 {@link Surface#ROTATION_90}, {@link Surface#ROTATION_180} and
+     *                 {@link Surface#ROTATION_270}.
+     * @throws UnsupportedOperationException if this method is called on an instance that is not
+     *         associated with a {@link android.annotation.UiContext}.
+     */
+    default void addProposedRotationListener(@NonNull @CallbackExecutor Executor executor,
+            @NonNull IntConsumer listener) {
+    }
+
+    /**
+     * Removes a listener, previously added with {@link #addProposedRotationListener}. It is
+     * recommended to call when the associated context no longer has visible components. No-op if
+     * the provided listener is not registered.
+     *
+     * @param listener The listener to be removed.
+     */
+    default void removeProposedRotationListener(@NonNull IntConsumer listener) {
+    }
+
+    /**
      * @hide
      */
     static String transitTypeToString(@TransitionType int type) {
@@ -1374,6 +1434,7 @@ public interface WindowManager extends ViewManager {
             case TRANSIT_KEYGUARD_UNOCCLUDE: return "KEYGUARD_UNOCCLUDE";
             case TRANSIT_PIP: return "PIP";
             case TRANSIT_WAKE: return "WAKE";
+            case TRANSIT_SLEEP: return "SLEEP";
             case TRANSIT_FIRST_CUSTOM: return "FIRST_CUSTOM";
             default:
                 if (type > TRANSIT_FIRST_CUSTOM) {
@@ -2752,10 +2813,10 @@ public interface WindowManager extends ViewManager {
         /**
          * Never animate position changes of the window.
          *
+         * @see android.R.attr#Window_windowNoMoveAnimation
          * {@hide}
          */
         @UnsupportedAppUsage
-        @TestApi
         public static final int PRIVATE_FLAG_NO_MOVE_ANIMATION = 0x00000040;
 
         /** Window flag: special flag to limit the size of the window to be
@@ -4175,6 +4236,31 @@ public interface WindowManager extends ViewManager {
          */
         public boolean areWallpaperTouchEventsEnabled() {
             return mWallpaperTouchEventsEnabled;
+        }
+
+        /**
+         * Set whether animations can be played for position changes on this window. If disabled,
+         * the window will move to its new position instantly without animating.
+         *
+         * @attr ref android.R.attr#Window_windowNoMoveAnimation
+         */
+        public void setCanPlayMoveAnimation(boolean enable) {
+            if (enable) {
+                privateFlags &= ~PRIVATE_FLAG_NO_MOVE_ANIMATION;
+            } else {
+                privateFlags |= PRIVATE_FLAG_NO_MOVE_ANIMATION;
+            }
+        }
+
+        /**
+         * @return whether playing an animation during a position change is allowed on this window.
+         * This does not guarantee that an animation will be played in all such situations. For
+         * example, drag-resizing may move the window but not play an animation.
+         *
+         * @attr ref android.R.attr#Window_windowNoMoveAnimation
+         */
+        public boolean canPlayMoveAnimation() {
+            return (privateFlags & PRIVATE_FLAG_NO_MOVE_ANIMATION) == 0;
         }
 
         /**

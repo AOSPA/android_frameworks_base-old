@@ -110,6 +110,7 @@
     <protected-broadcast android:name="android.os.action.POWER_SAVE_MODE_CHANGED_INTERNAL" />
     <protected-broadcast android:name="android.os.action.LOW_POWER_STANDBY_ENABLED_CHANGED" />
     <protected-broadcast android:name="android.os.action.LOW_POWER_STANDBY_POLICY_CHANGED" />
+    <protected-broadcast android:name="android.os.action.LOW_POWER_STANDBY_PORTS_CHANGED" />
     <protected-broadcast android:name="android.os.action.ENHANCED_DISCHARGE_PREDICTION_CHANGED" />
 
     <!-- @deprecated This is rarely used and will be phased out soon. -->
@@ -2969,6 +2970,15 @@
     <permission android:name="android.permission.BIND_IMS_SERVICE"
         android:protectionLevel="signature|privileged|vendorPrivileged" />
 
+    <!-- Must be required by a SatelliteService to ensure that only the
+         system can bind to it.
+         <p>Protection level: signature|privileged|vendorPrivileged
+         @SystemApi
+         @hide
+    -->
+    <permission android:name="android.permission.BIND_SATELLITE_SERVICE"
+        android:protectionLevel="signature|privileged|vendorPrivileged" />
+
     <!-- Must be required by a telephony data service to ensure that only the
          system can bind to it.
          <p>Protection level: signature
@@ -3706,6 +3716,10 @@
     <permission android:name="android.permission.MANAGE_DEVICE_POLICY_MTE"
                 android:protectionLevel="internal|role" />
 
+    <!-- Allows an application to manage policy related to device identifiers. -->
+    <permission android:name="android.permission.MANAGE_DEVICE_POLICY_DEVICE_IDENTIFIERS"
+                android:protectionLevel="internal|role" />
+
     <!-- Allows an application to set device policies outside the current user
         that are critical for securing data within the current user.
         <p>Holding this permission allows the use of other held MANAGE_DEVICE_POLICY_*
@@ -3732,7 +3746,8 @@
 
     <!-- @SystemApi @hide Allows an application to set a device owner on retail demo devices.-->
     <permission android:name="android.permission.PROVISION_DEMO_DEVICE"
-                android:protectionLevel="signature|setup" />
+                android:protectionLevel="signature|setup|knownSigner"
+                android:knownCerts="@array/demo_device_provisioning_known_signers" />
 
     <!-- @TestApi @hide Allows an application to reset the record of previous system update freeze
          periods. -->
@@ -4226,16 +4241,6 @@
     <permission android:name="android.permission.WRITE_DEVICE_CONFIG"
         android:protectionLevel="signature|verifier|configurator"/>
 
-    <!-- @SystemApi @TestApi @hide Allows an application to modify only allowlisted settings.
-    <p>Not for use by third-party applications. -->
-    <permission android:name="android.permission.ALLOWLISTED_WRITE_DEVICE_CONFIG"
-        android:protectionLevel="signature|verifier|configurator"/>
-
-    <!-- @SystemApi @TestApi @hide Allows an application to read/write sync disabled mode config.
-    <p>Not for use by third-party applications. -->
-    <permission android:name="android.permission.READ_WRITE_SYNC_DISABLED_MODE_CONFIG"
-        android:protectionLevel="signature|verifier|configurator"/>
-
     <!-- @SystemApi @hide Allows an application to read config settings.
     <p>Not for use by third-party applications. -->
     <permission android:name="android.permission.READ_DEVICE_CONFIG"
@@ -4507,6 +4512,11 @@
         <p>Protection level: normal -->
     <permission android:name="android.permission.CREDENTIAL_MANAGER_SET_ORIGIN"
         android:protectionLevel="normal" />
+
+    <!-- Allows permission to use Credential Manager UI for providing and saving credentials
+         @hide -->
+    <permission android:name="android.permission.LAUNCH_CREDENTIAL_SELECTOR"
+        android:protectionLevel="signature" />
 
     <!-- Allows an application to be able to store and retrieve credentials from a remote
          device.
@@ -5879,7 +5889,7 @@
         devices, regardless of their connection status.
         <p>Not for use by third-party applications.
         @hide -->
-    <permission android:name="android.permission.MODIFY_AUDIO_SYSTEM_SETTINGS"
+    <permission android:name="android.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED"
                 android:protectionLevel="signature|privileged" />
 
     <!-- @SystemApi Allows an application to access the uplink and downlink audio of an ongoing
@@ -5887,7 +5897,7 @@
          <p>Not for use by third-party applications.</p>
          @hide -->
     <permission android:name="android.permission.CALL_AUDIO_INTERCEPTION"
-                android:protectionLevel="signature|privileged" />
+                android:protectionLevel="signature|privileged|role" />
 
     <!-- @TestApi Allows an application to query audio related state.
          @hide -->
@@ -5988,6 +5998,12 @@
          <p>Not for use by third-party applications. -->
     <permission android:name="android.permission.MANAGE_LOW_POWER_STANDBY"
                 android:protectionLevel="signature|privileged" />
+
+    <!-- @hide @SystemApi Allows an application to request ports to remain open during
+         Low Power Standby.
+         <p>Not for use by third-party applications. -->
+    <permission android:name="android.permission.SET_LOW_POWER_STANDBY_PORTS"
+        android:protectionLevel="signature|privileged" />
 
    <!-- @hide Allows low-level access to tun tap driver -->
     <permission android:name="android.permission.NET_TUNNELING"
@@ -7131,6 +7147,13 @@
          @hide Not for use by third-party applications. -->
     <permission android:name="android.permission.READ_CLIPBOARD_IN_BACKGROUND"
         android:protectionLevel="signature|role" />
+
+    <!-- @SystemApi Permission that allows apps to disable the clipboard access notifications.
+         @hide
+         <p>Not for use by third-party applications. -->
+    <permission android:name="android.permission.MANAGE_CLIPBOARD_ACCESS_NOTIFICATION"
+        android:protectionLevel="signature|installer" />
+
     <!-- @hide Permission that suppresses the notification when the clipboard is accessed.
          <p>Not for use by third-party applications. -->
     <permission android:name="android.permission.SUPPRESS_CLIPBOARD_ACCESS_NOTIFICATION"
@@ -7528,6 +7551,13 @@
     <permission android:name="android.permission.MAKE_UID_VISIBLE"
                 android:protectionLevel="signature" />
 
+    <!-- Used for permissions that are associated with enabling secondary SIM do not disturb feature
+         @hide -->
+    <permission android:name="com.qualcomm.qti.qesdk.permission.CALL_CONTROL_SECONDARY_DND"
+                android:label="@string/permlabel_sec_dnd"
+                android:description="@string/permdesc_sec_dnd"
+		android:protectionLevel="dangerous" />
+
     <!-- Limits the system as the only handler of the QUERY_PACKAGE_RESTART broadcast
          @hide -->
     <permission android:name="android.permission.HANDLE_QUERY_PACKAGE_RESTART"
@@ -7588,7 +7618,7 @@
          HealthConnect can later integrate it. -->
     <permission android:name="android.permission.STAGE_HEALTH_CONNECT_REMOTE_DATA"
                 android:protectionLevel="signature|knownSigner"
-                android:knownCerts="@array/config_healthConnectStagingDataKnownSigners"/>
+                android:knownCerts="@array/config_healthConnectRestoreKnownSigners"/>
 
     <!-- @hide @TestApi Allows an application to clear HealthConnect's staged remote data for
          testing only. For security reasons, this is a platform-only permission. -->
@@ -7622,6 +7652,18 @@
          <p>Not for use by third-party applications. -->
     <permission android:name="android.permission.CAPTURE_CONSENTLESS_BUGREPORT_ON_USERDEBUG_BUILD"
                 android:protectionLevel="internal|appop" />
+
+    <!-- @SystemApi Allows to call APIs that log process lifecycle events
+         @hide -->
+    <permission android:name="android.permission.LOG_PROCESS_ACTIVITIES"
+                android:protectionLevel="signature|privileged" />
+
+    <!-- @hide Allows an application to get type of any provider uri.
+         <p>Not for use by third-party applications.
+         <p>Protection level: signature
+    -->
+    <permission android:name="android.permission.GET_ANY_PROVIDER_TYPE"
+                android:protectionLevel="signature" />
 
     <!-- Attribution for Geofencing service. -->
     <attribution android:tag="GeofencingService" android:label="@string/geofencing_service"/>
@@ -7707,8 +7749,11 @@
         </activity>
         <activity android:name="com.android.internal.app.IntentForwarderActivity"
                 android:finishOnCloseSystemDialogs="true"
-                android:theme="@style/Theme.Translucent.NoTitleBar"
+                android:theme="@style/Theme.DeviceDefault.Resolver"
                 android:excludeFromRecents="true"
+                android:documentLaunchMode="never"
+                android:relinquishTaskIdentity="true"
+                android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden"
                 android:label="@string/user_owner_label"
                 android:exported="true"
                 android:visibleToInstantApps="true"

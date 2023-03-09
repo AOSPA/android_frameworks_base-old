@@ -17,6 +17,7 @@
 package com.android.credentialmanager
 
 import android.app.Activity
+import android.os.IBinder
 import android.util.Log
 import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.result.ActivityResult
@@ -55,8 +56,17 @@ class CredentialSelectorViewModel(
     /**************************************************************************/
     /*****                       Shared Callbacks                         *****/
     /**************************************************************************/
-    fun onCancel() {
+    fun onUserCancel() {
+        Log.d(Constants.LOG_TAG, "User cancelled, finishing the ui")
         credManRepo.onUserCancel()
+        uiState = uiState.copy(dialogState = DialogState.COMPLETE)
+    }
+
+    /** Close the activity and don't report anything to the backend.
+     *  Example use case is the no-auth-info snackbar where the activity should simply display the
+     *  UI and then be dismissed. */
+    fun silentlyFinishActivity() {
+        Log.d(Constants.LOG_TAG, "Silently finishing the ui")
         uiState = uiState.copy(dialogState = DialogState.COMPLETE)
     }
 
@@ -115,10 +125,20 @@ class CredentialSelectorViewModel(
         }
     }
 
+    fun onLastLockedAuthEntryNotFoundError() {
+        Log.d(Constants.LOG_TAG, "Unable to find the last unlocked entry")
+        onInternalError()
+    }
+
     private fun onInternalError() {
         Log.w(Constants.LOG_TAG, "UI closed due to illegal internal state")
         credManRepo.onParsingFailureCancel()
         uiState = uiState.copy(dialogState = DialogState.COMPLETE)
+    }
+
+    /** Return true if the current UI's request token matches the UI cancellation request token. */
+    fun shouldCancelCurrentUi(cancelRequestToken: IBinder): Boolean {
+        return credManRepo.requestInfo.token.equals(cancelRequestToken)
     }
 
     /**************************************************************************/

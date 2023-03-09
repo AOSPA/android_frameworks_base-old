@@ -218,6 +218,9 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
 
     final TransitionController.Logger mLogger = new TransitionController.Logger();
 
+    /** Whether this transition was forced to play early (eg for a SLEEP signal). */
+    private boolean mForcePlaying = false;
+
     /**
      * {@code false} if this transition runs purely in WMCore (meaning Shell is completely unaware
      * of it). Currently, this happens before the display is ready since nothing can be seen yet.
@@ -813,6 +816,7 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
         }
 
         boolean hasParticipatedDisplay = false;
+        boolean hasVisibleTransientLaunch = false;
         // Commit all going-invisible containers
         for (int i = 0; i < mParticipants.size(); ++i) {
             final WindowContainer<?> participant = mParticipants.valueAt(i);
@@ -855,6 +859,8 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
                         && ar.isVisible()) {
                     // Transient launch was committed, so report enteringAnimation
                     ar.mEnteringAnimation = true;
+                    hasVisibleTransientLaunch = true;
+
                     // Since transient launches don't automatically take focus, make sure we
                     // synchronize focus since we committed to the launch.
                     if (ar.isTopRunningActivity()) {
@@ -875,8 +881,38 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
                             "  Commit wallpaper becoming invisible: %s", wt);
                     wt.commitVisibility(false /* visible */);
                 }
+                continue;
+            }
+            final Task tr = participant.asTask();
+            if (tr != null && tr.isVisibleRequested() && tr.inPinnedWindowingMode()) {
+                final ActivityRecord top = tr.getTopNonFinishingActivity();
+                if (top != null && !top.inPinnedWindowingMode()) {
+                    mController.mStateValidators.add(() -> {
+                        if (!tr.isAttached() || !tr.isVisibleRequested()
+                                || !tr.inPinnedWindowingMode()) return;
+                        final ActivityRecord currTop = tr.getTopNonFinishingActivity();
+                        if (currTop.inPinnedWindowingMode()) return;
+                        Slog.e(TAG, "Enter-PIP was started but not completed, this is a Shell/SysUI"
+                                + " bug. This state breaks gesture-nav, so attempting clean-up.");
+                        // We don't know the destination bounds, so we can't actually finish the
+                        // operation. So, to prevent the half-pipped task from covering everything,
+                        // abort the action (which moves the task to back).
+                        tr.abortPipEnter(currTop);
+                    });
+                }
             }
         }
+
+        if (hasVisibleTransientLaunch) {
+            // Notify the change about the transient-below task that becomes invisible.
+            mController.mAtm.getTaskChangeNotificationController().notifyTaskStackChanged();
+            // Prevent spurious background app switches.
+            mController.mAtm.stopAppSwitches();
+            // The end of transient launch may not reorder task, so make sure to compute the latest
+            // task rank according to the current visibility.
+            mController.mAtm.mRootWindowContainer.rankTaskLayers();
+        }
+
         // dispatch legacy callback in a different loop. This is because multiple legacy handlers
         // (fixed-rotation/displaycontent) make global changes, so we want to ensure that we've
         // processed all the participants first (in particular, we want to trigger pip-enter first)
@@ -969,6 +1005,25 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
         // Syncengine abort will call through to onTransactionReady()
         mSyncEngine.abort(mSyncId);
         mController.dispatchLegacyAppTransitionCancelled();
+    }
+
+    /** Immediately moves this to playing even if it isn't started yet. */
+    void playNow() {
+        if (mState == STATE_PLAYING) return;
+        ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Force Playing Transition: %d",
+                mSyncId);
+        mForcePlaying = true;
+        setAllReady();
+        if (mState == STATE_COLLECTING) {
+            start();
+        }
+        // Don't wait for actual surface-placement. We don't want anything else collected in this
+        // transition.
+        mSyncEngine.onSurfacePlacement();
+    }
+
+    boolean isForcePlaying() {
+        return mForcePlaying;
     }
 
     void setRemoteTransition(RemoteTransition remoteTransition) {

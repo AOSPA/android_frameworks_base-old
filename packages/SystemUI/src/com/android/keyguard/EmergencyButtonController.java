@@ -18,6 +18,7 @@ package com.android.keyguard;
 
 import static com.android.systemui.DejankUtils.whitelistIpcs;
 
+import android.annotation.SuppressLint;
 import android.app.ActivityOptions;
 import android.app.ActivityTaskManager;
 import android.content.Intent;
@@ -34,10 +35,14 @@ import android.telephony.TelephonyManager;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
+import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.dagger.KeyguardBouncerScope;
+import com.android.systemui.dagger.qualifiers.Background;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.R;
 import com.android.systemui.shade.ShadeController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
@@ -45,7 +50,9 @@ import com.android.systemui.statusbar.policy.ConfigurationController.Configurati
 import com.android.systemui.util.EmergencyDialerConstants;
 import com.android.systemui.util.ViewController;
 
+import java.util.concurrent.Executor;
 import java.util.List;
+
 import javax.inject.Inject;
 
 /** View Controller for {@link com.android.keyguard.EmergencyButton}. */
@@ -60,6 +67,10 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
     private ShadeController mShadeController;
     private final TelecomManager mTelecomManager;
     private final MetricsLogger mMetricsLogger;
+
+    private LockPatternUtils mLockPatternUtils;
+    private Executor mMainExecutor;
+    private Executor mBackgroundExecutor;
 
     private EmergencyButtonCallback mEmergencyButtonCallback;
     private boolean mIsCellAvailable;
@@ -94,12 +105,15 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
         }
     };
 
-    private EmergencyButtonController(@Nullable EmergencyButton view,
+    @VisibleForTesting
+    public EmergencyButtonController(@Nullable EmergencyButton view,
             ConfigurationController configurationController,
             KeyguardUpdateMonitor keyguardUpdateMonitor, TelephonyManager telephonyManager,
             PowerManager powerManager, ActivityTaskManager activityTaskManager,
             ShadeController shadeController,
-            @Nullable TelecomManager telecomManager, MetricsLogger metricsLogger) {
+            @Nullable TelecomManager telecomManager, MetricsLogger metricsLogger,
+            LockPatternUtils lockPatternUtils,
+            Executor mainExecutor, Executor backgroundExecutor) {
         super(view);
         mConfigurationController = configurationController;
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
@@ -109,6 +123,9 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
         mShadeController = shadeController;
         mTelecomManager = telecomManager;
         mMetricsLogger = metricsLogger;
+        mLockPatternUtils = lockPatternUtils;
+        mMainExecutor = mainExecutor;
+        mBackgroundExecutor = backgroundExecutor;
     }
 
     @Override
@@ -129,14 +146,28 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
         mConfigurationController.removeCallback(mConfigurationListener);
     }
 
-    private void updateEmergencyCallButton() {
+    /**
+     * Updates the visibility of the emergency button.
+     *
+     * This method runs binder calls in a background thread.
+     */
+    @VisibleForTesting
+    @SuppressLint("MissingPermission")
+    public void updateEmergencyCallButton() {
         if (mView != null) {
-            mView.updateEmergencyCallButton(
-                    mTelecomManager != null && mTelecomManager.isInCall(),
-                    getContext().getPackageManager().hasSystemFeature(
-                            PackageManager.FEATURE_TELEPHONY),
-                    mKeyguardUpdateMonitor.isSimPinVoiceSecure(),
-                    isEmergencyCapable());
+            // Run in bg thread to avoid throttling the main thread with binder call.
+            mBackgroundExecutor.execute(() -> {
+                boolean isInCall = mTelecomManager != null && mTelecomManager.isInCall();
+                boolean isSecure = mLockPatternUtils
+                        .isSecure(KeyguardUpdateMonitor.getCurrentUser());
+                mMainExecutor.execute(() -> mView.updateEmergencyCallButton(
+                        /* isInCall= */ isInCall,
+                        /* hasTelephonyRadio= */ getContext().getPackageManager()
+                                .hasSystemFeature(PackageManager.FEATURE_TELEPHONY),
+                        /* simLocked= */ mKeyguardUpdateMonitor.isSimPinVoiceSecure(),
+                        /* isSecure= */ isSecure,
+                        isEmergencyCapable()));
+            });
         }
     }
 
@@ -146,6 +177,7 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
     /**
      * Shows the emergency dialer or returns the user to the existing call.
      */
+    @SuppressLint("MissingPermission")
     public void takeEmergencyCallAction() {
         mMetricsLogger.action(MetricsEvent.ACTION_EMERGENCY_CALL);
         if (mPowerManager != null) {
@@ -153,29 +185,35 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
         }
         mActivityTaskManager.stopSystemLockTaskMode();
         mShadeController.collapseShade(false);
-        if (mTelecomManager != null && mTelecomManager.isInCall()) {
-            mTelecomManager.showInCallScreen(false);
-            if (mEmergencyButtonCallback != null) {
-                mEmergencyButtonCallback.onEmergencyButtonClickedWhenInCall();
-            }
-        } else {
-            mKeyguardUpdateMonitor.reportEmergencyCallAction(true /* bypassHandler */);
-            if (mTelecomManager == null) {
-                Log.wtf(LOG_TAG, "TelecomManager was null, cannot launch emergency dialer");
-                return;
-            }
-            Intent emergencyDialIntent =
-                    mTelecomManager.createLaunchEmergencyDialerIntent(null /* number*/)
-                            .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                                    | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
-                                    | Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                            .putExtra(EmergencyDialerConstants.EXTRA_ENTRY_TYPE,
-                                    EmergencyDialerConstants.ENTRY_TYPE_LOCKSCREEN_BUTTON);
+        // Run in bg thread to avoid throttling the main thread with binder call.
+        mBackgroundExecutor.execute(() -> {
+            boolean isInCall = mTelecomManager != null && mTelecomManager.isInCall();
+            mMainExecutor.execute(() -> {
+                if (isInCall) {
+                    mTelecomManager.showInCallScreen(false);
+                    if (mEmergencyButtonCallback != null) {
+                        mEmergencyButtonCallback.onEmergencyButtonClickedWhenInCall();
+                    }
+                } else {
+                    mKeyguardUpdateMonitor.reportEmergencyCallAction(true /* bypassHandler */);
+                    if (mTelecomManager == null) {
+                        Log.wtf(LOG_TAG, "TelecomManager was null, cannot launch emergency dialer");
+                        return;
+                    }
+                    Intent emergencyDialIntent =
+                            mTelecomManager.createLaunchEmergencyDialerIntent(null /* number*/)
+                                    .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                                            | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+                                            | Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                                    .putExtra(EmergencyDialerConstants.EXTRA_ENTRY_TYPE,
+                                            EmergencyDialerConstants.ENTRY_TYPE_LOCKSCREEN_BUTTON);
 
-            getContext().startActivityAsUser(emergencyDialIntent,
-                    ActivityOptions.makeCustomAnimation(getContext(), 0, 0).toBundle(),
-                    new UserHandle(KeyguardUpdateMonitor.getCurrentUser()));
-        }
+                    getContext().startActivityAsUser(emergencyDialIntent,
+                            ActivityOptions.makeCustomAnimation(getContext(), 0, 0).toBundle(),
+                            new UserHandle(KeyguardUpdateMonitor.getCurrentUser()));
+                }
+            });
+        });
     }
 
     private void requestCellInfoUpdate(){
@@ -229,13 +267,19 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
         @Nullable
         private final TelecomManager mTelecomManager;
         private final MetricsLogger mMetricsLogger;
+        private final LockPatternUtils mLockPatternUtils;
+        private final Executor mMainExecutor;
+        private final Executor mBackgroundExecutor;
 
         @Inject
         public Factory(ConfigurationController configurationController,
                 KeyguardUpdateMonitor keyguardUpdateMonitor, TelephonyManager telephonyManager,
                 PowerManager powerManager, ActivityTaskManager activityTaskManager,
                 ShadeController shadeController,
-                @Nullable TelecomManager telecomManager, MetricsLogger metricsLogger) {
+                @Nullable TelecomManager telecomManager, MetricsLogger metricsLogger,
+                LockPatternUtils lockPatternUtils,
+                @Main Executor mainExecutor,
+                @Background Executor backgroundExecutor) {
 
             mConfigurationController = configurationController;
             mKeyguardUpdateMonitor = keyguardUpdateMonitor;
@@ -245,14 +289,17 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
             mShadeController = shadeController;
             mTelecomManager = telecomManager;
             mMetricsLogger = metricsLogger;
+            mLockPatternUtils = lockPatternUtils;
+            mMainExecutor = mainExecutor;
+            mBackgroundExecutor = backgroundExecutor;
         }
 
         /** Construct an {@link com.android.keyguard.EmergencyButtonController}. */
         public EmergencyButtonController create(EmergencyButton view) {
             return new EmergencyButtonController(view, mConfigurationController,
                     mKeyguardUpdateMonitor, mTelephonyManager, mPowerManager, mActivityTaskManager,
-                    mShadeController,
-                    mTelecomManager, mMetricsLogger);
+                    mShadeController, mTelecomManager, mMetricsLogger, mLockPatternUtils,
+                    mMainExecutor, mBackgroundExecutor);
         }
     }
 }

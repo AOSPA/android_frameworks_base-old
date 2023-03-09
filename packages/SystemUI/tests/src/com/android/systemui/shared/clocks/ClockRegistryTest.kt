@@ -35,7 +35,6 @@ import junit.framework.Assert.fail
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
-import org.json.JSONException
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -230,7 +229,7 @@ class ClockRegistryTest : SysuiTestCase() {
     }
 
     @Test
-    fun pluginRemoved_clockChanged() {
+    fun pluginRemoved_clockAndListChanged() {
         val plugin1 = FakeClockPlugin()
             .addClock("clock_1", "clock 1")
             .addClock("clock_2", "clock 2")
@@ -239,26 +238,46 @@ class ClockRegistryTest : SysuiTestCase() {
             .addClock("clock_3", "clock 3", { mockClock })
             .addClock("clock_4", "clock 4")
 
-        registry.applySettings(ClockSettings("clock_3", null))
-        pluginListener.onPluginConnected(plugin1, mockContext)
-        pluginListener.onPluginConnected(plugin2, mockContext)
 
         var changeCallCount = 0
-        registry.registerClockChangeListener { changeCallCount++ }
+        var listChangeCallCount = 0
+        registry.registerClockChangeListener(object : ClockRegistry.ClockChangeListener {
+            override fun onCurrentClockChanged() { changeCallCount++ }
+            override fun onAvailableClocksChanged() { listChangeCallCount++ }
+        })
+
+        registry.applySettings(ClockSettings("clock_3", null))
+        assertEquals(0, changeCallCount)
+        assertEquals(0, listChangeCallCount)
+
+        pluginListener.onPluginConnected(plugin1, mockContext)
+        assertEquals(0, changeCallCount)
+        assertEquals(1, listChangeCallCount)
+
+        pluginListener.onPluginConnected(plugin2, mockContext)
+        assertEquals(1, changeCallCount)
+        assertEquals(2, listChangeCallCount)
 
         pluginListener.onPluginDisconnected(plugin1)
-        assertEquals(0, changeCallCount)
+        assertEquals(1, changeCallCount)
+        assertEquals(3, listChangeCallCount)
 
         pluginListener.onPluginDisconnected(plugin2)
-        assertEquals(1, changeCallCount)
+        assertEquals(2, changeCallCount)
+        assertEquals(4, listChangeCallCount)
     }
+
 
     @Test
     fun jsonDeserialization_gotExpectedObject() {
-        val expected = ClockSettings("ID", null).apply { _applied_timestamp = 500 }
+        val expected = ClockSettings("ID", null).apply {
+            metadata.put("appliedTimestamp", 500)
+        }
         val actual = ClockSettings.deserialize("""{
             "clockId":"ID",
-            "_applied_timestamp":500
+            "metadata": {
+                "appliedTimestamp":500
+            }
         }""")
         assertEquals(expected, actual)
     }
@@ -275,29 +294,32 @@ class ClockRegistryTest : SysuiTestCase() {
         val expected = ClockSettings("ID", null)
         val actual = ClockSettings.deserialize("""{
             "clockId":"ID",
-            "_applied_timestamp":null
+            "metadata":null
         }""")
         assertEquals(expected, actual)
     }
 
-    @Test(expected = JSONException::class)
-    fun jsonDeserialization_noId_threwException() {
-        val expected = ClockSettings(null, null).apply { _applied_timestamp = 500 }
-        val actual = ClockSettings.deserialize("{\"_applied_timestamp\":500}")
+    @Test
+    fun jsonDeserialization_noId_deserializedEmpty() {
+        val expected = ClockSettings(null, null).apply {
+            metadata.put("appliedTimestamp", 500)
+        }
+        val actual = ClockSettings.deserialize("{\"metadata\":{\"appliedTimestamp\":500}}")
         assertEquals(expected, actual)
     }
 
     @Test
     fun jsonSerialization_gotExpectedString() {
-        val expected = "{\"clockId\":\"ID\",\"_applied_timestamp\":500}"
-        val actual = ClockSettings.serialize(ClockSettings("ID", null)
-            .apply { _applied_timestamp = 500 })
+        val expected = "{\"clockId\":\"ID\",\"metadata\":{\"appliedTimestamp\":500}}"
+        val actual = ClockSettings.serialize(ClockSettings("ID", null).apply {
+            metadata.put("appliedTimestamp", 500)
+        })
         assertEquals(expected, actual)
     }
 
     @Test
     fun jsonSerialization_noTimestamp_gotExpectedString() {
-        val expected = "{\"clockId\":\"ID\"}"
+        val expected = "{\"clockId\":\"ID\",\"metadata\":{}}"
         val actual = ClockSettings.serialize(ClockSettings("ID", null))
         assertEquals(expected, actual)
     }

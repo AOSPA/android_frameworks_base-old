@@ -172,10 +172,10 @@ interface IActivityManager {
     // Currently keeping old bindService because it is on the greylist
     @UnsupportedAppUsage
     int bindService(in IApplicationThread caller, in IBinder token, in Intent service,
-            in String resolvedType, in IServiceConnection connection, int flags,
+            in String resolvedType, in IServiceConnection connection, long flags,
             in String callingPackage, int userId);
     int bindServiceInstance(in IApplicationThread caller, in IBinder token, in Intent service,
-            in String resolvedType, in IServiceConnection connection, int flags,
+            in String resolvedType, in IServiceConnection connection, long flags,
             in String instanceName, in String callingPackage, int userId);
     void updateServiceGroup(in IServiceConnection connection, int group, int importance);
     @UnsupportedAppUsage
@@ -341,13 +341,7 @@ interface IActivityManager {
             in String message, boolean force, int exceptionTypeId);
     void crashApplicationWithTypeWithExtras(int uid, int initialPid, in String packageName,
             int userId, in String message, boolean force, int exceptionTypeId, in Bundle extras);
-    /** @deprecated -- use getProviderMimeTypeAsync */
-    @UnsupportedAppUsage(maxTargetSdk = 29, publicAlternatives =
-            "Use {@link android.content.ContentResolver#getType} public API instead.")
-    String getProviderMimeType(in Uri uri, int userId);
-
-    oneway void getProviderMimeTypeAsync(in Uri uri, int userId, in RemoteCallback resultCallback);
-
+    oneway void getMimeTypeFilterAsync(in Uri uri, int userId, in RemoteCallback resultCallback);
     // Cause the specified process to dump the specified heap.
     boolean dumpHeap(in String process, int userId, boolean managed, boolean mallocInfo,
             boolean runGc, in String path, in ParcelFileDescriptor fd,
@@ -823,6 +817,7 @@ interface IActivityManager {
 
     /** Blocks until all broadcast queues become idle. */
     void waitForBroadcastIdle();
+    void waitForBroadcastBarrier();
 
     /** Delays delivering broadcasts to the specified package. */
     @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.DUMP)")
@@ -873,4 +868,13 @@ interface IActivityManager {
 
     /** Returns if the service is a short-service is still "alive" and past the timeout. */
     boolean shouldServiceTimeOut(in ComponentName className, in IBinder token);
+
+    /** Logs start of an API call to associate with an FGS, used for FGS Type Metrics */
+    oneway void logFgsApiBegin(int apiType, int appUid, int appPid);
+
+    /** Logs stop of an API call to associate with an FGS, used for FGS Type Metrics */
+    oneway void logFgsApiEnd(int apiType, int appUid, int appPid);
+
+    /** Logs API state change to associate with an FGS, used for FGS Type Metrics */
+    oneway void logFgsApiStateChanged(int apiType, int state, int appUid, int appPid);
 }

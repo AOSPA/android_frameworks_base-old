@@ -1641,6 +1641,7 @@ public class UserManager {
             DISALLOW_ADD_WIFI_CONFIG,
             DISALLOW_CELLULAR_2G,
             DISALLOW_ULTRA_WIDEBAND_RADIO,
+            DISALLOW_GRANT_ADMIN,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface UserRestrictionKey {}
@@ -2432,21 +2433,24 @@ public class UserManager {
     }
 
     /**
-     * Used to check if the context user is an admin user. An admin user is allowed to
+     * Used to check if the context user is an admin user. An admin user may be allowed to
      * modify or configure certain settings that aren't available to non-admin users,
      * create and delete additional users, etc. There can be more than one admin users.
      *
      * @return whether the context user is an admin user.
-     * @hide
      */
-    @SystemApi
-    @RequiresPermission(anyOf = {
-            Manifest.permission.MANAGE_USERS,
-            Manifest.permission.CREATE_USERS,
-            Manifest.permission.QUERY_USERS})
-    @UserHandleAware(enabledSinceTargetSdkVersion = Build.VERSION_CODES.TIRAMISU)
+    @UserHandleAware(
+            enabledSinceTargetSdkVersion = Build.VERSION_CODES.TIRAMISU,
+            requiresAnyOfPermissionsIfNotCallerProfileGroup = {
+                    Manifest.permission.MANAGE_USERS,
+                    Manifest.permission.CREATE_USERS,
+                    Manifest.permission.QUERY_USERS})
     public boolean isAdminUser() {
-        return isUserAdmin(getContextUserIfAppropriate());
+        try {
+            return mService.isAdminUser(getContextUserIfAppropriate());
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -3049,6 +3053,20 @@ public class UserManager {
             throw re.rethrowFromSystemServer();
         }
         return result;
+    }
+
+    /**
+     * See {@link com.android.server.pm.UserManagerInternal#getDisplayAssignedToUser(int)}.
+     *
+     * @hide
+     */
+    @TestApi
+    public int getDisplayIdAssignedToUser() {
+        try {
+            return mService.getDisplayIdAssignedToUser();
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -3957,6 +3975,9 @@ public class UserManager {
      * time, the preferred user name and account information are used by the setup process for that
      * user.
      *
+     * This API should only be called if the current user is an {@link #isAdminUser() admin} user,
+     * as otherwise the returned intent will not be able to create a user.
+     *
      * @param userName Optional name to assign to the user.
      * @param accountName Optional account name that will be used by the setup wizard to initialize
      *                    the user.
@@ -4368,11 +4389,16 @@ public class UserManager {
     }
 
     /**
-     * Returns information for Primary user.
+     * Returns information for Primary user (which in practice is the same as the System user).
      *
      * @return the Primary user, null if not found.
+     * @deprecated For the system user, call {@link #getUserInfo} on {@link UserHandle#USER_SYSTEM},
+     *             or just use {@link UserHandle#SYSTEM} or {@link UserHandle#USER_SYSTEM}.
+     *             For the designated MainUser, use {@link #getMainUser()}.
+     *
      * @hide
      */
+    @Deprecated
     @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public @Nullable UserInfo getPrimaryUser() {
         try {
@@ -5574,7 +5600,17 @@ public class UserManager {
      * if there are no saved restrictions.
      *
      * @see #KEY_RESTRICTIONS_PENDING
+     *
+     * @deprecated Use
+     * {@link android.content.RestrictionsManager#getApplicationRestrictionsPerAdmin} instead.
+     * Starting from Android version {@link android.os.Build.VERSION_CODES#UPSIDE_DOWN_CAKE}, it is
+     * possible for there to be multiple managing agents on the device with the ability to set
+     * restrictions. This API will only to return the restrictions set by device policy controllers
+     * (DPCs)
+     *
+     * @see DevicePolicyManager
      */
+    @Deprecated
     @WorkerThread
     @UserHandleAware(enabledSinceTargetSdkVersion = Build.VERSION_CODES.TIRAMISU)
     public Bundle getApplicationRestrictions(String packageName) {
@@ -5587,8 +5623,12 @@ public class UserManager {
     }
 
     /**
+     * @deprecated Use
+     * {@link android.content.RestrictionsManager#getApplicationRestrictionsPerAdmin} instead.
+     *
      * @hide
      */
+    @Deprecated
     @WorkerThread
     public Bundle getApplicationRestrictions(String packageName, UserHandle user) {
         try {

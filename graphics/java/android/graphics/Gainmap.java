@@ -18,6 +18,8 @@ package android.graphics;
 
 import android.annotation.FloatRange;
 import android.annotation.NonNull;
+import android.os.Parcel;
+import android.os.Parcelable;
 
 import libcore.util.NativeAllocationRegistry;
 
@@ -61,22 +63,22 @@ import libcore.util.NativeAllocationRegistry;
  * as follows:
  *
  * First, let W be a weight parameter determining how much the gainmap will be applied.
- *   W = clamp((log(H)               - log(displayRatioHdr)) /
- *             (log(displayRatioHdr) - log(displayRatioSdr), 0, 1)
+ *   W = clamp((log(H)                      - log(minDisplayRatioForHdrTransition)) /
+ *             (log(displayRatioForFullHdr) - log(minDisplayRatioForHdrTransition), 0, 1)
  *
  * Next, let L be the gainmap value in log space. We compute this from the value G that was
  * sampled from the texture as follows:
- *   L = mix(log(gainmapRatioMin), log(gainmapRatioMax), pow(G, gainmapGamma))
+ *   L = mix(log(ratioMin), log(ratioMax), pow(G, gamma))
  *
  * Finally, apply the gainmap to compute D, the displayed pixel. If the base image is SDR then
  * compute:
  *   D = (B + epsilonSdr) * exp(L * W) - epsilonHdr
- * If the base image is HDR then compute:
- *   D = (B + epsilonHdr) * exp(L * (W - 1)) - epsilonSdr
  *
- * In the above math, log() is a natural logarithm and exp() is natural exponentiation.
+ * In the above math, log() is a natural logarithm and exp() is natural exponentiation. The base
+ * for these functions cancels out and does not affect the result, so other bases may be used
+ * if preferred.
  */
-public final class Gainmap {
+public final class Gainmap implements Parcelable {
 
     // Use a Holder to allow static initialization of Gainmap in the boot image.
     private static class NoImagePreloadHolder {
@@ -94,8 +96,8 @@ public final class Gainmap {
             throw new RuntimeException("internal error: native gainmap is 0");
         }
 
-        mGainmapContents = gainmapContents;
         mNativePtr = nativeGainmap;
+        setGainmapContents(gainmapContents);
 
         NoImagePreloadHolder.sRegistry.registerNativeAllocation(this, nativeGainmap);
     }
@@ -284,6 +286,50 @@ public final class Gainmap {
         return nGetDisplayRatioSdr(mNativePtr);
     }
 
+    /**
+     * No special parcel contents.
+     */
+    @Override
+    public int describeContents() {
+        return 0;
+    }
+
+    /**
+     * Write the gainmap to the parcel.
+     *
+     * @param dest Parcel object to write the gainmap data into
+     * @param flags Additional flags about how the object should be written.
+     */
+    @Override
+    public void writeToParcel(@NonNull Parcel dest, int flags) {
+        if (mNativePtr == 0) {
+            throw new IllegalStateException("Cannot be written to a parcel");
+        }
+        dest.writeTypedObject(mGainmapContents, flags);
+        // write gainmapinfo into parcel
+        nWriteGainmapToParcel(mNativePtr, dest);
+    }
+
+    public static final @NonNull Parcelable.Creator<Gainmap> CREATOR =
+            new Parcelable.Creator<Gainmap>() {
+            /**
+             * Rebuilds a gainmap previously stored with writeToParcel().
+             *
+             * @param in Parcel object to read the gainmap from
+             * @return a new gainmap created from the data in the parcel
+             */
+            public Gainmap createFromParcel(Parcel in) {
+                Gainmap gm = new Gainmap(in.readTypedObject(Bitmap.CREATOR));
+                // read gainmapinfo from parcel
+                nReadGainmapFromParcel(gm.mNativePtr, in);
+                return gm;
+            }
+
+            public Gainmap[] newArray(int size) {
+                return new Gainmap[size];
+            }
+        };
+
     private static native long nGetFinalizer();
     private static native long nCreateEmpty();
 
@@ -309,4 +355,6 @@ public final class Gainmap {
 
     private static native void nSetDisplayRatioSdr(long ptr, float min);
     private static native float nGetDisplayRatioSdr(long ptr);
+    private static native void nWriteGainmapToParcel(long ptr, Parcel dest);
+    private static native void nReadGainmapFromParcel(long ptr, Parcel src);
 }

@@ -25,6 +25,7 @@ import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.StringDef;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
@@ -1371,14 +1372,14 @@ public class AppOpsManager {
             AppProtoEnums.APP_OP_READ_MEDIA_VISUAL_USER_SELECTED;
 
     /**
-     * Prevent an app from being placed into app standby buckets.
+     * Prevent an app from being suspended.
      *
      * Only to be used by the system.
      *
      * @hide
      */
-    public static final int OP_SYSTEM_EXEMPT_FROM_APP_STANDBY =
-            AppProtoEnums.APP_OP_SYSTEM_EXEMPT_FROM_APP_STANDBY;
+    public static final int OP_SYSTEM_EXEMPT_FROM_SUSPENSION =
+            AppProtoEnums.APP_OP_SYSTEM_EXEMPT_FROM_SUSPENSION;
 
     /**
      * Prevent an app from dismissible notifications. Starting from Android U, notifications with
@@ -1421,16 +1422,14 @@ public class AppOpsManager {
             AppProtoEnums.APP_OP_SYSTEM_EXEMPT_FROM_POWER_RESTRICTIONS;
 
     /**
-     * Exempt from start foreground service from background with while in user permission
-     * restriction.
+     * Prevent an app from being placed into hibernation.
      *
      * Only to be used by the system.
      *
      * @hide
      */
-    public static final int OP_SYSTEM_EXEMPT_FROM_FGS_BG_START_WHILE_IN_USE_PERMISSION_RESTRICTION =
-            AppProtoEnums
-                    .APP_OP_SYSTEM_EXEMPT_FROM_FGS_BG_START_WHILE_IN_USE_PERMISSION_RESTRICTION;
+    public static final int OP_SYSTEM_EXEMPT_FROM_HIBERNATION =
+            AppProtoEnums.APP_OP_SYSTEM_EXEMPT_FROM_HIBERNATION;
 
     /**
      * Allows an application to start an activity while running in the background.
@@ -1462,17 +1461,152 @@ public class AppOpsManager {
      */
     public static final int OP_USE_FULL_SCREEN_INTENT = AppProtoEnums.APP_OP_USE_FULL_SCREEN_INTENT;
 
+    /** @hide */
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    public static final int _NUM_OP = 134;
+
     /**
-     * Prevent an app from being placed into hibernation.
+     * All app ops represented as strings.
      *
      * @hide
      */
-    public static final int OP_SYSTEM_EXEMPT_FROM_HIBERNATION =
-            AppProtoEnums.APP_OP_SYSTEM_EXEMPT_FROM_HIBERNATION;
-
-    /** @hide */
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    public static final int _NUM_OP = 135;
+    @Retention(RetentionPolicy.SOURCE)
+    @StringDef(prefix = { "OPSTR_" }, value = {
+            OPSTR_COARSE_LOCATION,
+            OPSTR_FINE_LOCATION,
+            OPSTR_MONITOR_LOCATION,
+            OPSTR_MONITOR_HIGH_POWER_LOCATION,
+            OPSTR_GET_USAGE_STATS,
+            OPSTR_ACTIVATE_VPN,
+            OPSTR_READ_CONTACTS,
+            OPSTR_WRITE_CONTACTS,
+            OPSTR_READ_CALL_LOG,
+            OPSTR_WRITE_CALL_LOG,
+            OPSTR_READ_CALENDAR,
+            OPSTR_WRITE_CALENDAR,
+            OPSTR_CALL_PHONE,
+            OPSTR_READ_SMS,
+            OPSTR_RECEIVE_SMS,
+            OPSTR_RECEIVE_MMS,
+            OPSTR_RECEIVE_WAP_PUSH,
+            OPSTR_SEND_SMS,
+            OPSTR_CAMERA,
+            OPSTR_RECORD_AUDIO,
+            OPSTR_READ_PHONE_STATE,
+            OPSTR_ADD_VOICEMAIL,
+            OPSTR_USE_SIP,
+            OPSTR_PROCESS_OUTGOING_CALLS,
+            OPSTR_USE_FINGERPRINT,
+            OPSTR_BODY_SENSORS,
+            OPSTR_READ_CELL_BROADCASTS,
+            OPSTR_MOCK_LOCATION,
+            OPSTR_READ_EXTERNAL_STORAGE,
+            OPSTR_WRITE_EXTERNAL_STORAGE,
+            OPSTR_SYSTEM_ALERT_WINDOW,
+            OPSTR_WRITE_SETTINGS,
+            OPSTR_GET_ACCOUNTS,
+            OPSTR_READ_PHONE_NUMBERS,
+            OPSTR_PICTURE_IN_PICTURE,
+            OPSTR_INSTANT_APP_START_FOREGROUND,
+            OPSTR_ANSWER_PHONE_CALLS,
+            OPSTR_ACCEPT_HANDOVER,
+            OPSTR_GPS,
+            OPSTR_VIBRATE,
+            OPSTR_WIFI_SCAN,
+            OPSTR_POST_NOTIFICATION,
+            OPSTR_NEIGHBORING_CELLS,
+            OPSTR_WRITE_SMS,
+            OPSTR_RECEIVE_EMERGENCY_BROADCAST,
+            OPSTR_READ_ICC_SMS,
+            OPSTR_WRITE_ICC_SMS,
+            OPSTR_ACCESS_NOTIFICATIONS,
+            OPSTR_PLAY_AUDIO,
+            OPSTR_READ_CLIPBOARD,
+            OPSTR_WRITE_CLIPBOARD,
+            OPSTR_TAKE_MEDIA_BUTTONS,
+            OPSTR_TAKE_AUDIO_FOCUS,
+            OPSTR_AUDIO_MASTER_VOLUME,
+            OPSTR_AUDIO_VOICE_VOLUME,
+            OPSTR_AUDIO_RING_VOLUME,
+            OPSTR_AUDIO_MEDIA_VOLUME,
+            OPSTR_AUDIO_ALARM_VOLUME,
+            OPSTR_AUDIO_NOTIFICATION_VOLUME,
+            OPSTR_AUDIO_BLUETOOTH_VOLUME,
+            OPSTR_WAKE_LOCK,
+            OPSTR_MUTE_MICROPHONE,
+            OPSTR_TOAST_WINDOW,
+            OPSTR_PROJECT_MEDIA,
+            OPSTR_WRITE_WALLPAPER,
+            OPSTR_ASSIST_STRUCTURE,
+            OPSTR_ASSIST_SCREENSHOT,
+            OPSTR_TURN_SCREEN_ON,
+            OPSTR_RUN_IN_BACKGROUND,
+            OPSTR_AUDIO_ACCESSIBILITY_VOLUME,
+            OPSTR_REQUEST_INSTALL_PACKAGES,
+            OPSTR_RUN_ANY_IN_BACKGROUND,
+            OPSTR_CHANGE_WIFI_STATE,
+            OPSTR_REQUEST_DELETE_PACKAGES,
+            OPSTR_BIND_ACCESSIBILITY_SERVICE,
+            OPSTR_MANAGE_IPSEC_TUNNELS,
+            OPSTR_START_FOREGROUND,
+            OPSTR_BLUETOOTH_SCAN,
+            OPSTR_BLUETOOTH_CONNECT,
+            OPSTR_BLUETOOTH_ADVERTISE,
+            OPSTR_USE_BIOMETRIC,
+            OPSTR_ACTIVITY_RECOGNITION,
+            OPSTR_SMS_FINANCIAL_TRANSACTIONS,
+            OPSTR_READ_MEDIA_AUDIO,
+            OPSTR_WRITE_MEDIA_AUDIO,
+            OPSTR_READ_MEDIA_VIDEO,
+            OPSTR_WRITE_MEDIA_VIDEO,
+            OPSTR_READ_MEDIA_IMAGES,
+            OPSTR_WRITE_MEDIA_IMAGES,
+            OPSTR_LEGACY_STORAGE,
+            OPSTR_ACCESS_MEDIA_LOCATION,
+            OPSTR_ACCESS_ACCESSIBILITY,
+            OPSTR_READ_DEVICE_IDENTIFIERS,
+            OPSTR_QUERY_ALL_PACKAGES,
+            OPSTR_MANAGE_EXTERNAL_STORAGE,
+            OPSTR_AUTO_REVOKE_PERMISSIONS_IF_UNUSED,
+            OPSTR_AUTO_REVOKE_MANAGED_BY_INSTALLER,
+            OPSTR_INTERACT_ACROSS_PROFILES,
+            OPSTR_ACTIVATE_PLATFORM_VPN,
+            OPSTR_LOADER_USAGE_STATS,
+            OPSTR_MANAGE_ONGOING_CALLS,
+            OPSTR_NO_ISOLATED_STORAGE,
+            OPSTR_PHONE_CALL_MICROPHONE,
+            OPSTR_PHONE_CALL_CAMERA,
+            OPSTR_RECORD_AUDIO_HOTWORD,
+            OPSTR_MANAGE_CREDENTIALS,
+            OPSTR_USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER,
+            OPSTR_RECORD_AUDIO_OUTPUT,
+            OPSTR_SCHEDULE_EXACT_ALARM,
+            OPSTR_FINE_LOCATION_SOURCE,
+            OPSTR_COARSE_LOCATION_SOURCE,
+            OPSTR_MANAGE_MEDIA,
+            OPSTR_UWB_RANGING,
+            OPSTR_NEARBY_WIFI_DEVICES,
+            OPSTR_ACTIVITY_RECOGNITION_SOURCE,
+            OPSTR_RECORD_INCOMING_PHONE_AUDIO,
+            OPSTR_ESTABLISH_VPN_SERVICE,
+            OPSTR_ESTABLISH_VPN_MANAGER,
+            OPSTR_ACCESS_RESTRICTED_SETTINGS,
+            OPSTR_RECEIVE_AMBIENT_TRIGGER_AUDIO,
+            OPSTR_READ_MEDIA_VISUAL_USER_SELECTED,
+            OPSTR_READ_WRITE_HEALTH_DATA,
+            OPSTR_RECEIVE_EXPLICIT_USER_INTERACTION_AUDIO,
+            OPSTR_RUN_USER_INITIATED_JOBS,
+            OPSTR_SYSTEM_EXEMPT_FROM_SUSPENSION,
+            OPSTR_SYSTEM_EXEMPT_FROM_DISMISSIBLE_NOTIFICATIONS,
+            OPSTR_FOREGROUND_SERVICE_SPECIAL_USE,
+            OPSTR_SYSTEM_EXEMPT_FROM_POWER_RESTRICTIONS,
+            OPSTR_SYSTEM_EXEMPT_FROM_HIBERNATION,
+            OPSTR_SYSTEM_EXEMPT_FROM_ACTIVITY_BG_START_RESTRICTION,
+            OPSTR_CAPTURE_CONSENTLESS_BUGREPORT_ON_USERDEBUG_BUILD,
+            OPSTR_BODY_SENSORS_WRIST_TEMPERATURE,
+            OPSTR_USE_FULL_SCREEN_INTENT,
+    })
+    public @interface AppOpString {}
 
     /** Access to coarse location information. */
     public static final String OPSTR_COARSE_LOCATION = "android:coarse_location";
@@ -1981,14 +2115,14 @@ public class AppOpsManager {
     public static final String OPSTR_RUN_USER_INITIATED_JOBS = "android:run_user_initiated_jobs";
 
     /**
-     * Prevent an app from being placed into app standby buckets.
+     * Prevent an app from being suspended.
      *
      * Only to be used by the system.
      *
      * @hide
      */
-    public static final String OPSTR_SYSTEM_EXEMPT_FROM_APP_STANDBY =
-            "android:system_exempt_from_app_standby";
+    public static final String OPSTR_SYSTEM_EXEMPT_FROM_SUSPENSION =
+            "android:system_exempt_from_suspension";
 
     /**
      * Allow an application to create non-dismissible notifications. Starting from Android U,
@@ -2024,16 +2158,15 @@ public class AppOpsManager {
             "android:system_exempt_from_power_restrictions";
 
     /**
-     * Exempt from start foreground service from background with while in user permission
-     * restriction.
+     * Prevent an app from being placed into hibernation.
      *
      * Only to be used by the system.
      *
      * @hide
      */
-    public static final String
-            OPSTR_SYSTEM_EXEMPT_FROM_FGS_BG_START_WHILE_IN_USE_PERMISSION_RESTRICTION =
-            "android:system_exempt_from_fgs_bg_start_while_in_use_permission_restriction";
+    @SystemApi
+    public static final String OPSTR_SYSTEM_EXEMPT_FROM_HIBERNATION =
+            "android:system_exempt_from_hibernation";
 
     /**
      * Allows an application to start an activity while running in the background.
@@ -2065,15 +2198,6 @@ public class AppOpsManager {
      * @hide
      */
     public static final String OPSTR_USE_FULL_SCREEN_INTENT = "android:use_full_screen_intent";
-
-    /**
-     *  Prevent an app from being placed into hibernation.
-     *
-     * @hide
-     */
-    @SystemApi
-    public static final String OPSTR_SYSTEM_EXEMPT_FROM_HIBERNATION =
-            "android:system_exempt_from_hibernation";
 
     /** {@link #sAppOpsToNote} not initialized yet for this op */
     private static final byte SHOULD_COLLECT_NOTE_OP_NOT_INITIALIZED = 0;
@@ -2562,12 +2686,14 @@ public class AppOpsManager {
                     OPSTR_READ_MEDIA_VISUAL_USER_SELECTED, "READ_MEDIA_VISUAL_USER_SELECTED")
                     .setPermission(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
                     .setDefaultMode(AppOpsManager.MODE_ALLOWED).build(),
-        new AppOpInfo.Builder(OP_SYSTEM_EXEMPT_FROM_APP_STANDBY,
-                OPSTR_SYSTEM_EXEMPT_FROM_APP_STANDBY,
-                "SYSTEM_EXEMPT_FROM_APP_STANDBY").build(),
+        new AppOpInfo.Builder(OP_SYSTEM_EXEMPT_FROM_SUSPENSION,
+                OPSTR_SYSTEM_EXEMPT_FROM_SUSPENSION,
+                "SYSTEM_EXEMPT_FROM_SUSPENSION")
+                .setDisableReset(true).build(),
         new AppOpInfo.Builder(OP_SYSTEM_EXEMPT_FROM_DISMISSIBLE_NOTIFICATIONS,
                 OPSTR_SYSTEM_EXEMPT_FROM_DISMISSIBLE_NOTIFICATIONS,
-                "SYSTEM_EXEMPT_FROM_DISMISSIBLE_NOTIFICATIONS").build(),
+                "SYSTEM_EXEMPT_FROM_DISMISSIBLE_NOTIFICATIONS")
+                .setDisableReset(true).build(),
         new AppOpInfo.Builder(OP_READ_WRITE_HEALTH_DATA, OPSTR_READ_WRITE_HEALTH_DATA,
                 "READ_WRITE_HEALTH_DATA").setDefaultMode(AppOpsManager.MODE_ALLOWED).build(),
         new AppOpInfo.Builder(OP_FOREGROUND_SERVICE_SPECIAL_USE,
@@ -2575,15 +2701,16 @@ public class AppOpsManager {
                 .setPermission(Manifest.permission.FOREGROUND_SERVICE_SPECIAL_USE).build(),
         new AppOpInfo.Builder(OP_SYSTEM_EXEMPT_FROM_POWER_RESTRICTIONS,
                 OPSTR_SYSTEM_EXEMPT_FROM_POWER_RESTRICTIONS,
-                "SYSTEM_EXEMPT_FROM_POWER_RESTRICTIONS").build(),
-        new AppOpInfo.Builder(
-                OP_SYSTEM_EXEMPT_FROM_FGS_BG_START_WHILE_IN_USE_PERMISSION_RESTRICTION,
-                OPSTR_SYSTEM_EXEMPT_FROM_FGS_BG_START_WHILE_IN_USE_PERMISSION_RESTRICTION,
-                "SYSTEM_EXEMPT_FROM_FGS_BG_START_WHILE_IN_USE_PERMISSION_RESTRICTION")
-                .build(),
+                "SYSTEM_EXEMPT_FROM_POWER_RESTRICTIONS")
+                .setDisableReset(true).build(),
+        new AppOpInfo.Builder(OP_SYSTEM_EXEMPT_FROM_HIBERNATION,
+                OPSTR_SYSTEM_EXEMPT_FROM_HIBERNATION,
+                "SYSTEM_EXEMPT_FROM_HIBERNATION")
+                .setDisableReset(true).build(),
         new AppOpInfo.Builder(OP_SYSTEM_EXEMPT_FROM_ACTIVITY_BG_START_RESTRICTION,
                 OPSTR_SYSTEM_EXEMPT_FROM_ACTIVITY_BG_START_RESTRICTION,
-                "SYSTEM_EXEMPT_FROM_ACTIVITY_BG_START_RESTRICTION").build(),
+                "SYSTEM_EXEMPT_FROM_ACTIVITY_BG_START_RESTRICTION")
+                .setDisableReset(true).build(),
         new AppOpInfo.Builder(
                 OP_CAPTURE_CONSENTLESS_BUGREPORT_ON_USERDEBUG_BUILD,
                 OPSTR_CAPTURE_CONSENTLESS_BUGREPORT_ON_USERDEBUG_BUILD,
@@ -2597,10 +2724,7 @@ public class AppOpsManager {
                 .setDefaultMode(AppOpsManager.MODE_ALLOWED).build(),
         new AppOpInfo.Builder(OP_USE_FULL_SCREEN_INTENT, OPSTR_USE_FULL_SCREEN_INTENT,
                 "USE_FULL_SCREEN_INTENT").setPermission(Manifest.permission.USE_FULL_SCREEN_INTENT)
-                .build(),
-        new AppOpInfo.Builder(OP_SYSTEM_EXEMPT_FROM_HIBERNATION,
-                OPSTR_SYSTEM_EXEMPT_FROM_HIBERNATION,
-                "SYSTEM_EXEMPT_FROM_HIBERNATION").build()
+                .build()
     };
 
     // The number of longs needed to form a full bitmask of app ops
@@ -4584,10 +4708,9 @@ public class AppOpsManager {
      * Flag for querying app op history: assemble attribution chains, and attach the last visible
      * node in the chain to the start as a proxy info. This only applies to discrete accesses.
      *
-     * TODO 191512294: Add to @SystemApi
-     *
      * @hide
      */
+    @SystemApi
     public static final int HISTORY_FLAG_GET_ATTRIBUTION_CHAINS = 1 << 2;
 
     /**
@@ -7757,18 +7880,19 @@ public class AppOpsManager {
     }
 
     /**
-     * Start watching for noted app ops. An app op may be immediate or long running.
-     * Immediate ops are noted while long running ones are started and stopped. This
-     * method allows registering a listener to be notified when an app op is noted. If
-     * an op is being noted by any package you will get a callback. To change the
-     * watched ops for a registered callback you need to unregister and register it again.
+     * Start watching for noted app ops.
      *
-     * <p> If you don't hold the {@link android.Manifest.permission#WATCH_APPOPS} permission
-     * you can watch changes only for your UID.
+     * <p> Similar to {@link #startWatchingNoted(String[], Executor, OnOpNotedListener)}, but
+     * without an executor parameter.
      *
-     * @param ops The ops to watch.
-     * @param callback Where to report changes.
+     * <p> Note that the listener will be called on the main thread using
+     * {@link Context.getMainThread()}. To specify the execution thread, use
+     * {@link #startWatchingNoted(String[], Executor, OnOpNotedListener)}.
      *
+     * @param ops      the ops to watch
+     * @param listener listener to notify when an app op is noted
+     *
+     * @see #startWatchingNoted(String[], Executor, OnOpNotedListener)
      * @see #stopWatchingNoted(OnOpNotedListener)
      * @see #noteOp(String, int, String, String, String)
      *
@@ -7776,40 +7900,111 @@ public class AppOpsManager {
      */
     @SystemApi
     @RequiresPermission(value=Manifest.permission.WATCH_APPOPS, conditional=true)
-    public void startWatchingNoted(@NonNull String[] ops, @NonNull OnOpNotedListener callback) {
+    public void startWatchingNoted(@NonNull @AppOpString String[] ops,
+     @NonNull OnOpNotedListener listener) {
         final int[] intOps = new int[ops.length];
         for (int i = 0; i < ops.length; i++) {
             intOps[i] = strOpToOp(ops[i]);
         }
-        startWatchingNoted(intOps, callback);
+        startWatchingNoted(intOps, listener);
     }
 
     /**
-     * Start watching for noted app ops. An app op may be immediate or long running.
-     * Immediate ops are noted while long running ones are started and stopped. This
-     * method allows registering a listener to be notified when an app op is noted. If
-     * an op is being noted by any package you will get a callback. To change the
-     * watched ops for a registered callback you need to unregister and register it again.
+     * Start watching for noted app ops.
      *
-     * <p> If you don't hold the {@link android.Manifest.permission#WATCH_APPOPS} permission
-     * you can watch changes only for your UID.
+     * <p> An app op may be immediate or long-running. Immediate ops are noted while long-running
+     * ones are started and stopped.
      *
-     * This allows observing noted ops by their raw op codes instead of string op names.
+     * <p> This method allows registering a listener to be notified when an app op is noted. To
+     * change the watched ops for a registered callback you need to unregister and register it
+     * again.
      *
-     * @param ops The ops to watch.
-     * @param callback Where to report changes.
+     * <p> If you don't hold the {@link android.Manifest.permission#WATCH_APPOPS} permission you can
+     * watch changes only for your UID.
+     *
+     * @param ops      the ops to watch
+     * @param executor the executor on which the listener will be notified
+     * @param listener listener to notify when an app op is noted
+     *
+     * @see #startWatchingNoted(String[], OnOpNotedListener)
+     * @see #stopWatchingNoted(OnOpNotedListener)
+     * @see #noteOp(String, int, String, String, String)
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(value=Manifest.permission.WATCH_APPOPS, conditional=true)
+    public void startWatchingNoted(@NonNull @AppOpString String[] ops,
+     @CallbackExecutor @NonNull Executor executor, @NonNull OnOpNotedListener listener) {
+        final int[] intOps = new int[ops.length];
+        for (int i = 0; i < ops.length; i++) {
+            intOps[i] = strOpToOp(ops[i]);
+        }
+        startWatchingNoted(intOps, executor, listener);
+    }
+
+    /**
+     * Start watching for noted app ops.
+     *
+     * <p> Similar to {@link #startWatchingNoted(int[], Executor, OnOpNotedListener)}, but without
+     * an executor parameter.
+     *
+     * <p> This method is also similar to {@link #startWatchingNoted(String[], OnOpNotedListener)},
+     * but allows observing noted ops by their raw op codes instead of string op names.
+     *
+     * <p> Note that the listener will be called on the main thread using
+     * {@link Context.getMainThread()}. To specify the execution thread, use
+     * {@link {@link #startWatchingNoted(String[], Executor, OnOpNotedListener)}.
+     *
+     * @param ops      the ops to watch
+     * @param listener listener to notify when an app op is noted
      *
      * @see #startWatchingActive(int[], OnOpActiveChangedListener)
      * @see #startWatchingStarted(int[], OnOpStartedListener)
+     * @see #startWatchingNoted(String[], OnOpNotedListener)
+     * @see #startWatchingNoted(int[], Executor, OnOpNotedListener)
+     *
+     * @hide
+     */
+    @RequiresPermission(value=Manifest.permission.WATCH_APPOPS, conditional=true)
+    public void startWatchingNoted(@NonNull int[] ops, @NonNull OnOpNotedListener listener) {
+        startWatchingNoted(ops, mContext.getMainExecutor(), listener);
+    }
+
+    /**
+     * Start watching for noted app ops.
+     *
+     * <p> This method is similar to
+     * {@link #startWatchingNoted(String[], Executor, OnOpNotedListener)}, but allows observing
+     * noted ops by their raw op codes instead of string op names.
+     *
+     * <p> An app op may be immediate or long-running. Immediate ops are noted while long-running
+     * ones are started and stopped.
+     *
+     * <p> This method allows registering a listener to be notified when an app op is noted. To
+     * change the watched ops for a registered callback you need to unregister and register it
+     * again.
+     *
+     * <p> If you don't hold the {@link android.Manifest.permission#WATCH_APPOPS} permission you
+     * can watch changes only for your UID.
+     *
+     * @param ops      the ops to watch
+     * @param executor the executor on which the listener will be notified
+     * @param listener listener to notify when an app op is noted
+     *
+     * @see #startWatchingActive(int[], OnOpActiveChangedListener)
+     * @see #startWatchingStarted(int[], OnOpStartedListener)
+     * @see #startWatchingNoted(int[], Executor, OnOpNotedListener)
      * @see #startWatchingNoted(String[], OnOpNotedListener)
      *
      * @hide
      */
     @RequiresPermission(value=Manifest.permission.WATCH_APPOPS, conditional=true)
-    public void startWatchingNoted(@NonNull int[] ops, @NonNull OnOpNotedListener callback) {
+    public void startWatchingNoted(@NonNull int[] ops,
+     @CallbackExecutor @NonNull Executor executor, @NonNull OnOpNotedListener listener) {
         IAppOpsNotedCallback cb;
         synchronized (mNotedWatchers) {
-            cb = mNotedWatchers.get(callback);
+            cb = mNotedWatchers.get(listener);
             if (cb != null) {
                 return;
             }
@@ -7817,13 +8012,21 @@ public class AppOpsManager {
                 @Override
                 public void opNoted(int op, int uid, String packageName, String attributionTag,
                         int flags, int mode) {
-                    if (sAppOpInfos[op].name != null) {
-                        callback.onOpNoted(sAppOpInfos[op].name, uid, packageName, attributionTag,
-                                flags, mode);
+                    final long identity = Binder.clearCallingIdentity();
+                    try {
+                        executor.execute(() -> {
+                            if (sAppOpInfos[op].name != null) {
+                                listener.onOpNoted(sAppOpInfos[op].name, uid, packageName,
+                                        attributionTag,
+                                        flags, mode);
+                            }
+                        });
+                    } finally {
+                        Binder.restoreCallingIdentity(identity);
                     }
                 }
             };
-            mNotedWatchers.put(callback, cb);
+            mNotedWatchers.put(listener, cb);
         }
         try {
             mService.startWatchingNoted(ops, cb);
