@@ -196,6 +196,10 @@ java_library {
         "manifest_services.xml",
     ],
 
+    required: [
+        "libukey2_jni_shared",
+    ],
+
     // Uncomment to enable output of certain warnings (deprecated, unchecked)
     //javacflags: ["-Xlint"],
 }

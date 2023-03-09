@@ -16,12 +16,7 @@
 
 package com.android.server.credentials;
 
-import static com.android.server.credentials.MetricUtilities.METRICS_API_NAME_CLEAR_CREDENTIAL;
-import static com.android.server.credentials.MetricUtilities.METRICS_API_NAME_CREATE_CREDENTIAL;
-import static com.android.server.credentials.MetricUtilities.METRICS_API_NAME_GET_CREDENTIAL;
-import static com.android.server.credentials.MetricUtilities.METRICS_API_NAME_UNKNOWN;
-import static com.android.server.credentials.MetricUtilities.METRICS_API_STATUS_FAILURE;
-import static com.android.server.credentials.MetricUtilities.METRICS_API_STATUS_SUCCESS;
+import static com.android.server.credentials.MetricUtilities.logApiCalled;
 
 import android.annotation.NonNull;
 import android.annotation.UserIdInt;
@@ -39,7 +34,8 @@ import android.service.credentials.CredentialProviderInfo;
 import android.util.Log;
 
 import com.android.internal.R;
-import com.android.internal.util.FrameworkStatsLog;
+import com.android.server.credentials.metrics.ApiName;
+import com.android.server.credentials.metrics.ApiStatus;
 import com.android.server.credentials.metrics.CandidateProviderMetric;
 import com.android.server.credentials.metrics.ChosenProviderMetric;
 
@@ -82,6 +78,19 @@ abstract class RequestSession<T, U> implements CredentialManagerUi.CredentialMan
     //TODO improve design to allow grouped metrics per request
     protected final String mHybridService;
 
+    @NonNull protected RequestSessionStatus mRequestSessionStatus =
+            RequestSessionStatus.IN_PROGRESS;
+
+    /** The status in which a given request session is. */
+    enum RequestSessionStatus {
+        /** Request is in progress. This is the status a request session is instantiated with. */
+        IN_PROGRESS,
+        /** Request has been cancelled by the developer. */
+        CANCELLED,
+        /** Request is complete. */
+        COMPLETE
+    }
+
     protected RequestSession(@NonNull Context context,
             @UserIdInt int userId, int callingUid, @NonNull T clientRequest, U clientCallback,
             @NonNull String requestType,
@@ -112,6 +121,10 @@ abstract class RequestSession<T, U> implements CredentialManagerUi.CredentialMan
 
     @Override // from CredentialManagerUiCallbacks
     public void onUiSelection(UserSelectionDialogResult selection) {
+        if (mRequestSessionStatus == RequestSessionStatus.COMPLETE) {
+            Log.i(TAG, "Request has already been completed. This is strange.");
+            return;
+        }
         if (isSessionCancelled()) {
             finishSession(/*propagateCancellation=*/true);
             return;
@@ -128,27 +141,12 @@ abstract class RequestSession<T, U> implements CredentialManagerUi.CredentialMan
                 selection.getEntrySubkey(), selection.getPendingIntentProviderResponse());
     }
 
-    @Override // from CredentialManagerUiCallbacks
-    public void onUiCancellation(boolean isUserCancellation) {
-        Log.i(TAG, "Ui canceled. Canceled by user: " + isUserCancellation);
-        if (isSessionCancelled()) {
-            finishSession(/*propagateCancellation=*/true);
-            return;
-        }
-        // User canceled the activity
-        finishSession(/*propagateCancellation=*/false);
-    }
-
-    @Override
-    public void onUiSelectorInvocationFailure() {
-        Log.i(TAG, "onUiSelectorInvocationFailure");
-    }
-
     protected void finishSession(boolean propagateCancellation) {
         Log.i(TAG, "finishing session");
         if (propagateCancellation) {
             mProviders.values().forEach(ProviderSession::cancelProviderRemoteSession);
         }
+        mRequestSessionStatus = RequestSessionStatus.COMPLETE;
         mProviders.clear();
     }
 
@@ -160,50 +158,10 @@ abstract class RequestSession<T, U> implements CredentialManagerUi.CredentialMan
         }
         return false;
     }
-    // TODO: move these definitions to a separate logging focused class.
-    enum RequestType {
-        GET_CREDENTIALS,
-        CREATE_CREDENTIALS,
-        CLEAR_CREDENTIALS,
-    }
 
-    private static int getApiNameFromRequestType(RequestType requestType) {
-        switch (requestType) {
-            case GET_CREDENTIALS:
-                return METRICS_API_NAME_GET_CREDENTIAL;
-            case CREATE_CREDENTIALS:
-                return METRICS_API_NAME_CREATE_CREDENTIAL;
-            case CLEAR_CREDENTIALS:
-                return METRICS_API_NAME_CLEAR_CREDENTIAL;
-            default:
-                return METRICS_API_NAME_UNKNOWN;
-        }
-    }
-
-    protected void logApiCalled(RequestType requestType, boolean isSuccessfulOverall) {
-        var providerSessions = mProviders.values();
-        int providerSize = providerSessions.size();
-        int[] candidateUidList = new int[providerSize];
-        int[] candidateQueryRoundTripTimeList = new int[providerSize];
-        int[] candidateStatusList = new int[providerSize];
-        int index = 0;
-        for (var session : providerSessions) {
-            CandidateProviderMetric metric = session.mCandidateProviderMetric;
-            candidateUidList[index] = metric.getCandidateUid();
-            candidateQueryRoundTripTimeList[index] = metric.getQueryLatencyMs();
-            candidateStatusList[index] = metric.getProviderQueryStatus();
-            index++;
-        }
-        FrameworkStatsLog.write(FrameworkStatsLog.CREDENTIAL_MANAGER_API_CALLED,
-                /* api_name */getApiNameFromRequestType(requestType), /* caller_uid */
-                mCallingUid, /* api_status */
-                isSuccessfulOverall ? METRICS_API_STATUS_SUCCESS : METRICS_API_STATUS_FAILURE,
-                candidateUidList,
-                candidateQueryRoundTripTimeList,
-                candidateStatusList, mChosenProviderMetric.getChosenUid(),
-                mChosenProviderMetric.getEntireProviderLatencyMs(),
-                mChosenProviderMetric.getFinalPhaseLatencyMs(),
-                mChosenProviderMetric.getChosenProviderStatus());
+    protected void logApiCall(ApiName apiName, ApiStatus apiStatus) {
+        logApiCalled(apiName, apiStatus, mProviders, mCallingUid,
+                mChosenProviderMetric);
     }
 
     protected boolean isSessionCancelled() {
@@ -214,7 +172,7 @@ abstract class RequestSession<T, U> implements CredentialManagerUi.CredentialMan
      * Returns true if at least one provider is ready for UI invocation, and no
      * provider is pending a response.
      */
-    boolean isUiInvocationNeeded() {
+    protected boolean isUiInvocationNeeded() {
         for (ProviderSession session : mProviders.values()) {
             if (ProviderSession.isUiInvokingStatus(session.getStatus())) {
                 return true;

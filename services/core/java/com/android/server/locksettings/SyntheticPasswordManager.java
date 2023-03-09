@@ -780,6 +780,10 @@ class SyntheticPasswordManager {
         int slot = loadWeaverSlot(protectorId, userId);
         destroyState(WEAVER_SLOT_NAME, protectorId, userId);
         if (slot != INVALID_WEAVER_SLOT) {
+            if (!isWeaverAvailable()) {
+                Slog.e(TAG, "Cannot erase Weaver slot because Weaver is unavailable");
+                return;
+            }
             Set<Integer> usedSlots = getUsedWeaverSlots();
             if (!usedSlots.contains(slot)) {
                 Slog.i(TAG, "Destroy weaver slot " + slot + " for user " + userId);
@@ -1245,8 +1249,13 @@ class SyntheticPasswordManager {
                 }
                 sid = sidFromPasswordHandle(pwd.passwordHandle);
             }
-            protectorSecret = transformUnderSecdiscardable(stretchedLskf,
-                    loadSecdiscardable(protectorId, userId));
+            byte[] secdiscardable = loadSecdiscardable(protectorId, userId);
+            if (secdiscardable == null) {
+                Slog.e(TAG, "secdiscardable file not found");
+                result.gkResponse = VerifyCredentialResponse.ERROR;
+                return result;
+            }
+            protectorSecret = transformUnderSecdiscardable(stretchedLskf, secdiscardable);
         }
         // Supplied credential passes first stage weaver/gatekeeper check so it should be correct.
         // Notify the callback so the keyguard UI can proceed immediately.
@@ -1311,6 +1320,11 @@ class SyntheticPasswordManager {
             byte[] token, int userId) {
         AuthenticationResult result = new AuthenticationResult();
         byte[] secdiscardable = loadSecdiscardable(protectorId, userId);
+        if (secdiscardable == null) {
+            Slog.e(TAG, "secdiscardable file not found");
+            result.gkResponse = VerifyCredentialResponse.ERROR;
+            return result;
+        }
         int slotId = loadWeaverSlot(protectorId, userId);
         if (slotId != INVALID_WEAVER_SLOT) {
             if (!isWeaverAvailable()) {

@@ -16,53 +16,174 @@
 
 package android.net.wifi.sharedconnectivity.service;
 
-import static org.junit.Assert.assertNotNull;
+import static android.net.wifi.WifiInfo.SECURITY_TYPE_EAP;
+import static android.net.wifi.WifiInfo.SECURITY_TYPE_WEP;
+import static android.net.wifi.sharedconnectivity.app.HotspotNetwork.NETWORK_TYPE_CELLULAR;
+import static android.net.wifi.sharedconnectivity.app.HotspotNetworkConnectionStatus.CONNECTION_STATUS_UNKNOWN;
+import static android.net.wifi.sharedconnectivity.app.KnownNetwork.NETWORK_SOURCE_NEARBY_SELF;
+import static android.net.wifi.sharedconnectivity.app.KnownNetworkConnectionStatus.CONNECTION_STATUS_SAVED;
+import static android.net.wifi.sharedconnectivity.app.NetworkProviderInfo.DEVICE_TYPE_TABLET;
 
+import static com.google.common.truth.Truth.assertThat;
+
+import static org.mockito.Mockito.when;
+
+import android.content.Context;
 import android.content.Intent;
+import android.net.wifi.sharedconnectivity.app.HotspotNetwork;
+import android.net.wifi.sharedconnectivity.app.HotspotNetworkConnectionStatus;
 import android.net.wifi.sharedconnectivity.app.KnownNetwork;
-import android.net.wifi.sharedconnectivity.app.TetherNetwork;
-import android.os.Handler;
-import android.os.test.TestLooper;
+import android.net.wifi.sharedconnectivity.app.KnownNetworkConnectionStatus;
+import android.net.wifi.sharedconnectivity.app.NetworkProviderInfo;
+import android.net.wifi.sharedconnectivity.app.SharedConnectivitySettingsState;
+import android.os.Bundle;
+import android.os.Looper;
+import android.os.RemoteException;
 
+import androidx.annotation.NonNull;
 import androidx.test.filters.SmallTest;
 
+import org.junit.Before;
 import org.junit.Test;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+
+import java.util.List;
 
 /**
- * Unit tests for {@link android.net.wifi.sharedconnectivity.service.SharedConnectivityService}.
+ * Unit tests for {@link SharedConnectivityService}.
  */
 @SmallTest
 public class SharedConnectivityServiceTest {
+    private static final NetworkProviderInfo NETWORK_PROVIDER_INFO =
+            new NetworkProviderInfo.Builder()
+                    .setDeviceType(DEVICE_TYPE_TABLET).setDeviceName("TEST_NAME").setModelName(
+                            "TEST_MODEL")
+                    .setConnectionStrength(2).setBatteryPercentage(50).build();
+    private static final HotspotNetwork HOTSPOT_NETWORK =
+            new HotspotNetwork.Builder().setDeviceId(1).setNetworkProviderInfo(
+                            NETWORK_PROVIDER_INFO)
+                    .setHostNetworkType(NETWORK_TYPE_CELLULAR).setNetworkName("TEST_NETWORK")
+                    .setHotspotSsid("TEST_SSID").setHotspotBssid("TEST_BSSID")
+                    .addHotspotSecurityType(SECURITY_TYPE_WEP)
+                    .addHotspotSecurityType(SECURITY_TYPE_EAP).build();
+    private static final List<HotspotNetwork> HOTSPOT_NETWORKS = List.of(HOTSPOT_NETWORK);
+    private static final KnownNetwork KNOWN_NETWORK =
+            new KnownNetwork.Builder().setNetworkSource(NETWORK_SOURCE_NEARBY_SELF)
+                    .setSsid("TEST_SSID").addSecurityType(SECURITY_TYPE_WEP)
+                    .addSecurityType(SECURITY_TYPE_EAP).setNetworkProviderInfo(
+                            NETWORK_PROVIDER_INFO).build();
+    private static final List<KnownNetwork> KNOWN_NETWORKS = List.of(KNOWN_NETWORK);
+    private static final SharedConnectivitySettingsState SETTINGS_STATE =
+            new SharedConnectivitySettingsState.Builder().setInstantTetherEnabled(true)
+                    .setExtras(Bundle.EMPTY).build();
+    private static final HotspotNetworkConnectionStatus TETHER_NETWORK_CONNECTION_STATUS =
+            new HotspotNetworkConnectionStatus.Builder().setStatus(CONNECTION_STATUS_UNKNOWN)
+                    .setHotspotNetwork(HOTSPOT_NETWORK).setExtras(Bundle.EMPTY).build();
+    private static final KnownNetworkConnectionStatus KNOWN_NETWORK_CONNECTION_STATUS =
+            new KnownNetworkConnectionStatus.Builder().setStatus(CONNECTION_STATUS_SAVED)
+                    .setKnownNetwork(KNOWN_NETWORK).setExtras(Bundle.EMPTY).build();
 
-    /**
-     * Verifies service returns
-     */
-    @Test
-    public void testOnBind() {
-        SharedConnectivityService service = createService();
-        assertNotNull(service.onBind(new Intent()));
+    @Mock
+    Context mContext;
+
+    static class FakeSharedConnectivityService extends SharedConnectivityService {
+        public void attachBaseContext(Context context) {
+            super.attachBaseContext(context);
+        }
+
+        @Override
+        public void onConnectHotspotNetwork(@NonNull HotspotNetwork network) {
+        }
+
+        @Override
+        public void onDisconnectHotspotNetwork(@NonNull HotspotNetwork network) {
+        }
+
+        @Override
+        public void onConnectKnownNetwork(@NonNull KnownNetwork network) {
+        }
+
+        @Override
+        public void onForgetKnownNetwork(@NonNull KnownNetwork network) {
+        }
+    }
+
+    @Before
+    public void setUp() {
+        MockitoAnnotations.initMocks(this);
+        when(mContext.getMainLooper()).thenReturn(Looper.getMainLooper());
     }
 
     @Test
-    public void testCallbacks() {
+    public void onBind_isNotNull() {
+        SharedConnectivityService service = createService();
+
+        assertThat(service.onBind(new Intent())).isNotNull();
+    }
+
+    @Test
+    public void getHotspotNetworks() throws RemoteException {
         SharedConnectivityService service = createService();
         ISharedConnectivityService.Stub binder =
                 (ISharedConnectivityService.Stub) service.onBind(new Intent());
+
+        service.setHotspotNetworks(HOTSPOT_NETWORKS);
+
+        assertThat(binder.getHotspotNetworks())
+                .containsExactlyElementsIn(List.copyOf(HOTSPOT_NETWORKS));
+    }
+
+    @Test
+    public void getKnownNetworks() throws RemoteException {
+        SharedConnectivityService service = createService();
+        ISharedConnectivityService.Stub binder =
+                (ISharedConnectivityService.Stub) service.onBind(new Intent());
+
+        service.setKnownNetworks(KNOWN_NETWORKS);
+
+        assertThat(binder.getKnownNetworks())
+                .containsExactlyElementsIn(List.copyOf(KNOWN_NETWORKS));
+    }
+
+    @Test
+    public void getSharedConnectivitySettingsState() throws RemoteException {
+        SharedConnectivityService service = createService();
+        ISharedConnectivityService.Stub binder =
+                (ISharedConnectivityService.Stub) service.onBind(new Intent());
+
+        service.setSettingsState(SETTINGS_STATE);
+
+        assertThat(binder.getSettingsState()).isEqualTo(SETTINGS_STATE);
+    }
+
+    @Test
+    public void updateHotspotNetworkConnectionStatus() throws RemoteException {
+        SharedConnectivityService service = createService();
+        ISharedConnectivityService.Stub binder =
+                (ISharedConnectivityService.Stub) service.onBind(new Intent());
+
+        service.updateHotspotNetworkConnectionStatus(TETHER_NETWORK_CONNECTION_STATUS);
+
+        assertThat(binder.getHotspotNetworkConnectionStatus())
+                .isEqualTo(TETHER_NETWORK_CONNECTION_STATUS);
+    }
+
+    @Test
+    public void updateKnownNetworkConnectionStatus() throws RemoteException {
+        SharedConnectivityService service = createService();
+        ISharedConnectivityService.Stub binder =
+                (ISharedConnectivityService.Stub) service.onBind(new Intent());
+
+        service.updateKnownNetworkConnectionStatus(KNOWN_NETWORK_CONNECTION_STATUS);
+
+        assertThat(binder.getKnownNetworkConnectionStatus())
+                .isEqualTo(KNOWN_NETWORK_CONNECTION_STATUS);
     }
 
     private SharedConnectivityService createService() {
-        return new SharedConnectivityService(new Handler(new TestLooper().getLooper())) {
-            @Override
-            public void onConnectTetherNetwork(TetherNetwork network) {}
-
-            @Override
-            public void onDisconnectTetherNetwork() {}
-
-            @Override
-            public void onConnectKnownNetwork(KnownNetwork network) {}
-
-            @Override
-            public void onForgetKnownNetwork(KnownNetwork network) {}
-        };
+        FakeSharedConnectivityService service = new FakeSharedConnectivityService();
+        service.attachBaseContext(mContext);
+        return service;
     }
 }

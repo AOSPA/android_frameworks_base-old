@@ -45,6 +45,7 @@ import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
 import static android.content.pm.ConfigurationInfo.GL_ES_VERSION_UNDEFINED;
 import static android.content.pm.PackageManager.FEATURE_ACTIVITIES_ON_SECONDARY_DISPLAYS;
 import static android.content.pm.PackageManager.FEATURE_CANT_SAVE_STATE;
+import static android.content.pm.PackageManager.FEATURE_COMPANION_DEVICE_SETUP;
 import static android.content.pm.PackageManager.FEATURE_EXPANDED_PICTURE_IN_PICTURE;
 import static android.content.pm.PackageManager.FEATURE_FREEFORM_WINDOW_MANAGEMENT;
 import static android.content.pm.PackageManager.FEATURE_LEANBACK;
@@ -65,6 +66,7 @@ import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.WindowManager.TRANSIT_CHANGE;
 import static android.view.WindowManager.TRANSIT_PIP;
+import static android.view.WindowManager.TRANSIT_TO_FRONT;
 import static android.view.WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_TO_LAUNCHER_CLEAR_SNAPSHOT;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_CONFIGURATION;
@@ -201,6 +203,7 @@ import android.os.Parcel;
 import android.os.PowerManager;
 import android.os.PowerManagerInternal;
 import android.os.Process;
+import android.os.RemoteCallback;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.StrictMode;
@@ -227,7 +230,6 @@ import android.util.SparseArray;
 import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
 import android.view.IRecentsAnimationRunner;
-import android.view.IWindowFocusObserver;
 import android.view.RemoteAnimationAdapter;
 import android.view.RemoteAnimationDefinition;
 import android.view.WindowManager;
@@ -400,6 +402,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     volatile WindowProcessController mHeavyWeightProcess;
     boolean mHasHeavyWeightFeature;
     boolean mHasLeanbackFeature;
+    boolean mHasCompanionDeviceSetupFeature;
     /** The process of the top most activity. */
     volatile WindowProcessController mTopApp;
     /**
@@ -858,6 +861,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             final PackageManager pm = mContext.getPackageManager();
             mHasHeavyWeightFeature = pm.hasSystemFeature(FEATURE_CANT_SAVE_STATE);
             mHasLeanbackFeature = pm.hasSystemFeature(FEATURE_LEANBACK);
+            mHasCompanionDeviceSetupFeature = pm.hasSystemFeature(FEATURE_COMPANION_DEVICE_SETUP);
             mVrController.onSystemReady();
             mRecentTasks.onSystemReadyLocked();
             mTaskSupervisor.onSystemReady();
@@ -1852,11 +1856,11 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     @Override
     public BackNavigationInfo startBackNavigation(
-            IWindowFocusObserver observer, BackAnimationAdapter adapter) {
+            RemoteCallback navigationObserver, BackAnimationAdapter adapter) {
         mAmInternal.enforceCallingPermission(START_TASKS_FROM_RECENTS,
                 "startBackNavigation()");
 
-        return mBackNavigationController.startBackNavigation(observer, adapter);
+        return mBackNavigationController.startBackNavigation(navigationObserver, adapter);
     }
 
     /**
@@ -2034,7 +2038,20 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             return;
         }
 
-        if (r.moveFocusableActivityToTop("setFocusedTask")) {
+        final Transition transition = (getTransitionController().isCollecting()
+                || !getTransitionController().isShellTransitionsEnabled()) ? null
+                : getTransitionController().createTransition(TRANSIT_TO_FRONT);
+        if (transition != null) {
+            // Set ready before doing anything. If order does change, then that will set it unready
+            // so that we wait for the new lifecycles to complete.
+            transition.setReady(task, true /* ready */);
+        }
+        final boolean movedToTop = r.moveFocusableActivityToTop("setFocusedTask");
+        if (movedToTop) {
+            if (transition != null) {
+                getTransitionController().requestStartTransition(
+                        transition, null /* startTask */, null /* remote */, null /* display */);
+            }
             mRootWindowContainer.resumeFocusedTasksTopActivities();
         } else if (touchedActivity != null && touchedActivity.isFocusable()) {
             final TaskFragment parent = touchedActivity.getTaskFragment();
@@ -2045,6 +2062,10 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 mWindowManager.updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL,
                         true /* updateInputWindows */);
             }
+        }
+        if (transition != null && !movedToTop) {
+            // No order changes and focus-changes, alone, aren't captured in transitions.
+            transition.abort();
         }
     }
 
@@ -4397,6 +4418,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             return 0;
         }
 
+        Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "updateGlobalConfiguration");
         ProtoLog.i(WM_DEBUG_CONFIGURATION, "Updating global configuration "
                 + "to: %s", values);
         writeConfigurationChanged(changes);
@@ -4482,9 +4504,12 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 mAmInternal, changes, initLocale);
         mH.sendMessage(msg);
 
+        Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "RootConfigChange");
         // Update stored global config and notify everyone about the change.
         mRootWindowContainer.onConfigurationChanged(mTempConfig);
+        Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
 
+        Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         return changes;
     }
 
@@ -4759,13 +4784,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             if (changed) {
                 mWindowManager.updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL,
                         true /*updateInputWindows*/);
-            }
-            if (task != prevFocusTask) {
-                if (prevFocusTask != null) {
-                    mTaskChangeNotificationController.notifyTaskFocusChanged(
-                            prevFocusTask.mTaskId, false);
-                }
-                mTaskChangeNotificationController.notifyTaskFocusChanged(task.mTaskId, true);
             }
         }
         if (task != prevTask) {
@@ -6084,18 +6102,11 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
         @Override
         public ActivityServiceConnectionsHolder getServiceConnectionsHolder(IBinder token) {
-            synchronized (mGlobalLock) {
-                final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
-                if (r == null) {
-                    return null;
-                }
-                if (r.mServiceConnectionsHolder == null) {
-                    r.mServiceConnectionsHolder = new ActivityServiceConnectionsHolder(
-                            ActivityTaskManagerService.this, r);
-                }
-
-                return r.mServiceConnectionsHolder;
+            final ActivityRecord r = ActivityRecord.forToken(token);
+            if (r == null || !r.inHistory) {
+                return null;
             }
+            return r.getOrCreateServiceConnectionsHolder();
         }
 
         @Override

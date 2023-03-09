@@ -89,24 +89,6 @@ public final class VirtualDeviceManager {
 
     private static final String TAG = "VirtualDeviceManager";
 
-    private static final int DEFAULT_VIRTUAL_DISPLAY_FLAGS =
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC
-                    | DisplayManager.VIRTUAL_DISPLAY_FLAG_ROTATES_WITH_CONTENT
-                    | DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
-                    | DisplayManager.VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL
-                    | DisplayManager.VIRTUAL_DISPLAY_FLAG_SUPPORTS_TOUCH
-                    | DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_FOCUS;
-
-    /**
-     * The default device ID, which is the ID of the primary (non-virtual) device.
-     */
-    public static final int DEVICE_ID_DEFAULT = 0;
-
-    /**
-     * Invalid device ID.
-     */
-    public static final int DEVICE_ID_INVALID = -1;
-
     /**
      * Broadcast Action: A Virtual Device was removed.
      *
@@ -250,7 +232,7 @@ public final class VirtualDeviceManager {
     public int getDeviceIdForDisplayId(int displayId) {
         if (mService == null) {
             Log.w(TAG, "Failed to retrieve virtual devices; no virtual device manager service.");
-            return DEVICE_ID_DEFAULT;
+            return Context.DEVICE_ID_DEFAULT;
         }
         try {
             return mService.getDeviceIdForDisplayId(displayId);
@@ -261,7 +243,7 @@ public final class VirtualDeviceManager {
 
     /**
      * Checks whether the passed {@code deviceId} is a valid virtual device ID or not.
-     * {@link VirtualDeviceManager#DEVICE_ID_DEFAULT} is not valid as it is the ID of the default
+     * {@link Context#DEVICE_ID_DEFAULT} is not valid as it is the ID of the default
      * device which is not a virtual device. {@code deviceId} must correspond to a virtual device
      * created by {@link VirtualDeviceManager#createVirtualDevice(int, VirtualDeviceParams)}.
      *
@@ -549,7 +531,11 @@ public final class VirtualDeviceManager {
          * not create the virtual display.
          *
          * @see DisplayManager#createVirtualDisplay
+         *
+         * @deprecated use {@link #createVirtualDisplay(VirtualDisplayConfig, Executor,
+         * VirtualDisplay.Callback)}
          */
+        @Deprecated
         @Nullable
         public VirtualDisplay createVirtualDisplay(
                 @IntRange(from = 1) int width,
@@ -562,30 +548,16 @@ public final class VirtualDeviceManager {
             VirtualDisplayConfig config = new VirtualDisplayConfig.Builder(
                     getVirtualDisplayName(), width, height, densityDpi)
                     .setSurface(surface)
-                    .setFlags(getVirtualDisplayFlags(flags))
+                    .setFlags(flags)
                     .build();
-            return createVirtualDisplayInternal(config, executor, callback);
+            return createVirtualDisplay(config, executor, callback);
         }
 
         /**
          * Creates a virtual display for this virtual device. All displays created on the same
          * device belongs to the same display group.
          *
-         * @param width The width of the virtual display in pixels, must be greater than 0.
-         * @param height The height of the virtual display in pixels, must be greater than 0.
-         * @param densityDpi The density of the virtual display in dpi, must be greater than 0.
-         * @param displayCategories The categories of the virtual display, indicating the type of
-         * activities allowed to run on the display. Activities can declare their type using
-         * {@link android.content.pm.ActivityInfo#requiredDisplayCategory}.
-         * @param surface The surface to which the content of the virtual display should
-         * be rendered, or null if there is none initially. The surface can also be set later using
-         * {@link VirtualDisplay#setSurface(Surface)}.
-         * @param flags A combination of virtual display flags accepted by
-         * {@link DisplayManager#createVirtualDisplay}. In addition, the following flags are
-         * automatically set for all virtual devices:
-         * {@link DisplayManager#VIRTUAL_DISPLAY_FLAG_PUBLIC VIRTUAL_DISPLAY_FLAG_PUBLIC} and
-         * {@link DisplayManager#VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
-         * VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY}.
+         * @param config The configuration of the display.
          * @param executor The executor on which {@code callback} will be invoked. This is ignored
          * if {@code callback} is {@code null}. If {@code callback} is specified, this executor must
          * not be null.
@@ -597,28 +569,6 @@ public final class VirtualDeviceManager {
          */
         @Nullable
         public VirtualDisplay createVirtualDisplay(
-                @IntRange(from = 1) int width,
-                @IntRange(from = 1) int height,
-                @IntRange(from = 1) int densityDpi,
-                @NonNull List<String> displayCategories,
-                @Nullable Surface surface,
-                @VirtualDisplayFlag int flags,
-                @Nullable @CallbackExecutor Executor executor,
-                @Nullable VirtualDisplay.Callback callback) {
-            VirtualDisplayConfig config = new VirtualDisplayConfig.Builder(
-                    getVirtualDisplayName(), width, height, densityDpi)
-                    .setDisplayCategories(displayCategories)
-                    .setSurface(surface)
-                    .setFlags(getVirtualDisplayFlags(flags))
-                    .build();
-            return createVirtualDisplayInternal(config, executor, callback);
-        }
-
-        /**
-         * @hide
-         */
-        @Nullable
-        private VirtualDisplay createVirtualDisplayInternal(
                 @NonNull VirtualDisplayConfig config,
                 @Nullable @CallbackExecutor Executor executor,
                 @Nullable VirtualDisplay.Callback callback) {
@@ -905,16 +855,6 @@ public final class VirtualDeviceManager {
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
-        }
-
-        /**
-         * Returns the display flags that should be added to a particular virtual display.
-         * Additional device-level flags from {@link
-         * com.android.server.companion.virtual.VirtualDeviceImpl#getBaseVirtualDisplayFlags()} will
-         * be added by DisplayManagerService.
-         */
-        private int getVirtualDisplayFlags(int flags) {
-            return DEFAULT_VIRTUAL_DISPLAY_FLAGS | flags;
         }
 
         private String getVirtualDisplayName() {

@@ -82,6 +82,7 @@ import android.hardware.fingerprint.Fingerprint;
 import android.hardware.fingerprint.FingerprintManager;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -103,7 +104,6 @@ import android.security.Authorization;
 import android.security.KeyStore;
 import android.security.keystore.KeyProperties;
 import android.security.keystore.KeyProtection;
-import android.security.keystore.UserNotAuthenticatedException;
 import android.security.keystore.recovery.KeyChainProtectionParams;
 import android.security.keystore.recovery.KeyChainSnapshot;
 import android.security.keystore.recovery.RecoveryCertPath;
@@ -117,6 +117,7 @@ import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.EventLog;
+import android.util.Log;
 import android.util.LongSparseArray;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -200,7 +201,7 @@ public class LockSettingsService extends ILockSettings.Stub {
     private static final String TAG = "LockSettingsService";
     private static final String PERMISSION = ACCESS_KEYGUARD_SECURE_STORAGE;
     private static final String BIOMETRIC_PERMISSION = MANAGE_BIOMETRIC;
-    private static final boolean DEBUG = false;
+    private static final boolean DEBUG = Build.IS_DEBUGGABLE && Log.isLoggable(TAG, Log.DEBUG);
 
     private static final int PROFILE_KEY_IV_SIZE = 12;
     private static final String SEPARATE_PROFILE_CHALLENGE_KEY = "lockscreen.profilechallenge";
@@ -422,7 +423,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         try (LockscreenCredential unifiedProfilePassword = generateRandomProfilePassword()) {
             setLockCredentialInternal(unifiedProfilePassword, profileUserPassword, profileUserId,
                     /* isLockTiedToParent= */ true);
-            tieProfileLockToParent(profileUserId, unifiedProfilePassword);
+            tieProfileLockToParent(profileUserId, parentId, unifiedProfilePassword);
             mManagedProfilePasswordCache.storePassword(profileUserId, unifiedProfilePassword);
         }
     }
@@ -791,31 +792,12 @@ public class LockSettingsService extends ILockSettings.Stub {
         }
     }
 
-    /**
-     * Check if profile got unlocked but the keystore is still locked. This happens on full disk
-     * encryption devices since the profile may not yet be running when we consider unlocking it
-     * during the normal flow. In this case unlock the keystore for the profile.
-     */
-    private void ensureProfileKeystoreUnlocked(int userId) {
-        final KeyStore ks = KeyStore.getInstance();
-        if (ks.state(userId) == KeyStore.State.LOCKED
-                && isCredentialSharableWithParent(userId)
-                && hasUnifiedChallenge(userId)) {
-            Slog.i(TAG, "Profile got unlocked, will unlock its keystore");
-            // If boot took too long and the password in vold got expired, parent keystore will
-            // be still locked, we ignore this case since the user will be prompted to unlock
-            // the device after boot.
-            unlockChildProfile(userId, true /* ignoreUserNotAuthenticated */);
-        }
-    }
-
     private void onUnlockUser(final int userId) {
         // Perform tasks which require locks in LSS on a handler, as we are callbacks from
         // ActivityManager.unlockUser()
         mHandler.post(new Runnable() {
             @Override
             public void run() {
-                ensureProfileKeystoreUnlocked(userId);
                 // Hide notification first, as tie managed profile lock takes time
                 hideEncryptionNotification(new UserHandle(userId));
 
@@ -1086,18 +1068,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         mContext.enforceCallingOrSelfPermission(PERMISSION, "LockSettingsHave");
     }
 
-    private static final String[] UNPROTECTED_SETTINGS = {
-        // These three LOCK_PATTERN_* settings have traditionally been readable via the public API
-        // android.provider.Settings.{System,Secure}.getString() without any permission.
-        Settings.Secure.LOCK_PATTERN_ENABLED,
-        Settings.Secure.LOCK_PATTERN_VISIBLE,
-        Settings.Secure.LOCK_PATTERN_TACTILE_FEEDBACK_ENABLED,
-    };
-
     private final void checkDatabaseReadPermission(String requestedKey, int userId) {
-        if (ArrayUtils.contains(UNPROTECTED_SETTINGS, requestedKey)) {
-            return;
-        }
         if (!hasPermission(PERMISSION)) {
             throw new SecurityException("uid=" + getCallingUid() + " needs permission "
                     + PERMISSION + " to read " + requestedKey + " for user " + userId);
@@ -1211,9 +1182,6 @@ public class LockSettingsService extends ILockSettings.Stub {
     @Override
     public boolean getBoolean(String key, boolean defaultValue, int userId) {
         checkDatabaseReadPermission(key, userId);
-        if (Settings.Secure.LOCK_PATTERN_ENABLED.equals(key)) {
-            return getCredentialTypeInternal(userId) == CREDENTIAL_TYPE_PATTERN;
-        }
         return mStorage.getBoolean(key, defaultValue, userId);
     }
 
@@ -1377,7 +1345,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         return credential;
     }
 
-    private void unlockChildProfile(int profileHandle, boolean ignoreUserNotAuthenticated) {
+    private void unlockChildProfile(int profileHandle) {
         try {
             doVerifyCredential(getDecryptedPasswordForTiedProfile(profileHandle),
                     profileHandle, null /* progressCallback */, 0 /* flags */);
@@ -1387,8 +1355,6 @@ public class LockSettingsService extends ILockSettings.Stub {
                 | BadPaddingException | CertificateException | IOException e) {
             if (e instanceof FileNotFoundException) {
                 Slog.i(TAG, "Child profile key not found");
-            } else if (ignoreUserNotAuthenticated && e instanceof UserNotAuthenticatedException) {
-                Slog.i(TAG, "Parent keystore seems locked, ignoring");
             } else {
                 Slog.e(TAG, "Failed to decrypt child profile key", e);
             }
@@ -1452,7 +1418,7 @@ public class LockSettingsService extends ILockSettings.Stub {
             if (hasUnifiedChallenge(profile.id)) {
                 if (mUserManager.isUserRunning(profile.id)) {
                     // Unlock profile with unified lock
-                    unlockChildProfile(profile.id, false /* ignoreUserNotAuthenticated */);
+                    unlockChildProfile(profile.id);
                 } else {
                     try {
                         // Profile not ready for unlock yet, but decrypt the unified challenge now
@@ -1949,34 +1915,43 @@ public class LockSettingsService extends ILockSettings.Stub {
     }
 
     @VisibleForTesting /** Note: this method is overridden in unit tests */
-    protected void tieProfileLockToParent(int userId, LockscreenCredential password) {
-        if (DEBUG) Slog.v(TAG, "tieProfileLockToParent for user: " + userId);
+    protected void tieProfileLockToParent(int profileUserId, int parentUserId,
+            LockscreenCredential password) {
+        if (DEBUG) Slog.v(TAG, "tieProfileLockToParent for user: " + profileUserId);
         final byte[] iv;
         final byte[] ciphertext;
+        final long parentSid;
+        try {
+            parentSid = getGateKeeperService().getSecureUserId(parentUserId);
+        } catch (RemoteException e) {
+            throw new IllegalStateException("Failed to talk to GateKeeper service", e);
+        }
+
         try {
             KeyGenerator keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES);
             keyGenerator.init(new SecureRandom());
             SecretKey secretKey = keyGenerator.generateKey();
             try {
                 mJavaKeyStore.setEntry(
-                        PROFILE_KEY_NAME_ENCRYPT + userId,
+                        PROFILE_KEY_NAME_ENCRYPT + profileUserId,
                         new java.security.KeyStore.SecretKeyEntry(secretKey),
                         new KeyProtection.Builder(KeyProperties.PURPOSE_ENCRYPT)
                                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                                 .build());
                 mJavaKeyStore.setEntry(
-                        PROFILE_KEY_NAME_DECRYPT + userId,
+                        PROFILE_KEY_NAME_DECRYPT + profileUserId,
                         new java.security.KeyStore.SecretKeyEntry(secretKey),
                         new KeyProtection.Builder(KeyProperties.PURPOSE_DECRYPT)
                                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                                 .setUserAuthenticationRequired(true)
+                                .setBoundToSpecificSecureUserId(parentSid)
                                 .setUserAuthenticationValidityDurationSeconds(30)
                                 .build());
                 // Key imported, obtain a reference to it.
                 SecretKey keyStoreEncryptionKey = (SecretKey) mJavaKeyStore.getKey(
-                        PROFILE_KEY_NAME_ENCRYPT + userId, null);
+                        PROFILE_KEY_NAME_ENCRYPT + profileUserId, null);
                 Cipher cipher = Cipher.getInstance(
                         KeyProperties.KEY_ALGORITHM_AES + "/" + KeyProperties.BLOCK_MODE_GCM + "/"
                                 + KeyProperties.ENCRYPTION_PADDING_NONE);
@@ -1985,7 +1960,7 @@ public class LockSettingsService extends ILockSettings.Stub {
                 iv = cipher.getIV();
             } finally {
                 // The original key can now be discarded.
-                mJavaKeyStore.deleteEntry(PROFILE_KEY_NAME_ENCRYPT + userId);
+                mJavaKeyStore.deleteEntry(PROFILE_KEY_NAME_ENCRYPT + profileUserId);
             }
         } catch (UnrecoverableKeyException
                 | BadPaddingException | IllegalBlockSizeException | KeyStoreException
@@ -1995,7 +1970,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         if (iv.length != PROFILE_KEY_IV_SIZE) {
             throw new IllegalArgumentException("Invalid iv length: " + iv.length);
         }
-        mStorage.writeChildProfileLock(userId, ArrayUtils.concat(iv, ciphertext));
+        mStorage.writeChildProfileLock(profileUserId, ArrayUtils.concat(iv, ciphertext));
     }
 
     private void setUserKeyProtection(@UserIdInt int userId, byte[] secret) {
@@ -2107,7 +2082,7 @@ public class LockSettingsService extends ILockSettings.Stub {
                 LockscreenCredential piUserDecryptedPassword = profileUserDecryptedPasswords.get(i);
                 if (piUserId != -1 && piUserDecryptedPassword != null) {
                     if (DEBUG) Slog.v(TAG, "Restore tied profile lock");
-                    tieProfileLockToParent(piUserId, piUserDecryptedPassword);
+                    tieProfileLockToParent(piUserId, userId, piUserDecryptedPassword);
                 }
                 if (piUserDecryptedPassword != null) {
                     piUserDecryptedPassword.zeroize();

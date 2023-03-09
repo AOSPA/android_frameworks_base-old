@@ -16,9 +16,9 @@
 
 package android.media;
 
-import static android.companion.virtual.VirtualDeviceManager.DEVICE_ID_DEFAULT;
 import static android.companion.virtual.VirtualDeviceParams.DEVICE_POLICY_DEFAULT;
 import static android.companion.virtual.VirtualDeviceParams.POLICY_TYPE_AUDIO;
+import static android.content.Context.DEVICE_ID_DEFAULT;
 
 import android.Manifest;
 import android.annotation.CallbackExecutor;
@@ -42,6 +42,7 @@ import android.bluetooth.BluetoothLeAudioCodecConfig;
 import android.companion.virtual.VirtualDeviceManager;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledSince;
+import android.compat.annotation.Overridable;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
@@ -679,6 +680,20 @@ public class AudioManager {
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface Flags {}
+
+    /** @hide */
+    @IntDef(flag = true, prefix = "FLAG", value = {
+            FLAG_SHOW_UI,
+            FLAG_ALLOW_RINGER_MODES,
+            FLAG_PLAY_SOUND,
+            FLAG_REMOVE_SOUND_AND_VIBRATE,
+            FLAG_VIBRATE,
+            FLAG_BLUETOOTH_ABS_VOLUME,
+            FLAG_HDMI_SYSTEM_AUDIO_VOLUME,
+            FLAG_FROM_KEY,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface SystemVolumeFlags {}
 
     // The iterator of TreeMap#entrySet() returns the entries in ascending key order.
     private static final TreeMap<Integer, String> FLAG_NAMES = new TreeMap<>();
@@ -1441,10 +1456,10 @@ public class AudioManager {
      */
     @SystemApi
     @RequiresPermission(anyOf = {
-            android.Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS,
+            android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED,
             android.Manifest.permission.MODIFY_AUDIO_ROUTING
     })
-    public void setVolumeGroupVolumeIndex(int groupId, int index, int flags) {
+    public void setVolumeGroupVolumeIndex(int groupId, int index, @SystemVolumeFlags int flags) {
         final IAudioService service = getService();
         try {
             service.setVolumeGroupVolumeIndex(groupId, index, flags,
@@ -1466,7 +1481,7 @@ public class AudioManager {
     @SystemApi
     @IntRange(from = 0)
     @RequiresPermission(anyOf = {
-            android.Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS,
+            android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED,
             android.Manifest.permission.MODIFY_AUDIO_ROUTING
     })
     public int getVolumeGroupVolumeIndex(int groupId) {
@@ -1490,7 +1505,7 @@ public class AudioManager {
     @SystemApi
     @IntRange(from = 0)
     @RequiresPermission(anyOf = {
-            android.Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS,
+            android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED,
             android.Manifest.permission.MODIFY_AUDIO_ROUTING
     })
     public int getVolumeGroupMaxVolumeIndex(int groupId) {
@@ -1514,7 +1529,7 @@ public class AudioManager {
     @SystemApi
     @IntRange(from = 0)
     @RequiresPermission(anyOf = {
-            android.Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS,
+            android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED,
             android.Manifest.permission.MODIFY_AUDIO_ROUTING
     })
     public int getVolumeGroupMinVolumeIndex(int groupId) {
@@ -1541,7 +1556,7 @@ public class AudioManager {
      * @throws SecurityException if the adjustment triggers a Do Not Disturb change and the caller
      * is not granted notification policy access.
      */
-    public void adjustVolumeGroupVolume(int groupId, int direction, int flags) {
+    public void adjustVolumeGroupVolume(int groupId, int direction, @SystemVolumeFlags int flags) {
         IAudioService service = getService();
         try {
             service.adjustVolumeGroupVolume(groupId, direction, flags,
@@ -1563,10 +1578,10 @@ public class AudioManager {
     @SystemApi
     @RequiresPermission("android.permission.QUERY_AUDIO_STATE")
     @IntRange(from = 0)
-    public int getLastAudibleVolumeGroupVolume(int groupId) {
+    public int getLastAudibleVolumeForVolumeGroup(int groupId) {
         IAudioService service = getService();
         try {
-            return service.getLastAudibleVolumeGroupVolume(groupId);
+            return service.getLastAudibleVolumeForVolumeGroup(groupId);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -6354,7 +6369,7 @@ public class AudioManager {
     @SystemApi
     @RequiresPermission(anyOf = {
             Manifest.permission.MODIFY_AUDIO_ROUTING,
-            Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS
+            Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED
     })
     public void setDeviceVolumeBehavior(@NonNull AudioDeviceAttributes device,
             @DeviceVolumeBehavior int deviceVolumeBehavior) {
@@ -6379,6 +6394,7 @@ public class AudioManager {
      */
     @ChangeId
     @EnabledSince(targetSdkVersion = android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    @Overridable
     public static final long RETURN_DEVICE_VOLUME_BEHAVIOR_ABSOLUTE_ADJUST_ONLY = 240663182L;
 
     /**
@@ -6391,7 +6407,7 @@ public class AudioManager {
     @RequiresPermission(anyOf = {
             Manifest.permission.MODIFY_AUDIO_ROUTING,
             Manifest.permission.QUERY_AUDIO_STATE,
-            Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS
+            Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED
     })
     public @DeviceVolumeBehavior
     int getDeviceVolumeBehavior(@NonNull AudioDeviceAttributes device) {
@@ -6419,7 +6435,7 @@ public class AudioManager {
     @RequiresPermission(anyOf = {
             Manifest.permission.MODIFY_AUDIO_ROUTING,
             Manifest.permission.QUERY_AUDIO_STATE,
-            Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS
+            Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED
     })
     public boolean isFullVolumeDevice() {
         final AudioAttributes attributes = new AudioAttributes.Builder()
@@ -6807,7 +6823,7 @@ public class AudioManager {
      * @return the RS2 value used for momentary exposure warnings
      */
     @TestApi
-    @RequiresPermission(Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS)
+    @RequiresPermission(Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
     public float getRs2Value() {
         try {
             return getService().getRs2Value();
@@ -6821,7 +6837,7 @@ public class AudioManager {
      * Sets the RS2 value used for momentary exposure warnings
      */
     @TestApi
-    @RequiresPermission(Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS)
+    @RequiresPermission(Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
     public void setRs2Value(float rs2Value) {
         try {
             getService().setRs2Value(rs2Value);
@@ -6835,7 +6851,7 @@ public class AudioManager {
      * @return the current computed sound dose value
      */
     @TestApi
-    @RequiresPermission(Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS)
+    @RequiresPermission(Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
     public float getCsd() {
         try {
             return getService().getCsd();
@@ -6849,7 +6865,7 @@ public class AudioManager {
      * Sets the computed sound dose value to {@code csd}
      */
     @TestApi
-    @RequiresPermission(Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS)
+    @RequiresPermission(Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
     public void setCsd(float csd) {
         try {
             getService().setCsd(csd);
@@ -6865,7 +6881,7 @@ public class AudioManager {
      * since this can affect the certification of a device with EN50332-3 regulation.
      */
     @TestApi
-    @RequiresPermission(Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS)
+    @RequiresPermission(Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
     public void forceUseFrameworkMel(boolean useFrameworkMel) {
         try {
             getService().forceUseFrameworkMel(useFrameworkMel);
@@ -6879,7 +6895,7 @@ public class AudioManager {
      * Forces the computation of CSD on all output devices.
      */
     @TestApi
-    @RequiresPermission(Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS)
+    @RequiresPermission(Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
     public void forceComputeCsdOnAllDevices(boolean computeCsdOnAllDevices) {
         try {
             getService().forceComputeCsdOnAllDevices(computeCsdOnAllDevices);
@@ -6893,7 +6909,7 @@ public class AudioManager {
      * Returns whether CSD is enabled on this device.
      */
     @TestApi
-    @RequiresPermission(Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS)
+    @RequiresPermission(Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
     public boolean isCsdEnabled() {
         try {
             return getService().isCsdEnabled();
@@ -9264,11 +9280,12 @@ public class AudioManager {
     // Preferred mixer attributes
 
     /**
-     * Returns the {@link AudioMixerAttributes} that can be used to set as preferred mixe
+     * Returns the {@link AudioMixerAttributes} that can be used to set as preferred mixer
      * attributes via {@link #setPreferredMixerAttributes(
      * AudioAttributes, AudioDeviceInfo, AudioMixerAttributes)}.
-     * <p>Note that only USB devices are guaranteed to expose configurable mixer attributes, the
-     * returned list may be empty when devices do not allow dynamic configuration.
+     * <p>Note that only USB devices are guaranteed to expose configurable mixer attributes. An
+     * empty list may be returned for all other types of devices as they may not allow dynamic
+     * configuration.
      *
      * @param device the device to query
      * @return a list of {@link AudioMixerAttributes} that can be used as preferred mixer attributes
@@ -9286,9 +9303,8 @@ public class AudioManager {
     /**
      * Configures the mixer attributes for a particular {@link AudioAttributes} over a given
      * {@link AudioDeviceInfo}.
-     * <p>When constructing an {@link AudioMixerAttributes} for setting preferred mixer attributes,
-     * the mixer format must be constructed from an {@link AudioProfile} that can be used to set
-     * preferred mixer attributes.
+     * <p>Call {@link #getSupportedMixerAttributes(AudioDeviceInfo)} to determine which mixer
+     * attributes can be used with the given device.
      * <p>The ownership of preferred mixer attributes is recognized by uid. When a playback from the
      * same uid is routed to the given audio device when calling this API, the output mixer/stream
      * will be configured with the values previously set via this API.
@@ -9516,6 +9532,140 @@ public class AudioManager {
     public boolean isBluetoothVariableLatencyEnabled() {
         try {
             return getService().isBluetoothVariableLatencyEnabled();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    //====================================================================
+    // Stream aliasing changed listener, getter for stream alias or independent streams
+
+    /**
+     * manages the stream aliasing listeners and StreamAliasingDispatcherStub
+     */
+    private final CallbackUtil.LazyListenerManager<Runnable> mStreamAliasingListenerMgr =
+            new CallbackUtil.LazyListenerManager();
+
+
+    final class StreamAliasingDispatcherStub extends IStreamAliasingDispatcher.Stub
+            implements CallbackUtil.DispatcherStub {
+
+        @Override
+        public void register(boolean register) {
+            try {
+                getService().registerStreamAliasingDispatcher(this, register);
+            } catch (RemoteException e) {
+                e.rethrowFromSystemServer();
+            }
+        }
+
+        @Override
+        public void dispatchStreamAliasingChanged() {
+            mStreamAliasingListenerMgr.callListeners((listener) -> listener.run());
+        }
+    }
+
+    /**
+     * @hide
+     * Adds a listener to be notified of changes to volume stream type aliasing.
+     * See {@link #getIndependentStreamTypes()} and {@link #getStreamTypeAlias(int)}
+     * @param executor the Executor running the listener
+     * @param onStreamAliasingChangedListener the listener to add for the aliasing changes
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
+    public void addOnStreamAliasingChangedListener(
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull Runnable onStreamAliasingChangedListener) {
+        mStreamAliasingListenerMgr.addListener(executor, onStreamAliasingChangedListener,
+                "addOnStreamAliasingChangedListener",
+                () -> new StreamAliasingDispatcherStub());
+    }
+
+    /**
+     * @hide
+     * Removes a previously added listener for changes to stream aliasing.
+     * See {@link #getIndependentStreamTypes()} and {@link #getStreamTypeAlias(int)}
+     * @see #addOnStreamAliasingChangedListener(Executor, Runnable)
+     * @param onStreamAliasingChangedListener the previously added listener of aliasing changes
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
+    public void removeOnStreamAliasingChangedListener(
+            @NonNull Runnable onStreamAliasingChangedListener) {
+        mStreamAliasingListenerMgr.removeListener(onStreamAliasingChangedListener,
+                "removeOnStreamAliasingChangedListener");
+    }
+
+    /**
+     * @hide
+     * Test method to temporarily override whether STREAM_NOTIFICATION is aliased to STREAM_RING,
+     * volumes will be updated in case of a change.
+     * @param isAliased if true, STREAM_NOTIFICATION is aliased to STREAM_RING
+     */
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
+    public void setNotifAliasRingForTest(boolean isAliased) {
+        final IAudioService service = getService();
+        try {
+            service.setNotifAliasRingForTest(isAliased);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * @hide
+     * Return the list of independent stream types for volume control.
+     * A stream type is considered independent when the volume changes of that type do not
+     * affect any other independent volume control stream type.
+     * An independent stream type is its own alias when using {@link #getStreamTypeAlias(int)}.
+     * @return list of independent stream types.
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
+    public @NonNull List<Integer> getIndependentStreamTypes() {
+        final IAudioService service = getService();
+        try {
+            return service.getIndependentStreamTypes();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * @hide
+     * Return the stream type that a given stream is aliased to.
+     * A stream alias means that any change to the source stream will also be applied to the alias,
+     * and vice-versa.
+     * If a stream is independent (i.e. part of the stream types returned by
+     * {@link #getIndependentStreamTypes()}), its alias is itself.
+     * @param sourceStreamType the stream type to query for the alias.
+     * @return the stream type the source type is aliased to.
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
+    public @PublicStreamTypes int getStreamTypeAlias(@PublicStreamTypes int sourceStreamType) {
+        final IAudioService service = getService();
+        try {
+            return service.getStreamTypeAlias(sourceStreamType);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * @hide
+     * Returns whether the system uses {@link AudioVolumeGroup} for volume control
+     * @return true when volume control is performed through volume groups, false if it uses
+     *     stream types.
+     */
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
+    public boolean isVolumeControlUsingVolumeGroups() {
+        final IAudioService service = getService();
+        try {
+            return service.isVolumeControlUsingVolumeGroups();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

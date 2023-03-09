@@ -73,7 +73,6 @@ cc_defaults {
     target: {
         android: {
             include_dirs: [
-                "external/skia/src/effects",
                 "external/skia/src/image",
                 "external/skia/src/utils",
                 "external/skia/src/gpu",
@@ -333,6 +332,7 @@ cc_defaults {
         "jni/android_graphics_Matrix.cpp",
         "jni/android_graphics_Picture.cpp",
         "jni/android_graphics_DisplayListCanvas.cpp",
+        "jni/android_graphics_Mesh.cpp",
         "jni/android_graphics_RenderNode.cpp",
         "jni/android_nio_utils.cpp",
         "jni/android_util_PathParser.cpp",
@@ -352,7 +352,6 @@ cc_defaults {
         "jni/ImageDecoder.cpp",
         "jni/Interpolator.cpp",
         "jni/MeshSpecification.cpp",
-        "jni/Mesh.cpp",
         "jni/MaskFilter.cpp",
         "jni/NinePatch.cpp",
         "jni/NinePatchPeeker.cpp",
@@ -364,6 +363,7 @@ cc_defaults {
         "jni/PathMeasure.cpp",
         "jni/Picture.cpp",
         "jni/Region.cpp",
+        "jni/ScopedParcel.cpp",
         "jni/Shader.cpp",
         "jni/RenderEffect.cpp",
         "jni/Typeface.cpp",
@@ -385,9 +385,6 @@ cc_defaults {
         "external/skia/include/private",
         "external/skia/src/codec",
         "external/skia/src/core",
-        "external/skia/src/effects",
-        "external/skia/src/image",
-        "external/skia/src/images",
     ],
 
     shared_libs: [
@@ -541,6 +538,7 @@ cc_defaults {
         "Interpolator.cpp",
         "LightingInfo.cpp",
         "Matrix.cpp",
+        "Mesh.cpp",
         "MemoryPolicy.cpp",
         "PathParser.cpp",
         "Properties.cpp",

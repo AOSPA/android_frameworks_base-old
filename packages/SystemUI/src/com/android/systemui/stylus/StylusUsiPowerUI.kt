@@ -26,6 +26,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.hardware.BatteryState
 import android.hardware.input.InputManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.UserHandle
@@ -33,6 +34,8 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.android.internal.annotations.VisibleForTesting
+import com.android.internal.logging.InstanceId
+import com.android.internal.logging.InstanceIdSequence
 import com.android.internal.logging.UiEventLogger
 import com.android.systemui.R
 import com.android.systemui.dagger.SysUISingleton
@@ -62,6 +65,9 @@ constructor(
     private var batteryCapacity = 1.0f
     private var suppressed = false
     private var inputDeviceId: Int? = null
+    private var instanceId: InstanceId? = null
+
+    @VisibleForTesting var instanceIdSequence = InstanceIdSequence(1 shl 13)
 
     fun init() {
         val filter =
@@ -104,6 +110,10 @@ constructor(
 
             inputDeviceId = deviceId
             batteryCapacity = batteryState.capacity
+            logDebug {
+                "Updating notification battery state to $batteryCapacity " +
+                    "for InputDevice $deviceId."
+            }
             refresh()
         }
     }
@@ -120,12 +130,15 @@ constructor(
         handler.post updateSuppressed@{
             if (suppressed == suppress) return@updateSuppressed
 
+            logDebug { "Updating notification suppression to $suppress." }
             suppressed = suppress
             refresh()
         }
     }
 
     private fun hideNotification() {
+        logDebug { "Cancelling USI low battery notification." }
+        instanceId = null
         notificationManager.cancel(USI_NOTIFICATION_ID)
     }
 
@@ -147,6 +160,7 @@ constructor(
                 .setAutoCancel(true)
                 .build()
 
+        logDebug { "Show or update USI low battery notification at $batteryCapacity." }
         logUiEvent(StylusUiEvent.STYLUS_LOW_BATTERY_NOTIFICATION_SHOWN)
         notificationManager.notify(USI_NOTIFICATION_ID, notification)
     }
@@ -174,10 +188,12 @@ constructor(
             override fun onReceive(context: Context, intent: Intent) {
                 when (intent.action) {
                     ACTION_DISMISSED_LOW_BATTERY -> {
+                        logDebug { "USI low battery notification dismissed." }
                         logUiEvent(StylusUiEvent.STYLUS_LOW_BATTERY_NOTIFICATION_DISMISSED)
                         updateSuppression(true)
                     }
                     ACTION_CLICKED_LOW_BATTERY -> {
+                        logDebug { "USI low battery notification clicked." }
                         logUiEvent(StylusUiEvent.STYLUS_LOW_BATTERY_NOTIFICATION_CLICKED)
                         updateSuppression(true)
                         if (inputDeviceId == null) return
@@ -204,16 +220,31 @@ constructor(
             }
         }
 
+    /**
+     * Logs a stylus USI battery event with instance ID and battery level. The instance ID
+     * represents the notification instance, and is reset when a notification is cancelled.
+     */
     private fun logUiEvent(metricId: StylusUiEvent) {
-        uiEventLogger.logWithPosition(
+        uiEventLogger.logWithInstanceIdAndPosition(
             metricId,
             ActivityManager.getCurrentUser(),
             context.packageName,
+            getInstanceId(),
             (batteryCapacity * 100.0).toInt()
         )
     }
 
+    @VisibleForTesting
+    fun getInstanceId(): InstanceId? {
+        if (instanceId == null) {
+            instanceId = instanceId ?: instanceIdSequence.newInstanceId()
+        }
+        return instanceId
+    }
+
     companion object {
+        val TAG = StylusUsiPowerUI::class.simpleName.orEmpty()
+
         // Low battery threshold matches CrOS, see:
         // https://source.chromium.org/chromium/chromium/src/+/main:ash/system/power/peripheral_battery_notifier.cc;l=41
         private const val LOW_BATTERY_THRESHOLD = 0.16f
@@ -230,5 +261,11 @@ constructor(
         @VisibleForTesting const val KEY_DEVICE_INPUT_ID = "device_input_id"
 
         @VisibleForTesting const val KEY_SETTINGS_FRAGMENT_ARGS = ":settings:show_fragment_args"
+    }
+}
+
+private inline fun logDebug(message: () -> String) {
+    if (Build.IS_DEBUGGABLE) {
+        Log.d(StylusUsiPowerUI.TAG, message())
     }
 }

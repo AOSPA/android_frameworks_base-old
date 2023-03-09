@@ -526,8 +526,8 @@ class MediaDataManager(
      * through the internal listener pipeline.
      *
      * @param immediately indicates should apply the UI changes immediately, otherwise wait until
-     * the next refresh-round before UI becomes visible. Should only be true if the update is
-     * initiated by user's interaction.
+     *   the next refresh-round before UI becomes visible. Should only be true if the update is
+     *   initiated by user's interaction.
      */
     private fun notifySmartspaceMediaDataRemoved(key: String, immediately: Boolean) {
         internalListeners.forEach { it.onSmartspaceMediaDataRemoved(key, immediately) }
@@ -536,6 +536,7 @@ class MediaDataManager(
     /**
      * Called whenever the player has been paused or stopped for a while, or swiped from QQS. This
      * will make the player not active anymore, hiding it from QQS and Keyguard.
+     *
      * @see MediaData.active
      */
     internal fun setTimedOut(key: String, timedOut: Boolean, forceUpdate: Boolean = false) {
@@ -666,7 +667,7 @@ class MediaDataManager(
         appIntent: PendingIntent,
         packageName: String
     ) {
-        if (TextUtils.isEmpty(desc.title)) {
+        if (desc.title.isNullOrBlank()) {
             Log.e(TAG, "Description incomplete")
             // Delete the placeholder entry
             mediaEntries.remove(packageName)
@@ -1024,6 +1025,7 @@ class MediaDataManager(
      * @param packageName Package name for the media app
      * @param controller MediaController for the current session
      * @return a Pair consisting of a list of media actions, and a list of ints representing which
+     *
      * ```
      *      of those actions should be shown in the compact player
      * ```
@@ -1127,6 +1129,7 @@ class MediaDataManager(
      *      [PlaybackState.ACTION_SKIP_TO_NEXT]
      * @return
      * ```
+     *
      * A [MediaAction] with correct values set, or null if the state doesn't support it
      */
     private fun getStandardAction(
@@ -1229,6 +1232,7 @@ class MediaDataManager(
     }
     /**
      * Load a bitmap from a URI
+     *
      * @param uri the uri to load
      * @return bitmap, or null if couldn't be loaded
      */
@@ -1342,13 +1346,16 @@ class MediaDataManager(
     fun onNotificationRemoved(key: String) {
         Assert.isMainThread()
         val removed = mediaEntries.remove(key) ?: return
-
+        val isEligibleForResume =
+            removed.isLocalSession() ||
+                (mediaFlags.isRemoteResumeAllowed() &&
+                    removed.playbackLocation != MediaData.PLAYBACK_CAST_REMOTE)
         if (keyguardUpdateMonitor.isUserInLockdown(removed.userId)) {
             logger.logMediaRemoved(removed.appUid, removed.packageName, removed.instanceId)
-        } else if (useMediaResumption && removed.resumeAction != null && removed.isLocalSession()) {
-            convertToResumePlayer(removed)
+        } else if (useMediaResumption && removed.resumeAction != null && isEligibleForResume) {
+            convertToResumePlayer(key, removed)
         } else if (mediaFlags.isRetainingPlayersEnabled()) {
-            handlePossibleRemoval(removed, notificationRemoved = true)
+            handlePossibleRemoval(key, removed, notificationRemoved = true)
         } else {
             notifyMediaDataRemoved(key)
             logger.logMediaRemoved(removed.appUid, removed.packageName, removed.instanceId)
@@ -1362,7 +1369,7 @@ class MediaDataManager(
         val entry = mediaEntries.remove(key) ?: return
         // Clear token since the session is no longer valid
         val updated = entry.copy(token = null)
-        handlePossibleRemoval(updated)
+        handlePossibleRemoval(key, updated)
     }
 
     /**
@@ -1371,8 +1378,11 @@ class MediaDataManager(
      * if it was removed before becoming inactive. (Assumes that [removed] was removed from
      * [mediaEntries] before this function was called)
      */
-    private fun handlePossibleRemoval(removed: MediaData, notificationRemoved: Boolean = false) {
-        val key = removed.notificationKey!!
+    private fun handlePossibleRemoval(
+        key: String,
+        removed: MediaData,
+        notificationRemoved: Boolean = false
+    ) {
         val hasSession = removed.token != null
         if (hasSession && removed.semanticActions != null) {
             // The app was using session actions, and the session is still valid: keep player
@@ -1398,14 +1408,20 @@ class MediaDataManager(
                         "($hasSession) gone for inactive player $key"
                 )
             }
-            convertToResumePlayer(removed)
+            convertToResumePlayer(key, removed)
         }
     }
 
     /** Set the given [MediaData] as a resume state player and notify listeners */
-    private fun convertToResumePlayer(data: MediaData) {
-        val key = data.notificationKey!!
+    private fun convertToResumePlayer(key: String, data: MediaData) {
         if (DEBUG) Log.d(TAG, "Converting $key to resume")
+        // Resumption controls must have a title.
+        if (data.song.isNullOrBlank()) {
+            Log.e(TAG, "Description incomplete")
+            notifyMediaDataRemoved(key)
+            logger.logMediaRemoved(data.appUid, data.packageName, data.instanceId)
+            return
+        }
         // Move to resume key (aka package name) if that key doesn't already exist.
         val resumeAction = data.resumeAction?.let { getResumeMediaAction(it) }
         val actions = resumeAction?.let { listOf(resumeAction) } ?: emptyList()
@@ -1510,15 +1526,13 @@ class MediaDataManager(
          * notification key) or vice versa.
          *
          * @param immediately indicates should apply the UI changes immediately, otherwise wait
-         * until the next refresh-round before UI becomes visible. True by default to take in place
-         * immediately.
-         *
+         *   until the next refresh-round before UI becomes visible. True by default to take in
+         *   place immediately.
          * @param receivedSmartspaceCardLatency is the latency between headphone connects and sysUI
-         * displays Smartspace media targets. Will be 0 if the data is not activated by Smartspace
-         * signal.
-         *
+         *   displays Smartspace media targets. Will be 0 if the data is not activated by Smartspace
+         *   signal.
          * @param isSsReactivated indicates resume media card is reactivated by Smartspace
-         * recommendation signal
+         *   recommendation signal
          */
         fun onMediaDataLoaded(
             key: String,
@@ -1533,8 +1547,8 @@ class MediaDataManager(
          * Called whenever there's new Smartspace media data loaded.
          *
          * @param shouldPrioritize indicates the sorting priority of the Smartspace card. If true,
-         * it will be prioritized as the first card. Otherwise, it will show up as the last card as
-         * default.
+         *   it will be prioritized as the first card. Otherwise, it will show up as the last card
+         *   as default.
          */
         fun onSmartspaceMediaDataLoaded(
             key: String,
@@ -1549,8 +1563,8 @@ class MediaDataManager(
          * Called whenever a previously existing Smartspace media data was removed.
          *
          * @param immediately indicates should apply the UI changes immediately, otherwise wait
-         * until the next refresh-round before UI becomes visible. True by default to take in place
-         * immediately.
+         *   until the next refresh-round before UI becomes visible. True by default to take in
+         *   place immediately.
          */
         fun onSmartspaceMediaDataRemoved(key: String, immediately: Boolean = true) {}
     }
@@ -1559,7 +1573,7 @@ class MediaDataManager(
      * Converts the pass-in SmartspaceTarget to SmartspaceMediaData
      *
      * @return An empty SmartspaceMediaData with the valid target Id is returned if the
-     * SmartspaceTarget's data is invalid.
+     *   SmartspaceTarget's data is invalid.
      */
     private fun toSmartspaceMediaData(target: SmartspaceTarget): SmartspaceMediaData {
         var dismissIntent: Intent? = null

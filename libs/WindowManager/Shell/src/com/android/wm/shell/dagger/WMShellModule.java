@@ -196,7 +196,8 @@ public abstract class WMShellModule {
             DisplayController displayController,
             SyncTransactionQueue syncQueue,
             Optional<DesktopModeController> desktopModeController,
-            Optional<DesktopTasksController> desktopTasksController) {
+            Optional<DesktopTasksController> desktopTasksController,
+            Optional<SplitScreenController> splitScreenController) {
         if (DesktopModeStatus.isAnyEnabled()) {
             return new DesktopModeWindowDecorViewModel(
                     context,
@@ -206,7 +207,8 @@ public abstract class WMShellModule {
                     displayController,
                     syncQueue,
                     desktopModeController,
-                    desktopTasksController);
+                    desktopTasksController,
+                    splitScreenController);
         }
         return new CaptionWindowDecorViewModel(
                     context,
@@ -560,16 +562,18 @@ public abstract class WMShellModule {
     static FullscreenUnfoldTaskAnimator provideFullscreenUnfoldTaskAnimator(
             Context context,
             UnfoldBackgroundController unfoldBackgroundController,
+            ShellController shellController,
             DisplayInsetsController displayInsetsController
     ) {
         return new FullscreenUnfoldTaskAnimator(context, unfoldBackgroundController,
-                displayInsetsController);
+                shellController, displayInsetsController);
     }
 
     @Provides
     static SplitTaskUnfoldAnimator provideSplitTaskUnfoldAnimatorBase(
             Context context,
             UnfoldBackgroundController backgroundController,
+            ShellController shellController,
             @ShellMainThread ShellExecutor executor,
             Lazy<Optional<SplitScreenController>> splitScreenOptional,
             DisplayInsetsController displayInsetsController
@@ -579,7 +583,7 @@ public abstract class WMShellModule {
         // controller directly once we refactor ShellTaskOrganizer to not depend on the unfold
         // animation controller directly.
         return new SplitTaskUnfoldAnimator(context, executor, splitScreenOptional,
-                backgroundController, displayInsetsController);
+                shellController, backgroundController, displayInsetsController);
     }
 
     @WMSingleton

@@ -919,12 +919,6 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
-    "-1270148832": {
-      "message": "Resize start waiting for draw, mDrawState=DRAW_PENDING in %s, surfaceController %s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_RESIZE",
-      "at": "com\/android\/server\/wm\/WindowState.java"
-    },
     "-1263316010": {
       "message": "Computed rotation=%s (%d) for display id=%d based on lastOrientation=%s (%d) and oldRotation=%s (%d)",
       "level": "VERBOSE",
@@ -1296,6 +1290,12 @@
       "level": "WARN",
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
+    },
+    "-894942237": {
+      "message": "Force Playing Transition: %d",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WINDOW_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/Transition.java"
     },
     "-883738232": {
       "message": "Adding more than one toast window for UID at a time.",
@@ -2317,12 +2317,6 @@
       "group": "WM_DEBUG_RECENTS_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RecentsAnimationController.java"
     },
-    "25888308": {
-      "message": "Resize reasons for w=%s:  %s configChanged=%b dragResizingChanged=%b",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_RESIZE",
-      "at": "com\/android\/server\/wm\/WindowState.java"
-    },
     "34682671": {
       "message": "Not moving display (displayId=%d) to top. Top focused displayId=%d. Reason: FLAG_STEAL_TOP_FOCUS_DISABLED",
       "level": "INFO",
@@ -3105,6 +3099,12 @@
     },
     "685047360": {
       "message": "Resizing window %s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_RESIZE",
+      "at": "com\/android\/server\/wm\/WindowState.java"
+    },
+    "686185515": {
+      "message": "Resize reasons for w=%s:  %s configChanged=%b didFrameInsetsChange=%b",
       "level": "VERBOSE",
       "group": "WM_DEBUG_RESIZE",
       "at": "com\/android\/server\/wm\/WindowState.java"
@@ -4260,12 +4260,6 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/DisplayContent.java"
-    },
-    "1878927091": {
-      "message": "prepareSurface: No changes in animation for %s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_ANIM",
-      "at": "com\/android\/server\/wm\/WindowStateAnimator.java"
     },
     "1891501279": {
       "message": "cancelAnimation(): reason=%s",

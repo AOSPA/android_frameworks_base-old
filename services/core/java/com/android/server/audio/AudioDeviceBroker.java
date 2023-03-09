@@ -1282,7 +1282,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
     }
 
     /*package*/ void setLeAudioTimeout(String address, int device, int delayMs) {
-        sendILMsg(MSG_IL_BTLEA_TIMEOUT, SENDMSG_QUEUE, device, address, delayMs);
+        sendILMsg(MSG_IL_BTLEAUDIO_TIMEOUT, SENDMSG_QUEUE, device, address, delayMs);
     }
 
     /*package*/ void setAvrcpAbsoluteVolumeSupported(boolean supported) {
@@ -1489,6 +1489,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
                         mDeviceInventory.onMakeA2dpDeviceUnavailableNow((String) msg.obj, msg.arg1);
                     }
                     break;
+                case MSG_IL_BTLEAUDIO_TIMEOUT:
+                    // msg.obj  == address of LE Audio device
+                    synchronized (mDeviceStateLock) {
+                        mDeviceInventory.onMakeLeAudioDeviceUnavailableNow(
+                                (String) msg.obj, msg.arg1);
+                    }
+                    break;
                 case MSG_L_A2DP_DEVICE_CONFIG_CHANGE:
                     final BluetoothDevice btDevice = (BluetoothDevice) msg.obj;
                     synchronized (mDeviceStateLock) {
@@ -1679,11 +1686,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
                     final int capturePreset = msg.arg1;
                     mDeviceInventory.onSaveClearPreferredDevicesForCapturePreset(capturePreset);
                 } break;
-                case MSG_IL_BTLEA_TIMEOUT:
-                    synchronized (mDeviceStateLock) {
-                        mDeviceInventory.onMakeLeAudioUnavailableNow((String) msg.obj, msg.arg1);
-                }
-                break;
                 default:
                     Log.wtf(TAG, "Invalid message " + msg.what);
             }
@@ -1757,18 +1759,18 @@ import java.util.concurrent.atomic.AtomicBoolean;
     //
     // process set volume for Le Audio, obj is BleVolumeInfo
     private static final int MSG_II_SET_LE_AUDIO_OUT_VOLUME = 46;
-    private static final int MSG_L_A2DP_DEVICE_CONFIG_CHANGE_SHO = 49;
+    private static final int MSG_L_A2DP_DEVICE_CONFIG_CHANGE_SHO = 50;
 
     private static final int MSG_IL_SAVE_NDEF_DEVICE_FOR_STRATEGY = 47;
     private static final int MSG_IL_SAVE_REMOVE_NDEF_DEVICE_FOR_STRATEGY = 48;
-
-    private static final int MSG_IL_BTLEA_TIMEOUT = 50;
+    private static final int MSG_IL_BTLEAUDIO_TIMEOUT = 49;
 
     private static boolean isMessageHandledUnderWakelock(int msgId) {
         switch(msgId) {
             case MSG_L_SET_WIRED_DEVICE_CONNECTION_STATE:
             case MSG_L_SET_BT_ACTIVE_DEVICE:
             case MSG_IL_BTA2DP_TIMEOUT:
+            case MSG_IL_BTLEAUDIO_TIMEOUT:
             case MSG_L_A2DP_DEVICE_CONFIG_CHANGE:
             case MSG_L_A2DP_DEVICE_CONFIG_CHANGE_SHO:
             case MSG_TOGGLE_HDMI:
@@ -1776,7 +1778,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
             case MSG_L_HEARING_AID_DEVICE_CONNECTION_CHANGE_EXT:
             case MSG_CHECK_MUTE_MUSIC:
             case MSG_L_A2DP_ACTIVE_DEVICE_CHANGE_EXT:
-            case MSG_IL_BTLEA_TIMEOUT:
                 return true;
             default:
                 return false;
@@ -1863,7 +1864,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
                 case MSG_L_SET_BT_ACTIVE_DEVICE:
                 case MSG_L_SET_WIRED_DEVICE_CONNECTION_STATE:
                 case MSG_IL_BTA2DP_TIMEOUT:
-                case MSG_IL_BTLEA_TIMEOUT:
+                case MSG_IL_BTLEAUDIO_TIMEOUT:
                 case MSG_L_A2DP_DEVICE_CONFIG_CHANGE:
                 case MSG_L_A2DP_DEVICE_CONFIG_CHANGE_SHO:
                     if (sLastDeviceConnectMsgTime >= time) {

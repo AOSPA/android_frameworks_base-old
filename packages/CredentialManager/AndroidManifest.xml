@@ -35,11 +35,21 @@
     <activity
         android:name=".CredentialSelectorActivity"
         android:exported="true"
+        android:permission="android.permission.LAUNCH_CREDENTIAL_SELECTOR"
         android:launchMode="singleTop"
         android:label="@string/app_name"
         android:excludeFromRecents="true"
         android:theme="@style/Theme.CredentialSelector">
     </activity>
+
+    <receiver
+        android:name=".CredentialProviderReceiver"
+        android:exported="true"
+        android:permission="android.permission.LAUNCH_CREDENTIAL_SELECTOR">
+        <intent-filter>
+            <action android:name="android.credentials.ui.action.CREDMAN_ENABLED_PROVIDERS_UPDATED"/>
+        </intent-filter>
+    </receiver>
   </application>
 
 </manifest>

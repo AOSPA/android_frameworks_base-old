@@ -36,7 +36,7 @@ import java.util.Optional
 
 /** Compose all dependencies required by Note Task feature. */
 @Module(includes = [NoteTaskQuickAffordanceModule::class])
-internal interface NoteTaskModule {
+interface NoteTaskModule {
 
     @[Binds IntoMap ClassKey(LaunchNoteTaskActivity::class)]
     fun LaunchNoteTaskActivity.bindNoteTaskLauncherActivity(): Activity
@@ -51,7 +51,7 @@ internal interface NoteTaskModule {
             featureFlags: FeatureFlags,
             roleManager: RoleManager,
         ): Boolean {
-            val isRoleAvailable = roleManager.isRoleAvailable(NoteTaskInfoResolver.ROLE_NOTES)
+            val isRoleAvailable = roleManager.isRoleAvailable(RoleManager.ROLE_NOTES)
             val isFeatureEnabled = featureFlags.isEnabled(Flags.NOTE_TASKS)
             return isRoleAvailable && isFeatureEnabled
         }

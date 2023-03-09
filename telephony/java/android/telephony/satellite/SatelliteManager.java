@@ -116,6 +116,13 @@ public class SatelliteManager {
 
     /**
      * Bundle key to get the response from
+     * {@link #requestIsSatelliteDemoModeEnabled(Executor, OutcomeReceiver)}.
+     * @hide
+     */
+    public static final String KEY_DEMO_MODE_ENABLED = "demo_mode_enabled";
+
+    /**
+     * Bundle key to get the response from
      * {@link #requestIsSatelliteSupported(Executor, OutcomeReceiver)}.
      * @hide
      */
@@ -130,7 +137,7 @@ public class SatelliteManager {
 
     /**
      * Bundle key to get the response from
-     * {@link #requestMaxCharactersPerSatelliteTextMessage(Executor, OutcomeReceiver)}.
+     * {@link #requestMaxSizePerSendingDatagram(Executor, OutcomeReceiver)} .
      * @hide
      */
     public static final String KEY_MAX_CHARACTERS_PER_SATELLITE_TEXT =
@@ -157,6 +164,13 @@ public class SatelliteManager {
      * @hide
      */
     public static final String KEY_SATELLITE_NEXT_VISIBILITY = "satellite_next_visibility";
+
+    /**
+     * Bundle key to get the respoonse from {@link
+     * #sendSatelliteDatagram(long, int, SatelliteDatagram, boolean, Executor, OutcomeReceiver)}.
+     * @hide
+     */
+    public static final String KEY_SEND_SATELLITE_DATAGRAM = "send_satellite_datagram";
 
     /**
      * The request was successfully processed.
@@ -277,9 +291,42 @@ public class SatelliteManager {
     public @interface SatelliteError {}
 
     /**
-     * Enable or disable the satellite modem. If the satellite modem is enabled, this will also
-     * disable the cellular modem, and if the satellite modem is disabled, this will also re-enable
-     * the cellular modem.
+     * 3GPP NB-IoT (Narrowband Internet of Things) over Non-Terrestrial-Networks technology.
+     */
+    public static final int NT_RADIO_TECHNOLOGY_NB_IOT_NTN = 0;
+    /**
+     * 3GPP 5G NR over Non-Terrestrial-Networks technology.
+     */
+    public static final int NT_RADIO_TECHNOLOGY_NR_NTN = 1;
+    /**
+     * 3GPP eMTC (enhanced Machine-Type Communication) over Non-Terrestrial-Networks technology.
+     */
+    public static final int NT_RADIO_TECHNOLOGY_EMTC_NTN = 2;
+    /**
+     * Proprietary technology.
+     */
+    public static final int NT_RADIO_TECHNOLOGY_PROPRIETARY = 3;
+    /**
+     * Unknown Non-Terrestrial radio technology. This generic radio technology should be used
+     * only when the radio technology cannot be mapped to other specific radio technologies.
+     */
+    public static final int NT_RADIO_TECHNOLOGY_UNKNOWN = -1;
+
+    /** @hide */
+    @IntDef(prefix = "NT_RADIO_TECHNOLOGY_", value = {
+            NT_RADIO_TECHNOLOGY_NB_IOT_NTN,
+            NT_RADIO_TECHNOLOGY_NR_NTN,
+            NT_RADIO_TECHNOLOGY_EMTC_NTN,
+            NT_RADIO_TECHNOLOGY_PROPRIETARY,
+            NT_RADIO_TECHNOLOGY_UNKNOWN
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface NTRadioTechnology {}
+
+    /**
+     * Request to enable or disable the satellite modem. If the satellite modem is enabled, this
+     * will also disable the cellular modem, and if the satellite modem is disabled, this will also
+     * re-enable the cellular modem.
      *
      * @param enable {@code true} to enable the satellite modem and {@code false} to disable.
      * @param executor The executor on which the error code listener will be called.
@@ -289,7 +336,8 @@ public class SatelliteManager {
      * @throws IllegalStateException if the Telephony process is not currently available.
      */
     @RequiresPermission(Manifest.permission.SATELLITE_COMMUNICATION)
-    public void setSatelliteEnabled(boolean enable, @NonNull @CallbackExecutor Executor executor,
+    public void requestSatelliteEnabled(
+            boolean enable, @NonNull @CallbackExecutor Executor executor,
             @NonNull Consumer<Integer> errorCodeListener) {
         Objects.requireNonNull(executor);
         Objects.requireNonNull(errorCodeListener);
@@ -304,12 +352,12 @@ public class SatelliteManager {
                                 () -> errorCodeListener.accept(result)));
                     }
                 };
-                telephony.setSatelliteEnabled(mSubId, enable, errorCallback);
+                telephony.requestSatelliteEnabled(mSubId, enable, errorCallback);
             } else {
                 throw new IllegalStateException("telephony service is null.");
             }
         } catch (RemoteException ex) {
-            Rlog.e(TAG, "setSatelliteEnabled() RemoteException: ", ex);
+            Rlog.e(TAG, "requestSatelliteEnabled() RemoteException: ", ex);
             ex.rethrowFromSystemServer();
         }
     }
@@ -321,7 +369,7 @@ public class SatelliteManager {
      * @param callback The callback object to which the result will be delivered.
      *                 If the request is successful, {@link OutcomeReceiver#onResult(Object)}
      *                 will return a {@code boolean} with value {@code true} if the satellite modem
-     *                 is powered on and {@code false} otherwise.
+     *                 is enabled and {@code false} otherwise.
      *                 If the request is not successful, {@link OutcomeReceiver#onError(Throwable)}
      *                 will return a {@link SatelliteException} with the {@link SatelliteError}.
      *
@@ -364,6 +412,97 @@ public class SatelliteManager {
             }
         } catch (RemoteException ex) {
             loge("requestIsSatelliteEnabled() RemoteException: " + ex);
+            ex.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Request to enable or disable the satellite service demo mode.
+     *
+     * @param enable {@code true} to enable the satellite demo mode and {@code false} to disable.
+     * @param executor The executor on which the error code listener will be called.
+     * @param errorCodeListener Listener for the {@link SatelliteError} result of the operation.
+     *
+     * @throws SecurityException if the caller doesn't have required permission.
+     * @throws IllegalStateException if the Telephony process is not currently available.
+     */
+    @RequiresPermission(Manifest.permission.SATELLITE_COMMUNICATION)
+    public void requestSatelliteDemoModeEnabled(boolean enable,
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull Consumer<Integer> errorCodeListener) {
+        Objects.requireNonNull(executor);
+        Objects.requireNonNull(errorCodeListener);
+
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                IIntegerConsumer errorCallback = new IIntegerConsumer.Stub() {
+                    @Override
+                    public void accept(int result) {
+                        executor.execute(() -> Binder.withCleanCallingIdentity(
+                                () -> errorCodeListener.accept(result)));
+                    }
+                };
+                telephony.requestSatelliteDemoModeEnabled(mSubId, enable, errorCallback);
+            } else {
+                throw new IllegalStateException("telephony service is null.");
+            }
+        } catch (RemoteException ex) {
+            Rlog.e(TAG, "requestSatelliteDemoModeEnabled() RemoteException: ", ex);
+            ex.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Request to get whether the satellite service demo mode is enabled.
+     *
+     * @param executor The executor on which the callback will be called.
+     * @param callback The callback object to which the result will be delivered.
+     *                 If the request is successful, {@link OutcomeReceiver#onResult(Object)}
+     *                 will return a {@code boolean} with value {@code true} if the satellite
+     *                 demo mode is enabled and {@code false} otherwise.
+     *                 If the request is not successful, {@link OutcomeReceiver#onError(Throwable)}
+     *                 will return a {@link SatelliteException} with the {@link SatelliteError}.
+     *
+     * @throws SecurityException if the caller doesn't have required permission.
+     * @throws IllegalStateException if the Telephony process is not currently available.
+     */
+    @RequiresPermission(Manifest.permission.SATELLITE_COMMUNICATION)
+    public void requestIsSatelliteDemoModeEnabled(@NonNull @CallbackExecutor Executor executor,
+            @NonNull OutcomeReceiver<Boolean, SatelliteException> callback) {
+        Objects.requireNonNull(executor);
+        Objects.requireNonNull(callback);
+
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                ResultReceiver receiver = new ResultReceiver(null) {
+                    @Override
+                    protected void onReceiveResult(int resultCode, Bundle resultData) {
+                        if (resultCode == SATELLITE_ERROR_NONE) {
+                            if (resultData.containsKey(KEY_DEMO_MODE_ENABLED)) {
+                                boolean isDemoModeEnabled =
+                                        resultData.getBoolean(KEY_DEMO_MODE_ENABLED);
+                                executor.execute(() -> Binder.withCleanCallingIdentity(() ->
+                                        callback.onResult(isDemoModeEnabled)));
+                            } else {
+                                loge("KEY_DEMO_MODE_ENABLED does not exist.");
+                                executor.execute(() -> Binder.withCleanCallingIdentity(() ->
+                                        callback.onError(
+                                                new SatelliteException(SATELLITE_REQUEST_FAILED))));
+                            }
+                        } else {
+                            executor.execute(() -> Binder.withCleanCallingIdentity(() ->
+                                    callback.onError(new SatelliteException(resultCode))));
+                        }
+                    }
+                };
+                telephony.requestIsSatelliteDemoModeEnabled(mSubId, receiver);
+            } else {
+                throw new IllegalStateException("telephony service is null.");
+            }
+        } catch (RemoteException ex) {
+            loge("requestIsSatelliteDemoModeEnabled() RemoteException: " + ex);
             ex.rethrowFromSystemServer();
         }
     }
@@ -475,83 +614,135 @@ public class SatelliteManager {
     }
 
     /**
-     * The default state indicating that message transfer is idle.
-     * This should be sent immediately after either
-     * {@link #SATELLITE_MESSAGE_TRANSFER_STATE_SUCCESS} or
-     * {@link #SATELLITE_MESSAGE_TRANSFER_STATE_FAILED}.
+     * The default state indicating that datagram transfer is idle.
+     * This should be sent if there are no message transfer activity happening.
      */
-    public static final int SATELLITE_MESSAGE_TRANSFER_STATE_IDLE = 0;
+    public static final int SATELLITE_DATAGRAM_TRANSFER_STATE_IDLE = 0;
     /**
-     * A transition state indicating that a message is being sent.
+     * A transition state indicating that a datagram is being sent.
      */
-    public static final int SATELLITE_MESSAGE_TRANSFER_STATE_SENDING = 1;
+    public static final int SATELLITE_DATAGRAM_TRANSFER_STATE_SENDING = 1;
     /**
-     * A transition state indicating that a message is being received.
+     * An end state indicating that datagram sending completed successfully.
+     * After datagram transfer completes, {@link #SATELLITE_DATAGRAM_TRANSFER_STATE_IDLE}
+     * will be sent if no more messages are pending.
      */
-    public static final int SATELLITE_MESSAGE_TRANSFER_STATE_RECEIVING = 2;
+    public static final int SATELLITE_DATAGRAM_TRANSFER_STATE_SEND_SUCCESS = 2;
     /**
-     * A transition state indicating that message transfer is being retried.
+     * An end state indicating that datagram sending completed with a failure.
+     * After datagram transfer completes, {@link #SATELLITE_DATAGRAM_TRANSFER_STATE_IDLE}
+     * must be sent before reporting any additional datagram transfer state changes. All pending
+     * messages will be reported as failed, to the corresponding applications.
      */
-    public static final int SATELLITE_MESSAGE_TRANSFER_STATE_RETRYING = 3;
+    public static final int SATELLITE_DATAGRAM_TRANSFER_STATE_SEND_FAILED = 3;
     /**
-     * An end state indicating that message transfer completed successfully.
-     * After message transfer completes, {@link #SATELLITE_MESSAGE_TRANSFER_STATE_IDLE}
-     * must be sent before reporting any additional message transfer state changes.
+     * A transition state indicating that a datagram is being received.
      */
-    public static final int SATELLITE_MESSAGE_TRANSFER_STATE_SUCCESS = 4;
+    public static final int SATELLITE_DATAGRAM_TRANSFER_STATE_RECEIVING = 4;
     /**
-     * An end state indicating that message transfer completed with a failure.
-     * After message transfer completes, {@link #SATELLITE_MESSAGE_TRANSFER_STATE_IDLE}
-     * must be sent before reporting any additional message transfer state changes.
+     * An end state indicating that datagram receiving completed successfully.
+     * After datagram transfer completes, {@link #SATELLITE_DATAGRAM_TRANSFER_STATE_IDLE}
+     * will be sent if no more messages are pending.
      */
-    public static final int SATELLITE_MESSAGE_TRANSFER_STATE_FAILED = 5;
+    public static final int SATELLITE_DATAGRAM_TRANSFER_STATE_RECEIVE_SUCCESS = 5;
+    /**
+     * An end state indicating that datagram receive operation found that there are no
+     * messages to be retrieved from the satellite.
+     * After datagram transfer completes, {@link #SATELLITE_DATAGRAM_TRANSFER_STATE_IDLE}
+     * will be sent if no more messages are pending.
+     */
+    public static final int SATELLITE_DATAGRAM_TRANSFER_STATE_RECEIVE_NONE = 6;
+    /**
+     * An end state indicating that datagram receive completed with a failure.
+     * After datagram transfer completes, {@link #SATELLITE_DATAGRAM_TRANSFER_STATE_IDLE}
+     * will be sent if no more messages are pending.
+     */
+    public static final int SATELLITE_DATAGRAM_TRANSFER_STATE_RECEIVE_FAILED = 7;
+    /**
+     * The datagram transfer state is unknown. This generic datagram transfer state should be used
+     * only when the datagram transfer state cannot be mapped to other specific datagram transfer
+     * states.
+     */
+    public static final int SATELLITE_DATAGRAM_TRANSFER_STATE_UNKNOWN = -1;
 
     /** @hide */
-    @IntDef(prefix = {"SATELLITE_MESSAGE_TRANSFER_STATE_"}, value = {
-            SATELLITE_MESSAGE_TRANSFER_STATE_IDLE,
-            SATELLITE_MESSAGE_TRANSFER_STATE_SENDING,
-            SATELLITE_MESSAGE_TRANSFER_STATE_RECEIVING,
-            SATELLITE_MESSAGE_TRANSFER_STATE_RETRYING,
-            SATELLITE_MESSAGE_TRANSFER_STATE_SUCCESS,
-            SATELLITE_MESSAGE_TRANSFER_STATE_FAILED
+    @IntDef(prefix = {"SATELLITE_DATAGRAM_TRANSFER_STATE_"}, value = {
+            SATELLITE_DATAGRAM_TRANSFER_STATE_IDLE,
+            SATELLITE_DATAGRAM_TRANSFER_STATE_SENDING,
+            SATELLITE_DATAGRAM_TRANSFER_STATE_SEND_SUCCESS,
+            SATELLITE_DATAGRAM_TRANSFER_STATE_SEND_FAILED,
+            SATELLITE_DATAGRAM_TRANSFER_STATE_RECEIVING,
+            SATELLITE_DATAGRAM_TRANSFER_STATE_RECEIVE_SUCCESS,
+            SATELLITE_DATAGRAM_TRANSFER_STATE_RECEIVE_NONE,
+            SATELLITE_DATAGRAM_TRANSFER_STATE_RECEIVE_FAILED,
+            SATELLITE_DATAGRAM_TRANSFER_STATE_UNKNOWN
     })
-    public @interface SatelliteMessageTransferState {}
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface SatelliteDatagramTransferState {}
 
-    /* Satellite modem is in idle state. */
+    /**
+     * Satellite modem is in idle state.
+     */
     public static final int SATELLITE_MODEM_STATE_IDLE = 0;
-
-    /* Satellite modem is listening for incoming messages. */
+    /**
+     * Satellite modem is listening for incoming datagrams.
+     */
     public static final int SATELLITE_MODEM_STATE_LISTENING = 1;
-
-    /* Satellite modem is sending and/or receiving messages. */
-    public static final int SATELLITE_MODEM_STATE_MESSAGE_TRANSFERRING = 2;
-
-    /* Satellite modem is powered off */
-    public static final int SATELLITE_MODEM_STATE_OFF = 3;
+    /**
+     * Satellite modem is sending and/or receiving datagrams.
+     */
+    public static final int SATELLITE_MODEM_STATE_DATAGRAM_TRANSFERRING = 2;
+    /**
+     * Satellite modem is retrying to send and/or receive datagrams.
+     */
+    public static final int SATELLITE_MODEM_STATE_DATAGRAM_RETRYING = 3;
+    /**
+     * Satellite modem is powered off.
+     */
+    public static final int SATELLITE_MODEM_STATE_OFF = 4;
+    /**
+     * Satellite modem is unavailable.
+     */
+    public static final int SATELLITE_MODEM_STATE_UNAVAILABLE = 5;
+    /**
+     * Satellite modem state is unknown. This generic modem state should be used only when the
+     * modem state cannot be mapped to other specific modem states.
+     */
+    public static final int SATELLITE_MODEM_STATE_UNKNOWN = -1;
 
     /** @hide */
-    @IntDef(prefix = {"SATELLITE_STATE_"},
-            value = {
-                    SATELLITE_MODEM_STATE_IDLE,
-                    SATELLITE_MODEM_STATE_LISTENING,
-                    SATELLITE_MODEM_STATE_MESSAGE_TRANSFERRING,
-                    SATELLITE_MODEM_STATE_OFF
-            })
+    @IntDef(prefix = {"SATELLITE_MODEM_STATE_"}, value = {
+            SATELLITE_MODEM_STATE_IDLE,
+            SATELLITE_MODEM_STATE_LISTENING,
+            SATELLITE_MODEM_STATE_DATAGRAM_TRANSFERRING,
+            SATELLITE_MODEM_STATE_DATAGRAM_RETRYING,
+            SATELLITE_MODEM_STATE_OFF,
+            SATELLITE_MODEM_STATE_UNAVAILABLE,
+            SATELLITE_MODEM_STATE_UNKNOWN
+    })
     @Retention(RetentionPolicy.SOURCE)
     public @interface SatelliteModemState {}
 
-    /** SOS SMS */
-    public static final int DATAGRAM_TYPE_SOS_SMS = 0;
+    /**
+     * Datagram type indicating that the datagram to be sent or received is of type SOS message.
+     */
+    public static final int DATAGRAM_TYPE_SOS_MESSAGE = 0;
+    /**
+     * Datagram type indicating that the datagram to be sent or received is of type
+     * location sharing.
+     */
+    public static final int DATAGRAM_TYPE_LOCATION_SHARING = 1;
+    /**
+     * Datagram type is unknown. This generic datagram type should be used only when the
+     * datagram type cannot be mapped to other specific datagram types.
+     */
+    public static final int DATAGRAM_TYPE_UNKNOWN = -1;
 
-    /** Location sharing message */
-    public static final int DATAGRAM_TYPE_LOCATION_SHARING = 3;
-
-    @IntDef(
-            prefix = "DATAGRAM_TYPE_",
-            value = {
-                    DATAGRAM_TYPE_SOS_SMS,
-                    DATAGRAM_TYPE_LOCATION_SHARING,
-            })
+    @IntDef(prefix = "DATAGRAM_TYPE_", value = {
+            DATAGRAM_TYPE_SOS_MESSAGE,
+            DATAGRAM_TYPE_LOCATION_SHARING,
+            DATAGRAM_TYPE_UNKNOWN
+    })
     @Retention(RetentionPolicy.SOURCE)
     public @interface DatagramType {}
 
@@ -561,24 +752,20 @@ public class SatelliteManager {
      * Modem should continue to report the pointing input as the device or satellite moves.
      * Satellite position updates are started only on {@link #SATELLITE_ERROR_NONE}.
      * All other results indicate that this operation failed.
-     * Once satellite position updates begin, message transfer state updates will be sent
-     * through {@link SatelliteCallback.SatellitePositionUpdateListener}.
-     * Modem should report any changes in message transfer state and indicate success or failure
-     * by reporting {@link #SATELLITE_MESSAGE_TRANSFER_STATE_SUCCESS} or
-     * {@link #SATELLITE_MESSAGE_TRANSFER_STATE_FAILED}.
+     * Once satellite position updates begin, datagram transfer state updates will be sent
+     * through {@link SatellitePositionUpdateCallback}.
      *
      * @param executor The executor on which the callback and error code listener will be called.
      * @param errorCodeListener Listener for the {@link SatelliteError} result of the operation.
-     * @param callback The callback to notify of changes in satellite position. This
-     *                 SatelliteCallback should implement the interface
-     *                 {@link SatelliteCallback.SatellitePositionUpdateListener}.
+     * @param callback The callback to notify of changes in satellite position.
      *
      * @throws SecurityException if the caller doesn't have required permission.
      * @throws IllegalStateException if the Telephony process is not currently available.
      */
     @RequiresPermission(Manifest.permission.SATELLITE_COMMUNICATION)
     public void startSatellitePositionUpdates(@NonNull @CallbackExecutor Executor executor,
-            @NonNull Consumer<Integer> errorCodeListener, @NonNull SatelliteCallback callback) {
+            @NonNull Consumer<Integer> errorCodeListener,
+            @NonNull SatellitePositionUpdateCallback callback) {
         Objects.requireNonNull(executor);
         Objects.requireNonNull(errorCodeListener);
         Objects.requireNonNull(callback);
@@ -586,7 +773,7 @@ public class SatelliteManager {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                callback.init(executor);
+                callback.setExecutor(executor);
                 IIntegerConsumer errorCallback = new IIntegerConsumer.Stub() {
                     @Override
                     public void accept(int result) {
@@ -594,8 +781,8 @@ public class SatelliteManager {
                                 () -> errorCodeListener.accept(result)));
                     }
                 };
-                telephony.startSatellitePositionUpdates(mSubId, errorCallback,
-                        callback.getCallbackStub());
+                telephony.startSatellitePositionUpdates(
+                        mSubId, errorCallback, callback.getBinder());
             } else {
                 throw new IllegalStateException("telephony service is null.");
             }
@@ -612,7 +799,7 @@ public class SatelliteManager {
      * {@link #SATELLITE_ERROR_NONE}. All other results that this operation failed.
      *
      * @param callback The callback that was passed to
-     *       {@link #startSatellitePositionUpdates(Executor, Consumer, SatelliteCallback)}.
+     * {@link #startSatellitePositionUpdates(Executor, Consumer, SatellitePositionUpdateCallback)}.
      * @param executor The executor on which the error code listener will be called.
      * @param errorCodeListener Listener for the {@link SatelliteError} result of the operation.
      *
@@ -620,7 +807,7 @@ public class SatelliteManager {
      * @throws IllegalStateException if the Telephony process is not currently available.
      */
     @RequiresPermission(Manifest.permission.SATELLITE_COMMUNICATION)
-    public void stopSatellitePositionUpdates(@NonNull SatelliteCallback callback,
+    public void stopSatellitePositionUpdates(@NonNull SatellitePositionUpdateCallback callback,
             @NonNull @CallbackExecutor Executor executor,
             @NonNull Consumer<Integer> errorCodeListener) {
         Objects.requireNonNull(callback);
@@ -638,7 +825,7 @@ public class SatelliteManager {
                     }
                 };
                 telephony.stopSatellitePositionUpdates(mSubId, errorCallback,
-                        callback.getCallbackStub());
+                        callback.getBinder());
                 // TODO: Notify SmsHandler that pointing UI stopped
             } else {
                 throw new IllegalStateException("telephony service is null.");
@@ -650,19 +837,20 @@ public class SatelliteManager {
     }
 
     /**
-     * Request to get the maximum number of characters per text message on satellite.
+     * Request to get the maximum number of bytes per datagram that can be sent to satellite.
      *
      * @param executor The executor on which the callback will be called.
      * @param callback The callback object to which the result will be delivered.
      *                 If the request is successful, {@link OutcomeReceiver#onResult(Object)}
-     *                 will return the maximum number of characters per text message on satellite.
+     *                 will return the maximum number of bytes per datagram that can be sent to
+     *                 satellite.
      *                 If the request is not successful, {@link OutcomeReceiver#onError(Throwable)}
      *
      * @throws SecurityException if the caller doesn't have required permission.
      * @throws IllegalStateException if the Telephony process is not currently available.
      */
     @RequiresPermission(Manifest.permission.SATELLITE_COMMUNICATION)
-    public void requestMaxCharactersPerSatelliteTextMessage(
+    public void requestMaxSizePerSendingDatagram(
             @NonNull @CallbackExecutor Executor executor,
             @NonNull OutcomeReceiver<Integer, SatelliteException> callback) {
         Objects.requireNonNull(executor);
@@ -692,7 +880,7 @@ public class SatelliteManager {
                         }
                     }
                 };
-                telephony.requestMaxCharactersPerSatelliteTextMessage(mSubId, receiver);
+                telephony.requestMaxSizePerSendingDatagram(mSubId, receiver);
             } else {
                 throw new IllegalStateException("telephony service is null.");
             }
@@ -753,7 +941,7 @@ public class SatelliteManager {
     /**
      * Deprovision the device with the satellite provider.
      * This is needed if the provider allows dynamic registration. Once deprovisioned,
-     * {@link SatelliteCallback.SatelliteProvisionStateListener#onSatelliteProvisionStateChanged}
+     * {@link SatelliteProvisionStateCallback#onSatelliteProvisionStateChanged(boolean)}
      * should report as deprovisioned.
      * For provisioning satellite service, refer to
      * {@link #provisionSatelliteService(String, CancellationSignal, Executor, Consumer)}.
@@ -793,12 +981,10 @@ public class SatelliteManager {
     }
 
     /**
-     * Register for the satellite provision state change.
+     * Registers for the satellite provision state changed.
      *
      * @param executor The executor on which the callback will be called.
      * @param callback The callback to handle the satellite provision state changed event.
-     *                 This SatelliteCallback should implement the interface
-     *                 {@link SatelliteCallback.SatelliteProvisionStateListener}.
      *
      * @return The {@link SatelliteError} result of the operation.
      *
@@ -807,16 +993,17 @@ public class SatelliteManager {
      */
     @RequiresPermission(Manifest.permission.SATELLITE_COMMUNICATION)
     @SatelliteError public int registerForSatelliteProvisionStateChanged(
-            @NonNull @CallbackExecutor Executor executor, @NonNull SatelliteCallback callback) {
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull SatelliteProvisionStateCallback callback) {
         Objects.requireNonNull(executor);
         Objects.requireNonNull(callback);
 
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                callback.init(executor);
+                callback.setExecutor(executor);
                 return telephony.registerForSatelliteProvisionStateChanged(
-                        mSubId, callback.getCallbackStub());
+                        mSubId, callback.getBinder());
             } else {
                 throw new IllegalStateException("telephony service is null.");
             }
@@ -828,31 +1015,24 @@ public class SatelliteManager {
     }
 
     /**
-     * Unregister for the satellite provision state change.
+     * Unregisters for the satellite provision state changed.
+     * If callback was not registered before, the request will be ignored.
      *
-     * @param callback The callback that was passed to {@link
-     *                 #registerForSatelliteProvisionStateChanged(Executor, SatelliteCallback)}.
-     *
-     * @return The {@link SatelliteError} result of the operation.
+     * @param callback The callback that was passed to
+     * {@link #registerForSatelliteProvisionStateChanged(Executor, SatelliteProvisionStateCallback)}
      *
      * @throws SecurityException if the caller doesn't have required permission.
      * @throws IllegalStateException if the Telephony process is not currently available.
      */
     @RequiresPermission(Manifest.permission.SATELLITE_COMMUNICATION)
-    @SatelliteError public int unregisterForSatelliteProvisionStateChanged(
-            @NonNull SatelliteCallback callback) {
+    public void unregisterForSatelliteProvisionStateChanged(
+            @NonNull SatelliteProvisionStateCallback callback) {
         Objects.requireNonNull(callback);
-
-        if (callback.getCallbackStub() == null) {
-            loge("unregisterForSatelliteProvisionStateChanged: callbackStub is null");
-            return SATELLITE_INVALID_ARGUMENTS;
-        }
 
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                return telephony.unregisterForSatelliteProvisionStateChanged(mSubId,
-                        callback.getCallbackStub());
+                telephony.unregisterForSatelliteProvisionStateChanged(mSubId, callback.getBinder());
             } else {
                 throw new IllegalStateException("telephony service is null.");
             }
@@ -860,7 +1040,6 @@ public class SatelliteManager {
             loge("unregisterForSatelliteProvisionStateChanged() RemoteException: " + ex);
             ex.rethrowFromSystemServer();
         }
-        return SATELLITE_REQUEST_FAILED;
     }
 
     /**
@@ -918,12 +1097,10 @@ public class SatelliteManager {
     }
 
     /**
-     * Register for listening to satellite modem state changes.
+     * Registers for modem state changed from satellite modem.
      *
      * @param executor The executor on which the callback will be called.
-     * @param callback The callback to handle the satellite state change event.
-     *                 This SatelliteCallback should implement the interface
-     *                 {@link SatelliteCallback.SatelliteStateListener}.
+     * @param callback The callback to handle the satellite modem state changed event.
      *
      * @return The {@link SatelliteError} result of the operation.
      *
@@ -931,71 +1108,63 @@ public class SatelliteManager {
      * @throws IllegalStateException if the Telephony process is not currently available.
      */
     @RequiresPermission(Manifest.permission.SATELLITE_COMMUNICATION)
-    @SatelliteError public int registerForSatelliteModemStateChange(
-            @NonNull @CallbackExecutor Executor executor, @NonNull SatelliteCallback callback) {
+    @SatelliteError public int registerForSatelliteModemStateChanged(
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull SatelliteStateCallback callback) {
         Objects.requireNonNull(executor);
         Objects.requireNonNull(callback);
 
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                callback.init(executor);
-                return telephony.registerForSatelliteModemStateChange(mSubId,
-                        callback.getCallbackStub());
+                callback.setExecutor(executor);
+                return telephony.registerForSatelliteModemStateChanged(mSubId,
+                        callback.getBinder());
             } else {
                 throw new IllegalStateException("telephony service is null.");
             }
         } catch (RemoteException ex) {
-            loge("registerForSatelliteModemStateChange() RemoteException:" + ex);
+            loge("registerForSatelliteModemStateChanged() RemoteException:" + ex);
             ex.rethrowFromSystemServer();
         }
         return SATELLITE_REQUEST_FAILED;
     }
 
     /**
-     * Unregister to stop listening to satellite modem state changes.
+     * Unregisters for modem state changed from satellite modem.
+     * If callback was not registered before, the request will be ignored.
      *
      * @param callback The callback that was passed to
-     *                 {@link #registerForSatelliteModemStateChange(Executor, SatelliteCallback)}.
-     *
-     * @return The {@link SatelliteError} result of the operation.
+     * {@link #registerForSatelliteModemStateChanged(Executor, SatelliteStateCallback)}.
      *
      * @throws SecurityException if the caller doesn't have required permission.
      * @throws IllegalStateException if the Telephony process is not currently available.
      */
     @RequiresPermission(Manifest.permission.SATELLITE_COMMUNICATION)
-    @SatelliteError
-    public int unregisterForSatelliteModemStateChange(@NonNull SatelliteCallback callback) {
+    public void unregisterForSatelliteModemStateChanged(@NonNull SatelliteStateCallback callback) {
         Objects.requireNonNull(callback);
-
-        if (callback.getCallbackStub() == null) {
-            loge("unregisterForSatelliteModemStateChange: callbackStub is null");
-            return SATELLITE_INVALID_ARGUMENTS;
-        }
 
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                return telephony.unregisterForSatelliteModemStateChange(mSubId,
-                        callback.getCallbackStub());
+                telephony.unregisterForSatelliteModemStateChanged(mSubId, callback.getBinder());
             } else {
                 throw new IllegalStateException("telephony service is null.");
             }
         } catch (RemoteException ex) {
-            loge("unregisterForSatelliteModemStateChange() RemoteException:" + ex);
+            loge("unregisterForSatelliteModemStateChanged() RemoteException:" + ex);
             ex.rethrowFromSystemServer();
         }
-        return SATELLITE_REQUEST_FAILED;
     }
 
     /**
      * Register to receive incoming datagrams over satellite.
      *
-     * @param datagramType Type of datagram.
+     * @param datagramType datagram type indicating whether the datagram is of type
+     *                     SOS_SMS or LOCATION_SHARING.
      * @param executor The executor on which the callback will be called.
      * @param callback The callback to handle incoming datagrams over satellite.
-     *                 This SatelliteCallback should implement the interface
-     *                 {@link SatelliteCallback.SatelliteDatagramListener}.
+     *                 This callback with be invoked when a new datagram is received from satellite.
      *
      * @return The {@link SatelliteError} result of the operation.
      *
@@ -1004,16 +1173,17 @@ public class SatelliteManager {
      */
     @RequiresPermission(Manifest.permission.SATELLITE_COMMUNICATION)
     @SatelliteError public int registerForSatelliteDatagram(@DatagramType int datagramType,
-            @NonNull @CallbackExecutor Executor executor, @NonNull SatelliteCallback callback) {
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull SatelliteDatagramCallback callback) {
         Objects.requireNonNull(executor);
         Objects.requireNonNull(callback);
 
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                callback.init(executor);
+                callback.setExecutor(executor);
                 return telephony.registerForSatelliteDatagram(mSubId, datagramType,
-                            callback.getCallbackStub());
+                            callback.getBinder());
             } else {
                 throw new IllegalStateException("telephony service is null.");
             }
@@ -1026,28 +1196,22 @@ public class SatelliteManager {
 
     /**
      * Unregister to stop receiving incoming datagrams over satellite.
+     * If callback was not registered before, the request will be ignored.
      *
      * @param callback The callback that was passed to
-     *                 {@link #registerForSatelliteDatagram(int, Executor, SatelliteCallback)}.
-     *
-     * @return The {@link SatelliteError} result of the operation.
+     * {@link #registerForSatelliteDatagram(int, Executor, SatelliteDatagramCallback)}.
      *
      * @throws SecurityException if the caller doesn't have required permission.
      * @throws IllegalStateException if the Telephony process is not currently available.
      */
     @RequiresPermission(Manifest.permission.SATELLITE_COMMUNICATION)
-    @SatelliteError public int unregisterForSatelliteDatagram(@NonNull SatelliteCallback callback) {
+    public void unregisterForSatelliteDatagram(@NonNull SatelliteDatagramCallback callback) {
         Objects.requireNonNull(callback);
-
-        if (callback.getCallbackStub() == null) {
-            loge("unregisterForSatelliteDatagram: callbackStub is null");
-            return SATELLITE_INVALID_ARGUMENTS;
-        }
 
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                return telephony.unregisterForSatelliteDatagram(mSubId, callback.getCallbackStub());
+                telephony.unregisterForSatelliteDatagram(mSubId, callback.getBinder());
             } else {
                 throw new IllegalStateException("telephony service is null.");
             }
@@ -1055,50 +1219,27 @@ public class SatelliteManager {
             loge("unregisterForSatelliteDatagram() RemoteException:" + ex);
             ex.rethrowFromSystemServer();
         }
-        return SATELLITE_REQUEST_FAILED;
     }
 
     /**
      * Poll pending satellite datagrams over satellite.
      *
-     * @return The result of the operation.
-     * @throws SecurityException if the caller doesn't have required permission.
-     * @throws IllegalStateException if the Telephony process is not currently available.
-     */
-    @RequiresPermission(Manifest.permission.SATELLITE_COMMUNICATION)
-    @SatelliteError public int pollPendingSatelliteDatagrams() {
-        try {
-            ITelephony telephony = getITelephony();
-            if (telephony != null) {
-                return telephony.pollPendingSatelliteDatagrams(mSubId);
-            } else {
-                throw new IllegalStateException("telephony service is null.");
-            }
-        } catch (RemoteException ex) {
-            loge("pollPendingSatelliteDatagrams() RemoteException:" + ex);
-            ex.rethrowFromSystemServer();
-        }
-        return SATELLITE_REQUEST_FAILED;
-    }
-
-    /**
-     * Send datagram over satellite.
+     * This method requests modem to check if there are any pending datagrams to be received over
+     * satellite. If there are any incoming datagrams, they will be received via
+     * {@link SatelliteDatagramCallback#onSatelliteDatagramReceived(long, SatelliteDatagram, int,
+     *          ISatelliteDatagramReceiverAck)}
      *
-     * @param datagramType Type of datagram.
-     * @param datagram Datagram to send over satellite.
-     * @param executor The executor on which the error code listener will be called.
-     * @param errorCodeListener Listener for the {@link SatelliteError} result of the operation.
+     * @param executor The executor on which the result listener will be called.
+     * @param resultListener Listener for the {@link SatelliteError} result of the operation.
      *
      * @throws SecurityException if the caller doesn't have required permission.
      * @throws IllegalStateException if the Telephony process is not currently available.
      */
     @RequiresPermission(Manifest.permission.SATELLITE_COMMUNICATION)
-    public void sendSatelliteDatagram(@DatagramType int datagramType,
-            @NonNull SatelliteDatagram datagram, @NonNull @CallbackExecutor Executor executor,
-            @SatelliteError @NonNull Consumer<Integer> errorCodeListener) {
-        Objects.requireNonNull(datagram);
+    public void pollPendingSatelliteDatagrams(@NonNull @CallbackExecutor Executor executor,
+            @SatelliteError @NonNull Consumer<Integer> resultListener) {
         Objects.requireNonNull(executor);
-        Objects.requireNonNull(errorCodeListener);
+        Objects.requireNonNull(resultListener);
 
         try {
             ITelephony telephony = getITelephony();
@@ -1107,10 +1248,86 @@ public class SatelliteManager {
                     @Override
                     public void accept(int result) {
                         executor.execute(() -> Binder.withCleanCallingIdentity(
-                                () -> errorCodeListener.accept(result)));
+                                () -> resultListener.accept(result)));
                     }
                 };
-                telephony.sendSatelliteDatagram(mSubId, datagramType, datagram, internalCallback);
+                telephony.pollPendingSatelliteDatagrams(mSubId, internalCallback);
+            } else {
+                throw new IllegalStateException("telephony service is null.");
+            }
+        } catch (RemoteException ex) {
+            loge("pollPendingSatelliteDatagrams() RemoteException:" + ex);
+            ex.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Send datagram over satellite.
+     *
+     * Gateway encodes SOS message or location sharing message into a datagram and passes it as
+     * input to this method. Datagram received here will be passed down to modem without any
+     * encoding or encryption.
+     *
+     * @param datagramId An id that uniquely identifies datagram requested to be sent.
+     * @param datagramType datagram type indicating whether the datagram is of type
+     *                     SOS_SMS or LOCATION_SHARING.
+     * @param datagram encoded gateway datagram which is encrypted by the caller.
+     *                 Datagram will be passed down to modem without any encoding or encryption.
+     * @param needFullScreenPointingUI If set to true, this indicates pointingUI app to open in full
+     *                                 screen mode if satellite communication needs pointingUI.
+     *                                 If this is set to false, pointingUI may be presented to the
+     *                                 user in collapsed view. Application may decide to mark this
+     *                                 flag as true when the user is sending data for the first time
+     *                                 or whenever there is a considerable idle time between
+     *                                 satellite activity. This decision should be done based upon
+     *                                 user activity and the application's ability to determine the
+     *                                 best possible UX experience for the user.
+     * @param executor The executor on which the result listener will be called.
+     * @param callback The callback object to which the result will be returned.
+     *                 If datagram is sent successfully, then
+     *                 {@link OutcomeReceiver#onResult(Object)} will return datagramId.
+     *                 If the request is not successful, {@link OutcomeReceiver#onError(Throwable)}
+     *                 will return a {@link SatelliteException} with the {@link SatelliteError}.
+     *
+     * @throws SecurityException if the caller doesn't have required permission.
+     * @throws IllegalStateException if the Telephony process is not currently available.
+     */
+    @RequiresPermission(Manifest.permission.SATELLITE_COMMUNICATION)
+    public void sendSatelliteDatagram(long datagramId, @DatagramType int datagramType,
+            @NonNull SatelliteDatagram datagram, boolean needFullScreenPointingUI,
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull OutcomeReceiver<Long, SatelliteException> callback) {
+        Objects.requireNonNull(datagram);
+        Objects.requireNonNull(executor);
+        Objects.requireNonNull(callback);
+
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                ResultReceiver receiver = new ResultReceiver(null) {
+                    @Override
+                    protected void onReceiveResult(int resultCode, Bundle resultData) {
+                        if (resultCode == SATELLITE_ERROR_NONE) {
+                            if (resultData.containsKey(KEY_SEND_SATELLITE_DATAGRAM)) {
+                                long resultDatagramId = resultData
+                                        .getLong(KEY_SEND_SATELLITE_DATAGRAM);
+                                executor.execute(() -> Binder.withCleanCallingIdentity(() ->
+                                        callback.onResult(resultDatagramId)));
+                            } else {
+                                loge("KEY_SEND_SATELLITE_DATAGRAM does not exist.");
+                                executor.execute(() -> Binder.withCleanCallingIdentity(() ->
+                                        callback.onError(
+                                                new SatelliteException(SATELLITE_REQUEST_FAILED))));
+                            }
+
+                        } else {
+                            executor.execute(() -> Binder.withCleanCallingIdentity(() ->
+                                    callback.onError(new SatelliteException(resultCode))));
+                        }
+                    }
+                };
+                telephony.sendSatelliteDatagram(mSubId, datagramId, datagramType, datagram,
+                        needFullScreenPointingUI, receiver);
             } else {
                 throw new IllegalStateException("telephony service is null.");
             }
@@ -1179,14 +1396,14 @@ public class SatelliteManager {
     }
 
     /**
-     * Request to get the time after which the satellite will next be visible. This is an
+     * Request to get the time after which the satellite will be visible. This is an
      * {@code int} representing the duration in seconds after which the satellite will be visible.
      * This will return {@code 0} if the satellite is currently visible.
      *
      * @param executor The executor on which the callback will be called.
      * @param callback The callback object to which the result will be delivered.
      *                 If the request is successful, {@link OutcomeReceiver#onResult(Object)}
-     *                 will return the time after which the satellite will next be visible.
+     *                 will return the time after which the satellite will be visible.
      *                 If the request is not successful, {@link OutcomeReceiver#onError(Throwable)}
      *                 will return a {@link SatelliteException} with the {@link SatelliteError}.
      *
