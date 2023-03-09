@@ -33,6 +33,23 @@
       "message": "this should really be conditional.  we support pixels and other devices that may use 255 as the max brightness level.",
       "revId": "caaca86f5e3fe2c4d7f8e843b8c252246d681f79",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "a03e42bc_9a04e291",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2023-03-09T23:45:57Z",
+      "side": 1,
+      "message": "still needed for Nothing Phone for the time being.  Restoring so I can push to gerrit when I have this in my local tree.",
+      "revId": "caaca86f5e3fe2c4d7f8e843b8c252246d681f79",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ],
   "submitRequirementResults": []
