@@ -47,4 +47,6 @@ class FakeMobileConnectionRepository(
     fun setDataEnabled(enabled: Boolean) {
         _dataEnabled.value = enabled
     }
+
+    override val imsInfo = MutableStateFlow(MobileConnectionModel())
 }

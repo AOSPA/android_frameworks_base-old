@@ -16,12 +16,15 @@
 
 package com.android.systemui.statusbar.pipeline.mobile.ui.viewmodel
 
+import android.telephony.TelephonyManager
 import com.android.settingslib.AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH
 import com.android.settingslib.AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH_NONE
 import com.android.settingslib.graph.SignalDrawable
+import com.android.settingslib.mobile.TelephonyIcons
 import com.android.systemui.common.shared.model.ContentDescription
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.log.table.logDiffsForTable
+import com.android.systemui.R
 import com.android.systemui.statusbar.pipeline.airplane.domain.interactor.AirplaneModeInteractor
 import com.android.systemui.statusbar.pipeline.mobile.domain.interactor.MobileIconInteractor
 import com.android.systemui.statusbar.pipeline.mobile.domain.interactor.MobileIconsInteractor
@@ -53,6 +56,7 @@ interface MobileIconViewModelCommon {
     val activityInVisible: Flow<Boolean>
     val activityOutVisible: Flow<Boolean>
     val activityContainerVisible: Flow<Boolean>
+    val volteId: Flow<Int>
 }
 
 /**
@@ -170,12 +174,18 @@ constructor(
         combine(
                 iconInteractor.networkTypeIconGroup,
                 showNetworkTypeIcon,
-            ) { networkTypeIconGroup, shouldShow ->
+                iconInteractor.voWifiAvailable,
+            ) { networkTypeIconGroup, shouldShow, voWifiAvailable ->
                 val desc =
                     if (networkTypeIconGroup.dataContentDescription != 0)
                         ContentDescription.Resource(networkTypeIconGroup.dataContentDescription)
                     else null
-                val icon = Icon.Resource(networkTypeIconGroup.dataType, desc)
+                val icon =
+                    if (voWifiAvailable) {
+                        Icon.Resource(TelephonyIcons.VOWIFI.dataType, desc)
+                    } else {
+                        Icon.Resource(networkTypeIconGroup.dataType, desc)
+                    }
                 return@combine when {
                     !shouldShow -> null
                     else -> icon
@@ -236,4 +246,27 @@ constructor(
                 initialValue = false,
             )
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
+
+    override val volteId =
+        combine (
+                iconInteractor.imsInfo,
+                iconInteractor.showVolteIcon,
+            ) { imsInfo, showVolteIcon ->
+                if (!showVolteIcon) {
+                    return@combine 0
+                }
+                val voiceNetworkType = imsInfo.voiceNetworkType
+                val netWorkType = imsInfo.originNetworkType
+                if ((imsInfo.voiceCapable || imsInfo.videoCapable) && imsInfo.imsRegistered) {
+                    return@combine R.drawable.ic_volte
+                } else if ((netWorkType == TelephonyManager.NETWORK_TYPE_LTE
+                                    || netWorkType == TelephonyManager.NETWORK_TYPE_LTE_CA)
+                    && voiceNetworkType  == TelephonyManager.NETWORK_TYPE_UNKNOWN) {
+                    return@combine R.drawable.ic_volte_no_voice
+                } else {
+                    return@combine 0
+                }
+            }
+            .distinctUntilChanged()
+            .stateIn(scope, SharingStarted.WhileSubscribed(), 0)
 }

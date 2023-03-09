@@ -70,6 +70,8 @@ class MobileIconInteractorTest : SysuiTestCase() {
                 connectionRepository,
                 mobileIconsInteractor.alwaysUseRsrpLevelForLte,
                 mobileIconsInteractor.hideNoInternetState,
+                mobileIconsInteractor.showVolteIcon,
+                mobileIconsInteractor.showVowifiIcon,
             )
     }
 
