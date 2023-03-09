@@ -39,10 +39,16 @@ public class PropImitationHooks {
     private static final String sStockFp =
             Resources.getSystem().getString(R.string.config_stockFingerprint);
 
+    // Use stock fingerprint for ARCore to load correct profile
     private static final String PACKAGE_ARCORE = "com.google.ar.core";
+
+    // Use certified properties for GMS to pass SafetyNet / Play Integrity
     private static final String PACKAGE_FINSKY = "com.android.vending";
     private static final String PACKAGE_GMS = "com.google.android.gms";
     private static final String PROCESS_GMS_UNSTABLE = PACKAGE_GMS + ".unstable";
+
+    // Use certified properties for Snapchat to prevent send/receive delays
+    private static final String PACKAGE_SNAPCHAT = "com.snapchat.android";
 
     private static volatile boolean sIsGms = false;
     private static volatile boolean sIsFinsky = false;
@@ -59,11 +65,11 @@ public class PropImitationHooks {
         sIsGms = packageName.equals(PACKAGE_GMS) && processName.equals(PROCESS_GMS_UNSTABLE);
         sIsFinsky = packageName.equals(PACKAGE_FINSKY);
 
-        /* Set Certified Properties for GMSCore
-         * Set Stock Fingerprint for ARCore
+        /* Set certified properties for GMSCore / Snapchat
+         * Set stock fingerprint for ARCore
          */
-        if (sCertifiedProps.length == 4 && sIsGms) {
-            dlog("Spoofing build for GMS");
+        if (sCertifiedProps.length == 4 && (sIsGms || packageName.equals(PACKAGE_SNAPCHAT))) {
+            dlog("Spoofing build for: " + packageName);
             setPropValue("DEVICE", sCertifiedProps[0]);
             setPropValue("PRODUCT", sCertifiedProps[1]);
             setPropValue("MODEL", sCertifiedProps[2]);
