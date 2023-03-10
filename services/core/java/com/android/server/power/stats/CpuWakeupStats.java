@@ -18,6 +18,7 @@ package com.android.server.power.stats;
 
 import static android.os.BatteryStatsInternal.CPU_WAKEUP_SUBSYSTEM_ALARM;
 import static android.os.BatteryStatsInternal.CPU_WAKEUP_SUBSYSTEM_UNKNOWN;
+import static android.os.BatteryStatsInternal.CPU_WAKEUP_SUBSYSTEM_WIFI;
 
 import android.content.Context;
 import android.os.Handler;
@@ -49,6 +50,7 @@ public class CpuWakeupStats {
     private static final String TAG = "CpuWakeupStats";
 
     private static final String SUBSYSTEM_ALARM_STRING = "Alarm";
+    private static final String SUBSYSTEM_ALARM_WIFI = "Wifi";
     @VisibleForTesting
     static final long WAKEUP_RETENTION_MS = 3 * 24 * 60 * 60_000; // 3 days.
     @VisibleForTesting
@@ -74,6 +76,8 @@ public class CpuWakeupStats {
         switch (subsystem) {
             case CPU_WAKEUP_SUBSYSTEM_ALARM:
                 return FrameworkStatsLog.KERNEL_WAKEUP_ATTRIBUTED__REASON__ALARM;
+            case CPU_WAKEUP_SUBSYSTEM_WIFI:
+                return FrameworkStatsLog.KERNEL_WAKEUP_ATTRIBUTED__REASON__WIFI;
         }
         return FrameworkStatsLog.KERNEL_WAKEUP_ATTRIBUTED__REASON__UNKNOWN;
     }
@@ -122,7 +126,10 @@ public class CpuWakeupStats {
     /** Notes a wakeup reason as reported by SuspendControlService to battery stats. */
     public synchronized void noteWakeupTimeAndReason(long elapsedRealtime, long uptime,
             String rawReason) {
-        final Wakeup parsedWakeup = new Wakeup(rawReason, elapsedRealtime, uptime);
+        final Wakeup parsedWakeup = Wakeup.parseWakeup(rawReason, elapsedRealtime, uptime);
+        if (parsedWakeup == null) {
+            return;
+        }
         mWakeupEvents.put(elapsedRealtime, parsedWakeup);
         attemptAttributionFor(parsedWakeup);
         // Assuming that wakeups always arrive in monotonically increasing elapsedRealtime order,
@@ -425,6 +432,8 @@ public class CpuWakeupStats {
         switch (rawSubsystem) {
             case SUBSYSTEM_ALARM_STRING:
                 return CPU_WAKEUP_SUBSYSTEM_ALARM;
+            case SUBSYSTEM_ALARM_WIFI:
+                return CPU_WAKEUP_SUBSYSTEM_WIFI;
         }
         return CPU_WAKEUP_SUBSYSTEM_UNKNOWN;
     }
@@ -433,6 +442,8 @@ public class CpuWakeupStats {
         switch (subsystem) {
             case CPU_WAKEUP_SUBSYSTEM_ALARM:
                 return SUBSYSTEM_ALARM_STRING;
+            case CPU_WAKEUP_SUBSYSTEM_WIFI:
+                return SUBSYSTEM_ALARM_WIFI;
             case CPU_WAKEUP_SUBSYSTEM_UNKNOWN:
                 return "Unknown";
         }
@@ -443,28 +454,25 @@ public class CpuWakeupStats {
         private static final String PARSER_TAG = "CpuWakeupStats.Wakeup";
         private static final String ABORT_REASON_PREFIX = "Abort";
         private static final Pattern sIrqPattern = Pattern.compile("^(\\d+)\\s+(\\S+)");
-
-        String mRawReason;
         long mElapsedMillis;
         long mUptimeMillis;
         IrqDevice[] mDevices;
 
-        Wakeup(String rawReason, long elapsedMillis, long uptimeMillis) {
-            mRawReason = rawReason;
+        private Wakeup(IrqDevice[] devices, long elapsedMillis, long uptimeMillis) {
             mElapsedMillis = elapsedMillis;
             mUptimeMillis = uptimeMillis;
-            mDevices = parseIrqDevices(rawReason);
+            mDevices = devices;
         }
 
-        private static IrqDevice[] parseIrqDevices(String rawReason) {
+        static Wakeup parseWakeup(String rawReason, long elapsedMillis, long uptimeMillis) {
             final String[] components = rawReason.split(":");
             if (ArrayUtils.isEmpty(components) || components[0].startsWith(ABORT_REASON_PREFIX)) {
-                // We don't support parsing aborts yet.
+                // Accounting of aborts is not supported yet.
                 return null;
             }
 
             int parsedDeviceCount = 0;
-            IrqDevice[] parsedDevices = new IrqDevice[components.length];
+            final IrqDevice[] parsedDevices = new IrqDevice[components.length];
 
             for (String component : components) {
                 final Matcher matcher = sIrqPattern.matcher(component.trim());
@@ -482,14 +490,17 @@ public class CpuWakeupStats {
                     parsedDevices[parsedDeviceCount++] = new IrqDevice(line, device);
                 }
             }
-            return (parsedDeviceCount > 0) ? Arrays.copyOf(parsedDevices, parsedDeviceCount) : null;
+            if (parsedDeviceCount == 0) {
+                return null;
+            }
+            return new Wakeup(Arrays.copyOf(parsedDevices, parsedDeviceCount), elapsedMillis,
+                    uptimeMillis);
         }
 
         @Override
         public String toString() {
             return "Wakeup{"
-                    + "mRawReason='" + mRawReason + '\''
-                    + ", mElapsedMillis=" + mElapsedMillis
+                    + "mElapsedMillis=" + mElapsedMillis
                     + ", mUptimeMillis=" + TimeUtils.formatDuration(mUptimeMillis)
                     + ", mDevices=" + Arrays.toString(mDevices)
                     + '}';
@@ -506,7 +517,7 @@ public class CpuWakeupStats {
 
             @Override
             public String toString() {
-                return "IrqDevice{" + "mLine=" + mLine + ", mDevice='" + mDevice + '\'' + '}';
+                return "IrqDevice{" + "mLine=" + mLine + ", mDevice=\'" + mDevice + '\'' + '}';
             }
         }
     }
