@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/*
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 package com.android.systemui.statusbar.pipeline.mobile.domain.interactor
 
 import android.telephony.TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_LTE_ADVANCED_PRO
@@ -24,6 +30,7 @@ import com.android.settingslib.SignalIcon.MobileIconGroup
 import com.android.settingslib.mobile.TelephonyIcons
 import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectivityModel
+import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkTypeIconCustomizationMode
 import com.android.systemui.statusbar.pipeline.mobile.data.model.SubscriptionModel
 import com.android.systemui.statusbar.pipeline.mobile.util.MobileMappingsProxy
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -80,6 +87,9 @@ class FakeMobileIconsInteractor(
 
     private val _hideNoInternetState = MutableStateFlow(false)
     override val hideNoInternetState = _hideNoInternetState
+
+    private val _networkTypeIconCustomization = MutableStateFlow(NetworkTypeIconCustomizationMode())
+    override val networkTypeIconCustomization = _networkTypeIconCustomization
 
     /** Always returns a new fake interactor */
     override fun createMobileConnectionInteractorForSubId(subId: Int): MobileIconInteractor {
