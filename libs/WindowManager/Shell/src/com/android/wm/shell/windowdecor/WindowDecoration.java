@@ -252,9 +252,7 @@ public abstract class WindowDecoration<T extends View & TaskFocusStateConsumer>
         }
 
         final int captionHeight = loadDimensionPixelSize(resources, params.mCaptionHeightId);
-        final int captionWidth = params.mCaptionWidthId == Resources.ID_NULL
-                ? taskBounds.width()
-                : loadDimensionPixelSize(resources, params.mCaptionWidthId);
+        final int captionWidth = taskBounds.width();
 
         startT.setPosition(
                         mCaptionContainerSurface,
@@ -393,10 +391,11 @@ public abstract class WindowDecoration<T extends View & TaskFocusStateConsumer>
      * @param yPos y position of new window
      * @param width width of new window
      * @param height height of new window
+     * @param cropPadding padding to add to window crop to ensure shadows display properly
      * @return
      */
-    AdditionalWindow addWindow(int layoutId, String namePrefix,
-            SurfaceControl.Transaction t, int xPos, int yPos, int width, int height) {
+    AdditionalWindow addWindow(int layoutId, String namePrefix, SurfaceControl.Transaction t,
+            int xPos, int yPos, int width, int height, int cropPadding) {
         final SurfaceControl.Builder builder = mSurfaceControlBuilderSupplier.get();
         SurfaceControl windowSurfaceControl = builder
                 .setName(namePrefix + " of Task=" + mTaskInfo.taskId)
@@ -407,7 +406,7 @@ public abstract class WindowDecoration<T extends View & TaskFocusStateConsumer>
 
         t.setPosition(
                 windowSurfaceControl, xPos, yPos)
-                .setWindowCrop(windowSurfaceControl, width, height)
+                .setWindowCrop(windowSurfaceControl, width + cropPadding, height + cropPadding)
                 .show(windowSurfaceControl);
         final WindowManager.LayoutParams lp =
                 new WindowManager.LayoutParams(width, height,
@@ -485,7 +484,7 @@ public abstract class WindowDecoration<T extends View & TaskFocusStateConsumer>
 
     interface SurfaceControlViewHostFactory {
         default SurfaceControlViewHost create(Context c, Display d, WindowlessWindowManager wmm) {
-            return new SurfaceControlViewHost(c, d, wmm);
+            return new SurfaceControlViewHost(c, d, wmm, "WindowDecoration");
         }
     }
 

@@ -61,6 +61,17 @@ public class Build {
     /** The name of the overall product. */
     public static final String PRODUCT = getString("ro.product.name");
 
+    /**
+     * The product name for attestation. In non-default builds (like the AOSP build) the value of
+     * the 'PRODUCT' system property may be different to the one provisioned to KeyMint,
+     * and Keymint attestation would still attest to the product name, it's running on.
+     * @hide
+     */
+    @Nullable
+    @TestApi
+    public static final String PRODUCT_FOR_ATTESTATION =
+            getString("ro.product.name_for_attestation");
+
     /** The name of the industrial design. */
     public static final String DEVICE = getString("ro.product.device");
 
@@ -89,8 +100,30 @@ public class Build {
     /** The consumer-visible brand with which the product/hardware will be associated, if any. */
     public static final String BRAND = getString("ro.product.brand");
 
+    /**
+     * The product brand for attestation. In non-default builds (like the AOSP build) the value of
+     * the 'BRAND' system property may be different to the one provisioned to KeyMint,
+     * and Keymint attestation would still attest to the product brand, it's running on.
+     * @hide
+     */
+    @Nullable
+    @TestApi
+    public static final String BRAND_FOR_ATTESTATION =
+                getString("ro.product.brand_for_attestation");
+
     /** The end-user-visible name for the end product. */
     public static final String MODEL = getString("ro.product.model");
+
+    /**
+     * The product model for attestation. In non-default builds (like the AOSP build) the value of
+     * the 'MODEL' system property may be different to the one provisioned to KeyMint,
+     * and Keymint attestation would still attest to the product model, it's running on.
+     * @hide
+     */
+    @Nullable
+    @TestApi
+    public static final String MODEL_FOR_ATTESTATION =
+                getString("ro.product.model_for_attestation");
 
     /** The manufacturer of the device's primary system-on-chip. */
     @NonNull
@@ -754,12 +787,9 @@ public class Build {
          * PackageManager.setComponentEnabledSetting} will now throw an
          * IllegalArgumentException if the given component class name does not
          * exist in the application's manifest.
-         * <li> {@link android.nfc.NfcAdapter#setNdefPushMessage
-         * NfcAdapter.setNdefPushMessage},
-         * {@link android.nfc.NfcAdapter#setNdefPushMessageCallback
-         * NfcAdapter.setNdefPushMessageCallback} and
-         * {@link android.nfc.NfcAdapter#setOnNdefPushCompleteCallback
-         * NfcAdapter.setOnNdefPushCompleteCallback} will throw
+         * <li> {@code NfcAdapter.setNdefPushMessage},
+         * {@code NfcAdapter.setNdefPushMessageCallback} and
+         * {@code NfcAdapter.setOnNdefPushCompleteCallback} will throw
          * IllegalStateException if called after the Activity has been destroyed.
          * <li> Accessibility services must require the new
          * {@link android.Manifest.permission#BIND_ACCESSIBILITY_SERVICE} permission or

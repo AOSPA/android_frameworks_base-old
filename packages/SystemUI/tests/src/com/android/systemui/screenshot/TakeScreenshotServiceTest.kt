@@ -29,7 +29,7 @@ import android.hardware.HardwareBuffer
 import android.os.UserHandle
 import android.os.UserManager
 import android.testing.AndroidTestingRunner
-import android.view.WindowManager.ScreenshotSource.SCREENSHOT_KEY_CHORD
+import android.view.WindowManager.ScreenshotSource.SCREENSHOT_KEY_OTHER
 import android.view.WindowManager.ScreenshotSource.SCREENSHOT_OVERVIEW
 import android.view.WindowManager.TAKE_SCREENSHOT_FULLSCREEN
 import android.view.WindowManager.TAKE_SCREENSHOT_PROVIDED_IMAGE
@@ -38,14 +38,17 @@ import com.android.internal.logging.testing.UiEventLoggerFake
 import com.android.internal.util.ScreenshotRequest
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.flags.FakeFeatureFlags
+import com.android.systemui.flags.Flags.SCREENSHOT_METADATA_REFACTOR
 import com.android.systemui.flags.Flags.SCREENSHOT_WORK_PROFILE_POLICY
-import com.android.systemui.screenshot.ScreenshotEvent.SCREENSHOT_REQUESTED_KEY_CHORD
+import com.android.systemui.screenshot.ScreenshotEvent.SCREENSHOT_CAPTURE_FAILED
+import com.android.systemui.screenshot.ScreenshotEvent.SCREENSHOT_REQUESTED_KEY_OTHER
 import com.android.systemui.screenshot.ScreenshotEvent.SCREENSHOT_REQUESTED_OVERVIEW
 import com.android.systemui.screenshot.TakeScreenshotService.RequestCallback
 import com.android.systemui.util.mockito.any
 import com.android.systemui.util.mockito.argThat
 import com.android.systemui.util.mockito.eq
 import com.android.systemui.util.mockito.mock
+import com.android.systemui.util.mockito.whenever
 import java.util.function.Consumer
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -54,10 +57,10 @@ import org.junit.runner.RunWith
 import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.ArgumentMatchers.isNull
 import org.mockito.Mockito.doAnswer
+import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyZeroInteractions
-import org.mockito.Mockito.`when` as whenever
 
 private const val USER_ID = 1
 private const val TASK_ID = 11
@@ -110,11 +113,20 @@ class TakeScreenshotServiceTest : SysuiTestCase() {
                 val consumer: Consumer<ScreenshotRequest> = it.getArgument(1)
                 consumer.accept(request)
             }
-            .`when`(requestProcessor)
-            .processAsync(/* request= */ any(), /* callback= */ any())
+            .whenever(requestProcessor)
+            .processAsync(/* request= */ any(ScreenshotRequest::class.java), /* callback= */ any())
+
+        doAnswer {
+                val request: ScreenshotData = it.getArgument(0) as ScreenshotData
+                val consumer: Consumer<ScreenshotData> = it.getArgument(1)
+                consumer.accept(request)
+            }
+            .whenever(requestProcessor)
+            .processAsync(/* screenshot= */ any(ScreenshotData::class.java), /* callback= */ any())
 
         // Flipped in selected test cases
         flags.set(SCREENSHOT_WORK_PROFILE_POLICY, false)
+        flags.set(SCREENSHOT_METADATA_REFACTOR, false)
 
         service.attach(
             mContext,
@@ -141,7 +153,7 @@ class TakeScreenshotServiceTest : SysuiTestCase() {
     @Test
     fun takeScreenshotFullscreen() {
         val request =
-            ScreenshotRequest.Builder(TAKE_SCREENSHOT_FULLSCREEN, SCREENSHOT_KEY_CHORD)
+            ScreenshotRequest.Builder(TAKE_SCREENSHOT_FULLSCREEN, SCREENSHOT_KEY_OTHER)
                 .setTopComponent(topComponent)
                 .build()
 
@@ -154,13 +166,46 @@ class TakeScreenshotServiceTest : SysuiTestCase() {
                 /* requestCallback = */ any()
             )
 
+        assertEquals("Expected one UiEvent", 1, eventLogger.numLogs())
+        val logEvent = eventLogger.get(0)
+
+        assertEquals(
+            "Expected SCREENSHOT_REQUESTED UiEvent",
+            logEvent.eventId,
+            SCREENSHOT_REQUESTED_KEY_OTHER.id
+        )
+        assertEquals(
+            "Expected supplied package name",
+            topComponent.packageName,
+            eventLogger.get(0).packageName
+        )
+    }
+
+    @Test
+    fun takeScreenshotFullscreen_screenshotDataEnabled() {
+        flags.set(SCREENSHOT_METADATA_REFACTOR, true)
+
+        val request =
+            ScreenshotRequest.Builder(TAKE_SCREENSHOT_FULLSCREEN, SCREENSHOT_KEY_OTHER)
+                .setTopComponent(topComponent)
+                .build()
+
+        service.handleRequest(request, { /* onSaved */}, callback)
+
+        verify(controller, times(1))
+            .handleScreenshot(
+                eq(ScreenshotData.fromRequest(request)),
+                /* onSavedListener = */ any(),
+                /* requestCallback = */ any()
+            )
+
         assertEquals("Expected one UiEvent", eventLogger.numLogs(), 1)
         val logEvent = eventLogger.get(0)
 
         assertEquals(
             "Expected SCREENSHOT_REQUESTED UiEvent",
             logEvent.eventId,
-            SCREENSHOT_REQUESTED_KEY_CHORD.id
+            SCREENSHOT_REQUESTED_KEY_OTHER.id
         )
         assertEquals(
             "Expected supplied package name",
@@ -198,7 +243,7 @@ class TakeScreenshotServiceTest : SysuiTestCase() {
                 /* requestCallback = */ any()
             )
 
-        assertEquals("Expected one UiEvent", eventLogger.numLogs(), 1)
+        assertEquals("Expected one UiEvent", 1, eventLogger.numLogs())
         val logEvent = eventLogger.get(0)
 
         assertEquals(
@@ -215,10 +260,12 @@ class TakeScreenshotServiceTest : SysuiTestCase() {
 
     @Test
     fun takeScreenshotFullscreen_userLocked() {
+        flags.set(SCREENSHOT_METADATA_REFACTOR, true)
+
         whenever(userManager.isUserUnlocked).thenReturn(false)
 
         val request =
-            ScreenshotRequest.Builder(TAKE_SCREENSHOT_FULLSCREEN, SCREENSHOT_KEY_CHORD)
+            ScreenshotRequest.Builder(TAKE_SCREENSHOT_FULLSCREEN, SCREENSHOT_KEY_OTHER)
                 .setTopComponent(topComponent)
                 .build()
 
@@ -227,10 +274,36 @@ class TakeScreenshotServiceTest : SysuiTestCase() {
         verify(notificationsController, times(1)).notifyScreenshotError(anyInt())
         verify(callback, times(1)).reportError()
         verifyZeroInteractions(controller)
+
+        assertEquals("Expected two UiEvents", 2, eventLogger.numLogs())
+        val requestEvent = eventLogger.get(0)
+        assertEquals(
+            "Expected SCREENSHOT_REQUESTED_* UiEvent",
+            SCREENSHOT_REQUESTED_KEY_OTHER.id,
+            requestEvent.eventId
+        )
+        assertEquals(
+            "Expected supplied package name",
+            topComponent.packageName,
+            requestEvent.packageName
+        )
+        val failureEvent = eventLogger.get(1)
+        assertEquals(
+            "Expected SCREENSHOT_CAPTURE_FAILED UiEvent",
+            SCREENSHOT_CAPTURE_FAILED.id,
+            failureEvent.eventId
+        )
+        assertEquals(
+            "Expected supplied package name",
+            topComponent.packageName,
+            failureEvent.packageName
+        )
     }
 
     @Test
     fun takeScreenshotFullscreen_screenCaptureDisabled_allUsers() {
+        flags.set(SCREENSHOT_METADATA_REFACTOR, true)
+
         whenever(devicePolicyManager.getScreenCaptureDisabled(isNull(), eq(UserHandle.USER_ALL)))
             .thenReturn(true)
 
@@ -244,7 +317,7 @@ class TakeScreenshotServiceTest : SysuiTestCase() {
             .thenReturn("SCREENSHOT_BLOCKED_BY_ADMIN")
 
         val request =
-            ScreenshotRequest.Builder(TAKE_SCREENSHOT_FULLSCREEN, SCREENSHOT_KEY_CHORD)
+            ScreenshotRequest.Builder(TAKE_SCREENSHOT_FULLSCREEN, SCREENSHOT_KEY_OTHER)
                 .setTopComponent(topComponent)
                 .build()
 
@@ -253,6 +326,206 @@ class TakeScreenshotServiceTest : SysuiTestCase() {
         // error shown: Toast.makeText(...).show(), untestable
         verify(callback, times(1)).reportError()
         verifyZeroInteractions(controller)
+        assertEquals("Expected two UiEvents", 2, eventLogger.numLogs())
+        val requestEvent = eventLogger.get(0)
+        assertEquals(
+            "Expected SCREENSHOT_REQUESTED_* UiEvent",
+            SCREENSHOT_REQUESTED_KEY_OTHER.id,
+            requestEvent.eventId
+        )
+        assertEquals(
+            "Expected supplied package name",
+            topComponent.packageName,
+            requestEvent.packageName
+        )
+        val failureEvent = eventLogger.get(1)
+        assertEquals(
+            "Expected SCREENSHOT_CAPTURE_FAILED UiEvent",
+            SCREENSHOT_CAPTURE_FAILED.id,
+            failureEvent.eventId
+        )
+        assertEquals(
+            "Expected supplied package name",
+            topComponent.packageName,
+            failureEvent.packageName
+        )
+    }
+
+    @Test
+    fun takeScreenshotFullscreen_userLocked_metadataDisabled() {
+        flags.set(SCREENSHOT_METADATA_REFACTOR, false)
+        whenever(userManager.isUserUnlocked).thenReturn(false)
+
+        val request =
+            ScreenshotRequest.Builder(TAKE_SCREENSHOT_FULLSCREEN, SCREENSHOT_KEY_OTHER)
+                .setTopComponent(topComponent)
+                .build()
+
+        service.handleRequest(request, { /* onSaved */}, callback)
+
+        verify(notificationsController, times(1)).notifyScreenshotError(anyInt())
+        verify(callback, times(1)).reportError()
+        verifyZeroInteractions(controller)
+
+        assertEquals("Expected two UiEvents", 2, eventLogger.numLogs())
+        val requestEvent = eventLogger.get(0)
+        assertEquals(
+            "Expected SCREENSHOT_REQUESTED_* UiEvent",
+            SCREENSHOT_REQUESTED_KEY_OTHER.id,
+            requestEvent.eventId
+        )
+        assertEquals(
+            "Expected supplied package name",
+            topComponent.packageName,
+            requestEvent.packageName
+        )
+        val failureEvent = eventLogger.get(1)
+        assertEquals(
+            "Expected SCREENSHOT_CAPTURE_FAILED UiEvent",
+            SCREENSHOT_CAPTURE_FAILED.id,
+            failureEvent.eventId
+        )
+        assertEquals(
+            "Expected supplied package name",
+            topComponent.packageName,
+            failureEvent.packageName
+        )
+    }
+
+    @Test
+    fun takeScreenshotFullscreen_screenCaptureDisabled_allUsers_metadataDisabled() {
+        flags.set(SCREENSHOT_METADATA_REFACTOR, false)
+
+        whenever(devicePolicyManager.getScreenCaptureDisabled(isNull(), eq(UserHandle.USER_ALL)))
+            .thenReturn(true)
+
+        whenever(
+                devicePolicyResourcesManager.getString(
+                    eq(SCREENSHOT_BLOCKED_BY_ADMIN),
+                    /* Supplier<String> */
+                    any(),
+                )
+            )
+            .thenReturn("SCREENSHOT_BLOCKED_BY_ADMIN")
+
+        val request =
+            ScreenshotRequest.Builder(TAKE_SCREENSHOT_FULLSCREEN, SCREENSHOT_KEY_OTHER)
+                .setTopComponent(topComponent)
+                .build()
+
+        service.handleRequest(request, { /* onSaved */}, callback)
+
+        // error shown: Toast.makeText(...).show(), untestable
+        verify(callback, times(1)).reportError()
+        verifyZeroInteractions(controller)
+        assertEquals("Expected two UiEvents", 2, eventLogger.numLogs())
+        val requestEvent = eventLogger.get(0)
+        assertEquals(
+            "Expected SCREENSHOT_REQUESTED_* UiEvent",
+            SCREENSHOT_REQUESTED_KEY_OTHER.id,
+            requestEvent.eventId
+        )
+        assertEquals(
+            "Expected supplied package name",
+            topComponent.packageName,
+            requestEvent.packageName
+        )
+        val failureEvent = eventLogger.get(1)
+        assertEquals(
+            "Expected SCREENSHOT_CAPTURE_FAILED UiEvent",
+            SCREENSHOT_CAPTURE_FAILED.id,
+            failureEvent.eventId
+        )
+        assertEquals(
+            "Expected supplied package name",
+            topComponent.packageName,
+            failureEvent.packageName
+        )
+    }
+
+    @Test
+    fun takeScreenshot_workProfile_nullBitmap_metadataDisabled() {
+        flags.set(SCREENSHOT_METADATA_REFACTOR, false)
+
+        val request =
+            ScreenshotRequest.Builder(TAKE_SCREENSHOT_FULLSCREEN, SCREENSHOT_KEY_OTHER)
+                .setTopComponent(topComponent)
+                .build()
+
+        doThrow(IllegalStateException::class.java)
+            .whenever(requestProcessor)
+            .processAsync(any(ScreenshotRequest::class.java), any())
+
+        service.handleRequest(request, { /* onSaved */}, callback)
+
+        verify(callback, times(1)).reportError()
+        verify(notificationsController, times(1)).notifyScreenshotError(anyInt())
+        verifyZeroInteractions(controller)
+        assertEquals("Expected two UiEvents", 2, eventLogger.numLogs())
+        val requestEvent = eventLogger.get(0)
+        assertEquals(
+            "Expected SCREENSHOT_REQUESTED_* UiEvent",
+            SCREENSHOT_REQUESTED_KEY_OTHER.id,
+            requestEvent.eventId
+        )
+        assertEquals(
+            "Expected supplied package name",
+            topComponent.packageName,
+            requestEvent.packageName
+        )
+        val failureEvent = eventLogger.get(1)
+        assertEquals(
+            "Expected SCREENSHOT_CAPTURE_FAILED UiEvent",
+            SCREENSHOT_CAPTURE_FAILED.id,
+            failureEvent.eventId
+        )
+        assertEquals(
+            "Expected supplied package name",
+            topComponent.packageName,
+            failureEvent.packageName
+        )
+    }
+    @Test
+    fun takeScreenshot_workProfile_nullBitmap() {
+        flags.set(SCREENSHOT_METADATA_REFACTOR, true)
+
+        val request =
+            ScreenshotRequest.Builder(TAKE_SCREENSHOT_FULLSCREEN, SCREENSHOT_KEY_OTHER)
+                .setTopComponent(topComponent)
+                .build()
+
+        doThrow(IllegalStateException::class.java)
+            .whenever(requestProcessor)
+            .processAsync(any(ScreenshotData::class.java), any())
+
+        service.handleRequest(request, { /* onSaved */}, callback)
+
+        verify(callback, times(1)).reportError()
+        verify(notificationsController, times(1)).notifyScreenshotError(anyInt())
+        verifyZeroInteractions(controller)
+        assertEquals("Expected two UiEvents", 2, eventLogger.numLogs())
+        val requestEvent = eventLogger.get(0)
+        assertEquals(
+            "Expected SCREENSHOT_REQUESTED_* UiEvent",
+            SCREENSHOT_REQUESTED_KEY_OTHER.id,
+            requestEvent.eventId
+        )
+        assertEquals(
+            "Expected supplied package name",
+            topComponent.packageName,
+            requestEvent.packageName
+        )
+        val failureEvent = eventLogger.get(1)
+        assertEquals(
+            "Expected SCREENSHOT_CAPTURE_FAILED UiEvent",
+            SCREENSHOT_CAPTURE_FAILED.id,
+            failureEvent.eventId
+        )
+        assertEquals(
+            "Expected supplied package name",
+            topComponent.packageName,
+            failureEvent.packageName
+        )
     }
 }
 

@@ -583,6 +583,8 @@ public class KeyguardSecurityContainerControllerTest extends SysuiTestCase {
         verify(mKeyguardSecurityViewFlipperController).clearViews();
         verify(mKeyguardSecurityViewFlipperController).getSecurityView(any(SecurityMode.class),
                 any(KeyguardSecurityCallback.class));
+        verify(mView).reset();
+        verify(mKeyguardSecurityViewFlipperController).reset();
     }
 
     @Test
@@ -595,6 +597,14 @@ public class KeyguardSecurityContainerControllerTest extends SysuiTestCase {
         configurationListenerArgumentCaptor.getValue().onUiModeChanged();
 
         verify(mView).reloadColors();
+        verify(mKeyguardSecurityViewFlipperController).clearViews();
+        verify(mKeyguardSecurityViewFlipperController).getSecurityView(any(SecurityMode.class),
+                any(KeyguardSecurityCallback.class));
+    }
+
+    @Test
+    public void testReinflateViewFlipper() {
+        mKeyguardSecurityContainerController.reinflateViewFlipper();
         verify(mKeyguardSecurityViewFlipperController).clearViews();
         verify(mKeyguardSecurityViewFlipperController).getSecurityView(any(SecurityMode.class),
                 any(KeyguardSecurityCallback.class));

@@ -33,6 +33,7 @@ import com.android.systemui.backup.BackupHelper
 import com.android.systemui.controls.ControlStatus
 import com.android.systemui.controls.ControlsServiceInfo
 import com.android.systemui.controls.management.ControlsListingController
+import com.android.systemui.controls.panels.AuthorizedPanelsRepository
 import com.android.systemui.controls.ui.ControlsUiController
 import com.android.systemui.dump.DumpManager
 import com.android.systemui.settings.UserFileManager
@@ -66,6 +67,7 @@ import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoMoreInteractions
 import org.mockito.Mockito.`when`
+import org.mockito.Mockito.clearInvocations
 import org.mockito.MockitoAnnotations
 
 @SmallTest
@@ -88,6 +90,8 @@ class ControlsControllerImplTest : SysuiTestCase() {
     private lateinit var userTracker: UserTracker
     @Mock
     private lateinit var userFileManager: UserFileManager
+    @Mock
+    private lateinit var authorizedPanelsRepository: AuthorizedPanelsRepository
 
     @Captor
     private lateinit var structureInfoCaptor: ArgumentCaptor<StructureInfo>
@@ -99,8 +103,6 @@ class ControlsControllerImplTest : SysuiTestCase() {
     private lateinit var controlLoadCallbackCaptor2:
             ArgumentCaptor<ControlsBindingController.LoadCallback>
 
-    @Captor
-    private lateinit var userTrackerCallbackCaptor: ArgumentCaptor<UserTracker.Callback>
     @Captor
     private lateinit var listingCallbackCaptor:
             ArgumentCaptor<ControlsListingController.ControlsListingCallback>
@@ -168,14 +170,11 @@ class ControlsControllerImplTest : SysuiTestCase() {
                 listingController,
                 userFileManager,
                 userTracker,
+                authorizedPanelsRepository,
                 Optional.of(persistenceWrapper),
                 mock(DumpManager::class.java)
         )
         controller.auxiliaryPersistenceWrapper = auxiliaryPersistenceWrapper
-
-        verify(userTracker).addCallback(
-            capture(userTrackerCallbackCaptor), any()
-        )
 
         verify(listingController).addCallback(capture(listingCallbackCaptor))
     }
@@ -224,10 +223,31 @@ class ControlsControllerImplTest : SysuiTestCase() {
                 listingController,
                 userFileManager,
                 userTracker,
+                authorizedPanelsRepository,
                 Optional.of(persistenceWrapper),
                 mock(DumpManager::class.java)
         )
         assertEquals(listOf(TEST_STRUCTURE_INFO), controller_other.getFavorites())
+    }
+
+    @Test
+    fun testAddAuthorizedPackagesFromSavedFavoritesOnStart() {
+        clearInvocations(authorizedPanelsRepository)
+        `when`(persistenceWrapper.readFavorites()).thenReturn(listOf(TEST_STRUCTURE_INFO))
+        ControlsControllerImpl(
+                mContext,
+                delayableExecutor,
+                uiController,
+                bindingController,
+                listingController,
+                userFileManager,
+                userTracker,
+                authorizedPanelsRepository,
+                Optional.of(persistenceWrapper),
+                mock(DumpManager::class.java)
+        )
+        verify(authorizedPanelsRepository)
+                .addAuthorizedPanels(setOf(TEST_STRUCTURE_INFO.componentName.packageName))
     }
 
     @Test
@@ -513,7 +533,7 @@ class ControlsControllerImplTest : SysuiTestCase() {
 
         reset(persistenceWrapper)
 
-        userTrackerCallbackCaptor.value.onUserChanged(otherUser, mContext)
+        controller.changeUser(UserHandle.of(otherUser))
 
         verify(persistenceWrapper).changeFileAndBackupManager(any(), any())
         verify(persistenceWrapper).readFavorites()

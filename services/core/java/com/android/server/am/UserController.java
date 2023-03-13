@@ -55,16 +55,17 @@ import static com.android.server.pm.UserManagerInternal.userStartModeToString;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
 import android.app.AppGlobals;
 import android.app.AppOpsManager;
 import android.app.BroadcastOptions;
-import android.app.Dialog;
 import android.app.IStopUserCallback;
 import android.app.IUserSwitchObserver;
 import android.app.KeyguardManager;
+import android.app.admin.DevicePolicyManagerInternal;
 import android.app.usage.UsageEvents;
 import android.appwidget.AppWidgetManagerInternal;
 import android.content.Context;
@@ -1458,21 +1459,32 @@ class UserController implements Handler.Callback {
     }
 
     private boolean shouldStartWithParent(UserInfo user) {
-        final UserProperties properties = mInjector.getUserManagerInternal()
-                .getUserProperties(user.id);
+        final UserProperties properties = getUserProperties(user.id);
+        DevicePolicyManagerInternal dpmi =
+                LocalServices.getService(DevicePolicyManagerInternal.class);
         return (properties != null && properties.getStartWithParent())
-                && !user.isQuietModeEnabled();
+                && (!user.isQuietModeEnabled() || dpmi.isKeepProfilesRunningEnabled());
     }
 
     /**
-     * Starts a user only if it's a profile, with a more relaxed permission requirement:
-     * {@link android.Manifest.permission#MANAGE_USERS} or
-     * {@link android.Manifest.permission#INTERACT_ACROSS_USERS_FULL}.
-     * To be called from ActivityManagerService.
-     * @param userId the id of the user to start.
-     * @return true if the operation was successful.
+     * Starts a {@link UserManager#isProfile() profile user}.
+     *
+     * <p>To be called from {@link com.android.server.am.ActivityManagerService}.
+     *
+     * @param userId the id of the profile user to start.
+     * @param evenWhenDisabled whether the profile should be started if it's not enabled yet
+     *        (most callers should pass {@code false}, except when starting the profile while it's
+     *        being provisioned).
+     * @param unlockListener listener to be informed when the profile has started and unlocked.
+     *
+     * @return {@code true} if the operation was successful.
+     *
+     * @throws IllegalArgumentException if the user doesn't exist or is not a profile.
      */
-    boolean startProfile(final @UserIdInt int userId) {
+    @RequiresPermission(anyOf = {android.Manifest.permission.MANAGE_USERS,
+            android.Manifest.permission.INTERACT_ACROSS_USERS_FULL})
+    boolean startProfile(@UserIdInt int userId, boolean evenWhenDisabled,
+            @Nullable IProgressListener unlockListener) {
         if (mInjector.checkCallingPermission(android.Manifest.permission.MANAGE_USERS)
                 == PackageManager.PERMISSION_DENIED && mInjector.checkCallingPermission(
                 android.Manifest.permission.INTERACT_ACROSS_USERS_FULL)
@@ -1487,13 +1499,13 @@ class UserController implements Handler.Callback {
             throw new IllegalArgumentException("User " + userId + " is not a profile");
         }
 
-        if (!userInfo.isEnabled()) {
-            Slogf.w(TAG, "Cannot start disabled profile #" + userId);
+        if (!userInfo.isEnabled() && !evenWhenDisabled) {
+            Slogf.w(TAG, "Cannot start disabled profile #%d", userId);
             return false;
         }
 
         return startUserNoChecks(userId, Display.DEFAULT_DISPLAY,
-                USER_START_MODE_BACKGROUND_VISIBLE, /* unlockListener= */ null);
+                USER_START_MODE_BACKGROUND_VISIBLE, unlockListener);
     }
 
     @VisibleForTesting
@@ -1558,16 +1570,18 @@ class UserController implements Handler.Callback {
      *
      * @param userId user to be started
      * @param displayId display where the user will be visible
+     * @param unlockListener Listener to be informed when the user has started and unlocked.
      *
      * @return whether the user was started
      */
-    boolean startUserVisibleOnDisplay(@UserIdInt int userId, int displayId) {
+    boolean startUserVisibleOnDisplay(@UserIdInt int userId, int displayId,
+            @Nullable IProgressListener unlockListener) {
         checkCallingHasOneOfThosePermissions("startUserOnDisplay",
                 MANAGE_USERS, INTERACT_ACROSS_USERS);
 
         try {
             return startUserNoChecks(userId, displayId, USER_START_MODE_BACKGROUND_VISIBLE,
-                    /* unlockListener= */ null);
+                    unlockListener);
         } catch (RuntimeException e) {
             Slogf.e(TAG, "startUserOnSecondaryDisplay(%d, %d) failed: %s", userId, displayId, e);
             return false;
@@ -1677,6 +1691,7 @@ class UserController implements Handler.Callback {
                         R.anim.screen_user_exit, R.anim.screen_user_enter);
                 t.traceEnd();
             }
+            dismissUserSwitchDialog(); // so that we don't hold a reference to mUserSwitchingDialog
 
             boolean needStart = false;
             boolean updateUmState = false;
@@ -1863,6 +1878,8 @@ class UserController implements Handler.Callback {
         boolean success = startUser(targetUserId, USER_START_MODE_FOREGROUND);
         if (!success) {
             mInjector.getWindowManager().setSwitchingUser(false);
+            mTargetUserId = UserHandle.USER_NULL;
+            dismissUserSwitchDialog();
         }
     }
 
@@ -1979,10 +1996,6 @@ class UserController implements Handler.Callback {
             Slogf.w(TAG, "Cannot switch to User #" + targetUserId + ": not supported");
             return false;
         }
-        if (targetUserInfo.isProfile()) {
-            Slogf.w(TAG, "Cannot switch to User #" + targetUserId + ": not a full user");
-            return false;
-        }
         if (FactoryResetter.isFactoryResetting()) {
             Slogf.w(TAG, "Cannot switch to User #" + targetUserId + ": factory reset in progress");
             return false;
@@ -2009,6 +2022,10 @@ class UserController implements Handler.Callback {
                     START_USER_SWITCH_FG_MSG, targetUserId, 0));
         }
         return true;
+    }
+
+    private void dismissUserSwitchDialog() {
+        mInjector.dismissUserSwitchingDialog();
     }
 
     private void showUserSwitchDialog(Pair<UserInfo, UserInfo> fromToUserPair) {
@@ -2237,7 +2254,7 @@ class UserController implements Handler.Callback {
         // If there is no challenge set, dismiss the keyguard right away
         if (isUserSwitchUiEnabled && !mInjector.getKeyguardManager().isDeviceSecure(newUserId)) {
             // Wait until the keyguard is dismissed to unfreeze
-            mInjector.dismissKeyguard(runnable, "User Switch");
+            mInjector.dismissKeyguard(runnable);
         } else {
             runnable.run();
         }
@@ -2767,6 +2784,10 @@ class UserController implements Handler.Callback {
         return mInjector.getUserManager().getUserInfo(userId);
     }
 
+    private @Nullable UserProperties getUserProperties(@UserIdInt int userId) {
+        return mInjector.getUserManagerInternal().getUserProperties(userId);
+    }
+
     int[] getUserIds() {
         return mInjector.getUserManager().getUserIds();
     }
@@ -2897,7 +2918,8 @@ class UserController implements Handler.Callback {
         if (getStartedUserState(userId) == null) {
             return false;
         }
-        if (!mInjector.getUserManager().isCredentialSharableWithParent(userId)) {
+        final UserProperties properties = getUserProperties(userId);
+        if (properties == null || !properties.isCredentialShareableWithParent()) {
             return false;
         }
         if (mLockPatternUtils.isSeparateProfileChallengeEnabled(userId)) {
@@ -3462,6 +3484,9 @@ class UserController implements Handler.Callback {
         private UserManagerService mUserManager;
         private UserManagerInternal mUserManagerInternal;
         private Handler mHandler;
+        private final Object mUserSwitchingDialogLock = new Object();
+        @GuardedBy("mUserSwitchingDialogLock")
+        private UserSwitchingDialog mUserSwitchingDialog;
 
         Injector(ActivityManagerService service) {
             mService = service;
@@ -3637,6 +3662,15 @@ class UserController implements Handler.Callback {
             mService.mCpHelper.installEncryptionUnawareProviders(userId);
         }
 
+        void dismissUserSwitchingDialog() {
+            synchronized (mUserSwitchingDialogLock) {
+                if (mUserSwitchingDialog != null) {
+                    mUserSwitchingDialog.dismiss();
+                    mUserSwitchingDialog = null;
+                }
+            }
+        }
+
         void showUserSwitchingDialog(UserInfo fromUser, UserInfo toUser,
                 String switchingFromSystemUserMessage, String switchingToSystemUserMessage) {
             if (mService.mContext.getPackageManager()
@@ -3647,10 +3681,13 @@ class UserController implements Handler.Callback {
                 Slogf.w(TAG, "Showing user switch dialog on UserController, it could cause a race "
                         + "condition if it's shown by CarSystemUI as well");
             }
-            final Dialog d = new UserSwitchingDialog(mService, mService.mContext, fromUser,
-                    toUser, true /* above system */, switchingFromSystemUserMessage,
-                    switchingToSystemUserMessage);
-            d.show();
+            synchronized (mUserSwitchingDialogLock) {
+                dismissUserSwitchingDialog();
+                mUserSwitchingDialog = new UserSwitchingDialog(mService, mService.mContext,
+                        fromUser, toUser, true /* above system */, switchingFromSystemUserMessage,
+                        switchingToSystemUserMessage);
+                mUserSwitchingDialog.show();
+            }
         }
 
         void reportGlobalUsageEvent(int event) {
@@ -3685,7 +3722,7 @@ class UserController implements Handler.Callback {
             return IStorageManager.Stub.asInterface(ServiceManager.getService("mount"));
         }
 
-        protected void dismissKeyguard(Runnable runnable, String reason) {
+        protected void dismissKeyguard(Runnable runnable) {
             final AtomicBoolean isFirst = new AtomicBoolean(true);
             final Runnable runOnce = () -> {
                 if (isFirst.getAndSet(false)) {
@@ -3709,7 +3746,7 @@ class UserController implements Handler.Callback {
                 public void onDismissCancelled() throws RemoteException {
                     mHandler.post(runOnce);
                 }
-            }, reason);
+            }, /* message= */ null);
         }
 
         boolean isUsersOnSecondaryDisplaysEnabled() {

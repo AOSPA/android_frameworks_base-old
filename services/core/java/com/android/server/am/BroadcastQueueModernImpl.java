@@ -92,6 +92,7 @@ import java.util.Arrays;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -203,6 +204,14 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
      */
     @GuardedBy("mService")
     private final ArrayList<Pair<BooleanSupplier, CountDownLatch>> mWaitingFor = new ArrayList<>();
+
+    /**
+     * Container for holding the set of broadcasts that have been replaced by a newer broadcast
+     * sent with {@link Intent#FLAG_RECEIVER_REPLACE_PENDING}.
+     */
+    @GuardedBy("mService")
+    private final AtomicReference<ArraySet<BroadcastRecord>> mReplacedBroadcastsCache =
+            new AtomicReference<>();
 
     private final BroadcastConstants mConstants;
     private final BroadcastConstants mFgConstants;
@@ -627,9 +636,10 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
         r.enqueueRealTime = SystemClock.elapsedRealtime();
         r.enqueueClockTime = System.currentTimeMillis();
 
-        final ArraySet<BroadcastRecord> replacedBroadcasts = new ArraySet<>();
-        final BroadcastConsumer replacedBroadcastConsumer =
-                (record, i) -> replacedBroadcasts.add(record);
+        ArraySet<BroadcastRecord> replacedBroadcasts = mReplacedBroadcastsCache.getAndSet(null);
+        if (replacedBroadcasts == null) {
+            replacedBroadcasts = new ArraySet<>();
+        }
         boolean enqueuedBroadcast = false;
 
         for (int i = 0; i < r.receivers.size(); i++) {
@@ -653,7 +663,11 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
                 }
             }
             enqueuedBroadcast = true;
-            queue.enqueueOrReplaceBroadcast(r, i, replacedBroadcastConsumer, wouldBeSkipped);
+            final BroadcastRecord replacedBroadcast = queue.enqueueOrReplaceBroadcast(
+                    r, i, wouldBeSkipped);
+            if (replacedBroadcast != null) {
+                replacedBroadcasts.add(replacedBroadcast);
+            }
             if (r.isDeferUntilActive() && queue.isDeferredUntilActive()) {
                 setDeliveryState(queue, null, r, i, receiver, BroadcastRecord.DELIVERY_DEFERRED,
                         "deferred at enqueue time");
@@ -664,7 +678,11 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
 
         // Skip any broadcasts that have been replaced by newer broadcasts with
         // FLAG_RECEIVER_REPLACE_PENDING.
+        // TODO: Optimize and reuse mBroadcastConsumerSkipAndCanceled for the case of
+        // cancelling all receivers for a broadcast.
         skipAndCancelReplacedBroadcasts(replacedBroadcasts);
+        replacedBroadcasts.clear();
+        mReplacedBroadcastsCache.compareAndSet(null, replacedBroadcasts);
 
         // If nothing to dispatch, send any pending result immediately
         if (r.receivers.isEmpty() || !enqueuedBroadcast) {
@@ -893,6 +911,8 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
             batch.schedule(((BroadcastFilter) receiver).receiverList.receiver,
                     receiverIntent, r.resultCode, r.resultData, r.resultExtras,
                     r.ordered, r.initialSticky, assumeDelivered, r.userId,
+                    r.shareIdentity ? r.callingUid : Process.INVALID_UID,
+                    r.shareIdentity ? r.callerPackage : null,
                     app.mState.getReportedProcState(), r, index);
             // TODO: consider making registered receivers of unordered
             // broadcasts report results to detect ANRs
@@ -903,7 +923,9 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
         } else {
             batch.schedule(receiverIntent, ((ResolveInfo) receiver).activityInfo,
                     null, r.resultCode, r.resultData, r.resultExtras, r.ordered, assumeDelivered,
-                    r.userId, app.mState.getReportedProcState(), r, index);
+                    r.userId, r.shareIdentity ? r.callingUid : Process.INVALID_UID,
+                    r.shareIdentity ? r.callerPackage : null,
+                    app.mState.getReportedProcState(), r, index);
             if (assumeDelivered) {
                 batch.success(r, index, BroadcastRecord.DELIVERY_DELIVERED, "assuming delivered");
                 return true;
@@ -946,6 +968,11 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
             final BroadcastRecord r = cookie.r;
             final int index = cookie.index;
             final Object receiver = r.receivers.get(index);
+
+            if (r.shareIdentity) {
+                mService.mPackageManagerInt.grantImplicitAccess(r.userId, r.intent,
+                        UserHandle.getAppId(app.uid), r.callingUid, true);
+            }
             if (receiver instanceof BroadcastFilter) {
                 notifyScheduleRegisteredReceiver(queue.app, r, (BroadcastFilter) receiver);
             } else {
@@ -1055,12 +1082,19 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
         if (thread != null) {
             mService.mOomAdjuster.mCachedAppOptimizer.unfreezeTemporarily(
                     app, OOM_ADJ_REASON_FINISH_RECEIVER);
+            if (r.shareIdentity && app.uid != r.callingUid) {
+                mService.mPackageManagerInt.grantImplicitAccess(r.userId, r.intent,
+                        UserHandle.getAppId(app.uid), r.callingUid, true);
+            }
             try {
                 final boolean assumeDelivered = true;
                 thread.scheduleReceiverList(mReceiverBatch.registeredReceiver(
                         r.resultTo, r.intent,
                         r.resultCode, r.resultData, r.resultExtras, false, r.initialSticky,
-                        assumeDelivered, r.userId, app.mState.getReportedProcState()));
+                        assumeDelivered, r.userId,
+                        r.shareIdentity ? r.callingUid : Process.INVALID_UID,
+                        r.shareIdentity ? r.callerPackage : null,
+                        app.mState.getReportedProcState()));
             } catch (RemoteException e) {
                 final String msg = "Failed to schedule result of " + r + " via " + app + ": " + e;
                 logw(msg);

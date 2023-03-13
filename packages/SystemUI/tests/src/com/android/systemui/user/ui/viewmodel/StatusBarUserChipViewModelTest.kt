@@ -41,6 +41,7 @@ import com.android.systemui.telephony.domain.interactor.TelephonyInteractor
 import com.android.systemui.user.data.model.UserSwitcherSettingsModel
 import com.android.systemui.user.data.repository.FakeUserRepository
 import com.android.systemui.user.domain.interactor.GuestUserInteractor
+import com.android.systemui.user.domain.interactor.HeadlessSystemUserMode
 import com.android.systemui.user.domain.interactor.RefreshUsersScheduler
 import com.android.systemui.user.domain.interactor.UserInteractor
 import com.android.systemui.util.mockito.mock
@@ -71,6 +72,7 @@ class StatusBarUserChipViewModelTest : SysuiTestCase() {
     @Mock private lateinit var activityStarter: ActivityStarter
     @Mock private lateinit var activityManager: ActivityManager
     @Mock private lateinit var manager: UserManager
+    @Mock private lateinit var headlessSystemUserMode: HeadlessSystemUserMode
     @Mock private lateinit var deviceProvisionedController: DeviceProvisionedController
     @Mock private lateinit var devicePolicyManager: DevicePolicyManager
     @Mock private lateinit var uiEventLogger: UiEventLogger
@@ -82,7 +84,6 @@ class StatusBarUserChipViewModelTest : SysuiTestCase() {
 
     private val userRepository = FakeUserRepository()
     private val keyguardRepository = FakeKeyguardRepository()
-    private val featureFlags = FakeFeatureFlags()
     private lateinit var guestUserInteractor: GuestUserInteractor
     private lateinit var refreshUsersScheduler: RefreshUsersScheduler
 
@@ -233,6 +234,11 @@ class StatusBarUserChipViewModelTest : SysuiTestCase() {
         }
 
     private fun viewModel(): StatusBarUserChipViewModel {
+        val featureFlags =
+            FakeFeatureFlags().apply {
+                set(Flags.FULL_SCREEN_USER_SWITCHER, false)
+                set(Flags.FACE_AUTH_REFACTOR, true)
+            }
         return StatusBarUserChipViewModel(
             context = context,
             interactor =
@@ -244,10 +250,11 @@ class StatusBarUserChipViewModelTest : SysuiTestCase() {
                         KeyguardInteractor(
                             repository = keyguardRepository,
                             commandQueue = commandQueue,
+                            featureFlags = featureFlags,
                         ),
-                    featureFlags =
-                        FakeFeatureFlags().apply { set(Flags.FULL_SCREEN_USER_SWITCHER, false) },
+                    featureFlags = featureFlags,
                     manager = manager,
+                    headlessSystemUserMode = headlessSystemUserMode,
                     applicationScope = testScope.backgroundScope,
                     telephonyInteractor =
                         TelephonyInteractor(

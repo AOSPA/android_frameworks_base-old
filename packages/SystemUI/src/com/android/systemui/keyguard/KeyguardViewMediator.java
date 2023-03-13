@@ -1332,7 +1332,7 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
         mHideAnimation = AnimationUtils.loadAnimation(mContext,
                 com.android.internal.R.anim.lock_screen_behind_enter);
 
-        mWorkLockController = new WorkLockActivityController(mContext);
+        mWorkLockController = new WorkLockActivityController(mContext, mUserTracker);
     }
 
     @Override
@@ -2281,6 +2281,10 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
         }
         if (!mKeyguardDonePending && mHideAnimationRun && !mHideAnimationRunning) {
             handleKeyguardDone();
+        } else if (mSurfaceBehindRemoteAnimationRunning) {
+            // We're already running the keyguard exit animation, likely due to an in-progress swipe
+            // to unlock.
+           exitKeyguardAndFinishSurfaceBehindRemoteAnimation(false /* cancelled */);
         } else if (!mHideAnimationRun) {
             if (DEBUG) Log.d(TAG, "tryKeyguardDone: starting pre-hide animation");
             mHideAnimationRun = true;
@@ -2444,13 +2448,26 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
         }
         mKeyguardDisplayManager.show();
 
-        // schedule 4hr idle timeout after which non-strong biometrics (i.e. weak or convenience
-        // biometric) can't be used to unlock device until unlocking with strong biometric or
-        // primary auth (i.e. PIN/pattern/password)
-        mLockPatternUtils.scheduleNonStrongBiometricIdleTimeout(
-                KeyguardUpdateMonitor.getCurrentUser());
+        scheduleNonStrongBiometricIdleTimeout();
 
         Trace.endSection();
+    }
+
+    /**
+     * Schedule 4-hour idle timeout for non-strong biometrics when the device is locked
+     */
+    private void scheduleNonStrongBiometricIdleTimeout() {
+        final int currentUser = KeyguardUpdateMonitor.getCurrentUser();
+        // If unlocking with non-strong (i.e. weak or convenience) biometrics is possible, schedule
+        // 4hr idle timeout after which non-strong biometrics can't be used to unlock device until
+        // unlocking with strong biometric or primary auth (i.e. PIN/pattern/password)
+        if (mUpdateMonitor.isUnlockingWithNonStrongBiometricsPossible(currentUser)) {
+            if (DEBUG) {
+                Log.d(TAG, "scheduleNonStrongBiometricIdleTimeout: schedule an alarm for "
+                        + "currentUser=" + currentUser);
+            }
+            mLockPatternUtils.scheduleNonStrongBiometricIdleTimeout(currentUser);
+        }
     }
 
     private final Runnable mKeyguardGoingAwayRunnable = new Runnable() {
@@ -2936,6 +2953,8 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
             if (DEBUG) Log.d(TAG, "handleReset");
             mKeyguardViewControllerLazy.get().reset(true /* hideBouncerWhenShowing */);
         }
+
+        scheduleNonStrongBiometricIdleTimeout();
     }
 
     /**

@@ -40,6 +40,7 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.SearchManager;
 import android.app.WallpaperManager;
+import android.app.tare.EconomyManager;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.ContentResolver;
@@ -72,6 +73,7 @@ import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.os.DropBoxManager;
 import android.os.IBinder;
+import android.os.IpcDataCache;
 import android.os.LocaleList;
 import android.os.PowerManager;
 import android.os.PowerManager.AutoPowerSaveModeTriggers;
@@ -123,6 +125,9 @@ import java.util.concurrent.Executor;
 public final class Settings {
     /** @hide */
     public static final boolean DEFAULT_OVERRIDEABLE_BY_RESTORE = false;
+
+    /** @hide default value of whether IpcDataCache is enabled or not */
+    public static final boolean IPC_DATA_CACHE_ENABLED = false;
 
     // Intent actions for Settings
 
@@ -594,7 +599,7 @@ public final class Settings {
 
     /**
      * Activity Action: Show settings to allow configuration of
-     * {@link Manifest.permission#RUN_LONG_JOBS} permission
+     * {@link Manifest.permission#RUN_USER_INITIATED_JOBS} permission
      *
      * Input: Optionally, the Intent's data URI can specify the application package name to
      * directly invoke the management GUI specific to the package name. For example
@@ -1060,13 +1065,30 @@ public final class Settings {
      * In some cases, a matching Activity may not exist, so ensure you
      * safeguard against this.
      * <p>
-     * Input: Nothing.
-     * <p>
+     * Input: The optional {@code #EXTRA_EXPLICIT_LOCALES} with language tags that contains locales
+     * to limit available locales. This is only supported when device is under demo mode.
+     * If intent does not contain this extra, it will show system supported locale list.
+     * <br/>
+     * If {@code #EXTRA_EXPLICIT_LOCALES} contain a unsupported locale, it will still show this
+     * locale on list, but may not be supported by the devcie.
+     *
      * Output: Nothing.
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_LOCALE_SETTINGS =
             "android.settings.LOCALE_SETTINGS";
+
+    /**
+     * Activity Extra: Show explicit locales in launched locale picker activity.
+     *
+     * This can be passed as an extra field in an Activity Intent with one or more language tags
+     * as a {@link LocaleList}. This must be passed as an extra field to the
+     * {@link #ACTION_LOCALE_SETTINGS}.
+     *
+     * @hide
+     */
+    public static final String EXTRA_EXPLICIT_LOCALES =
+            "android.provider.extra.EXPLICIT_LOCALES";
 
     /**
      * Activity Action: Show settings to allow configuration of per application locale.
@@ -1694,7 +1716,6 @@ public final class Settings {
      * Input: Nothing.
      * <p>
      * Output: Nothing
-     * @see android.nfc.NfcAdapter#isNdefPushEnabled()
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_NFCSHARING_SETTINGS =
@@ -2903,8 +2924,8 @@ public final class Settings {
 
     public static final String AUTHORITY = "settings";
 
-    private static final String TAG = "Settings";
-    private static final boolean LOCAL_LOGV = false;
+    static final String TAG = "Settings";
+    static final boolean LOCAL_LOGV = false;
 
     // Used in system server calling uid workaround in call()
     private static boolean sInSystemServer = false;
@@ -3014,10 +3035,10 @@ public final class Settings {
         }
     }
 
-    private static final class ContentProviderHolder {
+    static final class ContentProviderHolder {
         private final Object mLock = new Object();
 
-        private final Uri mUri;
+        final Uri mUri;
         @GuardedBy("mLock")
         @UnsupportedAppUsage
         private IContentProvider mContentProvider;
@@ -3044,14 +3065,14 @@ public final class Settings {
     }
 
     // Thread-safe.
-    private static class NameValueCache {
+    static class NameValueCache {
         private static final boolean DEBUG = false;
 
-        private static final String[] SELECT_VALUE_PROJECTION = new String[] {
+        static final String[] SELECT_VALUE_PROJECTION = new String[] {
                 Settings.NameValueTable.VALUE
         };
 
-        private static final String NAME_EQ_PLACEHOLDER = "name=?";
+        static final String NAME_EQ_PLACEHOLDER = "name=?";
 
         // Must synchronize on 'this' to access mValues and mValuesVersion.
         private final ArrayMap<String, String> mValues = new ArrayMap<>();
@@ -3071,6 +3092,14 @@ public final class Settings {
         private final ArraySet<String> mReadableFields;
         private final ArraySet<String> mAllFields;
         private final ArrayMap<String, Integer> mReadableFieldsWithMaxTargetSdk;
+
+        private final String mSettingsType;
+
+        // Caches for settings key -> value, only for the current user
+        private final IpcDataCache<SettingsIpcDataCache.GetQuery, String> mValueCache;
+        // Cache for settings namespace -> list of settings, only for the current user
+        private final IpcDataCache<SettingsIpcDataCache.ListQuery, HashMap<String, String>>
+                mNamespaceCache;
 
         @GuardedBy("this")
         private GenerationTracker mGenerationTracker;
@@ -3097,6 +3126,11 @@ public final class Settings {
             mReadableFieldsWithMaxTargetSdk = new ArrayMap<>();
             getPublicSettingsForClass(callerClass, mAllFields, mReadableFields,
                     mReadableFieldsWithMaxTargetSdk);
+            mSettingsType = callerClass.getSimpleName().toLowerCase();
+            mValueCache = IPC_DATA_CACHE_ENABLED ? SettingsIpcDataCache.createValueCache(
+                    mProviderHolder, mCallGetCommand, mUri, mSettingsType) : null;
+            mNamespaceCache = IPC_DATA_CACHE_ENABLED ? SettingsIpcDataCache.createListCache(
+                    mProviderHolder, mCallListCommand, mSettingsType) : null;
         }
 
         public boolean putStringForUser(ContentResolver cr, String name, String value,
@@ -3195,6 +3229,30 @@ public final class Settings {
                 }
             }
 
+            if (IPC_DATA_CACHE_ENABLED) {
+                if (userHandle != UserHandle.myUserId()) {
+                    if (LOCAL_LOGV) {
+                        Log.v(TAG, "get setting for user " + userHandle
+                                + " by user " + UserHandle.myUserId()
+                                + " so skipping cache");
+                    }
+                    try {
+                        return SettingsIpcDataCache.getValueFromContentProviderCall(
+                                mProviderHolder, mCallGetCommand, mUri, userHandle, cr, name);
+                    } catch (RemoteException e) {
+                        return null;
+                    }
+                }
+
+                try {
+                    return mValueCache.query(new SettingsIpcDataCache.GetQuery(cr, name));
+                } catch (RuntimeException e) {
+                    // Failed to query the server
+                    return null;
+                }
+            }
+
+            // Fall back to old cache mechanism
             final boolean isSelf = (userHandle == UserHandle.myUserId());
             int currentGeneration = -1;
             if (isSelf) {
@@ -3391,6 +3449,38 @@ public final class Settings {
                 List<String> names) {
             String namespace = prefix.substring(0, prefix.length() - 1);
             Config.enforceReadPermission(namespace);
+
+            if (mCallListCommand == null) {
+                // No list command specified, return empty map
+                return new ArrayMap<>();
+            }
+
+            if (IPC_DATA_CACHE_ENABLED) {
+                ArrayMap<String, String> results = new ArrayMap<>();
+                HashMap<String, String> flagsToValues;
+                try {
+                    flagsToValues = mNamespaceCache.query(
+                            new SettingsIpcDataCache.ListQuery(cr, prefix));
+                } catch (RuntimeException e) {
+                    // Failed to query the server, return an empty map
+                    return results;
+                }
+
+                if (flagsToValues != null) {
+                    if (!names.isEmpty()) {
+                        for (Map.Entry<String, String> flag : flagsToValues.entrySet()) {
+                            if (names.contains(flag.getKey())) {
+                                results.put(flag.getKey(), flag.getValue());
+                            }
+                        }
+                    } else {
+                        results.putAll(flagsToValues);
+                    }
+                }
+                return results;
+            }
+
+            // Fall back to old cache mechanism
             ArrayMap<String, String> keyValues = new ArrayMap<>();
             int currentGeneration = -1;
 
@@ -3430,10 +3520,7 @@ public final class Settings {
                 }
             }
 
-            if (mCallListCommand == null) {
-                // No list command specified, return empty map
-                return keyValues;
-            }
+
             IContentProvider cp = mProviderHolder.getProvider(cr);
 
             try {
@@ -3539,13 +3626,25 @@ public final class Settings {
             }
         }
 
-        public void clearGenerationTrackerForTest() {
+        public void clearCachesForTest() {
+            if (IPC_DATA_CACHE_ENABLED) {
+                mValueCache.clear();
+                mNamespaceCache.clear();
+                return;
+            }
+            // Fall back to old cache mechanism
             synchronized (NameValueCache.this) {
                 if (mGenerationTracker != null) {
                     mGenerationTracker.destroy();
                 }
                 mValues.clear();
                 mGenerationTracker = null;
+            }
+        }
+
+        public void invalidateCache() {
+            if (IPC_DATA_CACHE_ENABLED) {
+                SettingsIpcDataCache.invalidateCache(mSettingsType);
             }
         }
     }
@@ -3824,7 +3923,12 @@ public final class Settings {
         /** @hide */
         public static void clearProviderForTest() {
             sProviderHolder.clearProviderForTest();
-            sNameValueCache.clearGenerationTrackerForTest();
+            sNameValueCache.clearCachesForTest();
+        }
+
+        /** @hide */
+        public static void invalidateValueCache() {
+            sNameValueCache.invalidateCache();
         }
 
         /** @hide */
@@ -5569,6 +5673,44 @@ public final class Settings {
         public static final String POINTER_SPEED = "pointer_speed";
 
         /**
+         * Touchpad pointer speed setting.
+         * This is an integer value in a range between -7 and +7, so there are 15 possible values.
+         *   -7 = slowest
+         *    0 = default speed
+         *   +7 = fastest
+         * @hide
+         */
+        public static final String TOUCHPAD_POINTER_SPEED = "touchpad_pointer_speed";
+
+        /**
+         * Whether to invert the touchpad scrolling direction.
+         *
+         * If set to 1 (the default), moving two fingers downwards on the touchpad will scroll
+         * upwards, consistent with normal touchscreen scrolling. If set to 0, moving two fingers
+         * downwards will scroll downwards.
+         *
+         * @hide
+         */
+        public static final String TOUCHPAD_NATURAL_SCROLLING = "touchpad_natural_scrolling";
+
+        /**
+         * Whether to enable tap-to-click on touchpads.
+         *
+         * @hide
+         */
+        public static final String TOUCHPAD_TAP_TO_CLICK = "touchpad_tap_to_click";
+
+        /**
+         * Whether to enable a right-click zone on touchpads.
+         *
+         * When set to 1, pressing to click in a section on the right-hand side of the touchpad will
+         * result in a context click (a.k.a. right click).
+         *
+         * @hide
+         */
+        public static final String TOUCHPAD_RIGHT_CLICK_ZONE = "touchpad_right_click_zone";
+
+        /**
          * Whether lock-to-app will be triggered by long-press on recents.
          * @hide
          */
@@ -5754,6 +5896,10 @@ public final class Settings {
             PRIVATE_SETTINGS.add(DISPLAY_COLOR_MODE_VENDOR_HINT);
             PRIVATE_SETTINGS.add(DESKTOP_MODE);
             PRIVATE_SETTINGS.add(LOCALE_PREFERENCES);
+            PRIVATE_SETTINGS.add(TOUCHPAD_POINTER_SPEED);
+            PRIVATE_SETTINGS.add(TOUCHPAD_NATURAL_SCROLLING);
+            PRIVATE_SETTINGS.add(TOUCHPAD_TAP_TO_CLICK);
+            PRIVATE_SETTINGS.add(TOUCHPAD_RIGHT_CLICK_ZONE);
             PRIVATE_SETTINGS.add(CALL_CONNECTED_TONE_ENABLED);
         }
 
@@ -6273,7 +6419,12 @@ public final class Settings {
         /** @hide */
         public static void clearProviderForTest() {
             sProviderHolder.clearProviderForTest();
-            sNameValueCache.clearGenerationTrackerForTest();
+            sNameValueCache.clearCachesForTest();
+        }
+
+        /** @hide */
+        public static void invalidateValueCache() {
+            sNameValueCache.invalidateCache();
         }
 
         /** @hide */
@@ -6859,6 +7010,58 @@ public final class Settings {
                 "bluetooth_le_broadcast_app_source_name";
 
         /**
+         * Ringtone routing value for hearing aid. It routes ringtone to hearing aid or device
+         * speaker.
+         * <ul>
+         *     <li> 0 = Default
+         *     <li> 1 = Route to hearing aid
+         *     <li> 2 = Route to device speaker
+         * </ul>
+         * @hide
+         */
+        public static final String HEARING_AID_RINGTONE_ROUTING =
+                "hearing_aid_ringtone_routing";
+
+        /**
+         * Phone call routing value for hearing aid. It routes phone call to hearing aid or
+         * device speaker.
+         * <ul>
+         *     <li> 0 = Default
+         *     <li> 1 = Route to hearing aid
+         *     <li> 2 = Route to device speaker
+         * </ul>
+         * @hide
+         */
+        public static final String HEARING_AID_CALL_ROUTING =
+                "hearing_aid_call_routing";
+
+        /**
+         * Media routing value for hearing aid. It routes media to hearing aid or device
+         * speaker.
+         * <ul>
+         *     <li> 0 = Default
+         *     <li> 1 = Route to hearing aid
+         *     <li> 2 = Route to device speaker
+         * </ul>
+         * @hide
+         */
+        public static final String HEARING_AID_MEDIA_ROUTING =
+                "hearing_aid_media_routing";
+
+        /**
+         * System sounds routing value for hearing aid. It routes system sounds to hearing aid
+         * or device speaker.
+         * <ul>
+         *     <li> 0 = Default
+         *     <li> 1 = Route to hearing aid
+         *     <li> 2 = Route to device speaker
+         * </ul>
+         * @hide
+         */
+        public static final String HEARING_AID_SYSTEM_SOUNDS_ROUTING =
+                "hearing_aid_system_sounds_routing";
+
+        /**
          * Setting to indicate that on device captions are enabled.
          *
          * @hide
@@ -7251,6 +7454,9 @@ public final class Settings {
          *
          * Format like "ime0;subtype0;subtype1;subtype2:ime1:ime2;subtype0"
          * where imeId is ComponentName and subtype is int32.
+         *
+         * <p>Note: This setting is not readable to the app targeting API level 34 or higher. use
+         * {@link android.view.inputmethod.InputMethodManager#getEnabledInputMethodList()} instead.
          */
         @Readable(maxTargetSdk = Build.VERSION_CODES.TIRAMISU)
         public static final String ENABLED_INPUT_METHODS = "enabled_input_methods";
@@ -7281,7 +7487,7 @@ public final class Settings {
          * @hide
          */
         @SuppressLint("NoSettingsProvider")
-        public static final String STYLUS_BUTTONS_DISABLED = "stylus_buttons_disabled";
+        public static final String STYLUS_BUTTONS_ENABLED = "stylus_buttons_enabled";
 
         /**
          * Host name and port for global http proxy. Uses ':' seperator for
@@ -9732,7 +9938,7 @@ public final class Settings {
         /**
          * Indicates whether "seen" notifications should be suppressed from the lockscreen.
          * <p>
-         * Type: int (0 for false, 1 for true)
+         * Type: int (0 for unset, 1 for true, 2 for false)
          *
          * @hide
          */
@@ -10125,6 +10331,17 @@ public final class Settings {
          */
         public static final String ACTIVE_UNLOCK_ON_UNLOCK_INTENT_WHEN_BIOMETRIC_ENROLLED =
                 "active_unlock_on_unlock_intent_when_biometric_enrolled";
+
+        /**
+         * If active unlock triggers on unlock intents, then also request active unlock on
+         * these wake-up reasons. See PowerManager.WakeReason for value mappings.
+         * WakeReasons should be separated by a pipe. For example: "0|3" or "0". If this
+         * setting should be disabled, then this should be set to an empty string. A null value
+         * will use the system default value (WAKE_REASON_UNFOLD_DEVICE).
+         * @hide
+         */
+        public static final String ACTIVE_UNLOCK_WAKEUPS_CONSIDERED_UNLOCK_INTENTS =
+                "active_unlock_wakeups_considered_unlock_intents";
 
         /**
          * Whether the assist gesture should be enabled.
@@ -11006,11 +11223,27 @@ public final class Settings {
         public static final int ACCESSIBILITY_MAGNIFICATION_MODE_ALL = 0x3;
 
         /**
+         * Whether the magnification always on feature is enabled. If true, the magnifier will not
+         * deactivate on Activity transitions; it will only zoom out to 100%.
+         *
+         * @hide
+         */
+        public static final String ACCESSIBILITY_MAGNIFICATION_ALWAYS_ON_ENABLED =
+                "accessibility_magnification_always_on_enabled";
+
+        /**
          * Whether the following typing focus feature for magnification is enabled.
          * @hide
          */
         public static final String ACCESSIBILITY_MAGNIFICATION_FOLLOW_TYPING_ENABLED =
                 "accessibility_magnification_follow_typing_enabled";
+
+        /**
+         * Whether the magnification joystick controller feature is enabled.
+         * @hide
+         */
+        public static final String ACCESSIBILITY_MAGNIFICATION_JOYSTICK_ENABLED =
+                "accessibility_magnification_joystick_enabled";
 
         /**
          * Controls magnification capability. Accessibility magnification is capable of at least one
@@ -11311,6 +11544,13 @@ public final class Settings {
          */
         public static final String EXTRA_AUTOMATIC_POWER_SAVE_MODE =
                 "extra_automatic_power_save_mode";
+
+        /**
+         * Whether lockscreen weather is enabled.
+         *
+         * @hide
+         */
+        public static final String LOCK_SCREEN_WEATHER_ENABLED = "lockscreen_weather_enabled";
 
         /**
          * These entries are considered common between the personal and the managed profile,
@@ -14574,15 +14814,6 @@ public final class Settings {
                 "app_auto_restriction_enabled";
 
         /**
-         * Feature flag to enable or disable the Forced App Standby feature.
-         * Type: int (0 for false, 1 for true)
-         * Default: 1
-         * @hide
-         */
-        @Readable
-        public static final String FORCED_APP_STANDBY_ENABLED = "forced_app_standby_enabled";
-
-        /**
          * Whether or not to enable Forced App Standby on small battery devices.
          * Type: int (0 for false, 1 for true)
          * Default: 0
@@ -14605,7 +14836,7 @@ public final class Settings {
          *
          * @hide
          */
-        public static final int DEFAULT_ENABLE_TARE = 1;
+        public static final int DEFAULT_ENABLE_TARE = EconomyManager.DEFAULT_ENABLE_TARE_MODE;
 
         /**
          * Whether to enable the TARE AlarmManager economic policy or not.
@@ -14620,7 +14851,8 @@ public final class Settings {
          *
          * @hide
          */
-        public static final int DEFAULT_ENABLE_TARE_ALARM_MANAGER = 0;
+        public static final int DEFAULT_ENABLE_TARE_ALARM_MANAGER =
+                        EconomyManager.DEFAULT_ENABLE_POLICY_ALARM ? 1 : 0;
 
         /**
          * Settings for AlarmManager's TARE EconomicPolicy (list of its economic factors).
@@ -14644,7 +14876,8 @@ public final class Settings {
          *
          * @hide
          */
-        public static final int DEFAULT_ENABLE_TARE_JOB_SCHEDULER = 0;
+        public static final int DEFAULT_ENABLE_TARE_JOB_SCHEDULER =
+                EconomyManager.DEFAULT_ENABLE_POLICY_JOB_SCHEDULER ? 1 : 0;
 
         /**
          * Settings for JobScheduler's TARE EconomicPolicy (list of its economic factors).
@@ -15376,6 +15609,25 @@ public final class Settings {
         public static final String AUDIO_SAFE_VOLUME_STATE = "audio_safe_volume_state";
 
         /**
+         * Persisted safe hearding current CSD value. Values are stored as float percentages where
+         * 1.f represents 100% sound dose has been reached.
+         * @hide
+         */
+        public static final String AUDIO_SAFE_CSD_CURRENT_VALUE = "audio_safe_csd_current_value";
+
+        /**
+         * Persisted safe hearding next CSD warning value. Values are stored as float percentages.
+         * @hide
+         */
+        public static final String AUDIO_SAFE_CSD_NEXT_WARNING = "audio_safe_csd_next_warning";
+
+        /**
+         * Persisted safe hearding dose records (see {@link android.media.SoundDoseRecord})
+         * @hide
+         */
+        public static final String AUDIO_SAFE_CSD_DOSE_RECORDS = "audio_safe_csd_dose_records";
+
+        /**
          * URL for tzinfo (time zone) updates
          * @hide
          */
@@ -15755,6 +16007,36 @@ public final class Settings {
         @SuppressLint("NoSettingsProvider")
         public static final String USER_PREFERRED_RESOLUTION_WIDTH =
                 "user_preferred_resolution_width";
+
+        /**
+         * The HDR output mode chosen by the user. This is one of:
+         * {@link android.hardware.display.HdrConversionMode#HDR_CONVERSION_PASSTHROUGH},
+         * {@link android.hardware.display.HdrConversionMode#HDR_CONVERSION_SYSTEM},
+         * {@link android.hardware.display.HdrConversionMode#HDR_CONVERSION_FORCE}.
+         *
+         * @hide
+         */
+        @TestApi
+        @Readable
+        public static final String HDR_CONVERSION_MODE = "hdr_conversion_mode";
+
+        /**
+         * The output HDR type chosen by the user in case when {@link #HDR_CONVERSION_MODE} is
+         * {@link #HDR_CONVERSION_FORCE}. This is one of:
+         * {@link android.view.Display.HdrCapabilities#HDR_TYPE_INVALID},
+         * {@link android.view.Display.HdrCapabilities#HDR_TYPE_DOLBY_VISION},
+         * {@link android.view.Display.HdrCapabilities#HDR_TYPE_HDR10},
+         * {@link android.view.Display.HdrCapabilities#HDR_TYPE_HLG},
+         * {@link android.view.Display.HdrCapabilities#HDR_TYPE_HDR10_PLUS}
+         * <p>
+         * The value is {@link android.view.Display.HdrCapabilities#HDR_TYPE_INVALID} when user
+         * chooses SDR output type. </p>
+         *
+         * @hide
+         */
+        @TestApi
+        @Readable
+        public static final String HDR_FORCE_CONVERSION_TYPE = "hdr_force_conversion_type";
 
         /**
          * The name of the device
@@ -16430,7 +16712,12 @@ public final class Settings {
         /** @hide */
         public static void clearProviderForTest() {
             sProviderHolder.clearProviderForTest();
-            sNameValueCache.clearGenerationTrackerForTest();
+            sNameValueCache.clearCachesForTest();
+        }
+
+        /** @hide */
+        public static void invalidateValueCache() {
+            sNameValueCache.invalidateCache();
         }
 
         /** @hide */
@@ -17906,6 +18193,12 @@ public final class Settings {
                     "gesture_touch_and_hold_watchface_enabled";
 
             /**
+             * Whether screenshot is enabled.
+             * @hide
+             */
+            public static final String SCREENSHOT_ENABLED = "screenshot_enabled";
+
+            /**
              * Whether bedtime mode is enabled.
              * @hide
              */
@@ -18123,6 +18416,37 @@ public final class Settings {
             public static final String WRIST_ORIENTATION_MODE = "wear_wrist_orientation_mode";
 
             /**
+             * Current lock screen state of the device
+             * (null = default value of this setting (lockscreen is never set),
+             * 0 = {@link #LOCK_SCREEN_STATE_NONE},
+             * 1 = {@link #LOCK_SCREEN_STATE_PIN},
+             * 2 = {@link #LOCK_SCREEN_STATE_PATTERN})
+             * @hide
+             */
+            public static final String LOCK_SCREEN_STATE = "lock_screen_state";
+
+            /**
+             * No lock screen set
+             * One of the possible states for {@link #LOCK_SCREEN_STATE}.
+             * @hide
+             */
+            public static final int LOCK_SCREEN_STATE_NONE = 0;
+
+            /**
+             * Lock screen set as a pin
+             * One of the possible states for {@link #LOCK_SCREEN_STATE}.
+             * @hide
+             */
+            public static final int LOCK_SCREEN_STATE_PIN = 1;
+
+            /**
+             * Lock screen set as a pattern
+             * One of the possible states for {@link #LOCK_SCREEN_STATE}.
+             * @hide
+             */
+            public static final int LOCK_SCREEN_STATE_PATTERN = 2;
+
+            /**
              * Setting indicating the name of the Wear OS app package containing the device's sysui.
              *
              * @hide
@@ -18214,6 +18538,91 @@ public final class Settings {
              * @hide
              */
             public static final String DYNAMIC_COLOR_THEME_ENABLED = "dynamic_color_theme_enabled";
+
+            /**
+             * Current state of accessibility vibration watch feature
+             * (0 = false, 1 = true)
+             *
+             * @hide
+             */
+            public static final String ACCESSIBILITY_VIBRATION_WATCH_ENABLED =
+                    "a11y_vibration_watch_enabled";
+
+            /**
+             * Stores current type of accessibility vibration
+             * (0 = {@link #ACCESSIBILITY_VIBRATION_WATCH_TYPE_DIGIT},
+             * 1 = {@link #ACCESSIBILITY_VIBRATION_WATCH_TYPE_TERSE)
+             *
+             * @hide
+             */
+            public static final String ACCESSIBILITY_VIBRATION_WATCH_TYPE =
+                    "a11y_vibration_watch_type";
+
+            /**
+             * Vibration watch type digit
+             * One of the possible states for {@link #ACCESSIBILITY_VIBRATION_WATCH_TYPE}.
+             *
+             * @hide
+             */
+            public static final int ACCESSIBILITY_VIBRATION_WATCH_TYPE_DIGIT = 0;
+
+            /**
+             * Vibration watch type terse
+             * One of the possible states for {@link #ACCESSIBILITY_VIBRATION_WATCH_TYPE}.
+             *
+             * @hide
+             */
+            public static final int ACCESSIBILITY_VIBRATION_WATCH_TYPE_TERSE = 1;
+
+            /**
+             * Stores current accessibility vibration watch speed
+             * (0 = {@link #ACCESSIBILITY_VIBRATION_WATCH_SPEED_VERY_SLOW},
+             * 1 = {@link #ACCESSIBILITY_VIBRATION_WATCH_SPEED_SLOW},
+             * 2 = {@link #ACCESSIBILITY_VIBRATION_WATCH_SPEED_MEDIUM},
+             * 3 = {@link #ACCESSIBILITY_VIBRATION_WATCH_SPEED_FAST},
+             * 4 = {@link #ACCESSIBILITY_VIBRATION_WATCH_SPEED_VERY_FAST})
+             */
+            public static final String ACCESSIBILITY_VIBRATION_WATCH_SPEED = "vibration_speed";
+
+            /**
+             * Vibration watch speed type very slow
+             * One of the possible states for {@link #ACCESSIBILITY_VIBRATION_WATCH_SPEED}.
+             *
+             * @hide
+             */
+            public static final int ACCESSIBILITY_VIBRATION_WATCH_SPEED_VERY_SLOW = 0;
+
+            /**
+             * Vibration watch speed type slow
+             * One of the possible states for {@link #ACCESSIBILITY_VIBRATION_WATCH_SPEED}.
+             *
+             * @hide
+             */
+            public static final int ACCESSIBILITY_VIBRATION_WATCH_SPEED_SLOW = 1;
+
+            /**
+             * Vibration watch speed type medium
+             * One of the possible states for {@link #ACCESSIBILITY_VIBRATION_WATCH_SPEED}.
+             *
+             * @hide
+             */
+            public static final int ACCESSIBILITY_VIBRATION_WATCH_SPEED_MEDIUM = 2;
+
+            /**
+             * Vibration watch speed type fast
+             * One of the possible states for {@link #ACCESSIBILITY_VIBRATION_WATCH_SPEED}.
+             *
+             * @hide
+             */
+            public static final int ACCESSIBILITY_VIBRATION_WATCH_SPEED_FAST = 3;
+
+            /**
+             * Vibration watch speed type very fast
+             * One of the possible states for {@link #ACCESSIBILITY_VIBRATION_WATCH_SPEED}.
+             *
+             * @hide
+             */
+            public static final int ACCESSIBILITY_VIBRATION_WATCH_SPEED_VERY_FAST = 4;
         }
     }
 
@@ -18654,7 +19063,17 @@ public final class Settings {
         /** @hide */
         public static void clearProviderForTest() {
             sProviderHolder.clearProviderForTest();
-            sNameValueCache.clearGenerationTrackerForTest();
+            sNameValueCache.clearCachesForTest();
+        }
+
+        /** @hide */
+        public static void invalidateValueCache() {
+            sNameValueCache.invalidateCache();
+        }
+
+        /** @hide */
+        public static void invalidateNamespaceCache() {
+            sNameValueCache.invalidateCache();
         }
 
         private static void handleMonitorCallback(
@@ -19127,6 +19546,18 @@ public final class Settings {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION =
             "android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION";
+
+    /**
+     * Activity Action: Show screen for controlling whether an app can send full screen intents.
+     * <p>
+     *     Input: the intent's data URI must specify the application package name for which you want
+     *     to manage full screen intents.
+     * <p>
+     * Output: Nothing.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT =
+            "android.settings.MANAGE_APP_USE_FULL_SCREEN_INTENT";
 
     /**
      * Activity Action: For system or preinstalled apps to show their {@link Activity} embedded

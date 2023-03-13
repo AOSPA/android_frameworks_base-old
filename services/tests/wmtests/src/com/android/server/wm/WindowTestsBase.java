@@ -79,6 +79,7 @@ import android.graphics.Insets;
 import android.graphics.Rect;
 import android.hardware.HardwareBuffer;
 import android.hardware.display.DisplayManager;
+import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -262,6 +263,12 @@ class WindowTestsBase extends SystemServiceTestsBase {
         // device form factors.
         mAtm.mWindowManager.mLetterboxConfiguration
                 .setIsSplitScreenAspectRatioForUnresizableAppsEnabled(false);
+        // Ensure aspect ratio for al apps isn't overridden on any device target.
+        // {@link com.android.internal.R.bool
+        // .config_letterboxIsDisplayAspectRatioForFixedOrientationLetterboxEnabled}, may be set on
+        // some device form factors.
+        mAtm.mWindowManager.mLetterboxConfiguration
+                .setIsDisplayAspectRatioEnabledForFixedOrientationLetterbox(false);
 
         checkDeviceSpecificOverridesNotApplied();
     }
@@ -276,6 +283,8 @@ class WindowTestsBase extends SystemServiceTestsBase {
         mAtm.mWindowManager.mLetterboxConfiguration.resetIsVerticalReachabilityEnabled();
         mAtm.mWindowManager.mLetterboxConfiguration
                 .resetIsSplitScreenAspectRatioForUnresizableAppsEnabled();
+        mAtm.mWindowManager.mLetterboxConfiguration
+                .resetIsDisplayAspectRatioEnabledForFixedOrientationLetterbox();
     }
 
     /**
@@ -742,11 +751,11 @@ class WindowTestsBase extends SystemServiceTestsBase {
     }
 
     /**
-     * Creates a {@link TaskFragment} with {@link ActivityRecord} and attach it to the
+     * Creates a {@link TaskFragment} with {@link ActivityRecord}, and attaches it to the
      * {@code parentTask}.
      *
-     * @param parentTask the {@link Task} this TaskFragment is going to be attached
-     * @return the created TaskFragment
+     * @param parentTask the {@link Task} this {@link TaskFragment} is going to be attached.
+     * @return the created {@link TaskFragment}
      */
     static TaskFragment createTaskFragmentWithActivity(@NonNull Task parentTask) {
         return new TaskFragmentBuilder(parentTask.mAtmService)
@@ -755,13 +764,27 @@ class WindowTestsBase extends SystemServiceTestsBase {
                 .build();
     }
 
+    /**
+     * Creates an embedded {@link TaskFragment} organized by {@code organizer} with
+     * {@link ActivityRecord}, and attaches it to the {@code parentTask}.
+     *
+     * @param parentTask the {@link Task} this {@link TaskFragment} is going to be attached.
+     * @param organizer  the {@link TaskFragmentOrganizer} this {@link TaskFragment} is going to be
+     *                   organized by.
+     * @return the created {@link TaskFragment}
+     */
     static TaskFragment createTaskFragmentWithEmbeddedActivity(@NonNull Task parentTask,
-            TaskFragmentOrganizer organizer) {
-        return new TaskFragmentBuilder(parentTask.mAtmService)
+            @NonNull TaskFragmentOrganizer organizer) {
+        final IBinder fragmentToken = new Binder();
+        final TaskFragment taskFragment = new TaskFragmentBuilder(parentTask.mAtmService)
                 .setParentTask(parentTask)
                 .createActivityCount(1)
                 .setOrganizer(organizer)
+                .setFragmentToken(fragmentToken)
                 .build();
+        parentTask.mAtmService.mWindowOrganizerController.mLaunchTaskFragments
+                .put(fragmentToken, taskFragment);
+        return taskFragment;
     }
 
     /** Creates a {@link DisplayContent} that supports IME and adds it to the system. */
@@ -1717,6 +1740,14 @@ class WindowTestsBase extends SystemServiceTestsBase {
             super.updateResizingWindowIfNeeded();
 
             mHasSurface = hadSurface;
+        }
+    }
+
+    static class TestTransitionController extends TransitionController {
+        TestTransitionController(ActivityTaskManagerService atms) {
+            super(atms);
+            mTaskSnapshotController = mock(TaskSnapshotController.class);
+            mTransitionTracer = mock(TransitionTracer.class);
         }
     }
 

@@ -29,8 +29,10 @@ import static android.window.TaskFragmentOperation.OP_TYPE_REQUEST_FOCUS_ON_TASK
 import static android.window.TaskFragmentOperation.OP_TYPE_SET_ADJACENT_TASK_FRAGMENTS;
 import static android.window.TaskFragmentOperation.OP_TYPE_SET_ANIMATION_PARAMS;
 import static android.window.TaskFragmentOperation.OP_TYPE_SET_COMPANION_TASK_FRAGMENT;
+import static android.window.TaskFragmentOperation.OP_TYPE_SET_RELATIVE_BOUNDS;
 import static android.window.TaskFragmentOperation.OP_TYPE_START_ACTIVITY_IN_TASK_FRAGMENT;
 import static android.window.TaskFragmentOperation.OP_TYPE_UNKNOWN;
+import static android.window.WindowContainerTransaction.Change.CHANGE_RELATIVE_BOUNDS;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_ADD_RECT_INSETS_PROVIDER;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_ADD_TASK_FRAGMENT_OPERATION;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_CHILDREN_TASKS_REPARENT;
@@ -51,7 +53,6 @@ import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_START_SHORTCUT;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_WINDOW_ORGANIZER;
-import static com.android.server.wm.ActivityTaskManagerService.LAYOUT_REASON_CONFIG_CHANGED;
 import static com.android.server.wm.ActivityTaskManagerService.enforceTaskPermission;
 import static com.android.server.wm.ActivityTaskSupervisor.PRESERVE_WINDOWS;
 import static com.android.server.wm.Task.FLAG_FORCE_HIDDEN_FOR_PINNED_TASK;
@@ -94,6 +95,7 @@ import android.window.IWindowOrganizerController;
 import android.window.TaskFragmentAnimationParams;
 import android.window.TaskFragmentCreationParams;
 import android.window.TaskFragmentOperation;
+import android.window.WindowContainerToken;
 import android.window.WindowContainerTransaction;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -145,7 +147,8 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
     final DisplayAreaOrganizerController mDisplayAreaOrganizerController;
     final TaskFragmentOrganizerController mTaskFragmentOrganizerController;
 
-    TransitionController mTransitionController;
+    final TransitionController mTransitionController;
+
     /**
      * A Map which manages the relationship between
      * {@link TaskFragmentCreationParams#getFragmentToken()} and {@link TaskFragment}
@@ -162,12 +165,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         mTaskOrganizerController = new TaskOrganizerController(mService);
         mDisplayAreaOrganizerController = new DisplayAreaOrganizerController(mService);
         mTaskFragmentOrganizerController = new TaskFragmentOrganizerController(atm, this);
-    }
-
-    void setWindowManager(WindowManagerService wms) {
-        mTransitionController = new TransitionController(mService, wms.mTaskSnapshotController,
-                wms.mTransitionTracer);
-        mTransitionController.registerLegacyListener(wms.mActivityManagerAppTransitionNotifier);
+        mTransitionController = new TransitionController(atm);
     }
 
     TransitionController getTransitionController() {
@@ -430,6 +428,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 applyTransaction(wct, -1 /* syncId */, transition, caller);
                 mTransitionController.requestStartTransition(transition, null /* startTask */,
                         null /* remoteTransition */, null /* displayChange */);
+                transition.setAllReady();
                 return;
             }
 
@@ -468,6 +467,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                             mTransitionController.requestStartTransition(nextTransition,
                                     null /* startTask */, null /* remoteTransition */,
                                     null /* displayChange */);
+                            nextTransition.setAllReady();
                         } else {
                             nextTransition.abort();
                         }
@@ -496,8 +496,8 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         mService.deferWindowLayout();
         mService.mTaskSupervisor.setDeferRootVisibilityUpdate(true /* deferUpdate */);
         try {
-            if (transition != null && transition.applyDisplayChangeIfNeeded()) {
-                effects |= TRANSACT_EFFECTS_LIFECYCLE;
+            if (transition != null) {
+                transition.applyDisplayChangeIfNeeded();
             }
             final List<WindowContainerTransaction.HierarchyOp> hops = t.getHierarchyOps();
             final int hopSize = hops.size();
@@ -618,8 +618,8 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 }
             }
 
-            if ((effects & TRANSACT_EFFECTS_CLIENT_CONFIG) != 0) {
-                mService.addWindowLayoutReasons(LAYOUT_REASON_CONFIG_CHANGED);
+            if (effects != 0) {
+                mService.mWindowManager.mWindowPlacerLocked.requestTraversal();
             }
         } finally {
             mService.mTaskSupervisor.setDeferRootVisibilityUpdate(false /* deferUpdate */);
@@ -627,8 +627,8 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         }
     }
 
-    private int applyChanges(WindowContainer<?> container,
-            WindowContainerTransaction.Change change, @Nullable IBinder errorCallbackToken) {
+    private int applyChanges(@NonNull WindowContainer<?> container,
+            @NonNull WindowContainerTransaction.Change change) {
         // The "client"-facing API should prevent bad changes; however, just in case, sanitize
         // masks here.
         final int configMask = change.getConfigSetMask() & CONTROLLABLE_CONFIGS;
@@ -636,9 +636,6 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         int effects = TRANSACT_EFFECTS_NONE;
         final int windowingMode = change.getWindowingMode();
         if (configMask != 0) {
-
-            adjustBoundsForMinDimensionsIfNeeded(container, change, errorCallbackToken);
-
             if (windowingMode > -1 && windowingMode != container.getWindowingMode()) {
                 // Special handling for when we are setting a windowingMode in the same transaction.
                 // Setting the windowingMode is going to call onConfigurationChanged so we don't
@@ -691,28 +688,8 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         return effects;
     }
 
-    private void adjustBoundsForMinDimensionsIfNeeded(WindowContainer<?> container,
-            WindowContainerTransaction.Change change, @Nullable IBinder errorCallbackToken) {
-        final TaskFragment taskFragment = container.asTaskFragment();
-        if (taskFragment == null || !taskFragment.isEmbedded()) {
-            return;
-        }
-        if ((change.getWindowSetMask() & WINDOW_CONFIG_BOUNDS) == 0) {
-            return;
-        }
-        final WindowConfiguration winConfig = change.getConfiguration().windowConfiguration;
-        final Rect bounds = winConfig.getBounds();
-        final Point minDimensions = taskFragment.calculateMinDimension();
-        if (bounds.width() < minDimensions.x || bounds.height() < minDimensions.y) {
-            sendMinimumDimensionViolation(taskFragment, minDimensions, errorCallbackToken,
-                    "setBounds:" + bounds);
-            // Sets the bounds to match parent bounds.
-            winConfig.setBounds(new Rect());
-        }
-    }
-
     private int applyTaskChanges(Task tr, WindowContainerTransaction.Change c) {
-        int effects = applyChanges(tr, c, null /* errorCallbackToken */);
+        int effects = applyChanges(tr, c);
         final SurfaceControl.Transaction t = c.getBoundsChangeTransaction();
 
         if ((c.getChangeMask() & WindowContainerTransaction.Change.CHANGE_HIDDEN) != 0) {
@@ -773,7 +750,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
     private int applyDisplayAreaChanges(DisplayArea displayArea,
             WindowContainerTransaction.Change c) {
         final int[] effects = new int[1];
-        effects[0] = applyChanges(displayArea, c, null /* errorCallbackToken */);
+        effects[0] = applyChanges(displayArea, c);
 
         if ((c.getChangeMask()
                 & WindowContainerTransaction.Change.CHANGE_IGNORE_ORIENTATION_REQUEST) != 0) {
@@ -807,13 +784,53 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         mTmpBounds0.set(taskFragment.getBounds());
         mTmpBounds1.set(taskFragment.getRelativeEmbeddedBounds());
         taskFragment.deferOrganizedTaskFragmentSurfaceUpdate();
-        final int effects = applyChanges(taskFragment, c, errorCallbackToken);
-        taskFragment.updateRelativeEmbeddedBounds();
+        final Rect relBounds = c.getRelativeBounds();
+        if (relBounds != null) {
+            // Make sure the requested bounds satisfied the min dimensions requirement.
+            adjustTaskFragmentRelativeBoundsForMinDimensionsIfNeeded(taskFragment, relBounds,
+                    errorCallbackToken);
+
+            // For embedded TaskFragment, the organizer set the bounds in parent coordinate to
+            // prevent flicker in case there is a racing condition between the parent bounds changed
+            // and the organizer request.
+            final Rect parentBounds = taskFragment.getParent().getBounds();
+            // Convert relative bounds to screen space.
+            final Rect absBounds = taskFragment.translateRelativeBoundsToAbsoluteBounds(relBounds,
+                    parentBounds);
+            c.getConfiguration().windowConfiguration.setBounds(absBounds);
+            taskFragment.setRelativeEmbeddedBounds(relBounds);
+        }
+        final int effects = applyChanges(taskFragment, c);
         if (taskFragment.shouldStartChangeTransition(mTmpBounds0, mTmpBounds1)) {
             taskFragment.initializeChangeTransition(mTmpBounds0);
         }
         taskFragment.continueOrganizedTaskFragmentSurfaceUpdate();
         return effects;
+    }
+
+    /**
+     * Adjusts the requested relative bounds on {@link TaskFragment} to make sure it satisfies the
+     * activity min dimensions.
+     */
+    private void adjustTaskFragmentRelativeBoundsForMinDimensionsIfNeeded(
+            @NonNull TaskFragment taskFragment, @NonNull Rect inOutRelativeBounds,
+            @Nullable IBinder errorCallbackToken) {
+        if (inOutRelativeBounds.isEmpty()) {
+            return;
+        }
+        final Point minDimensions = taskFragment.calculateMinDimension();
+        if (inOutRelativeBounds.width() < minDimensions.x
+                || inOutRelativeBounds.height() < minDimensions.y) {
+            // Notify organizer about the request failure.
+            final Throwable exception = new SecurityException("The requested relative bounds:"
+                    + inOutRelativeBounds + " does not satisfy minimum dimensions:"
+                    + minDimensions);
+            sendTaskFragmentOperationFailure(taskFragment.getTaskFragmentOrganizer(),
+                    errorCallbackToken, taskFragment, OP_TYPE_SET_RELATIVE_BOUNDS, exception);
+
+            // Reset to match parent bounds.
+            inOutRelativeBounds.setEmpty();
+        }
     }
 
     private int applyHierarchyOp(WindowContainerTransaction.HierarchyOp hop, int effects,
@@ -1013,17 +1030,30 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 taskDisplayArea.moveRootTaskBehindRootTask(thisTask.getRootTask(), restoreAt);
                 break;
             }
-            case HIERARCHY_OP_TYPE_ADD_RECT_INSETS_PROVIDER:
+            case HIERARCHY_OP_TYPE_ADD_RECT_INSETS_PROVIDER: {
                 final Rect insetsProviderWindowContainer = hop.getInsetsProviderFrame();
-                final WindowContainer receiverWindowContainer =
+                final WindowContainer container =
                         WindowContainer.fromBinder(hop.getContainer());
-                receiverWindowContainer.addLocalRectInsetsSourceProvider(
+                if (container == null) {
+                    Slog.e(TAG, "Attempt to add local insets source provider on unknown: "
+                                    + container);
+                    break;
+                }
+                container.addLocalRectInsetsSourceProvider(
                         insetsProviderWindowContainer, hop.getInsetsTypes());
                 break;
-            case HIERARCHY_OP_TYPE_REMOVE_INSETS_PROVIDER:
-                WindowContainer.fromBinder(hop.getContainer())
-                        .removeLocalInsetsSourceProvider(hop.getInsetsTypes());
+            }
+            case HIERARCHY_OP_TYPE_REMOVE_INSETS_PROVIDER: {
+                final WindowContainer container =
+                        WindowContainer.fromBinder(hop.getContainer());
+                if (container == null) {
+                    Slog.e(TAG, "Attempt to remove local insets source provider from unknown: "
+                                    + container);
+                    break;
+                }
+                container.removeLocalInsetsSourceProvider(hop.getInsetsTypes());
                 break;
+            }
             case HIERARCHY_OP_TYPE_SET_ALWAYS_ON_TOP: {
                 final WindowContainer container = WindowContainer.fromBinder(hop.getContainer());
                 if (container == null || container.asDisplayArea() == null
@@ -1312,19 +1342,6 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         return true;
     }
 
-    /** A helper method to send minimum dimension violation error to the client. */
-    private void sendMinimumDimensionViolation(TaskFragment taskFragment, Point minDimensions,
-            IBinder errorCallbackToken, String reason) {
-        if (taskFragment == null || taskFragment.getTaskFragmentOrganizer() == null) {
-            return;
-        }
-        final Throwable exception = new SecurityException("The task fragment's bounds:"
-                + taskFragment.getBounds() + " does not satisfy minimum dimensions:"
-                + minDimensions + " " + reason);
-        sendTaskFragmentOperationFailure(taskFragment.getTaskFragmentOrganizer(),
-                errorCallbackToken, taskFragment, OP_TYPE_UNKNOWN, exception);
-    }
-
     /**
      * Post and wait for the result of the activity start to prevent potential deadlock against
      * {@link WindowManagerGlobalLock}.
@@ -1579,10 +1596,10 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
             return applyDisplayAreaChanges(wc.asDisplayArea(), c);
         } else if (wc.asTask() != null) {
             return applyTaskChanges(wc.asTask(), c);
-        } else if (wc.asTaskFragment() != null) {
+        } else if (wc.asTaskFragment() != null && wc.asTaskFragment().isEmbedded()) {
             return applyTaskFragmentChanges(wc.asTaskFragment(), c, errorCallbackToken);
         } else {
-            return applyChanges(wc, c, errorCallbackToken);
+            return applyChanges(wc, c);
         }
     }
 
@@ -1706,9 +1723,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 t.getChanges().entrySet().iterator();
         while (entries.hasNext()) {
             final Map.Entry<IBinder, WindowContainerTransaction.Change> entry = entries.next();
-            // Only allow to apply changes to TaskFragment that is created by this organizer.
             final WindowContainer wc = WindowContainer.fromBinder(entry.getKey());
-            enforceTaskFragmentOrganized(func, wc, organizer);
             enforceTaskFragmentConfigChangeAllowed(func, wc, entry.getValue(), organizer);
         }
 
@@ -1744,27 +1759,6 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
     }
 
     /**
-     * Makes sure that the given {@link WindowContainer} is a {@link TaskFragment} organized by the
-     * given {@link ITaskFragmentOrganizer}.
-     */
-    private void enforceTaskFragmentOrganized(@NonNull String func, @Nullable WindowContainer wc,
-            @NonNull ITaskFragmentOrganizer organizer) {
-        if (wc == null) {
-            Slog.e(TAG, "Attempt to operate on window that no longer exists");
-            return;
-        }
-
-        final TaskFragment tf = wc.asTaskFragment();
-        if (tf == null || !tf.hasTaskFragmentOrganizer(organizer)) {
-            String msg = "Permission Denial: " + func + " from pid=" + Binder.getCallingPid()
-                    + ", uid=" + Binder.getCallingUid() + " trying to modify window container not"
-                    + " belonging to the TaskFragmentOrganizer=" + organizer;
-            Slog.w(TAG, msg);
-            throw new SecurityException(msg);
-        }
-    }
-
-    /**
      * Makes sure that the {@link TaskFragment} of the given fragment token is created and organized
      * by the given {@link ITaskFragmentOrganizer}.
      */
@@ -1785,75 +1779,49 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
     }
 
     /**
-     * Makes sure that SurfaceControl transactions and the ability to set bounds outside of the
-     * parent bounds are not allowed for embedding without full trust between the host and the
-     * target.
+     * For config change on {@link TaskFragment}, we only support the following operations:
+     * {@link WindowContainerTransaction#setRelativeBounds(WindowContainerToken, Rect)},
+     * {@link WindowContainerTransaction#setWindowingMode(WindowContainerToken, int)}.
      */
-    private void enforceTaskFragmentConfigChangeAllowed(String func, @Nullable WindowContainer wc,
-            WindowContainerTransaction.Change change, ITaskFragmentOrganizer organizer) {
+    private void enforceTaskFragmentConfigChangeAllowed(@NonNull String func,
+            @Nullable WindowContainer wc, @NonNull WindowContainerTransaction.Change change,
+            @NonNull ITaskFragmentOrganizer organizer) {
         if (wc == null) {
             Slog.e(TAG, "Attempt to operate on task fragment that no longer exists");
             return;
         }
-        if (change == null) {
-            return;
+        final TaskFragment tf = wc.asTaskFragment();
+        if (tf == null || !tf.hasTaskFragmentOrganizer(organizer)) {
+            // Only allow to apply changes to TaskFragment that is organized by this organizer.
+            String msg = "Permission Denial: " + func + " from pid=" + Binder.getCallingPid()
+                    + ", uid=" + Binder.getCallingUid() + " trying to modify window container"
+                    + " not belonging to the TaskFragmentOrganizer=" + organizer;
+            Slog.w(TAG, msg);
+            throw new SecurityException(msg);
         }
+
         final int changeMask = change.getChangeMask();
-        if (changeMask != 0) {
-            // None of the change should be requested from a TaskFragment organizer.
-            String msg = "Permission Denial: " + func + " from pid="
-                    + Binder.getCallingPid() + ", uid=" + Binder.getCallingUid()
-                    + " trying to apply changes of " + changeMask + " to TaskFragment"
-                    + " TaskFragmentOrganizer=" + organizer;
-            Slog.w(TAG, msg);
-            throw new SecurityException(msg);
-        }
-        // Check if TaskFragment is embedded in fully trusted mode.
-        if (wc.asTaskFragment().isAllowedToBeEmbeddedInTrustedMode()) {
-            // Fully trusted, no need to check further
+        final int configSetMask = change.getConfigSetMask();
+        final int windowSetMask = change.getWindowSetMask();
+        if (changeMask == 0 && configSetMask == 0 && windowSetMask == 0
+                && change.getWindowingMode() >= 0) {
+            // The change contains only setWindowingMode, which is allowed.
             return;
         }
-        final WindowContainer wcParent = wc.getParent();
-        if (wcParent == null) {
-            Slog.e(TAG, "Attempt to apply config change on task fragment that has no parent");
-            return;
-        }
-        final Configuration requestedConfig = change.getConfiguration();
-        final Configuration parentConfig = wcParent.getConfiguration();
-        if (parentConfig.screenWidthDp < requestedConfig.screenWidthDp
-                || parentConfig.screenHeightDp < requestedConfig.screenHeightDp
-                || parentConfig.smallestScreenWidthDp < requestedConfig.smallestScreenWidthDp) {
+        if (changeMask != CHANGE_RELATIVE_BOUNDS
+                || configSetMask != ActivityInfo.CONFIG_WINDOW_CONFIGURATION
+                || windowSetMask != WindowConfiguration.WINDOW_CONFIG_BOUNDS) {
+            // None of the change should be requested from a TaskFragment organizer except
+            // setRelativeBounds and setWindowingMode.
+            // For setRelativeBounds, we don't need to check whether it is outside of the Task
+            // bounds, because it is possible that the Task is also resizing, for which we don't
+            // want to throw an exception. The bounds will be adjusted in
+            // TaskFragment#translateRelativeBoundsToAbsoluteBounds.
             String msg = "Permission Denial: " + func + " from pid="
                     + Binder.getCallingPid() + ", uid=" + Binder.getCallingUid()
-                    + " trying to apply screen width/height greater than parent's for non-trusted"
-                    + " host, TaskFragmentOrganizer=" + organizer;
-            Slog.w(TAG, msg);
-            throw new SecurityException(msg);
-        }
-        if (change.getWindowSetMask() == 0) {
-            // No bounds change.
-            return;
-        }
-        final WindowConfiguration requestedWindowConfig = requestedConfig.windowConfiguration;
-        final WindowConfiguration parentWindowConfig = parentConfig.windowConfiguration;
-        if (!requestedWindowConfig.getBounds().isEmpty()
-                && !parentWindowConfig.getBounds().contains(requestedWindowConfig.getBounds())) {
-            String msg = "Permission Denial: " + func + " from pid="
-                    + Binder.getCallingPid() + ", uid=" + Binder.getCallingUid()
-                    + " trying to apply bounds outside of parent for non-trusted host,"
-                    + " TaskFragmentOrganizer=" + organizer;
-            Slog.w(TAG, msg);
-            throw new SecurityException(msg);
-        }
-        if (requestedWindowConfig.getAppBounds() != null
-                && !requestedWindowConfig.getAppBounds().isEmpty()
-                && parentWindowConfig.getAppBounds() != null
-                && !parentWindowConfig.getAppBounds().contains(
-                        requestedWindowConfig.getAppBounds())) {
-            String msg = "Permission Denial: " + func + " from pid="
-                    + Binder.getCallingPid() + ", uid=" + Binder.getCallingUid()
-                    + " trying to apply app bounds outside of parent for non-trusted host,"
-                    + " TaskFragmentOrganizer=" + organizer;
+                    + " trying to apply changes of changeMask=" + changeMask
+                    + " configSetMask=" + configSetMask + " windowSetMask=" + windowSetMask
+                    + " to TaskFragment=" + tf + " TaskFragmentOrganizer=" + organizer;
             Slog.w(TAG, msg);
             throw new SecurityException(msg);
         }
@@ -1932,9 +1900,17 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         }
         ownerTask.addChild(taskFragment, position);
         taskFragment.setWindowingMode(creationParams.getWindowingMode());
-        taskFragment.setBounds(creationParams.getInitialBounds());
-        // Record the initial relative embedded bounds.
-        taskFragment.updateRelativeEmbeddedBounds();
+        if (creationParams.areInitialRelativeBoundsSet()) {
+            // Set relative bounds instead of using setBounds. This will avoid unnecessary update in
+            // case the parent has resized since the last time parent info is sent to the organizer.
+            taskFragment.setRelativeEmbeddedBounds(creationParams.getInitialRelativeBounds());
+            // Recompute configuration as the bounds will be calculated based on relative bounds in
+            // TaskFragment#resolveOverrideConfiguration.
+            taskFragment.recomputeConfiguration();
+        } else {
+            // TODO(b/232476698): remove after remove creationParams.getInitialBounds().
+            taskFragment.setBounds(creationParams.getInitialBounds());
+        }
         mLaunchTaskFragments.put(creationParams.getFragmentToken(), taskFragment);
 
         if (transition != null) transition.collectExistenceChange(taskFragment);

@@ -19,6 +19,7 @@ package com.android.server.wm;
 import static android.Manifest.permission.BIND_VOICE_INTERACTION;
 import static android.Manifest.permission.CHANGE_CONFIGURATION;
 import static android.Manifest.permission.CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS;
+import static android.Manifest.permission.DETECT_SCREEN_CAPTURE;
 import static android.Manifest.permission.INTERACT_ACROSS_USERS;
 import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
 import static android.Manifest.permission.INTERNAL_SYSTEM_WINDOW;
@@ -145,6 +146,7 @@ import android.app.IAppTask;
 import android.app.IApplicationThread;
 import android.app.IAssistDataReceiver;
 import android.app.INotificationManager;
+import android.app.IScreenCaptureObserver;
 import android.app.ITaskStackListener;
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -1025,7 +1027,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         synchronized (mGlobalLock) {
             mWindowManager = wm;
             mRootWindowContainer = wm.mRoot;
-            mWindowOrganizerController.setWindowManager(wm);
+            mWindowOrganizerController.mTransitionController.setWindowManager(wm);
             mTempConfig.setToDefaults();
             mTempConfig.setLocales(LocaleList.getDefault());
             mConfigurationSeq = mTempConfig.seq = 1;
@@ -4746,16 +4748,27 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         updateResumedAppTrace(r);
         mLastResumedActivity = r;
 
-        final boolean changed = r.mDisplayContent.setFocusedApp(r);
-        if (changed) {
-            mWindowManager.updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL,
-                    true /*updateInputWindows*/);
-        }
-        if (prevTask == null || task != prevTask) {
-            if (prevTask != null) {
-                mTaskChangeNotificationController.notifyTaskFocusChanged(prevTask.mTaskId, false);
+        // Don't take focus when transient launching. We don't want the app to know anything
+        // until we've committed to the gesture. The focus will be transferred at the end of
+        // the transition (if the transient launch is committed) or early if explicitly requested
+        // via `setFocused*`.
+        if (!getTransitionController().isTransientCollect(r)) {
+            final Task prevFocusTask = r.mDisplayContent.mFocusedApp != null
+                    ? r.mDisplayContent.mFocusedApp.getTask() : null;
+            final boolean changed = r.mDisplayContent.setFocusedApp(r);
+            if (changed) {
+                mWindowManager.updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL,
+                        true /*updateInputWindows*/);
             }
-            mTaskChangeNotificationController.notifyTaskFocusChanged(task.mTaskId, true);
+            if (task != prevFocusTask) {
+                if (prevFocusTask != null) {
+                    mTaskChangeNotificationController.notifyTaskFocusChanged(
+                            prevFocusTask.mTaskId, false);
+                }
+                mTaskChangeNotificationController.notifyTaskFocusChanged(task.mTaskId, true);
+            }
+        }
+        if (task != prevTask) {
             mTaskSupervisor.mRecentTasks.add(task);
         }
 
@@ -5434,6 +5447,32 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 return;
             }
             controller.mRemotePlayer.update(wpc, true /* running */, false /* predict */);
+        }
+    }
+
+    @Override
+    public void registerScreenCaptureObserver(IBinder activityToken,
+            IScreenCaptureObserver observer) {
+        mAmInternal.enforceCallingPermission(DETECT_SCREEN_CAPTURE,
+                "registerScreenCaptureObserver");
+        synchronized (mGlobalLock) {
+            ActivityRecord activityRecord = ActivityRecord.forTokenLocked(activityToken);
+            if (activityRecord != null) {
+                activityRecord.registerCaptureObserver(observer);
+            }
+        }
+    }
+
+    @Override
+    public void unregisterScreenCaptureObserver(IBinder activityToken,
+            IScreenCaptureObserver observer) {
+        mAmInternal.enforceCallingPermission(DETECT_SCREEN_CAPTURE,
+                "unregisterScreenCaptureObserver");
+        synchronized (mGlobalLock) {
+            ActivityRecord activityRecord = ActivityRecord.forTokenLocked(activityToken);
+            if (activityRecord != null) {
+                activityRecord.unregisterCaptureObserver(observer);
+            }
         }
     }
 
@@ -6915,6 +6954,18 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
                 activity.restartProcessIfVisible();
             }
+        }
+
+        /** Sets the task stack listener that gets callbacks when a task stack changes. */
+        @Override
+        public void registerTaskStackListener(ITaskStackListener listener) {
+            ActivityTaskManagerService.this.registerTaskStackListener(listener);
+        }
+
+        /** Unregister a task stack listener so that it stops receiving callbacks. */
+        @Override
+        public void unregisterTaskStackListener(ITaskStackListener listener) {
+            ActivityTaskManagerService.this.unregisterTaskStackListener(listener);
         }
     }
 }

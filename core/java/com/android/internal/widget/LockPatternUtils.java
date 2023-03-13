@@ -28,6 +28,8 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.PropertyInvalidatedCache;
+import android.app.RemoteLockscreenValidationResult;
+import android.app.StartLockscreenValidationRequest;
 import android.app.admin.DevicePolicyManager;
 import android.app.admin.PasswordMetrics;
 import android.app.trust.IStrongAuthTracker;
@@ -48,6 +50,7 @@ import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.storage.StorageManager;
+import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Log;
@@ -62,6 +65,7 @@ import com.google.android.collect.Lists;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
@@ -112,6 +116,13 @@ public class LockPatternUtils {
     public static final int CREDENTIAL_TYPE_PIN = 3;
     public static final int CREDENTIAL_TYPE_PASSWORD = 4;
 
+    /**
+     * Header used for the encryption and decryption of the device credential for
+     * remote device lockscreen validation.
+     */
+    public static final byte[] ENCRYPTED_REMOTE_CREDENTIALS_HEADER =
+            "encrypted_remote_credentials".getBytes(StandardCharsets.UTF_8);
+
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(prefix = {"CREDENTIAL_TYPE_"}, value = {
             CREDENTIAL_TYPE_NONE,
@@ -151,6 +162,8 @@ public class LockPatternUtils {
     @Deprecated
     public final static String LOCKSCREEN_WIDGETS_ENABLED = "lockscreen.widgets_enabled";
 
+    public static final String PIN_LENGTH = "lockscreen.pin_length";
+
     public final static String PASSWORD_HISTORY_KEY = "lockscreen.passwordhistory";
 
     private static final String LOCK_SCREEN_OWNER_INFO = Settings.Secure.LOCK_SCREEN_OWNER_INFO;
@@ -163,8 +176,16 @@ public class LockPatternUtils {
     private static final String KNOWN_TRUST_AGENTS = "lockscreen.knowntrustagents";
     private static final String IS_TRUST_USUALLY_MANAGED = "lockscreen.istrustusuallymanaged";
 
+    private static final String AUTO_PIN_CONFIRM = "lockscreen.auto_pin_confirm";
+
     public static final String CURRENT_LSKF_BASED_PROTECTOR_ID_KEY = "sp-handle";
     public static final String PASSWORD_HISTORY_DELIMITER = ",";
+
+    /**
+     * drives the pin auto confirmation feature availability in code logic.
+     */
+    public static final String FLAG_ENABLE_AUTO_PIN_CONFIRMATION =
+            "AutoPinConfirmation__enable_auto_pin_confirmation";
 
     @UnsupportedAppUsage
     private final Context mContext;
@@ -566,6 +587,24 @@ public class LockPatternUtils {
     }
 
     /**
+     * Used for setting the length of the PIN set by a particular user.
+     * @param userId user id of the user whose pin length we save
+     * @param val value of length of pin
+     */
+    public void setPinLength(int userId, long val) {
+        setLong(PIN_LENGTH, val, userId);
+    }
+
+    /**
+     * Returns the length of the PIN set by a particular user.
+     * @param userId user id of the user whose pin length we have to return
+     * @return the length of the pin set by user and -1 if nothing
+     */
+    public long getPinLength(int userId) {
+        return getLong(PIN_LENGTH, -1, userId);
+    }
+
+    /**
      * Records that the user has chosen a pattern at some time, even if the pattern is
      * currently cleared.
      */
@@ -625,6 +664,38 @@ public class LockPatternUtils {
         return getBoolean(DISABLE_LOCKSCREEN_KEY, false, userId)
                 || disabledByDefault
                 || isDemoUser;
+    }
+
+    /**
+     * Sets the pin auto confirm capability to enabled or disabled
+     * @param enabled enables pin auto confirm capability when true
+     * @param userId user ID of the user this has effect on
+     */
+    public void setAutoPinConfirm(boolean enabled, int userId) {
+        setBoolean(AUTO_PIN_CONFIRM, enabled, userId);
+    }
+
+    /**
+     * Determines if the auto pin confirmation feature is enabled or not for current user
+     * If setting is not available, the default behaviour is disabled
+     * @param userId user ID of the user this has effect on
+     *
+     * @return true, if the entered pin should be auto confirmed
+     */
+    public boolean isAutoPinConfirmEnabled(int userId) {
+        return getBoolean(AUTO_PIN_CONFIRM, /* defaultValue= */ false, userId);
+    }
+
+    /**
+     * Whether the auto pin feature logic is available or not.
+     * @return true, if deviceConfig flag is set to true or the flag is not propagated and
+     * defaultValue is true.
+     */
+    public static boolean isAutoPinConfirmFeatureAvailable() {
+        return DeviceConfig.getBoolean(
+                DeviceConfig.NAMESPACE_AUTO_PIN_CONFIRMATION,
+                FLAG_ENABLE_AUTO_PIN_CONFIRMATION,
+                /* defaultValue= */ false);
     }
 
     /** Returns if the given quality maps to an alphabetic password */
@@ -1771,5 +1842,30 @@ public class LockPatternUtils {
 
     public void removeUser(@UserIdInt int userId) {
         getLockSettingsInternal().removeUser(userId);
+    }
+
+   /**
+     * Starts a session to verify lockscreen credentials provided by a remote device.
+     */
+    @NonNull
+    public StartLockscreenValidationRequest startRemoteLockscreenValidation() {
+        try {
+            return getLockSettings().startRemoteLockscreenValidation();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+   /**
+     * Verifies credentials guess from a remote device.
+     */
+    @NonNull
+    public RemoteLockscreenValidationResult validateRemoteLockscreen(
+            @NonNull byte[] encryptedCredential) {
+        try {
+            return getLockSettings().validateRemoteLockscreen(encryptedCredential);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 }

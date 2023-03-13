@@ -121,9 +121,17 @@ public final class UserTypeFactory {
                 .setBaseType(FLAG_PROFILE)
                 .setMaxAllowedPerParent(1)
                 .setLabel(0)
+                .setIconBadge(com.android.internal.R.drawable.ic_clone_icon_badge)
+                .setBadgePlain(com.android.internal.R.drawable.ic_clone_badge)
+                // Clone doesn't use BadgeNoBackground, so just set to BadgePlain as a placeholder.
+                .setBadgeNoBackground(com.android.internal.R.drawable.ic_clone_badge)
+                .setBadgeLabels(
+                        com.android.internal.R.string.clone_profile_label_badge)
+                .setBadgeColors(
+                        com.android.internal.R.color.system_neutral2_800)
+                .setDarkThemeBadgeColors(
+                        com.android.internal.R.color.system_neutral2_900)
                 .setDefaultRestrictions(null)
-                .setIsMediaSharedWithParent(true)
-                .setIsCredentialSharableWithParent(true)
                 .setDefaultCrossProfileIntentFilters(getDefaultCloneCrossProfileIntentFilter())
                 .setDefaultUserProperties(new UserProperties.Builder()
                         .setStartWithParent(true)
@@ -135,7 +143,10 @@ public final class UserTypeFactory {
                         .setCrossProfileIntentFilterAccessControl(
                                 UserProperties.CROSS_PROFILE_INTENT_FILTER_ACCESS_LEVEL_SYSTEM)
                         .setCrossProfileIntentResolutionStrategy(UserProperties
-                                .CROSS_PROFILE_INTENT_RESOLUTION_STRATEGY_NO_FILTERING));
+                                .CROSS_PROFILE_INTENT_RESOLUTION_STRATEGY_NO_FILTERING)
+                        .setMediaSharedWithParent(true)
+                        .setCredentialShareableWithParent(true)
+                        .setDeleteAppWithParent(true));
     }
 
     /**
@@ -167,11 +178,11 @@ public final class UserTypeFactory {
                 .setDefaultRestrictions(getDefaultManagedProfileRestrictions())
                 .setDefaultSecureSettings(getDefaultManagedProfileSecureSettings())
                 .setDefaultCrossProfileIntentFilters(getDefaultManagedCrossProfileIntentFilter())
-                .setIsCredentialSharableWithParent(true)
                 .setDefaultUserProperties(new UserProperties.Builder()
                         .setStartWithParent(true)
                         .setShowInLauncher(UserProperties.SHOW_IN_LAUNCHER_SEPARATE)
-                        .setShowInSettings(UserProperties.SHOW_IN_SETTINGS_SEPARATE));
+                        .setShowInSettings(UserProperties.SHOW_IN_SETTINGS_SEPARATE)
+                        .setCredentialShareableWithParent(true));
     }
 
     /**

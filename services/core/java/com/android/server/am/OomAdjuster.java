@@ -18,6 +18,7 @@ package com.android.server.am;
 
 import static android.app.ActivityManager.PROCESS_CAPABILITY_ALL;
 import static android.app.ActivityManager.PROCESS_CAPABILITY_ALL_IMPLICIT;
+import static android.app.ActivityManager.PROCESS_CAPABILITY_BFSL;
 import static android.app.ActivityManager.PROCESS_CAPABILITY_FOREGROUND_CAMERA;
 import static android.app.ActivityManager.PROCESS_CAPABILITY_FOREGROUND_LOCATION;
 import static android.app.ActivityManager.PROCESS_CAPABILITY_FOREGROUND_MICROPHONE;
@@ -129,6 +130,7 @@ import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.BoostFramework;
 import android.util.Slog;
+import android.util.SparseSetArray;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.CompositeRWLock;
@@ -146,6 +148,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * All of the code required to compute proc states and oom_adj values.
@@ -385,6 +388,19 @@ public class OomAdjuster {
      */
     @GuardedBy("mService")
     private boolean mPendingFullOomAdjUpdate = false;
+
+    /**
+     * PIDs that has a SHORT_SERVICE. We need to access it with the PowerManager lock held,
+     * so we use a fine-grained lock here.
+     */
+    @GuardedBy("mPidsWithShortFgs")
+    private final ArraySet<Integer> mPidsWithShortFgs = new ArraySet<>();
+
+    /**
+     * UIDs -> PIDs map, used with mPidsWithShortFgs.
+     */
+    @GuardedBy("mPidsWithShortFgs")
+    private final SparseSetArray<Integer> mUidsToPidsWithShortFgs = new SparseSetArray<>();
 
     /** Overrideable by a test */
     @VisibleForTesting
@@ -780,6 +796,45 @@ public class OomAdjuster {
                 }
                 queue.offer(provider);
                 provider.mState.setReachable(true);
+            }
+            // See if this process has any corresponding SDK sandbox processes running, and if so
+            // scan them as well.
+            final List<ProcessRecord> sdkSandboxes =
+                    mProcessList.getSdkSandboxProcessesForAppLocked(pr.uid);
+            final int numSdkSandboxes = sdkSandboxes != null ? sdkSandboxes.size() : 0;
+            for (int i = numSdkSandboxes - 1; i >= 0; i--) {
+                ProcessRecord sdkSandbox = sdkSandboxes.get(i);
+                containsCycle |= sdkSandbox.mState.isReachable();
+                if (sdkSandbox.mState.isReachable()) {
+                    continue;
+                }
+                queue.offer(sdkSandbox);
+                sdkSandbox.mState.setReachable(true);
+            }
+            // If this process is a sandbox itself, also scan the app on whose behalf its running
+            if (pr.isSdkSandbox) {
+                for (int is = psr.numberOfRunningServices() - 1; is >= 0; is--) {
+                    ServiceRecord s = psr.getRunningServiceAt(is);
+                    ArrayMap<IBinder, ArrayList<ConnectionRecord>> serviceConnections =
+                            s.getConnections();
+                    for (int conni = serviceConnections.size() - 1; conni >= 0; conni--) {
+                        ArrayList<ConnectionRecord> clist = serviceConnections.valueAt(conni);
+                        for (int i = clist.size() - 1; i >= 0; i--) {
+                            ConnectionRecord cr = clist.get(i);
+                            ProcessRecord attributedApp = cr.binding.attributedClient;
+                            if (attributedApp == null || attributedApp == pr
+                                    || ((attributedApp.mState.getMaxAdj() >= ProcessList.SYSTEM_ADJ)
+                                    && (attributedApp.mState.getMaxAdj() < FOREGROUND_APP_ADJ))) {
+                                continue;
+                            }
+                            if (attributedApp.mState.isReachable()) {
+                                continue;
+                            }
+                            queue.offer(attributedApp);
+                            attributedApp.mState.setReachable(true);
+                        }
+                    }
+                }
             }
         }
 
@@ -1257,7 +1312,7 @@ public class OomAdjuster {
                     "Identified app.processName = " + selectedAppRecord.processName
                     + " app.pid = " + selectedAppRecord.getPid());
             final ProcessStateRecord state = app.mState;
-            if (!app.isKilledByAm() && app.getThread() != null) {
+            if (!app.isKilledByAm() && app.getThread() != null && !app.isPendingFinishAttach()) {
                 // We don't need to apply the update for the process which didn't get computed
                 if (state.getCompletedAdjSeq() == mAdjSeq) {
                     applyOomAdjLSP(app, true, now, nowElapsed, oomAdjReason);
@@ -1730,7 +1785,7 @@ public class OomAdjuster {
             state.setCurRawAdj(state.getMaxAdj());
             state.setHasForegroundActivities(false);
             state.setCurrentSchedulingGroup(SCHED_GROUP_DEFAULT);
-            state.setCurCapability(PROCESS_CAPABILITY_ALL);
+            state.setCurCapability(PROCESS_CAPABILITY_ALL); // BFSL allowed
             state.setCurProcState(ActivityManager.PROCESS_STATE_PERSISTENT);
             // System processes can do UI, and when they do we want to have
             // them trim their memory after the user leaves the UI.  To
@@ -1831,6 +1886,7 @@ public class OomAdjuster {
             schedGroup = SCHED_GROUP_DEFAULT;
             state.setAdjType("instrumentation");
             procState = PROCESS_STATE_FOREGROUND_SERVICE;
+            capability |= PROCESS_CAPABILITY_BFSL;
             if (DEBUG_OOM_ADJ_REASON || logUid == appUid) {
                 reportOomAdjMessageLocked(TAG_OOM_ADJ, "Making instrumentation: " + app);
             }
@@ -1906,6 +1962,11 @@ public class OomAdjuster {
 
         int capabilityFromFGS = 0; // capability from foreground service.
 
+        final boolean hasForegroundServices = psr.hasForegroundServices();
+        final boolean hasNonShortForegroundServices = psr.hasNonShortForegroundServices();
+        final boolean hasShortForegroundServices = hasForegroundServices
+                && !psr.areAllShortForegroundServicesProcstateTimedOut(now);
+
         // Adjust for FGS or "has-overlay-ui".
         if (adj > PERCEPTIBLE_APP_ADJ
                 || procState > PROCESS_STATE_FOREGROUND_SERVICE) {
@@ -1913,42 +1974,33 @@ public class OomAdjuster {
             int newAdj = 0;
             int newProcState = 0;
 
-            if (psr.hasForegroundServices() && psr.hasNonShortForegroundServices()) {
+            if (hasForegroundServices && hasNonShortForegroundServices) {
                 // For regular (non-short) FGS.
                 adjType = "fg-service";
                 newAdj = PERCEPTIBLE_APP_ADJ;
+                newProcState = PROCESS_STATE_FOREGROUND_SERVICE;
+                capabilityFromFGS |= PROCESS_CAPABILITY_BFSL;
+
+            } else if (hasShortForegroundServices) {
+
+                // For short FGS.
+                adjType = "fg-service-short";
+
+                // We use MEDIUM_APP_ADJ + 1 so we can tell apart EJ
+                // (which uses MEDIUM_APP_ADJ + 1)
+                // from short-FGS.
+                // (We use +1 and +2, not +0 and +1, to be consistent with the following
+                // RECENT_FOREGROUND_APP_ADJ tweak)
+                newAdj = PERCEPTIBLE_MEDIUM_APP_ADJ + 1;
+
+                // We give the FGS procstate, but not PROCESS_CAPABILITY_BFSL, so
+                // short-fgs can't start FGS from the background.
                 newProcState = PROCESS_STATE_FOREGROUND_SERVICE;
 
             } else if (state.hasOverlayUi()) {
                 adjType = "has-overlay-ui";
                 newAdj = PERCEPTIBLE_APP_ADJ;
                 newProcState = PROCESS_STATE_IMPORTANT_FOREGROUND;
-
-            } else if (psr.hasForegroundServices()) {
-                // If we get here, hasNonShortForegroundServices() must be false.
-
-                // TODO(short-service): Proactively run OomAjudster when the grace period finish.
-                if (psr.areAllShortForegroundServicesProcstateTimedOut(now)) {
-                    // All the short-FGSes within this process are timed out. Don't promote to FGS.
-                    // TODO(short-service): Should we set some unique oom-adj to make it detectable,
-                    // in a long trace?
-                } else {
-                    // For short FGS.
-                    adjType = "fg-service-short";
-                    // We use MEDIUM_APP_ADJ + 1 so we can tell apart EJ
-                    // (which uses MEDIUM_APP_ADJ + 1)
-                    // from short-FGS.
-                    // (We use +1 and +2, not +0 and +1, to be consistent with the following
-                    // RECENT_FOREGROUND_APP_ADJ tweak)
-                    newAdj = PERCEPTIBLE_MEDIUM_APP_ADJ + 1;
-
-                    // Short-FGS gets a below-BFGS procstate, so it can't start another FGS from it.
-                    newProcState = PROCESS_STATE_IMPORTANT_FOREGROUND;
-
-                    // Same as EJ, we explicitly grant network access to short FGS,
-                    // even when battery saver or data saver is enabled.
-                    capabilityFromFGS |= PROCESS_CAPABILITY_NETWORK;
-                }
             }
 
             if (adjType != null) {
@@ -1964,6 +2016,7 @@ public class OomAdjuster {
                 }
             }
         }
+        updateShortFgsOwner(psr.mApp.uid, psr.mApp.mPid, hasShortForegroundServices);
 
         // If the app was recently in the foreground and moved to a foreground service status,
         // allow it to get a higher rank in memory for some time, compared to other foreground
@@ -2228,6 +2281,11 @@ public class OomAdjuster {
                     boolean trackedProcState = false;
 
                     ProcessRecord client = cr.binding.client;
+                    if (app.isSdkSandbox && cr.binding.attributedClient != null) {
+                        // For SDK sandboxes, use the attributed client (eg the app that
+                        // requested the sandbox)
+                        client = cr.binding.attributedClient;
+                    }
                     final ProcessStateRecord cstate = client.mState;
                     if (computeClients) {
                         computeOomAdjLSP(client, cachedAdj, topApp, doingAll, now,
@@ -2251,6 +2309,11 @@ public class OomAdjuster {
                         // Propagate the shouldNotFreeze flag down the bindings.
                         app.mOptRecord.setShouldNotFreeze(true);
                     }
+
+                    // We always propagate PROCESS_CAPABILITY_BFSL over bindings here,
+                    // but, right before actually setting it to the process,
+                    // we check the final procstate, and remove it if the procsate is below BFGS.
+                    capability |= getBfslCapabilityFromClient(client);
 
                     if ((cr.flags & Context.BIND_WAIVE_PRIORITY) == 0) {
                         if (cr.hasFlag(Context.BIND_INCLUDE_CAPABILITIES)) {
@@ -2351,6 +2414,14 @@ public class OomAdjuster {
                                         && adj >= (lbAdj = PERCEPTIBLE_LOW_APP_ADJ)) {
                                     newAdj = PERCEPTIBLE_LOW_APP_ADJ;
                                 } else if ((cr.flags & Context.BIND_ALMOST_PERCEPTIBLE) != 0
+                                        && (cr.flags & Context.BIND_NOT_FOREGROUND) == 0
+                                        && clientAdj < PERCEPTIBLE_APP_ADJ
+                                        && adj >= (lbAdj = PERCEPTIBLE_APP_ADJ)) {
+                                    // This is for user-initiated jobs.
+                                    // We use APP_ADJ + 1 here, so we can tell them apart from FGS.
+                                    newAdj = PERCEPTIBLE_APP_ADJ + 1;
+                                } else if ((cr.flags & Context.BIND_ALMOST_PERCEPTIBLE) != 0
+                                        && (cr.flags & Context.BIND_NOT_FOREGROUND) != 0
                                         && clientAdj < PERCEPTIBLE_APP_ADJ
                                         && adj >= (lbAdj = (PERCEPTIBLE_MEDIUM_APP_ADJ + 2))) {
                                     // This is for expedited jobs.
@@ -2474,12 +2545,12 @@ public class OomAdjuster {
                             state.setAdjType(adjType);
                             state.setAdjTypeCode(ActivityManager.RunningAppProcessInfo
                                     .REASON_SERVICE_IN_USE);
-                            state.setAdjSource(cr.binding.client);
+                            state.setAdjSource(client);
                             state.setAdjSourceProcState(clientProcState);
                             state.setAdjTarget(s.instanceName);
                             if (DEBUG_OOM_ADJ_REASON || logUid == appUid) {
                                 reportOomAdjMessageLocked(TAG_OOM_ADJ, "Raise to " + adjType
-                                        + ": " + app + ", due to " + cr.binding.client
+                                        + ": " + app + ", due to " + client
                                         + " adj=" + adj + " procState="
                                         + ProcessList.makeProcStateString(procState));
                             }
@@ -2563,6 +2634,11 @@ public class OomAdjuster {
 
                 int clientAdj = cstate.getCurRawAdj();
                 int clientProcState = cstate.getCurRawProcState();
+
+                // We always propagate PROCESS_CAPABILITY_BFSL to providers here,
+                // but, right before actually setting it to the process,
+                // we check the final procstate, and remove it if the procsate is below BFGS.
+                capability |= getBfslCapabilityFromClient(client);
 
                 if (clientProcState >= PROCESS_STATE_CACHED_ACTIVITY) {
                     // If the other app is cached for any reason, for purposes here
@@ -2742,6 +2818,11 @@ public class OomAdjuster {
 
         capability |= getDefaultCapability(app, procState);
 
+        // Procstates below BFGS should never have this capability.
+        if (procState > PROCESS_STATE_BOUND_FOREGROUND_SERVICE) {
+            capability &= ~PROCESS_CAPABILITY_BFSL;
+        }
+
         // Do final modification to adj.  Everything we do between here and applying
         // the final setAdj must be done in this function, because we will also use
         // it when computing the final cached adj later.  Note that we don't need to
@@ -2767,9 +2848,9 @@ public class OomAdjuster {
             case PROCESS_STATE_PERSISTENT:
             case PROCESS_STATE_PERSISTENT_UI:
             case PROCESS_STATE_TOP:
-                return PROCESS_CAPABILITY_ALL;
+                return PROCESS_CAPABILITY_ALL; // BFSL allowed
             case PROCESS_STATE_BOUND_TOP:
-                return PROCESS_CAPABILITY_NETWORK;
+                return PROCESS_CAPABILITY_NETWORK | PROCESS_CAPABILITY_BFSL;
             case PROCESS_STATE_FOREGROUND_SERVICE:
                 if (app.getActiveInstrumentation() != null) {
                     return PROCESS_CAPABILITY_ALL_IMPLICIT | PROCESS_CAPABILITY_NETWORK ;
@@ -2784,6 +2865,53 @@ public class OomAdjuster {
             default:
                 return PROCESS_CAPABILITY_NONE;
         }
+    }
+
+    /**
+     * @return the BFSL capability from a client (of a service binding or provider).
+     */
+    int getBfslCapabilityFromClient(ProcessRecord client) {
+        // Procstates above FGS should always have this flag. We shouldn't need this logic,
+        // but let's do it just in case.
+        if (client.mState.getCurProcState() < PROCESS_STATE_FOREGROUND_SERVICE) {
+            return PROCESS_CAPABILITY_BFSL;
+        }
+        // Otherwise, use the process's cur capability.
+
+        // Note: BFSL is a per-UID check, not per-process, but here, the BFSL capability is still
+        // propagated on a per-process basis.
+        //
+        // For example, consider this case:
+        // - There are App 1 and App 2.
+        // - App 1 has two processes
+        //   Proc #1A, procstate BFGS with CAPABILITY_BFSL
+        //   Proc #1B, procstate FGS with no CAPABILITY_BFSL (i.e. process has a short FGS)
+        //        And this process binds to Proc #2 of App 2.
+        //
+        //       (Note because #1A has CAPABILITY_BFSL, App 1's UidRecord has CAPABILITY_BFSL.)
+        //
+        // - App 2 has one process:
+        //   Proc #2, procstate FGS due to the above binding, _with no CAPABILITY_BFSL_.
+        //
+        // In this case, #2 will not get CAPABILITY_BFSL because the binding client (#1B)
+        // doesn't have this capability. (Even though App 1's UidRecord has it.)
+        //
+        // This may look weird, because App 2 _is_ still BFSL allowed, because "it's bound by
+        // an app that is BFSL-allowed". (See [bookmark: 61867f60-007c-408c-a2c4-e19e96056135]
+        // in ActiveServices.)
+        //
+        // So why don't we propagate PROCESS_CAPABILITY_BFSL from App 1's UID record?
+        // This is because short-FGS acts like "below BFGS" as far as BFSL is concerned,
+        // similar to how JobScheduler jobs are below BFGS and apps can't start FGS from there.
+        //
+        // If #1B was running a job instead of a short-FGS, then its procstate would be below BFGS.
+        // Then #2's procstate would also be below BFGS. So #2 wouldn't get CAPABILITY_BFSL.
+        // Similarly, if #1B has a short FGS, even though the procstate of #1B and #2 would be FGS,
+        // they both still wouldn't get CAPABILITY_BFSL.
+        //
+        // However, again, because #2 is bound by App 1, which is BFSL-allowed (because of #1A)
+        // App 2 would still BFSL-allowed, due to the aforementioned check in ActiveServices.
+        return client.mState.getCurCapability() & PROCESS_CAPABILITY_BFSL;
     }
 
     /**
@@ -3413,5 +3541,41 @@ public class OomAdjuster {
         } else if (state.getSetAdj() < CACHED_APP_MIN_ADJ) {
             mCachedAppOptimizer.unfreezeAppLSP(app, oomAdjReason);
         }
+    }
+
+    /**
+     * Update {@link #mPidsWithShortFgs} and {@link #mUidsToPidsWithShortFgs} to keep track
+     * of which UID/PID has a short FGS.
+     *
+     * TODO(short-FGS): Remove it and all the relevant code once SHORT_FGS use the FGS procstate.
+     */
+    void updateShortFgsOwner(int uid, int pid, boolean add) {
+        synchronized (mPidsWithShortFgs) {
+            if (add) {
+                mUidsToPidsWithShortFgs.add(uid, pid);
+                mPidsWithShortFgs.add(pid);
+            } else {
+                mUidsToPidsWithShortFgs.remove(uid, pid);
+                mPidsWithShortFgs.remove(pid);
+            }
+        }
+    }
+
+    /**
+     * Whether a UID has a (non-timed-out) short FGS or not.
+     * It's indirectly called by PowerManager, so we can't hold the AM lock in it.
+     */
+    boolean hasUidShortForegroundService(int uid) {
+        synchronized (mPidsWithShortFgs) {
+            final ArraySet<Integer> pids = mUidsToPidsWithShortFgs.get(uid);
+            if (pids == null || pids.size() == 0) {
+                return false;
+            }
+            for (int i = pids.size() - 1; i >= 0; i--) {
+                final int pid = pids.valueAt(i);
+                return mPidsWithShortFgs.contains(pid);
+            }
+        }
+        return false;
     }
 }

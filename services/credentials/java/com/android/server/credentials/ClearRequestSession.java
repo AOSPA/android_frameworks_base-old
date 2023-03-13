@@ -23,6 +23,7 @@ import android.credentials.ClearCredentialStateRequest;
 import android.credentials.IClearCredentialStateCallback;
 import android.credentials.ui.ProviderData;
 import android.credentials.ui.RequestInfo;
+import android.os.CancellationSignal;
 import android.os.RemoteException;
 import android.service.credentials.CallingAppInfo;
 import android.service.credentials.CredentialProviderInfo;
@@ -41,9 +42,9 @@ public final class ClearRequestSession extends RequestSession<ClearCredentialSta
 
     public ClearRequestSession(Context context, int userId, int callingUid,
             IClearCredentialStateCallback callback, ClearCredentialStateRequest request,
-            CallingAppInfo callingAppInfo) {
+            CallingAppInfo callingAppInfo, CancellationSignal cancellationSignal) {
         super(context, userId, callingUid, request, callback, RequestInfo.TYPE_UNDEFINED,
-                callingAppInfo);
+                callingAppInfo, cancellationSignal);
     }
 
     /**
@@ -82,7 +83,10 @@ public final class ClearRequestSession extends RequestSession<ClearCredentialSta
     }
 
     @Override
-    public void onFinalResponseReceived(ComponentName componentName, Void response) {
+    public void onFinalResponseReceived(
+            ComponentName componentName,
+            Void response) {
+        setChosenMetric(componentName);
         respondToClientWithResponseAndFinish();
     }
 
@@ -111,25 +115,41 @@ public final class ClearRequestSession extends RequestSession<ClearCredentialSta
 
     private void respondToClientWithResponseAndFinish() {
         Log.i(TAG, "respondToClientWithResponseAndFinish");
+        if (isSessionCancelled()) {
+            // TODO: Differentiate btw cancelled and false
+            mChosenProviderMetric.setChosenProviderStatus(
+                    MetricUtilities.METRICS_PROVIDER_STATUS_FINAL_SUCCESS);
+            logApiCalled(RequestType.CLEAR_CREDENTIALS, /* isSuccessful */ true);
+            finishSession(/*propagateCancellation=*/true);
+            return;
+        }
         try {
             mClientCallback.onSuccess();
             logApiCalled(RequestType.CLEAR_CREDENTIALS, /* isSuccessful */ true);
         } catch (RemoteException e) {
+            mChosenProviderMetric.setChosenProviderStatus(
+                    MetricUtilities.METRICS_PROVIDER_STATUS_FINAL_FAILURE);
             Log.i(TAG, "Issue while propagating the response to the client");
             logApiCalled(RequestType.CLEAR_CREDENTIALS, /* isSuccessful */ false);
         }
-        finishSession();
+        finishSession(/*propagateCancellation=*/false);
     }
 
     private void respondToClientWithErrorAndFinish(String errorType, String errorMsg) {
         Log.i(TAG, "respondToClientWithErrorAndFinish");
+        if (isSessionCancelled()) {
+            // TODO: Differentiate btw cancelled and false
+            logApiCalled(RequestType.CLEAR_CREDENTIALS, /* isSuccessful */ true);
+            finishSession(/*propagateCancellation=*/true);
+            return;
+        }
         try {
             mClientCallback.onError(errorType, errorMsg);
         } catch (RemoteException e) {
             e.printStackTrace();
         }
         logApiCalled(RequestType.CLEAR_CREDENTIALS, /* isSuccessful */ false);
-        finishSession();
+        finishSession(/*propagateCancellation=*/false);
     }
 
     private void processResponses() {

@@ -56,16 +56,29 @@ public class CredentialManagerUi {
     };
 
     private void handleUiResult(int resultCode, Bundle resultData) {
-        if (resultCode == UserSelectionDialogResult.RESULT_CODE_DIALOG_COMPLETE_WITH_SELECTION) {
-            UserSelectionDialogResult selection = UserSelectionDialogResult
-                    .fromResultData(resultData);
-            if (selection != null) {
-                mCallbacks.onUiSelection(selection);
-            } else {
-                Slog.i(TAG, "No selection found in UI result");
-            }
-        } else if (resultCode == UserSelectionDialogResult.RESULT_CODE_DIALOG_CANCELED) {
-            mCallbacks.onUiCancellation();
+        switch (resultCode) {
+            case UserSelectionDialogResult.RESULT_CODE_DIALOG_COMPLETE_WITH_SELECTION:
+                UserSelectionDialogResult selection = UserSelectionDialogResult
+                        .fromResultData(resultData);
+                if (selection != null) {
+                    mCallbacks.onUiSelection(selection);
+                } else {
+                    Slog.i(TAG, "No selection found in UI result");
+                }
+                break;
+            case UserSelectionDialogResult.RESULT_CODE_DIALOG_USER_CANCELED:
+                mCallbacks.onUiCancellation(/* isUserCancellation= */ true);
+                break;
+            case UserSelectionDialogResult.RESULT_CODE_CANCELED_AND_LAUNCHED_SETTINGS:
+                mCallbacks.onUiCancellation(/* isUserCancellation= */ false);
+                break;
+            case UserSelectionDialogResult.RESULT_CODE_DATA_PARSING_FAILURE:
+                mCallbacks.onUiSelectorInvocationFailure();
+                break;
+            default:
+                Slog.i(TAG, "Unknown error code returned from the UI");
+                mCallbacks.onUiSelectorInvocationFailure();
+                break;
         }
     }
 
@@ -75,8 +88,11 @@ public class CredentialManagerUi {
     public interface CredentialManagerUiCallback {
         /** Called when the user makes a selection. */
         void onUiSelection(UserSelectionDialogResult selection);
-        /** Called when the user cancels the UI. */
-        void onUiCancellation();
+        /** Called when the UI is canceled without a successful provider result. */
+        void onUiCancellation(boolean isUserCancellation);
+
+        /** Called when the selector UI fails to come up (mostly due to parsing issue today). */
+        void onUiSelectorInvocationFailure();
     }
     public CredentialManagerUi(Context context, int userId,
             CredentialManagerUiCallback callbacks) {

@@ -27,6 +27,8 @@ import android.os.Bundle;
 import android.os.UserManager;
 import android.util.DebugUtils;
 
+import com.android.internal.annotations.Keep;
+
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.List;
@@ -47,21 +49,25 @@ public abstract class UserManagerInternal {
     public @interface OwnerType {
     }
 
-    public static final int USER_ASSIGNMENT_RESULT_SUCCESS_VISIBLE = 1;
-    public static final int USER_ASSIGNMENT_RESULT_SUCCESS_INVISIBLE = 2;
-    public static final int USER_ASSIGNMENT_RESULT_FAILURE = -1;
+    // TODO(b/248408342): Move keep annotation to the method referencing these fields reflectively.
+    @Keep public static final int USER_ASSIGNMENT_RESULT_SUCCESS_VISIBLE = 1;
+    @Keep public static final int USER_ASSIGNMENT_RESULT_SUCCESS_INVISIBLE = 2;
+    @Keep public static final int USER_ASSIGNMENT_RESULT_SUCCESS_ALREADY_VISIBLE = 3;
+    @Keep public static final int USER_ASSIGNMENT_RESULT_FAILURE = -1;
 
     private static final String PREFIX_USER_ASSIGNMENT_RESULT = "USER_ASSIGNMENT_RESULT_";
     @IntDef(flag = false, prefix = {PREFIX_USER_ASSIGNMENT_RESULT}, value = {
             USER_ASSIGNMENT_RESULT_SUCCESS_VISIBLE,
             USER_ASSIGNMENT_RESULT_SUCCESS_INVISIBLE,
+            USER_ASSIGNMENT_RESULT_SUCCESS_ALREADY_VISIBLE,
             USER_ASSIGNMENT_RESULT_FAILURE
     })
     public @interface UserAssignmentResult {}
 
-    public static final int USER_START_MODE_FOREGROUND = 1;
-    public static final int USER_START_MODE_BACKGROUND = 2;
-    public static final int USER_START_MODE_BACKGROUND_VISIBLE = 3;
+    // TODO(b/248408342): Move keep annotation to the method referencing these fields reflectively.
+    @Keep public static final int USER_START_MODE_FOREGROUND = 1;
+    @Keep public static final int USER_START_MODE_BACKGROUND = 2;
+    @Keep public static final int USER_START_MODE_BACKGROUND_VISIBLE = 3;
 
     private static final String PREFIX_USER_START_MODE = "USER_START_MODE_";
     @IntDef(flag = false, prefix = {PREFIX_USER_START_MODE}, value = {
@@ -232,8 +238,9 @@ public abstract class UserManagerInternal {
      * the user is created (as it will be passed back to it through
      * {@link UserLifecycleListener#onUserCreated(UserInfo, Object)});
      */
-    public abstract UserInfo createUserEvenWhenDisallowed(String name, String userType,
-            int flags, String[] disallowedPackages, @Nullable Object token)
+    public abstract @NonNull UserInfo createUserEvenWhenDisallowed(
+            @Nullable String name, @NonNull String userType, @UserInfo.UserInfoFlag int flags,
+            @Nullable String[] disallowedPackages, @Nullable Object token)
             throws UserManager.CheckedUserOperationException;
 
     /**
@@ -522,11 +529,12 @@ public abstract class UserManagerInternal {
      * switched to.
      *
      * <p>Otherwise, in {@link UserManager#isHeadlessSystemUserMode() headless system user mode},
-     * this will be the user who was last in the foreground on this device. If there is no
-     * switchable user on the device, a new user will be created and its id will be returned.
+     * this will be the user who was last in the foreground on this device.
      *
-     * <p>In non-headless system user mode, the return value will be {@link UserHandle#USER_SYSTEM}.
+     * <p>In non-headless system user mode, the return value will be
+     * {@link android.os.UserHandle#USER_SYSTEM}.
+
+     * @throws UserManager.CheckedUserOperationException if no switchable user can be found
      */
-    public abstract @UserIdInt int getBootUser()
-            throws UserManager.CheckedUserOperationException;
+    public abstract @UserIdInt int getBootUser() throws UserManager.CheckedUserOperationException;
 }

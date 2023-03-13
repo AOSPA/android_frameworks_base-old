@@ -324,13 +324,13 @@
     <string name="permgroupdesc_sensors" msgid="2610631290633747752">"আপনার অত্যাবশ্যক লক্ষণগুলির সম্পর্কে সেন্সর ডেটা অ্যাক্সেস করে"</string>
     <string name="permgrouplab_notifications" msgid="5472972361980668884">"বিজ্ঞপ্তি"</string>
     <string name="permgroupdesc_notifications" msgid="4608679556801506580">"বিজ্ঞপ্তি দেখুন"</string>
-    <string name="capability_title_canRetrieveWindowContent" msgid="7554282892101587296">"উইন্ডোর কন্টেন্ট পুনরুদ্ধার করে"</string>
-    <string name="capability_desc_canRetrieveWindowContent" msgid="6195610527625237661">"ব্যবহার করছেন এমন একটি উইন্ডোর কন্টেন্ট নিরীক্ষণ করে৷"</string>
+    <string name="capability_title_canRetrieveWindowContent" msgid="7554282892101587296">"উইন্ডোর কন্টেন্ট ফিরিয়ে আনুন"</string>
+    <string name="capability_desc_canRetrieveWindowContent" msgid="6195610527625237661">"ব্যবহার করছেন এমন একটি উইন্ডোর কন্টেন্ট পরীক্ষা করে৷"</string>
     <string name="capability_title_canRequestTouchExploration" msgid="327598364696316213">"স্পর্শের মাধ্যমে অন্বেষণ করা চালু করুন"</string>
-    <string name="capability_desc_canRequestTouchExploration" msgid="4394677060796752976">"যে আইটেমগুলিতে আলতো চেপেছেন সেগুলি সশব্দে বলবে এবং ইঙ্গিতগুলি ব্যবহার করে স্ক্রিন অন্বেষণ করা যাবে৷"</string>
+    <string name="capability_desc_canRequestTouchExploration" msgid="4394677060796752976">"যে আইটেমগুলিতে ট্যাপ করেছেন সেগুলি জোরে বলবে এবং ইঙ্গিতগুলি ব্যবহার করে স্ক্রিন অন্বেষণ করা যাবে৷"</string>
     <string name="capability_title_canRequestFilterKeyEvents" msgid="2772371671541753254">"আপনার লেখা পাঠ্যকে নিরীক্ষণ করে"</string>
     <string name="capability_desc_canRequestFilterKeyEvents" msgid="2381315802405773092">"ক্রেডিট কার্ডের নম্বর ও পাসওয়ার্ডগুলির মতো ব্যক্তিগত তথ্য অন্তর্ভুক্ত করে৷"</string>
-    <string name="capability_title_canControlMagnification" msgid="7701572187333415795">"প্রদর্শনের বৃহত্তরীকরণ ব্যবস্থা নিয়ন্ত্রণ করুন"</string>
+    <string name="capability_title_canControlMagnification" msgid="7701572187333415795">"ডিসপ্লে বড়কার ব্যবস্থা নিয়ন্ত্রণ করুন"</string>
     <string name="capability_desc_canControlMagnification" msgid="2206586716709254805">"প্রদর্শনের জুমের স্তর এবং লোকেশন নির্ধারন নিয়ন্ত্রণ করুন৷"</string>
     <string name="capability_title_canPerformGestures" msgid="9106545062106728987">"অঙ্গভঙ্গির কাজগুলি সম্পাদন"</string>
     <string name="capability_desc_canPerformGestures" msgid="6619457251067929726">"আলতো চাপ দেওয়া, সোয়াইপ, পিঞ্চ করা এবং অন্যান্য ইঙ্গিতের কাজগুলি সম্পাদন করতে পারবেন৷"</string>
@@ -458,6 +458,10 @@
     <string name="permdesc_bodySensors" product="default" msgid="7652650410295512140">"এই অ্যাপ ব্যবহার করার সময় বডি সেন্সর ডেটা অ্যাক্সেস করার অনুমতি দেওয়া হয়। এর মধ্যে হার্ট রেট, তাপমাত্রা এবং রক্তে অক্সিজেনের পরিমাণের শতাংশ সম্পর্কিত তথ্যও আছে।"</string>
     <string name="permlab_bodySensors_background" msgid="4912560779957760446">"অ্যাপ ব্যাকগ্রাউন্ডে চলার সময়, হার্ট রেটের মতো বডি সেন্সর ডেটার অ্যাক্সেস দিন"</string>
     <string name="permdesc_bodySensors_background" product="default" msgid="8870726027557749417">"এই অ্যাপ ব্যাকগ্রাউন্ডে চলার সময় বডি সেন্সর ডেটা অ্যাক্সেস করার অনুমতি দেওয়া হয়। এর মধ্যে হার্ট রেট, তাপমাত্রা এবং রক্তে অক্সিজেনের পরিমাণের শতাংশ সম্পর্কিত তথ্যও আছে।"</string>
+    <string name="permlab_bodySensorsWristTemperature" msgid="5007987988922337657">"অ্যাপ ব্যবহার করার সময়, দেহের তাপমাত্রা সংক্রান্ত বডি সেন্সর ডেটা অ্যাক্সেস করা।"</string>
+    <string name="permdesc_bodySensorsWristTemperature" product="default" msgid="4978345709781045181">"অ্যাপ ব্যবহার করার সময়, দেহের তাপমাত্রা সংক্রান্ত বডি সেন্সর ডেটা অ্যাক্সেস করার ক্ষেত্রে অ্যাপকে অনুমতি দেয়।"</string>
+    <string name="permlab_bodySensors_wristTemperature_background" msgid="7692772783509074356">"অ্যাপ ব্যাকগ্রাউন্ডে চলার সময়, দেহের তাপমাত্রা সংক্রান্ত বডি সেন্সর ডেটা অ্যাক্সেস করা।"</string>
+    <string name="permdesc_bodySensors_wristTemperature_background" product="default" msgid="3170369705518699219">"অ্যাপ ব্যাকগ্রাউন্ডে চলার সময়, দেহের তাপমাত্রা সংক্রান্ত বডি সেন্সর ডেটা অ্যাক্সেস করার ক্ষেত্রে অ্যাপকে অনুমতি দেয়।"</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"ক্যালেন্ডারের ইভেন্ট এবং বিশদ বিবরণ পড়ুন"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"এই অ্যাপটি আপনার ট্যাবলেটে সংরক্ষিত সমস্ত ক্যালেন্ডার ইভেন্ট পড়তে এবং আপনার ক্যালেন্ডারের ডেটা শেয়ার বা সংরক্ষণ করতে পারে৷"</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"এই অ্যাপ আপনার Android TV ডিভাইসে সেভ করা সব ক্যালেন্ডার ইভেন্ট পড়তে পারে এবং আপনার ক্যালেন্ডারের ডেটা শেয়ার বা সেভ করতে পারে।"</string>
@@ -1241,10 +1245,8 @@
     <string name="android_start_title" product="automotive" msgid="7917984412828168079">"Android চালু হচ্ছে…"</string>
     <string name="android_start_title" product="tablet" msgid="4429767260263190344">"ট্যাবলেট চালু করা হচ্ছে…"</string>
     <string name="android_start_title" product="device" msgid="6967413819673299309">"ডিভাইস চালু করা হচ্ছে…"</string>
-    <string name="android_upgrading_fstrim" msgid="3259087575528515329">"স্টোরেজ অপ্টিমাইজ করা হচ্ছে৷"</string>
     <string name="android_upgrading_notification_title" product="default" msgid="3509927005342279257">"সিস্টেম আপডেট শেষ করা হচ্ছে…"</string>
     <string name="app_upgrading_toast" msgid="1016267296049455585">"<xliff:g id="APPLICATION">%1$s</xliff:g> আপগ্রেড করা হচ্ছে…"</string>
-    <string name="android_upgrading_apk" msgid="1339564803894466737">"<xliff:g id="NUMBER_1">%2$d</xliff:g>টির মধ্যে <xliff:g id="NUMBER_0">%1$d</xliff:g>টি অ্যাপ্লিকেশান অপ্টিমাইজ করা হচ্ছে৷"</string>
     <string name="android_preparing_apk" msgid="589736917792300956">"<xliff:g id="APPNAME">%1$s</xliff:g> প্রস্তুত করা হচ্ছে৷"</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"অ্যাপ্লিকেশানগুলি শুরু করা হচ্ছে৷"</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"চালু করা সম্পূর্ণ হচ্ছে৷"</string>
@@ -1356,6 +1358,8 @@
     <string name="usb_ptp_notification_title" msgid="5043437571863443281">"USB এর মাধ্যমে PTP চালু করা হয়েছে"</string>
     <string name="usb_tether_notification_title" msgid="8828527870612663771">"USB টিথারিং চালু করা হয়েছে"</string>
     <string name="usb_midi_notification_title" msgid="7404506788950595557">"USB এর মাধ্যমে MIDI চালু করা হয়েছে"</string>
+    <!-- no translation found for usb_uvc_notification_title (2030032862673400008) -->
+    <skip />
     <string name="usb_accessory_notification_title" msgid="1385394660861956980">"ইউএসবি অ্যাক্সেসরি কানেক্ট করা হয়েছে"</string>
     <string name="usb_notification_message" msgid="4715163067192110676">"আরও বিকল্পের জন্য আলতো চাপুন৷"</string>
     <string name="usb_power_notification_message" msgid="7284765627437897702">"সংযুক্ত ডিভাইস চার্জ করা হচ্ছে। আরও বিকল্প দেখতে ট্যাপ করুন।"</string>
@@ -1704,7 +1708,8 @@
     <string name="done_accessibility_shortcut_menu_button" msgid="3668407723770815708">"হয়ে গেছে"</string>
     <string name="disable_accessibility_shortcut" msgid="5806091378745232383">"শর্টকাট বন্ধ করুন"</string>
     <string name="leave_accessibility_shortcut_on" msgid="6543362062336990814">"শর্টকাট ব্যবহার করুন"</string>
-    <string name="color_inversion_feature_name" msgid="326050048927789012">"রঙ উল্টানো"</string>
+    <!-- no translation found for color_inversion_feature_name (2672824491933264951) -->
+    <skip />
     <string name="color_correction_feature_name" msgid="7975133554160979214">"রঙ সংশোধন করা"</string>
     <string name="one_handed_mode_feature_name" msgid="2334330034828094891">"এক হাতে ব্যবহার করার মোড"</string>
     <string name="reduce_bright_colors_feature_name" msgid="3222994553174604132">"অতিরিক্ত কম আলো"</string>
@@ -1842,6 +1847,8 @@
     <string name="immersive_cling_title" msgid="2307034298721541791">"পূর্ণ স্ক্রিনে দেখা হচ্ছে"</string>
     <string name="immersive_cling_description" msgid="7092737175345204832">"প্রস্থান করতে উপর থেকে নিচের দিকে সোয়াইপ করুন"</string>
     <string name="immersive_cling_positive" msgid="7047498036346489883">"বুঝেছি"</string>
+    <string name="display_rotation_camera_compat_toast_after_rotation" msgid="7600891546249829854">"আরও ভাল ক্যামেরা ভিউ পাওয়ার জন্য ঘোরান"</string>
+    <string name="display_rotation_camera_compat_toast_in_split_screen" msgid="8393302456336805466">"আরও ভাল ক্যামেরা ভিউ পাওয়ার জন্য স্প্লিট স্ক্রিন থেকে বেরিয়ে আসুন"</string>
     <string name="done_label" msgid="7283767013231718521">"সম্পন্ন হয়েছে"</string>
     <string name="hour_picker_description" msgid="5153757582093524635">"বৃত্তাকার ঘণ্টা নির্বাচকের স্লাইডার"</string>
     <string name="minute_picker_description" msgid="9029797023621927294">"বৃত্তাকার মিনিট নির্বাচকের স্লাইডার"</string>
@@ -1853,6 +1860,7 @@
     <string name="managed_profile_label_badge" msgid="6762559569999499495">"কর্মক্ষেত্র <xliff:g id="LABEL">%1$s</xliff:g>"</string>
     <string name="managed_profile_label_badge_2" msgid="5673187309555352550">"দ্বিতীয় কার্যক্ষেত্র <xliff:g id="LABEL">%1$s</xliff:g>"</string>
     <string name="managed_profile_label_badge_3" msgid="6882151970556391957">"তৃতীয় কার্যক্ষেত্র <xliff:g id="LABEL">%1$s</xliff:g>"</string>
+    <string name="clone_profile_label_badge" msgid="1871997694718793964">"<xliff:g id="LABEL">%1$s</xliff:g> ক্লোন"</string>
     <string name="lock_to_app_unlock_pin" msgid="3890940811866290782">"আনপিন করার আগে পিন চান"</string>
     <string name="lock_to_app_unlock_pattern" msgid="2694204070499712503">"আনপিন করার আগে আনলক প্যাটার্ন চান"</string>
     <string name="lock_to_app_unlock_password" msgid="9126722403506560473">"আনপিন করার আগে পাসওয়ার্ড চান"</string>
@@ -1943,10 +1951,8 @@
     <string name="work_mode_off_title" msgid="961171256005852058">"অফিস অ্যাপ চালু করবেন?"</string>
     <string name="work_mode_off_message" msgid="7319580997683623309">"আপনার অফিস অ্যাপ এবং বিজ্ঞপ্তিতে অ্যাক্সেস পান"</string>
     <string name="work_mode_turn_on" msgid="3662561662475962285">"চালু করুন"</string>
-    <!-- no translation found for work_mode_emergency_call_button (6818855962881612322) -->
-    <skip />
-    <!-- no translation found for work_mode_dialer_off_message (2193299184850387465) -->
-    <skip />
+    <string name="work_mode_emergency_call_button" msgid="6818855962881612322">"জরুরি"</string>
+    <string name="work_mode_dialer_off_message" msgid="2193299184850387465">"আপনার অফিসের অ্যাপ এবং কলে অ্যাক্সেস পান"</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"অ্যাপ পাওয়া যাচ্ছে না"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"এই মুহূর্তে <xliff:g id="APP_NAME">%1$s</xliff:g> অ্যাপ পাওয়া যাচ্ছে না।"</string>
     <string name="app_streaming_blocked_title" msgid="6090945835898766139">"<xliff:g id="ACTIVITY">%1$s</xliff:g> উপলভ্য নেই"</string>
@@ -2309,4 +2315,10 @@
     <string name="permdesc_startForegroundServicesFromBackground" msgid="4071826571656001537">"কম্প্যানিয়ন অ্যাপকে, ব্যাকগ্রাউন্ড থেকে ফোরগ্রাউন্ড পরিষেবা চালু করার অনুমতি দেয়।"</string>
     <string name="mic_access_on_toast" msgid="2666925317663845156">"মাইক্রোফোন উপলভ্য আছে"</string>
     <string name="mic_access_off_toast" msgid="8111040892954242437">"মাইক্রোফোন ব্লক করা হয়েছে"</string>
+    <string name="concurrent_display_notification_name" msgid="1526911253558311131">"ডুয়াল স্ক্রিন"</string>
+    <string name="concurrent_display_notification_active_title" msgid="4892473462327943673">"\'ডুয়াল স্ক্রিন\' চালু করা আছে"</string>
+    <string name="concurrent_display_notification_active_content" msgid="5889355473710601270">"কন্টেন্ট দেখানোর জন্য <xliff:g id="APP_NAME">%1$s</xliff:g> দুটি ডিসপ্লে ব্যবহার করছে"</string>
+    <string name="concurrent_display_notification_thermal_title" msgid="5921609404644739229">"ডিভাইস খুব গরম হয়ে গেছে"</string>
+    <string name="concurrent_display_notification_thermal_content" msgid="2075484836527609319">"আপনার ফোন খুব বেশি গরম হয়ে যাচ্ছে বলে \'ডুয়াল স্ক্রিন\' উপলভ্য নেই"</string>
+    <string name="device_state_notification_turn_off_button" msgid="6327161707661689232">"বন্ধ করুন"</string>
 </resources>

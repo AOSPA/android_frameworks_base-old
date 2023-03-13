@@ -30,9 +30,9 @@ import java.util.List;
 public interface JobSchedulerInternal {
 
     /**
-     * Returns a list of pending jobs scheduled by the system service.
+     * Returns a list of jobs scheduled by the system service for itself.
      */
-    List<JobInfo> getSystemScheduledPendingJobs();
+    List<JobInfo> getSystemScheduledOwnJobs(@Nullable String namespace);
 
     /**
      * Cancel the jobs for a given uid (e.g. when app data is cleared)

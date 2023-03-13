@@ -2445,13 +2445,12 @@ public abstract class Context {
      * @see #sendBroadcast(Intent)
      * @see #sendOrderedBroadcast(Intent, String)
      * @see #sendOrderedBroadcast(Intent, String, BroadcastReceiver, Handler, int, String, Bundle)
-     * @hide
      */
-    @SuppressWarnings("HiddenAbstractMethod")
-    @SystemApi
-    public abstract void sendBroadcast(Intent intent,
+    public void sendBroadcast(@NonNull Intent intent,
             @Nullable String receiverPermission,
-            @Nullable Bundle options);
+            @Nullable Bundle options) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
 
     /**
      * Like {@link #sendBroadcast(Intent, String)}, but also allows specification
@@ -2485,6 +2484,32 @@ public abstract class Context {
      */
     public abstract void sendOrderedBroadcast(@RequiresPermission Intent intent,
             @Nullable String receiverPermission);
+
+    /**
+     * Broadcast the given intent to all interested BroadcastReceivers, delivering
+     * them one at a time to allow more preferred receivers to consume the
+     * broadcast before it is delivered to less preferred receivers.  This
+     * call is asynchronous; it returns immediately, and you will continue
+     * executing while the receivers are run.
+     *
+     * <p>See {@link BroadcastReceiver} for more information on Intent broadcasts.
+     *
+     * @param intent             The Intent to broadcast; all receivers matching this
+     *                           Intent will receive the broadcast.
+     * @param receiverPermission (optional) String naming a permissions that
+     *                           a receiver must hold in order to receive your broadcast.
+     *                           If null, no permission is required.
+     * @param options            (optional) Additional sending options, generated from a
+     *                           {@link android.app.BroadcastOptions}.
+     * @see android.content.BroadcastReceiver
+     * @see #registerReceiver
+     * @see #sendBroadcast(Intent)
+     * @see #sendOrderedBroadcast(Intent, String, BroadcastReceiver, Handler, int, String, Bundle)
+     */
+    public void sendOrderedBroadcast(@NonNull Intent intent, @Nullable String receiverPermission,
+            @Nullable Bundle options) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
 
     /**
      * Version of {@link #sendBroadcast(Intent)} that allows you to
@@ -2572,14 +2597,13 @@ public abstract class Context {
      * @see android.content.BroadcastReceiver
      * @see #registerReceiver
      * @see android.app.Activity#RESULT_OK
-     * @hide
      */
-    @SuppressWarnings("HiddenAbstractMethod")
-    @SystemApi
-    public abstract void sendOrderedBroadcast(@NonNull Intent intent,
+    public void sendOrderedBroadcast(@NonNull Intent intent,
             @Nullable String receiverPermission, @Nullable Bundle options,
             @Nullable BroadcastReceiver resultReceiver, @Nullable Handler scheduler,
-            int initialCode, @Nullable String initialData, @Nullable Bundle initialExtras);
+            int initialCode, @Nullable String initialData, @Nullable Bundle initialExtras) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
 
     /**
      * Like {@link #sendOrderedBroadcast(Intent, String, BroadcastReceiver, android.os.Handler,
@@ -5854,7 +5878,7 @@ public abstract class Context {
     public static final String SECURE_ELEMENT_SERVICE = "secure_element";
 
     /**
-     * Use with {@link #getSystemService(String)} to retrieve an
+     * Use with {@link #getSystemService(String)} to retrieve a
      * {@link android.app.timedetector.TimeDetector}.
      * @hide
      *
@@ -5863,7 +5887,7 @@ public abstract class Context {
     public static final String TIME_DETECTOR_SERVICE = "time_detector";
 
     /**
-     * Use with {@link #getSystemService(String)} to retrieve an
+     * Use with {@link #getSystemService(String)} to retrieve a
      * {@link android.app.timezonedetector.TimeZoneDetector}.
      * @hide
      *
@@ -5872,12 +5896,14 @@ public abstract class Context {
     public static final String TIME_ZONE_DETECTOR_SERVICE = "time_zone_detector";
 
     /**
-     * Use with {@link #getSystemService(String)} to retrieve an {@link TimeManager}.
+     * Use with {@link #getSystemService(String)} to retrieve a {@link TimeManager}.
      * @hide
      *
      * @see #getSystemService(String)
      */
-    public static final String TIME_MANAGER = "time_manager";
+    @SystemApi
+    @SuppressLint("ServiceName")
+    public static final String TIME_MANAGER_SERVICE = "time_manager";
 
     /**
      * Binder service name for {@link AppBindingService}.
@@ -6149,10 +6175,10 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
-     * {@link android.healthconnect.HealthConnectManager}.
+     * {@link android.health.connect.HealthConnectManager}.
      *
      * @see #getSystemService(String)
-     * @see android.healthconnect.HealthConnectManager
+     * @see android.health.connect.HealthConnectManager
      */
     public static final String HEALTHCONNECT_SERVICE = "healthconnect";
 
@@ -6196,12 +6222,34 @@ public abstract class Context {
     public static final String GRAMMATICAL_INFLECTION_SERVICE = "grammatical_inflection";
 
     /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.telephony.satellite.SatelliteManager} for accessing satellite functionality.
+     *
+     * @see #getSystemService(String)
+     * @see android.telephony.satellite.SatelliteManager
+     * @hide
+     */
+    public static final String SATELLITE_SERVICE = "satellite";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.net.wifi.sharedconnectivity.app.SharedConnectivityManager} for accessing
+     * shared connectivity services.
+     *
+     * @see #getSystemService(String)
+     * @see android.net.wifi.sharedconnectivity.app.SharedConnectivityManager
+     * @hide
+     */
+    @SystemApi
+    public static final String SHARED_CONNECTIVITY_SERVICE = "shared_connectivity";
+
+    /**
      * Determine whether the given permission is allowed for a particular
      * process and user ID running in the system.
      *
      * @param permission The name of the permission being checked.
      * @param pid The process ID being checked against.  Must be > 0.
-     * @param uid The user ID being checked against.  A uid of 0 is the root
+     * @param uid The UID being checked against.  A uid of 0 is the root
      * user, which will pass every permission check.
      *
      * @return {@link PackageManager#PERMISSION_GRANTED} if the given
@@ -6291,7 +6339,7 @@ public abstract class Context {
      *
      * @param permission The name of the permission being checked.
      * @param pid The process ID being checked against.  Must be &gt; 0.
-     * @param uid The user ID being checked against.  A uid of 0 is the root
+     * @param uid The UID being checked against.  A uid of 0 is the root
      * user, which will pass every permission check.
      * @param message A message to include in the exception if it is thrown.
      *
@@ -6435,7 +6483,7 @@ public abstract class Context {
      *
      * @param uri The uri that is being checked.
      * @param pid The process ID being checked against.  Must be &gt; 0.
-     * @param uid The user ID being checked against.  A uid of 0 is the root
+     * @param uid The UID being checked against.  A uid of 0 is the root
      * user, which will pass every permission check.
      * @param modeFlags The access modes to check.
      *
@@ -6463,7 +6511,7 @@ public abstract class Context {
      *
      * @param uris The list of URIs that is being checked.
      * @param pid The process ID being checked against.  Must be &gt; 0.
-     * @param uid The user ID being checked against.  A uid of 0 is the root
+     * @param uid The UID being checked against.  A uid of 0 is the root
      * user, which will pass every permission check.
      * @param modeFlags The access modes to check for the list of uris
      *
@@ -6589,7 +6637,7 @@ public abstract class Context {
      * @param writePermission The permission that provides overall write
      * access, or null to not do this check.
      * @param pid The process ID being checked against.  Must be &gt; 0.
-     * @param uid The user ID being checked against.  A uid of 0 is the root
+     * @param uid The UID being checked against.  A uid of 0 is the root
      * user, which will pass every permission check.
      * @param modeFlags The access modes to check.
      *
@@ -6613,7 +6661,7 @@ public abstract class Context {
      *
      * @param uri The uri that is being checked.
      * @param pid The process ID being checked against.  Must be &gt; 0.
-     * @param uid The user ID being checked against.  A uid of 0 is the root
+     * @param uid The UID being checked against.  A uid of 0 is the root
      * user, which will pass every permission check.
      * @param modeFlags The access modes to enforce.
      * @param message A message to include in the exception if it is thrown.
@@ -6672,7 +6720,7 @@ public abstract class Context {
      * @param writePermission The permission that provides overall write
      * access, or null to not do this check.
      * @param pid The process ID being checked against.  Must be &gt; 0.
-     * @param uid The user ID being checked against.  A uid of 0 is the root
+     * @param uid The UID being checked against.  A uid of 0 is the root
      * user, which will pass every permission check.
      * @param modeFlags The access modes to enforce.
      * @param message A message to include in the exception if it is thrown.
@@ -7340,6 +7388,7 @@ public abstract class Context {
      * @see #createDeviceContext(int)
      * @hide
      */
+    @TestApi
     public void updateDeviceId(int deviceId) {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
@@ -7376,10 +7425,12 @@ public abstract class Context {
     /**
      * Indicates whether the value of {@link Context#getDeviceId()} can be relied upon for
      * this instance. It will return {@code true} for Contexts created by
-     * {@link Context#createDeviceContext(int)}, as well as for UI and Display Contexts.
+     * {@link Context#createDeviceContext(int)} which reference a valid device ID, as well as for
+     * UI and Display Contexts.
      * <p>
      * Contexts created with {@link Context#createDeviceContext(int)} will have an explicit
-     * device association, which will never change. UI Contexts and Display Contexts are
+     * device association, which will never change, even if the underlying device is closed or is
+     * removed. UI Contexts and Display Contexts are
      * already associated with a display, so if the device association is not explicitly
      * given, {@link Context#getDeviceId()} will return the ID of the device associated with
      * the associated display. The system can assign an arbitrary device id value for Contexts not
@@ -7527,14 +7578,12 @@ public abstract class Context {
     }
 
     /**
-     * Get the binder object associated with the IApplicationThread of this Context.
-     *
-     * This can be used by a mainline module to uniquely identify a specific app process.
+     * Used by a mainline module to uniquely identify a specific app process.
      * @hide
      */
     @NonNull
     @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
-    public IBinder getIApplicationThreadBinder() {
+    public IBinder getProcessToken() {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
 

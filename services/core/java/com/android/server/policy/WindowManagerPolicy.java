@@ -67,6 +67,7 @@ import static java.lang.annotation.RetentionPolicy.SOURCE;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Rect;
@@ -91,6 +92,7 @@ import com.android.server.wm.DisplayRotation;
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.List;
 
 /**
  * This interface supplies all UI-specific behavior of the window manager.  An
@@ -162,9 +164,10 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
 
     /**
      * Called when the Keyguard occluded state changed.
+     *
      * @param occluded Whether Keyguard is currently occluded or not.
      */
-    void onKeyguardOccludedChangedLw(boolean occluded);
+    void onKeyguardOccludedChangedLw(boolean occluded, boolean waitAppTransition);
 
     /**
      * @param notify {@code true} if the status change should be immediately notified via
@@ -357,6 +360,11 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
          *                      windows even if the rotation hasn't changed.
          */
         void updateRotation(boolean alwaysSendConfiguration, boolean forceRelayout);
+
+        /**
+         * Invoked when a screenshot is taken of the given display to notify registered listeners.
+         */
+        List<ComponentName> notifyScreenshotListeners(int displayId);
     }
 
     /**

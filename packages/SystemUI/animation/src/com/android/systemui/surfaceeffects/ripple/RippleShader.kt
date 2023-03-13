@@ -18,6 +18,7 @@ package com.android.systemui.surfaceeffects.ripple
 import android.graphics.PointF
 import android.graphics.RuntimeShader
 import android.util.MathUtils
+import com.android.systemui.animation.Interpolators
 import com.android.systemui.surfaceeffects.shaderutil.SdfShaderLibrary
 import com.android.systemui.surfaceeffects.shaderutil.ShaderUtilLibrary
 
@@ -43,11 +44,24 @@ class RippleShader(rippleShape: RippleShape = RippleShape.CIRCLE) :
     }
     // language=AGSL
     companion object {
+        // Default fade in/ out values. The value range is [0,1].
+        const val DEFAULT_FADE_IN_START = 0f
+        const val DEFAULT_FADE_OUT_END = 1f
+
+        const val DEFAULT_BASE_RING_FADE_IN_END = 0.1f
+        const val DEFAULT_BASE_RING_FADE_OUT_START = 0.3f
+
+        const val DEFAULT_SPARKLE_RING_FADE_IN_END = 0.1f
+        const val DEFAULT_SPARKLE_RING_FADE_OUT_START = 0.4f
+
+        const val DEFAULT_CENTER_FILL_FADE_IN_END = 0f
+        const val DEFAULT_CENTER_FILL_FADE_OUT_START = 0f
+        const val DEFAULT_CENTER_FILL_FADE_OUT_END = 0.6f
+
         private const val SHADER_UNIFORMS =
             """
             uniform vec2 in_center;
             uniform vec2 in_size;
-            uniform float in_progress;
             uniform float in_cornerRadius;
             uniform float in_thickness;
             uniform float in_time;
@@ -68,7 +82,7 @@ class RippleShader(rippleShape: RippleShape = RippleShape.CIRCLE) :
                 vec2 p_distorted = distort(p, in_time, in_distort_radial, in_distort_xy);
                 float radius = in_size.x * 0.5;
                 float sparkleRing = soften(circleRing(p_distorted-in_center, radius), in_blur);
-                float inside = soften(sdCircle(p_distorted-in_center, radius * 1.2), in_blur);
+                float inside = soften(sdCircle(p_distorted-in_center, radius * 1.25), in_blur);
                 float sparkle = sparkles(p - mod(p, in_pixelDensity * 0.8), in_time * 0.00175)
                     * (1.-sparkleRing) * in_fadeSparkle;
 
@@ -143,10 +157,25 @@ class RippleShader(rippleShape: RippleShape = RippleShape.CIRCLE) :
             }
 
         private fun subProgress(start: Float, end: Float, progress: Float): Float {
+            // Avoid division by 0.
+            if (start == end) {
+                // If start and end are the same and progress has exceeded the start/ end point,
+                // treat it as 1, otherwise 0.
+                return if (progress > start) 1f else 0f
+            }
+
             val min = Math.min(start, end)
             val max = Math.max(start, end)
             val sub = Math.min(Math.max(progress, min), max)
             return (sub - start) / (end - start)
+        }
+
+        private fun getFade(fadeParams: FadeParams, rawProgress: Float): Float {
+            val fadeIn = subProgress(fadeParams.fadeInStart, fadeParams.fadeInEnd, rawProgress)
+            val fadeOut =
+                1f - subProgress(fadeParams.fadeOutStart, fadeParams.fadeOutEnd, rawProgress)
+
+            return Math.min(fadeIn, fadeOut)
         }
     }
 
@@ -162,33 +191,33 @@ class RippleShader(rippleShape: RippleShape = RippleShape.CIRCLE) :
         maxSize.y = height
     }
 
-    /** Progress of the ripple. Float value between [0, 1]. */
-    var progress: Float = 0.0f
+    /**
+     * Linear progress of the ripple. Float value between [0, 1].
+     *
+     * <p>Note that the progress here is expected to be linear without any curve applied.
+     */
+    var rawProgress: Float = 0.0f
         set(value) {
             field = value
-            setFloatUniform("in_progress", value)
-            val curvedProg = 1 - (1 - value) * (1 - value) * (1 - value)
+            progress = Interpolators.STANDARD.getInterpolation(value)
 
-            currentWidth = maxSize.x * curvedProg
-            currentHeight = maxSize.y * curvedProg
-            setFloatUniform("in_size", /* width= */ currentWidth, /* height= */ currentHeight)
-            setFloatUniform("in_thickness", maxSize.y * curvedProg * 0.5f)
+            setFloatUniform("in_fadeSparkle", getFade(sparkleRingFadeParams, value))
+            setFloatUniform("in_fadeRing", getFade(baseRingFadeParams, value))
+            setFloatUniform("in_fadeFill", getFade(centerFillFadeParams, value))
+        }
+
+    /** Progress with Standard easing curve applied. */
+    private var progress: Float = 0.0f
+        set(value) {
+            currentWidth = maxSize.x * value
+            currentHeight = maxSize.y * value
+            setFloatUniform("in_size", currentWidth, currentHeight)
+
+            setFloatUniform("in_thickness", maxSize.y * value * 0.5f)
             // radius should not exceed width and height values.
-            setFloatUniform("in_cornerRadius", Math.min(maxSize.x, maxSize.y) * curvedProg)
+            setFloatUniform("in_cornerRadius", Math.min(maxSize.x, maxSize.y) * value)
 
             setFloatUniform("in_blur", MathUtils.lerp(1.25f, 0.5f, value))
-
-            val fadeIn = subProgress(0f, 0.1f, value)
-            val fadeOutNoise = subProgress(0.4f, 1f, value)
-            var fadeOutRipple = 0f
-            var fadeFill = 0f
-            if (!rippleFill) {
-                fadeFill = subProgress(0f, 0.6f, value)
-                fadeOutRipple = subProgress(0.3f, 1f, value)
-            }
-            setFloatUniform("in_fadeSparkle", Math.min(fadeIn, 1 - fadeOutNoise))
-            setFloatUniform("in_fadeFill", 1 - fadeFill)
-            setFloatUniform("in_fadeRing", Math.min(fadeIn, 1 - fadeOutRipple))
         }
 
     /** Play time since the start of the effect. */
@@ -220,25 +249,97 @@ class RippleShader(rippleShape: RippleShape = RippleShape.CIRCLE) :
     var distortionStrength: Float = 0.0f
         set(value) {
             field = value
-            setFloatUniform("in_distort_radial", 75 * progress * value)
+            setFloatUniform("in_distort_radial", 75 * rawProgress * value)
             setFloatUniform("in_distort_xy", 75 * value)
         }
 
+    /**
+     * Pixel density of the screen that the effects are rendered to.
+     *
+     * <p>This value should come from [resources.displayMetrics.density].
+     */
     var pixelDensity: Float = 1.0f
         set(value) {
             field = value
             setFloatUniform("in_pixelDensity", value)
         }
 
-    /**
-     * True if the ripple should stayed filled in as it expands to give a filled-in circle effect.
-     * False for a ring effect.
-     */
-    var rippleFill: Boolean = false
-
     var currentWidth: Float = 0f
         private set
 
     var currentHeight: Float = 0f
         private set
+
+    /** Parameters that are used to fade in/ out of the sparkle ring. */
+    val sparkleRingFadeParams =
+        FadeParams(
+            DEFAULT_FADE_IN_START,
+            DEFAULT_SPARKLE_RING_FADE_IN_END,
+            DEFAULT_SPARKLE_RING_FADE_OUT_START,
+            DEFAULT_FADE_OUT_END
+        )
+
+    /**
+     * Parameters that are used to fade in/ out of the base ring.
+     *
+     * <p>Note that the shader draws the sparkle ring on top of the base ring.
+     */
+    val baseRingFadeParams =
+        FadeParams(
+            DEFAULT_FADE_IN_START,
+            DEFAULT_BASE_RING_FADE_IN_END,
+            DEFAULT_BASE_RING_FADE_OUT_START,
+            DEFAULT_FADE_OUT_END
+        )
+
+    /** Parameters that are used to fade in/ out of the center fill. */
+    val centerFillFadeParams =
+        FadeParams(
+            DEFAULT_FADE_IN_START,
+            DEFAULT_CENTER_FILL_FADE_IN_END,
+            DEFAULT_CENTER_FILL_FADE_OUT_START,
+            DEFAULT_CENTER_FILL_FADE_OUT_END
+        )
+
+    /**
+     * Parameters used for fade in and outs of the ripple.
+     *
+     * <p>Note that all the fade in/ outs are "linear" progression.
+     * ```
+     *          (opacity)
+     *          1
+     *          │
+     * maxAlpha ←       ――――――――――――
+     *          │      /            \
+     *          │     /              \
+     * minAlpha ←――――/                \―――― (alpha change)
+     *          │
+     *          │
+     *          0 ―――↑―――↑―――――――――↑―――↑――――1 (progress)
+     *               fadeIn        fadeOut
+     *               Start & End   Start & End
+     * ```
+     * <p>If no fade in/ out is needed, set [fadeInStart] and [fadeInEnd] to 0; [fadeOutStart] and
+     * [fadeOutEnd] to 1.
+     */
+    data class FadeParams(
+        /**
+         * The starting point of the fade out which ends at [fadeInEnd], given that the animation
+         * goes from 0 to 1.
+         */
+        var fadeInStart: Float = DEFAULT_FADE_IN_START,
+        /**
+         * The endpoint of the fade in when the fade in starts at [fadeInStart], given that the
+         * animation goes from 0 to 1.
+         */
+        var fadeInEnd: Float,
+        /**
+         * The starting point of the fade out which ends at 1, given that the animation goes from 0
+         * to 1.
+         */
+        var fadeOutStart: Float,
+
+        /** The endpoint of the fade out, given that the animation goes from 0 to 1. */
+        var fadeOutEnd: Float = DEFAULT_FADE_OUT_END,
+    )
 }

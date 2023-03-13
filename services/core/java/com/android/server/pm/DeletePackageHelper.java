@@ -35,6 +35,7 @@ import static com.android.server.pm.PackageManagerService.TAG;
 import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.ApplicationExitInfo;
 import android.app.ApplicationPackageManager;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
@@ -43,6 +44,7 @@ import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
 import android.content.pm.SharedLibraryInfo;
 import android.content.pm.UserInfo;
+import android.content.pm.UserProperties;
 import android.content.pm.VersionedPackage;
 import android.net.Uri;
 import android.os.Binder;
@@ -237,7 +239,7 @@ final class DeletePackageHelper {
         synchronized (mPm.mInstallLock) {
             if (DEBUG_REMOVE) Slog.d(TAG, "deletePackageX: pkg=" + packageName + " user=" + userId);
             try (PackageFreezer freezer = mPm.freezePackageForDelete(packageName, freezeUser,
-                    deleteFlags, "deletePackageX")) {
+                    deleteFlags, "deletePackageX", ApplicationExitInfo.REASON_OTHER)) {
                 res = deletePackageLIF(packageName, UserHandle.of(removeUser), true, allUsers,
                         deleteFlags | PackageManager.DELETE_CHATTY, info, true);
             }
@@ -262,7 +264,7 @@ final class DeletePackageHelper {
             final boolean killApp = (deleteFlags & PackageManager.DELETE_DONT_KILL_APP) == 0;
             info.sendPackageRemovedBroadcasts(killApp, removedBySystem);
             info.sendSystemPackageUpdatedBroadcasts();
-            PackageMetrics.onUninstallSucceeded(info, deleteFlags, userId);
+            PackageMetrics.onUninstallSucceeded(info, deleteFlags, removeUser);
         }
 
         // Force a gc to clear up things.
@@ -786,6 +788,25 @@ final class DeletePackageHelper {
                 if (!deleteAllUsers) {
                     returnCode = deletePackageX(internalPackageName, versionCode,
                             userId, deleteFlags, false /*removedBySystem*/);
+
+                    // Get a list of child user profiles and delete if package is
+                    // present in that profile.
+                    int[] childUserIds = mUserManagerInternal.getProfileIds(userId, true);
+                    int returnCodeOfChild;
+                    for (int childId : childUserIds) {
+                        if (childId == userId) continue;
+                        UserProperties userProperties = mUserManagerInternal
+                                .getUserProperties(childId);
+                        if (userProperties != null && userProperties.getDeleteAppWithParent()) {
+                            returnCodeOfChild = deletePackageX(internalPackageName, versionCode,
+                                    childId, deleteFlags, false /*removedBySystem*/);
+                            if (returnCodeOfChild != PackageManager.DELETE_SUCCEEDED) {
+                                Slog.w(TAG, "Package delete failed for user " + childId
+                                        + ", returnCode " + returnCodeOfChild);
+                                returnCode = PackageManager.DELETE_FAILED_FOR_CHILD_PROFILE;
+                            }
+                        }
+                    }
                 } else {
                     int[] blockUninstallUserIds = getBlockUninstallForUsers(innerSnapshot,
                             internalPackageName, users);
@@ -832,7 +853,7 @@ final class DeletePackageHelper {
 
     private boolean isCallerAllowedToSilentlyUninstall(@NonNull Computer snapshot, int callingUid,
             String pkgName, int userId) {
-        if (callingUid == Process.SHELL_UID || callingUid == Process.ROOT_UID
+        if (PackageManagerServiceUtils.isRootOrShell(callingUid)
                 || UserHandle.getAppId(callingUid) == Process.SYSTEM_UID) {
             return true;
         }

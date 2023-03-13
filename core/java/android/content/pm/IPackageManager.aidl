@@ -281,6 +281,9 @@ interface IPackageManager {
     void addCrossProfileIntentFilter(in IntentFilter intentFilter, String ownerPackage,
             int sourceUserId, int targetUserId, int flags);
 
+    boolean removeCrossProfileIntentFilter(in IntentFilter intentFilter, String ownerPackage,
+                int sourceUserId, int targetUserId, int flags);
+
     void clearCrossProfileIntentFilters(int sourceUserId, String ownerPackage);
 
     String[] setDistractingPackageRestrictionsAsUser(in String[] packageNames, int restrictionFlags,
@@ -571,8 +574,6 @@ interface IPackageManager {
      */
     boolean performDexOptSecondary(String packageName,
             String targetCompilerFilter, boolean force);
-
-    void forceDexOpt(String packageName);
 
     int getMoveStatus(int moveId);
 

@@ -53,6 +53,7 @@ import android.security.keymaster.KeymasterCertificateChain;
 import android.security.keystore.ParcelableKeyGenParameterSpec;
 import android.telephony.data.ApnSetting;
 import com.android.internal.infra.AndroidFuture;
+import android.app.admin.DevicePolicyState;
 
 import java.util.List;
 
@@ -140,7 +141,7 @@ interface IDevicePolicyManager {
 
     boolean requestBugreport(in ComponentName who);
 
-    void setCameraDisabled(in ComponentName who, boolean disabled, boolean parent);
+    void setCameraDisabled(in ComponentName who, String callerPackageName, boolean disabled, boolean parent);
     boolean getCameraDisabled(in ComponentName who, int userHandle, boolean parent);
 
     void setScreenCaptureDisabled(in ComponentName who, boolean disabled, boolean parent);
@@ -246,8 +247,11 @@ interface IDevicePolicyManager {
     void setRestrictionsProvider(in ComponentName who, in ComponentName provider);
     ComponentName getRestrictionsProvider(int userHandle);
 
-    void setUserRestriction(in ComponentName who, in String key, boolean enable, boolean parent);
-    Bundle getUserRestrictions(in ComponentName who, boolean parent);
+    void setUserRestriction(in ComponentName who, in String callerPackage, in String key, boolean enable, boolean parent);
+    void setUserRestrictionGlobally(in String callerPackage, in String key);
+    Bundle getUserRestrictions(in ComponentName who, in String callerPackage, boolean parent);
+    Bundle getUserRestrictionsGlobally(in String callerPackage);
+
     void addCrossProfileIntentFilter(in ComponentName admin, in IntentFilter filter, int flags);
     void clearCrossProfileIntentFilters(in ComponentName admin);
 
@@ -336,6 +340,9 @@ interface IDevicePolicyManager {
     PackagePolicy getManagedProfileCallerIdAccessPolicy();
     boolean hasManagedProfileCallerIdAccess(int userId, String packageName);
 
+    void setCredentialManagerPolicy(in PackagePolicy policy);
+    PackagePolicy getCredentialManagerPolicy();
+
     void setManagedProfileContactsAccessPolicy(in PackagePolicy policy);
     PackagePolicy getManagedProfileContactsAccessPolicy();
     boolean hasManagedProfileContactsAccess(int userId, String packageName);
@@ -375,6 +382,7 @@ interface IDevicePolicyManager {
 
     boolean setKeyguardDisabled(in ComponentName admin, boolean disabled);
     boolean setStatusBarDisabled(in ComponentName who, boolean disabled);
+    boolean isStatusBarDisabled(in String callerPackage);
     boolean getDoNotAskCredentialsOnBoot();
 
     void notifyPendingSystemUpdate(in SystemUpdateInfo info);
@@ -412,7 +420,7 @@ interface IDevicePolicyManager {
     CharSequence getDeviceOwnerOrganizationName();
     CharSequence getOrganizationNameForUser(int userHandle);
 
-    int getUserProvisioningState();
+    int getUserProvisioningState(int userHandle);
     void setUserProvisioningState(int state, int userHandle);
 
     void setAffiliationIds(in ComponentName admin, in List<String> ids);
@@ -550,7 +558,7 @@ interface IDevicePolicyManager {
     int getDeviceOwnerType(in ComponentName admin);
 
     void resetDefaultCrossProfileIntentFilters(int userId);
-    boolean canAdminGrantSensorsPermissionsForUser(int userId);
+    boolean canAdminGrantSensorsPermissions();
 
     void setUsbDataSignalingEnabled(String callerPackage, boolean enabled);
     boolean isUsbDataSignalingEnabled(String callerPackage);
@@ -588,4 +596,10 @@ interface IDevicePolicyManager {
 
     void setManagedSubscriptionsPolicy(in ManagedSubscriptionsPolicy policy);
     ManagedSubscriptionsPolicy getManagedSubscriptionsPolicy();
+
+    DevicePolicyState getDevicePolicyState();
+
+    void setOverrideKeepProfilesRunning(boolean enabled);
+
+    boolean triggerDevicePolicyEngineMigration(boolean forceMigration);
 }

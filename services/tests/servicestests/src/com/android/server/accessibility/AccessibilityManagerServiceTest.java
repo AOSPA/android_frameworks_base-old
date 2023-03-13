@@ -28,6 +28,7 @@ import static com.google.common.truth.Truth.assertThat;
 
 import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
@@ -182,6 +183,7 @@ public class AccessibilityManagerServiceTest {
 
         mA11yms = new AccessibilityManagerService(
                 mTestableContext,
+                mHandler,
                 mMockPackageManager,
                 mMockSecurityPolicy,
                 mMockSystemActionPerformer,
@@ -364,6 +366,7 @@ public class AccessibilityManagerServiceTest {
         );
 
         mA11yms.onMagnificationTransitionEndedLocked(Display.DEFAULT_DISPLAY, true);
+        mHandler.sendAllMessages();
 
         ArgumentCaptor<Display> displayCaptor = ArgumentCaptor.forClass(Display.class);
         verify(mInputFilter, timeout(100)).refreshMagnificationMode(displayCaptor.capture());
@@ -427,6 +430,40 @@ public class AccessibilityManagerServiceTest {
         mA11yms.readMagnificationFollowTypingLocked(userState);
 
         verify(mMockMagnificationController).setMagnificationFollowTypingEnabled(false);
+    }
+
+    @Test
+    public void testSettingsAlwaysOn_setEnabled_featureFlagDisabled_doNothing() {
+        when(mMockMagnificationController.isAlwaysOnMagnificationFeatureFlagEnabled())
+                .thenReturn(false);
+
+        final AccessibilityUserState userState = mA11yms.mUserStates.get(
+                mA11yms.getCurrentUserIdLocked());
+        Settings.Secure.putIntForUser(
+                mTestableContext.getContentResolver(),
+                Settings.Secure.ACCESSIBILITY_MAGNIFICATION_ALWAYS_ON_ENABLED,
+                1, mA11yms.getCurrentUserIdLocked());
+
+        mA11yms.readAlwaysOnMagnificationLocked(userState);
+
+        verify(mMockMagnificationController, never()).setAlwaysOnMagnificationEnabled(anyBoolean());
+    }
+
+    @Test
+    public void testSettingsAlwaysOn_setEnabled_featureFlagEnabled_propagateToController() {
+        when(mMockMagnificationController.isAlwaysOnMagnificationFeatureFlagEnabled())
+                .thenReturn(true);
+
+        final AccessibilityUserState userState = mA11yms.mUserStates.get(
+                mA11yms.getCurrentUserIdLocked());
+        Settings.Secure.putIntForUser(
+                mTestableContext.getContentResolver(),
+                Settings.Secure.ACCESSIBILITY_MAGNIFICATION_ALWAYS_ON_ENABLED,
+                1, mA11yms.getCurrentUserIdLocked());
+
+        mA11yms.readAlwaysOnMagnificationLocked(userState);
+
+        verify(mMockMagnificationController).setAlwaysOnMagnificationEnabled(eq(true));
     }
 
     @SmallTest

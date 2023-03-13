@@ -72,8 +72,7 @@ final class RemoteSpeechRecognitionService extends ServiceConnector.Impl<IRecogn
                 new Intent(RecognitionService.SERVICE_INTERFACE).setComponent(serviceName),
                 Context.BIND_AUTO_CREATE
                         | Context.BIND_FOREGROUND_SERVICE
-                        | Context.BIND_INCLUDE_CAPABILITIES
-                        | Context.BIND_ALLOW_BACKGROUND_ACTIVITY_STARTS,
+                        | Context.BIND_INCLUDE_CAPABILITIES,
                 userId,
                 IRecognitionService.Stub::asInterface);
 
@@ -234,7 +233,9 @@ final class RemoteSpeechRecognitionService extends ServiceConnector.Impl<IRecogn
 
     void checkRecognitionSupport(
             Intent recognizerIntent,
+            AttributionSource attributionSource,
             IRecognitionSupportCallback callback) {
+
         if (!mConnected) {
             try {
                 callback.onError(SpeechRecognizer.ERROR_SERVER_DISCONNECTED);
@@ -244,15 +245,16 @@ final class RemoteSpeechRecognitionService extends ServiceConnector.Impl<IRecogn
             }
             return;
         }
-        run(service -> service.checkRecognitionSupport(recognizerIntent, callback));
+        run(service ->
+                service.checkRecognitionSupport(recognizerIntent, attributionSource, callback));
     }
 
-    void triggerModelDownload(Intent recognizerIntent) {
+    void triggerModelDownload(Intent recognizerIntent, AttributionSource attributionSource) {
         if (!mConnected) {
             Slog.e(TAG, "#downloadModel failed due to connection.");
             return;
         }
-        run(service -> service.triggerModelDownload(recognizerIntent));
+        run(service -> service.triggerModelDownload(recognizerIntent, attributionSource));
     }
 
     void shutdown(IBinder clientToken) {

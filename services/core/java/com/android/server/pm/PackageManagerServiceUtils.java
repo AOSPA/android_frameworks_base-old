@@ -1152,8 +1152,8 @@ public class PackageManagerServiceUtils {
                 throw new IOException("Root has not present");
             }
             return ApkChecksums.verityHashForFile(new File(filename), hashInfo.rawRootHash);
-        } catch (IOException ignore) {
-            Slog.e(TAG, "ERROR: could not load root hash from incremental install");
+        } catch (IOException e) {
+            Slog.i(TAG, "Could not obtain verity root hash", e);
         }
         return null;
     }
@@ -1372,7 +1372,21 @@ public class PackageManagerServiceUtils {
      */
     public static boolean isSystemOrRoot() {
         final int uid = Binder.getCallingUid();
+        return isSystemOrRoot(uid);
+    }
+
+    /**
+     * Check if a UID is system UID or root's UID.
+     */
+    public static boolean isSystemOrRoot(int uid) {
         return uid == Process.SYSTEM_UID || uid == Process.ROOT_UID;
+    }
+
+    /**
+     * Check if a UID is system UID or shell's UID.
+     */
+    public static boolean isRootOrShell(int uid) {
+        return uid == Process.ROOT_UID || uid == Process.SHELL_UID;
     }
 
     /**

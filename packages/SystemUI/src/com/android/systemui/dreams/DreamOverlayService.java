@@ -234,6 +234,13 @@ public class DreamOverlayService extends android.service.dreams.DreamOverlayServ
         });
     }
 
+    @Override
+    public void onEndDream() {
+        mExecutor.execute(() -> {
+            resetCurrentDreamOverlayLocked();
+        });
+    }
+
     private Lifecycle.State getCurrentStateLocked() {
         return mLifecycleRegistry.getCurrentState();
     }
@@ -262,6 +269,8 @@ public class DreamOverlayService extends android.service.dreams.DreamOverlayServ
      */
     private void addOverlayWindowLocked(WindowManager.LayoutParams layoutParams) {
         mWindow = new PhoneWindow(mContext);
+        // Default to SystemUI name for TalkBack.
+        mWindow.setTitle("");
         mWindow.setAttributes(layoutParams);
         mWindow.setWindowManager(null, layoutParams.token, "DreamOverlay", true);
 
@@ -317,6 +326,7 @@ public class DreamOverlayService extends android.service.dreams.DreamOverlayServ
         mDreamOverlayContainerViewController = null;
         mDreamOverlayTouchMonitor = null;
 
+        mWindow = null;
         mStarted = false;
     }
 }

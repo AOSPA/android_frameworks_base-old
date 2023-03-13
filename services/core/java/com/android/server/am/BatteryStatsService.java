@@ -457,6 +457,11 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         }
 
         @Override
+        public void noteCpuWakingNetworkPacket(Network network, long elapsedMillis, int uid) {
+            Slog.d(TAG, "Wakeup due to incoming packet on network " + network + " to uid " + uid);
+        }
+
+        @Override
         public void noteBinderCallStats(int workSourceUid, long incrementatCallCount,
                 Collection<BinderCallsStats.CallStat> callStats) {
             synchronized (BatteryStatsService.this.mLock) {
@@ -477,6 +482,12 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         public void noteCpuWakingActivity(int subsystem, long elapsedMillis, int... uids) {
             Objects.requireNonNull(uids);
             mCpuWakeupStats.noteWakingActivity(subsystem, elapsedMillis, uids);
+        }
+
+        @Override
+        public void noteWakingSoundTrigger(long elapsedMillis, int uid) {
+            // TODO(b/267717665): Pipe to noteCpuWakingActivity once SoundTrigger starts using this.
+            Slog.w(TAG, "Sound trigger event dispatched to uid " + uid);
         }
     }
 
@@ -2875,7 +2886,7 @@ public final class BatteryStatsService extends IBatteryStats.Stub
                                 checkinStats.setPowerProfileLocked(mPowerProfile);
                                 checkinStats.readSummaryFromParcel(in);
                                 in.recycle();
-                                checkinStats.dumpCheckinLocked(mContext, pw, apps, flags,
+                                checkinStats.dumpCheckin(mContext, pw, apps, flags,
                                         historyStart);
                                 mStats.mCheckinFile.delete();
                                 return;
@@ -2887,29 +2898,25 @@ public final class BatteryStatsService extends IBatteryStats.Stub
                     }
                 }
             }
-            if (DBG) Slog.d(TAG, "begin dumpCheckinLocked from UID " + Binder.getCallingUid());
+            if (DBG) Slog.d(TAG, "begin dumpCheckin from UID " + Binder.getCallingUid());
             awaitCompletion();
-            synchronized (mStats) {
-                mStats.dumpCheckinLocked(mContext, pw, apps, flags, historyStart);
-                if (writeData) {
-                    mStats.writeAsyncLocked();
-                }
+            mStats.dumpCheckin(mContext, pw, apps, flags, historyStart);
+            if (writeData) {
+                mStats.writeAsyncLocked();
             }
-            if (DBG) Slog.d(TAG, "end dumpCheckinLocked");
+            if (DBG) Slog.d(TAG, "end dumpCheckin");
         } else {
-            if (DBG) Slog.d(TAG, "begin dumpLocked from UID " + Binder.getCallingUid());
+            if (DBG) Slog.d(TAG, "begin dump from UID " + Binder.getCallingUid());
             awaitCompletion();
 
-            synchronized (mStats) {
-                mStats.dumpLocked(mContext, pw, flags, reqUid, historyStart);
-                if (writeData) {
-                    mStats.writeAsyncLocked();
-                }
+            mStats.dump(mContext, pw, flags, reqUid, historyStart);
+            if (writeData) {
+                mStats.writeAsyncLocked();
             }
             pw.println();
             mCpuWakeupStats.dump(new IndentingPrintWriter(pw, "  "), SystemClock.elapsedRealtime());
 
-            if (DBG) Slog.d(TAG, "end dumpLocked");
+            if (DBG) Slog.d(TAG, "end dump");
         }
     }
 

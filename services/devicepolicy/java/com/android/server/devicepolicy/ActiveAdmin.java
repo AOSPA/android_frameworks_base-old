@@ -174,8 +174,10 @@ class ActiveAdmin {
     private static final String ATTR_LAST_NETWORK_LOGGING_NOTIFICATION = "last-notification";
     private static final String ATTR_NUM_NETWORK_LOGGING_NOTIFICATIONS = "num-notifications";
     private static final String ATTR_PACKAGE_POLICY_MODE = "package-policy-type";
+    private static final String TAG_CREDENTIAL_MANAGER_POLICY = "credential-manager-policy";
 
-
+    // If the ActiveAdmin is a permission-based admin, then info will be null because the
+    // permission-based admin is not mapped to a device administrator component.
     DeviceAdminInfo info;
 
     static final int DEF_PASSWORD_HISTORY_LENGTH = 0;
@@ -332,6 +334,9 @@ class ActiveAdmin {
     // The package policy for Cross Profile Contacts Search
     PackagePolicy mManagedProfileContactsAccess = null;
 
+    // The package policy for Credential Manager
+    PackagePolicy mCredentialManagerPolicy = null;
+
     public String mAlwaysOnVpnPackage;
     public boolean mAlwaysOnVpnLockdown;
     boolean mCommonCriteriaMode;
@@ -374,9 +379,11 @@ class ActiveAdmin {
 
     void writeToXml(TypedXmlSerializer out)
             throws IllegalArgumentException, IllegalStateException, IOException {
-        out.startTag(null, TAG_POLICIES);
-        info.writePoliciesToXml(out);
-        out.endTag(null, TAG_POLICIES);
+        if (info != null) {
+            out.startTag(null, TAG_POLICIES);
+            info.writePoliciesToXml(out);
+            out.endTag(null, TAG_POLICIES);
+        }
         if (mPasswordPolicy.quality != PASSWORD_QUALITY_UNSPECIFIED) {
             writeAttributeValueToXml(
                     out, TAG_PASSWORD_QUALITY, mPasswordPolicy.quality);
@@ -647,6 +654,8 @@ class ActiveAdmin {
                 mManagedProfileCallerIdAccess);
         writePackagePolicy(out, TAG_CROSS_PROFILE_CONTACTS_SEARCH_POLICY,
                 mManagedProfileContactsAccess);
+        writePackagePolicy(out, TAG_CREDENTIAL_MANAGER_POLICY,
+                mCredentialManagerPolicy);
         if (mManagedSubscriptionsPolicy != null) {
             out.startTag(null, TAG_MANAGED_SUBSCRIPTIONS_POLICY);
             mManagedSubscriptionsPolicy.saveToXml(out);
@@ -958,6 +967,8 @@ class ActiveAdmin {
                 mManagedProfileContactsAccess = readPackagePolicy(parser);
             } else if (TAG_MANAGED_SUBSCRIPTIONS_POLICY.equals(tag)) {
                 mManagedSubscriptionsPolicy = ManagedSubscriptionsPolicy.readFromXml(parser);
+            } else if (TAG_CREDENTIAL_MANAGER_POLICY.equals(tag)) {
+                mCredentialManagerPolicy = readPackagePolicy(parser);
             } else {
                 Slogf.w(LOG_TAG, "Unknown admin tag: %s", tag);
                 XmlUtils.skipCurrentTag(parser);
@@ -1180,14 +1191,16 @@ class ActiveAdmin {
         pw.print("testOnlyAdmin=");
         pw.println(testOnlyAdmin);
 
-        pw.println("policies:");
-        ArrayList<DeviceAdminInfo.PolicyInfo> pols = info.getUsedPolicies();
-        if (pols != null) {
-            pw.increaseIndent();
-            for (int i = 0; i < pols.size(); i++) {
-                pw.println(pols.get(i).tag);
+        if (info != null) {
+            pw.println("policies:");
+            ArrayList<DeviceAdminInfo.PolicyInfo> pols = info.getUsedPolicies();
+            if (pols != null) {
+                pw.increaseIndent();
+                for (int i = 0; i < pols.size(); i++) {
+                    pw.println(pols.get(i).tag);
+                }
+                pw.decreaseIndent();
             }
-            pw.decreaseIndent();
         }
 
         pw.print("passwordQuality=0x");
@@ -1332,6 +1345,9 @@ class ActiveAdmin {
         dumpPackagePolicy(pw, "managedProfileContactsPolicy",
                 mManagedProfileContactsAccess);
 
+        dumpPackagePolicy(pw, "credentialManagerPolicy",
+                mCredentialManagerPolicy);
+
         pw.print("isParent=");
         pw.println(isParent);
 
@@ -1430,8 +1446,7 @@ class ActiveAdmin {
         if (mManagedSubscriptionsPolicy != null) {
             pw.println("mManagedSubscriptionsPolicy:");
             pw.increaseIndent();
-            pw.print("mPolicyType=");
-            mManagedSubscriptionsPolicy.getPolicyType();
+            pw.println(mManagedSubscriptionsPolicy);
             pw.decreaseIndent();
         }
     }

@@ -63,6 +63,7 @@ import com.android.systemui.statusbar.notification.DynamicPrivacyController;
 import com.android.systemui.statusbar.notification.NotifPipelineFlags;
 import com.android.systemui.statusbar.notification.collection.NotifCollection;
 import com.android.systemui.statusbar.notification.collection.NotifPipeline;
+import com.android.systemui.statusbar.notification.collection.provider.NotificationDismissibilityProvider;
 import com.android.systemui.statusbar.notification.collection.provider.SeenNotificationsProviderImpl;
 import com.android.systemui.statusbar.notification.collection.provider.VisibilityLocationProviderDelegator;
 import com.android.systemui.statusbar.notification.collection.render.GroupExpansionManager;
@@ -80,6 +81,7 @@ import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.ZenModeController;
 import com.android.systemui.tuner.TunerService;
+import com.android.systemui.util.settings.SecureSettings;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -137,6 +139,7 @@ public class NotificationStackScrollLayoutControllerTest extends SysuiTestCase {
     @Mock private ShadeTransitionController mShadeTransitionController;
     @Mock private FeatureFlags mFeatureFlags;
     @Mock private NotificationTargetsHelper mNotificationTargetsHelper;
+    @Mock private SecureSettings mSecureSettings;
 
     @Captor
     private ArgumentCaptor<StatusBarStateController.StateListener> mStateListenerArgumentCaptor;
@@ -192,7 +195,9 @@ public class NotificationStackScrollLayoutControllerTest extends SysuiTestCase {
                 mLogger,
                 mNotificationStackSizeCalculator,
                 mFeatureFlags,
-                mNotificationTargetsHelper
+                mNotificationTargetsHelper,
+                mSecureSettings,
+                mock(NotificationDismissibilityProvider.class)
         );
 
         when(mNotificationStackScrollLayout.isAttachedToWindow()).thenReturn(true);

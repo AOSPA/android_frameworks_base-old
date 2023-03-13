@@ -17,6 +17,7 @@
 package android.view;
 
 import static android.content.res.Resources.ID_NULL;
+import static android.os.Trace.TRACE_TAG_APP;
 import static android.view.ContentInfo.SOURCE_DRAG_AND_DROP;
 import static android.view.accessibility.AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED;
 import static android.view.displayhash.DisplayHashResultCallback.DISPLAY_HASH_ERROR_INVALID_BOUNDS;
@@ -996,6 +997,22 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Currently zero size SurfaceControl cannot be created thus we create a 1x1 surface instead.
      */
     private static boolean sAcceptZeroSizeDragShadow;
+
+    /**
+     * When true, measure and layout passes of all the newly attached views will be logged with
+     * {@link Trace}, so we can better debug jank due to complex view hierarchies.
+     */
+    private static boolean sTraceLayoutSteps;
+
+    /**
+     * When not null, emits a {@link Trace} instant event and the stacktrace every time a relayout
+     * of a class having this name happens.
+     */
+    private static String sTraceRequestLayoutClass;
+
+    /** Used to avoid computing the full strings each time when layout tracing is enabled. */
+    @Nullable
+    private ViewTraversalTracingStrings mTracingStrings;
 
     /**
      * Prior to R, {@link #dispatchApplyWindowInsets} had an issue:
@@ -3583,6 +3600,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *                  1               PFLAG4_HAS_TRANSLATION_TRANSIENT_STATE
      *                 1                PFLAG4_DRAG_A11Y_STARTED
      *                1                 PFLAG4_AUTO_HANDWRITING_INITIATION_ENABLED
+     *               1                  PFLAG4_IMPORTANT_FOR_CREDENTIAL_MANAGER
+     *              1                   PFLAG4_TRAVERSAL_TRACING_ENABLED
+     *             1                    PFLAG4_RELAYOUT_TRACING_ENABLED
      * |-------|-------|-------|-------|
      */
 
@@ -3668,6 +3688,18 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Indicates that the view is important for Credential Manager.
      */
     private static final int PFLAG4_IMPORTANT_FOR_CREDENTIAL_MANAGER = 0x000020000;
+
+    /**
+     * When set, measure and layout passes of this view will be logged with {@link Trace}, so we
+     * can better debug jank due to complex view hierarchies.
+     */
+    private static final int PFLAG4_TRAVERSAL_TRACING_ENABLED = 0x000040000;
+
+    /**
+     * When set, emits a {@link Trace} instant event and stacktrace every time a requestLayout of
+     * this class happens.
+     */
+    private static final int PFLAG4_RELAYOUT_TRACING_ENABLED = 0x000080000;
 
     /* End of masks for mPrivateFlags4 */
 
@@ -6653,6 +6685,15 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         out.append(mRight);
         out.append(',');
         out.append(mBottom);
+        appendId(out);
+        if (mAutofillId != null) {
+            out.append(" aid="); out.append(mAutofillId);
+        }
+        out.append("}");
+        return out.toString();
+    }
+
+    void appendId(StringBuilder out) {
         final int id = getId();
         if (id != NO_ID) {
             out.append(" #");
@@ -6684,11 +6725,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 }
             }
         }
-        if (mAutofillId != null) {
-            out.append(" aid="); out.append(mAutofillId);
-        }
-        out.append("}");
-        return out.toString();
     }
 
     /**
@@ -7698,8 +7734,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         boolean handled = false;
         final ListenerInfo li = mListenerInfo;
+        boolean shouldPerformHapticFeedback = true;
         if (li != null && li.mOnLongClickListener != null) {
             handled = li.mOnLongClickListener.onLongClick(View.this);
+            if (handled) {
+                shouldPerformHapticFeedback =
+                        li.mOnLongClickListener.onLongClickUseDefaultHapticFeedback(View.this);
+            }
         }
         if (!handled) {
             final boolean isAnchored = !Float.isNaN(x) && !Float.isNaN(y);
@@ -7710,7 +7751,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 handled = showLongClickTooltip((int) x, (int) y);
             }
         }
-        if (handled) {
+        if (handled && shouldPerformHapticFeedback) {
             performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
         }
         return handled;
@@ -8904,9 +8945,31 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         outRect.set(position.left, position.top, position.right, position.bottom);
     }
 
+    /**
+     * Gets the location of this view in window coordinates.
+     *
+     * @param outRect The output location
+     * @param clipToParent Whether to clip child bounds to the parent ones.
+     * @hide
+     */
+    public void getBoundsInWindow(Rect outRect, boolean clipToParent) {
+        if (mAttachInfo == null) {
+            return;
+        }
+        RectF position = mAttachInfo.mTmpTransformRect;
+        getBoundsToWindowInternal(position, clipToParent);
+        outRect.set(Math.round(position.left), Math.round(position.top),
+                Math.round(position.right), Math.round(position.bottom));
+    }
+
     private void getBoundsToScreenInternal(RectF position, boolean clipToParent) {
         position.set(0, 0, mRight - mLeft, mBottom - mTop);
         mapRectFromViewToScreenCoords(position, clipToParent);
+    }
+
+    private void getBoundsToWindowInternal(RectF position, boolean clipToParent) {
+        position.set(0, 0, mRight - mLeft, mBottom - mTop);
+        mapRectFromViewToWindowCoords(position, clipToParent);
     }
 
     /**
@@ -8917,6 +8980,18 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @hide
      */
     public void mapRectFromViewToScreenCoords(RectF rect, boolean clipToParent) {
+        mapRectFromViewToWindowCoords(rect, clipToParent);
+        rect.offset(mAttachInfo.mWindowLeft, mAttachInfo.mWindowTop);
+    }
+
+    /**
+     * Map a rectangle from view-relative coordinates to window-relative coordinates
+     *
+     * @param rect The rectangle to be mapped
+     * @param clipToParent Whether to clip child bounds to the parent ones.
+     * @hide
+     */
+    public void mapRectFromViewToWindowCoords(RectF rect, boolean clipToParent) {
         if (!hasIdentityMatrix()) {
             getMatrix().mapRect(rect);
         }
@@ -8949,8 +9024,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             ViewRootImpl viewRootImpl = (ViewRootImpl) parent;
             rect.offset(0, -viewRootImpl.mCurScrollY);
         }
-
-        rect.offset(mAttachInfo.mWindowLeft, mAttachInfo.mWindowTop);
     }
 
     /**
@@ -10537,6 +10610,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         getBoundsOnScreen(bounds, true);
         info.setBoundsInScreen(bounds);
+        getBoundsInWindow(bounds, true);
+        info.setBoundsInWindow(bounds);
 
         ViewParent parent = getParentForAccessibility();
         if (parent instanceof View) {
@@ -14078,7 +14153,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         // working solution.
         View source = this;
         while (true) {
-            if (source.includeForAccessibility()) {
+            if (source.includeForAccessibility(false)) {
                 source.sendAccessibilityEvent(eventType);
                 return;
             }
@@ -14432,11 +14507,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             // importance, since we'll need to check it later to make sure.
             final boolean maySkipNotify = oldMode == IMPORTANT_FOR_ACCESSIBILITY_AUTO
                     || mode == IMPORTANT_FOR_ACCESSIBILITY_AUTO;
-            final boolean oldIncludeForAccessibility = maySkipNotify && includeForAccessibility();
+            final boolean oldIncludeForAccessibility =
+                    maySkipNotify && includeForAccessibility(false);
             mPrivateFlags2 &= ~PFLAG2_IMPORTANT_FOR_ACCESSIBILITY_MASK;
             mPrivateFlags2 |= (mode << PFLAG2_IMPORTANT_FOR_ACCESSIBILITY_SHIFT)
                     & PFLAG2_IMPORTANT_FOR_ACCESSIBILITY_MASK;
-            if (!maySkipNotify || oldIncludeForAccessibility != includeForAccessibility()) {
+            if (!maySkipNotify || oldIncludeForAccessibility != includeForAccessibility(false)) {
                 notifySubtreeAccessibilityStateChangedIfNeeded();
             } else {
                 notifyViewAccessibilityStateChangedIfNeeded(
@@ -14568,28 +14644,53 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Whether to regard this view for accessibility. A view is regarded for
-     * accessibility if it is important for accessibility or the querying
-     * accessibility service has explicitly requested that view not
-     * important for accessibility are regarded.
-     *
-     * @return Whether to regard the view for accessibility.
-     *
+     * @see #includeForAccessibility(boolean)
      * @hide
      */
     @UnsupportedAppUsage
     public boolean includeForAccessibility() {
-        if (mAttachInfo != null) {
+        return includeForAccessibility(true);
+    }
+
+    /**
+     * Whether to regard this view for accessibility.
+     *
+     * <p>
+     * If this decision is used for generating the accessibility node tree then this returns false
+     * for {@link #isAccessibilityDataPrivate()} views queried by non-accessibility tools.
+     * </p>
+     * <p>
+     * Otherwise, a view is regarded for accessibility if:
+     * <li>the view returns true for {@link #isImportantForAccessibility()}, or</li>
+     * <li>the querying accessibility service has explicitly requested that views not important for
+     * accessibility are regarded by setting
+     * {@link android.accessibilityservice.AccessibilityServiceInfo#FLAG_INCLUDE_NOT_IMPORTANT_VIEWS}</li>
+     * </p>
+     *
+     * @param forNodeTree True if the result of this function will be used for generating a node
+     *                    tree, otherwise false (like when sending {@link AccessibilityEvent}s).
+     * @return Whether to regard the view for accessibility.
+     * @hide
+     */
+    public boolean includeForAccessibility(boolean forNodeTree) {
+        if (mAttachInfo == null) {
+            return false;
+        }
+
+        if (forNodeTree) {
+            // The AccessibilityDataPrivate property should not effect whether this View is
+            // included for consideration when sending AccessibilityEvents. Events copy their
+            // source View's AccessibilityDataPrivate value, and then filtering is done when
+            // AccessibilityManagerService propagates events to each recipient AccessibilityService.
             if (!AccessibilityManager.getInstance(mContext).isRequestFromAccessibilityTool()
                     && isAccessibilityDataPrivate()) {
                 return false;
             }
-
-            return (mAttachInfo.mAccessibilityFetchFlags
-                    & AccessibilityNodeInfo.FLAG_SERVICE_REQUESTS_INCLUDE_NOT_IMPORTANT_VIEWS) != 0
-                    || isImportantForAccessibility();
         }
-        return false;
+
+        return (mAttachInfo.mAccessibilityFetchFlags
+                & AccessibilityNodeInfo.FLAG_SERVICE_REQUESTS_INCLUDE_NOT_IMPORTANT_VIEWS) != 0
+                || isImportantForAccessibility();
     }
 
     /**
@@ -17104,6 +17205,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * This is similar to {@link View#requestUnbufferedDispatch(MotionEvent)}, but does not
      * automatically terminate, and allows the specification of arbitrary input source classes.
      *
+     * <p>Prior to {@link android.os.Build.VERSION_CODES#UPSIDE_DOWN_CAKE}, this method will fail
+     * when this View is not attached to a window.
+     *
      * @param source The combined input source class to request unbuffered dispatch for. All
      *               events coming from these source classes will not be buffered. Set to
      *               {@link InputDevice#SOURCE_CLASS_NONE} in order to return to default behaviour.
@@ -17141,7 +17245,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     void setFlags(int flags, int mask) {
         final boolean accessibilityEnabled =
                 AccessibilityManager.getInstance(mContext).isEnabled();
-        final boolean oldIncludeForAccessibility = accessibilityEnabled && includeForAccessibility();
+        final boolean oldIncludeForAccessibility =
+                accessibilityEnabled && includeForAccessibility(false);
 
         int old = mViewFlags;
         mViewFlags = (mViewFlags & ~mask) | (flags & mask);
@@ -17367,7 +17472,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             if ((changed & FOCUSABLE) != 0 || (changed & VISIBILITY_MASK) != 0
                     || (changed & CLICKABLE) != 0 || (changed & LONG_CLICKABLE) != 0
                     || (changed & CONTEXT_CLICKABLE) != 0) {
-                if (oldIncludeForAccessibility != includeForAccessibility()) {
+                if (oldIncludeForAccessibility != includeForAccessibility(false)) {
                     notifySubtreeAccessibilityStateChangedIfNeeded();
                 } else {
                     notifyViewAccessibilityStateChangedIfNeeded(
@@ -21153,6 +21258,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if (isFocused()) {
             notifyFocusChangeToImeFocusController(true /* hasFocus */);
         }
+
+        if (sTraceLayoutSteps) {
+            setTraversalTracingEnabled(true);
+        }
+        if (sTraceRequestLayoutClass != null
+                && sTraceRequestLayoutClass.equals(getClass().getSimpleName())) {
+            setRelayoutTracingEnabled(true);
+        }
     }
 
     /**
@@ -24052,6 +24165,30 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         return o instanceof ViewGroup && ((ViewGroup) o).isLayoutModeOptical();
     }
 
+    /**
+     * Enable measure/layout debugging on traces.
+     *
+     * @see Trace
+     * @hide
+     */
+    public static void setTraceLayoutSteps(boolean traceLayoutSteps) {
+        sTraceLayoutSteps = traceLayoutSteps;
+    }
+
+    /**
+     * Enable request layout tracing classes with {@code s} simple name.
+     * <p>
+     * When set, a {@link Trace} instant event and a log with the stacktrace is emitted every
+     * time a requestLayout of a class matching {@code s} name happens.
+     * This applies only to views attached from this point onwards.
+     *
+     * @see Trace#instant(long, String)
+     * @hide
+     */
+    public static void setTracedRequestLayoutClassClass(String s) {
+        sTraceRequestLayoutClass = s;
+    }
+
     private boolean setOpticalFrame(int left, int top, int right, int bottom) {
         Insets parentInsets = mParent instanceof View ?
                 ((View) mParent).getOpticalInsets() : Insets.NONE;
@@ -24086,7 +24223,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @SuppressWarnings({"unchecked"})
     public void layout(int l, int t, int r, int b) {
         if ((mPrivateFlags3 & PFLAG3_MEASURE_NEEDED_BEFORE_LAYOUT) != 0) {
+            if (isTraversalTracingEnabled()) {
+                Trace.beginSection(mTracingStrings.onMeasureBeforeLayout);
+            }
             onMeasure(mOldWidthMeasureSpec, mOldHeightMeasureSpec);
+            if (isTraversalTracingEnabled()) {
+                Trace.endSection();
+            }
             mPrivateFlags3 &= ~PFLAG3_MEASURE_NEEDED_BEFORE_LAYOUT;
         }
 
@@ -24099,7 +24242,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 setOpticalFrame(l, t, r, b) : setFrame(l, t, r, b);
 
         if (changed || (mPrivateFlags & PFLAG_LAYOUT_REQUIRED) == PFLAG_LAYOUT_REQUIRED) {
+            if (isTraversalTracingEnabled()) {
+                Trace.beginSection(mTracingStrings.onLayout);
+            }
             onLayout(changed, l, t, r, b);
+            if (isTraversalTracingEnabled()) {
+                Trace.endSection();
+            }
 
             if (shouldDrawRoundScrollbar()) {
                 if(mRoundScrollbarRenderer == null) {
@@ -25828,10 +25977,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @param selected true if the view must be selected, false otherwise
      */
     public void setSelected(boolean selected) {
-        setSelected(selected, true);
-    }
-
-    void setSelected(boolean selected, boolean sendAccessibilityEvent) {
         //noinspection DoubleNegation
         if (((mPrivateFlags & PFLAG_SELECTED) != 0) != selected) {
             mPrivateFlags = (mPrivateFlags & ~PFLAG_SELECTED) | (selected ? PFLAG_SELECTED : 0);
@@ -25839,13 +25984,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             invalidate(true);
             refreshDrawableState();
             dispatchSetSelected(selected);
-            if (sendAccessibilityEvent) {
-                if (selected) {
-                    sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_SELECTED);
-                } else {
-                    notifyViewAccessibilityStateChangedIfNeeded(
-                            AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED);
-                }
+            if (selected) {
+                sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_SELECTED);
+            } else {
+                notifyViewAccessibilityStateChangedIfNeeded(
+                        AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED);
             }
         }
     }
@@ -26665,6 +26808,25 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         return (viewRoot != null && viewRoot.isInLayout());
     }
 
+    /** To be used only for debugging purposes. */
+    private void printStackStrace(String name) {
+        Log.d(VIEW_LOG_TAG, "---- ST:" + name);
+
+        StringBuilder sb = new StringBuilder();
+        StackTraceElement[] stackTraceElements = Thread.currentThread().getStackTrace();
+        int startIndex = 1;
+        int endIndex = Math.min(stackTraceElements.length, startIndex + 20); // max 20 entries.
+        for (int i = startIndex; i < endIndex; i++) {
+            StackTraceElement s = stackTraceElements[i];
+            sb.append(s.getMethodName())
+                    .append("(")
+                    .append(s.getFileName())
+                    .append(":")
+                    .append(s.getLineNumber())
+                    .append(") <- ");
+        }
+        Log.d(VIEW_LOG_TAG, name + ": " + sb);
+    }
     /**
      * Call this when something has changed which has invalidated the
      * layout of this view. This will schedule a layout pass of the view
@@ -26678,6 +26840,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     @CallSuper
     public void requestLayout() {
+        if (isRelayoutTracingEnabled()) {
+            Trace.instantForTrack(TRACE_TAG_APP, "requestLayoutTracing",
+                    mTracingStrings.classSimpleName);
+            printStackStrace(mTracingStrings.requestLayoutStacktracePrefix);
+        }
+
         if (mMeasureCache != null) mMeasureCache.clear();
 
         if (mAttachInfo != null && mAttachInfo.mViewRequestingLayout == null) {
@@ -26771,8 +26939,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
             int cacheIndex = forceLayout ? -1 : mMeasureCache.indexOfKey(key);
             if (cacheIndex < 0 || sIgnoreMeasureCache) {
+                if (isTraversalTracingEnabled()) {
+                    Trace.beginSection(mTracingStrings.onMeasure);
+                }
                 // measure ourselves, this should set the measured dimension flag back
                 onMeasure(widthMeasureSpec, heightMeasureSpec);
+                if (isTraversalTracingEnabled()) {
+                    Trace.endSection();
+                }
                 mPrivateFlags3 &= ~PFLAG3_MEASURE_NEEDED_BEFORE_LAYOUT;
             } else {
                 long value = mMeasureCache.valueAt(cacheIndex);
@@ -27275,7 +27449,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @param flags Additional flags as per {@link HapticFeedbackConstants}.
      */
     public boolean performHapticFeedback(int feedbackConstant, int flags) {
-        if (mAttachInfo == null) {
+        if (feedbackConstant == HapticFeedbackConstants.NO_HAPTICS
+                || mAttachInfo == null) {
             return false;
         }
         //noinspection SimplifiableIfStatement
@@ -29926,6 +30101,19 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
          * @return true if the callback consumed the long click, false otherwise.
          */
         boolean onLongClick(View v);
+
+        /**
+         * Returns whether the default {@link HapticFeedbackConstants#LONG_PRESS} haptic feedback
+         * is performed when this listener has consumed the long click. This method is called
+         * immediately after {@link #onLongClick} has returned true.
+         *
+         * @param v The view that was clicked and held.
+         * @return true to perform the default {@link HapticFeedbackConstants#LONG_PRESS} haptic
+         * feedback, or false if the handler manages all haptics itself.
+         */
+        default boolean onLongClickUseDefaultHapticFeedback(@NonNull View v) {
+            return true;
+        }
     }
 
     /**
@@ -31994,6 +32182,38 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     public boolean isStylusHandwritingAvailable() {
         return getContext().getSystemService(InputMethodManager.class)
                 .isStylusHandwritingAvailable();
+    }
+
+    private void setTraversalTracingEnabled(boolean enabled) {
+        if (enabled) {
+            if (mTracingStrings == null) {
+                mTracingStrings = new ViewTraversalTracingStrings(this);
+            }
+            mPrivateFlags4 |= PFLAG4_TRAVERSAL_TRACING_ENABLED;
+        } else {
+            mPrivateFlags4 &= ~PFLAG4_TRAVERSAL_TRACING_ENABLED;
+        }
+    }
+
+    private boolean isTraversalTracingEnabled() {
+        return (mPrivateFlags4 & PFLAG4_TRAVERSAL_TRACING_ENABLED)
+                == PFLAG4_TRAVERSAL_TRACING_ENABLED;
+    }
+
+    private void setRelayoutTracingEnabled(boolean enabled) {
+        if (enabled) {
+            if (mTracingStrings == null) {
+                mTracingStrings = new ViewTraversalTracingStrings(this);
+            }
+            mPrivateFlags4 |= PFLAG4_RELAYOUT_TRACING_ENABLED;
+        } else {
+            mPrivateFlags4 &= ~PFLAG4_RELAYOUT_TRACING_ENABLED;
+        }
+    }
+
+    private boolean isRelayoutTracingEnabled() {
+        return (mPrivateFlags4 & PFLAG4_RELAYOUT_TRACING_ENABLED)
+                == PFLAG4_RELAYOUT_TRACING_ENABLED;
     }
 
     /**

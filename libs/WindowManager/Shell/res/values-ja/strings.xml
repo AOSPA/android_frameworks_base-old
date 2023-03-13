@@ -49,6 +49,14 @@
     <string name="accessibility_action_divider_top_50" msgid="8649582798829048946">"上 50%"</string>
     <string name="accessibility_action_divider_top_30" msgid="3572788224908570257">"上 30%"</string>
     <string name="accessibility_action_divider_bottom_full" msgid="2831868345092314060">"下部全画面"</string>
+    <!-- no translation found for accessibility_split_left (1713683765575562458) -->
+    <skip />
+    <!-- no translation found for accessibility_split_right (8441001008181296837) -->
+    <skip />
+    <!-- no translation found for accessibility_split_top (2789329702027147146) -->
+    <skip />
+    <!-- no translation found for accessibility_split_bottom (8694551025220868191) -->
+    <skip />
     <string name="one_handed_tutorial_title" msgid="4583241688067426350">"片手モードの使用"</string>
     <string name="one_handed_tutorial_description" msgid="3486582858591353067">"終了するには、画面を下から上にスワイプするか、アプリの任意の場所をタップします"</string>
     <string name="accessibility_action_start_one_handed" msgid="5070337354072861426">"片手モードを開始します"</string>
@@ -84,6 +92,11 @@
     <string name="letterbox_education_reposition_text" msgid="4589957299813220661">"位置を変えるにはアプリの外側をダブルタップしてください"</string>
     <string name="letterbox_education_got_it" msgid="4057634570866051177">"OK"</string>
     <string name="letterbox_education_expand_button_description" msgid="1729796567101129834">"開くと詳細が表示されます。"</string>
+    <string name="letterbox_restart_dialog_title" msgid="8543049527871033505">"再起動して画面をすっきりさせますか？"</string>
+    <string name="letterbox_restart_dialog_description" msgid="6096946078246557848">"アプリを再起動して画面をすっきりさせることはできますが、進捗状況が失われ、保存されていない変更が消える可能性があります"</string>
+    <string name="letterbox_restart_cancel" msgid="1342209132692537805">"キャンセル"</string>
+    <string name="letterbox_restart_restart" msgid="8529976234412442973">"再起動"</string>
+    <string name="letterbox_restart_dialog_checkbox_title" msgid="5252918008140768386">"次回から表示しない"</string>
     <string name="maximize_button_text" msgid="1650859196290301963">"最大化"</string>
     <string name="minimize_button_text" msgid="271592547935841753">"最小化"</string>
     <string name="close_button_text" msgid="2913281996024033299">"閉じる"</string>

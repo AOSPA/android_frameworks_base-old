@@ -62,6 +62,7 @@ import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
@@ -156,24 +157,28 @@ class CustomizationProviderTest : SysuiTestCase() {
                 dumpManager = mock(),
                 userHandle = UserHandle.SYSTEM,
             )
+        val featureFlags =
+            FakeFeatureFlags().apply {
+                set(Flags.CUSTOMIZABLE_LOCK_SCREEN_QUICK_AFFORDANCES, true)
+                set(Flags.LOCKSCREEN_CUSTOM_CLOCKS, true)
+                set(Flags.REVAMPED_WALLPAPER_UI, true)
+                set(Flags.WALLPAPER_FULLSCREEN_PREVIEW, true)
+                set(Flags.FACE_AUTH_REFACTOR, true)
+            }
         underTest.interactor =
             KeyguardQuickAffordanceInteractor(
                 keyguardInteractor =
                     KeyguardInteractor(
                         repository = FakeKeyguardRepository(),
                         commandQueue = commandQueue,
+                        featureFlags = featureFlags,
                     ),
                 registry = mock(),
                 lockPatternUtils = lockPatternUtils,
                 keyguardStateController = keyguardStateController,
                 userTracker = userTracker,
                 activityStarter = activityStarter,
-                featureFlags =
-                    FakeFeatureFlags().apply {
-                        set(Flags.CUSTOMIZABLE_LOCK_SCREEN_QUICK_AFFORDANCES, true)
-                        set(Flags.LOCKSCREEN_CUSTOM_CLOCKS, true)
-                        set(Flags.REVAMPED_WALLPAPER_UI, true)
-                    },
+                featureFlags = featureFlags,
                 repository = { quickAffordanceRepository },
                 launchAnimator = launchAnimator,
             )
@@ -183,6 +188,7 @@ class CustomizationProviderTest : SysuiTestCase() {
                 mainDispatcher = testDispatcher,
                 backgroundHandler = backgroundHandler,
             )
+        underTest.mainDispatcher = UnconfinedTestDispatcher()
 
         underTest.attachInfoForTesting(
             context,

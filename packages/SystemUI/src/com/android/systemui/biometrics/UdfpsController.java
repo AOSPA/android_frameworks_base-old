@@ -50,10 +50,8 @@ import android.os.Trace;
 import android.os.VibrationAttributes;
 import android.os.VibrationEffect;
 import android.util.Log;
-import android.util.RotationUtils;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
-import android.view.Surface;
 import android.view.VelocityTracker;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityManager;
@@ -66,6 +64,8 @@ import com.android.internal.logging.InstanceId;
 import com.android.internal.util.LatencyTracker;
 import com.android.keyguard.FaceAuthApiRequestReason;
 import com.android.keyguard.KeyguardUpdateMonitor;
+import com.android.settingslib.udfps.UdfpsOverlayParams;
+import com.android.settingslib.udfps.UdfpsUtils;
 import com.android.systemui.Dumpable;
 import com.android.systemui.animation.ActivityLaunchAnimator;
 import com.android.systemui.biometrics.dagger.BiometricsBackground;
@@ -97,6 +97,7 @@ import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.concurrency.DelayableExecutor;
 import com.android.systemui.util.concurrency.Execution;
+import com.android.systemui.util.settings.SecureSettings;
 import com.android.systemui.util.time.SystemClock;
 
 import java.io.PrintWriter;
@@ -166,6 +167,8 @@ public class UdfpsController implements DozeReceiver, Dumpable {
     @Nullable private final TouchProcessor mTouchProcessor;
     @NonNull private final SessionTracker mSessionTracker;
     @NonNull private final AlternateBouncerInteractor mAlternateBouncerInteractor;
+    @NonNull private final SecureSettings mSecureSettings;
+    @NonNull private final UdfpsUtils mUdfpsUtils;
 
     // Currently the UdfpsController supports a single UDFPS sensor. If devices have multiple
     // sensors, this, in addition to a lot of the code here, will be updated.
@@ -261,10 +264,10 @@ public class UdfpsController implements DozeReceiver, Dumpable {
                             mLockscreenShadeTransitionController, mConfigurationController,
                             mKeyguardStateController,
                             mUnlockedScreenOffAnimationController,
-                            mUdfpsDisplayMode, requestId, reason, callback,
+                            mUdfpsDisplayMode, mSecureSettings, requestId, reason, callback,
                             (view, event, fromUdfpsView) -> onTouch(requestId, event,
                                     fromUdfpsView), mActivityLaunchAnimator, mFeatureFlags,
-                            mPrimaryBouncerInteractor, mAlternateBouncerInteractor)));
+                            mPrimaryBouncerInteractor, mAlternateBouncerInteractor, mUdfpsUtils)));
         }
 
         @Override
@@ -304,34 +307,15 @@ public class UdfpsController implements DozeReceiver, Dumpable {
                         unconfigureDisplay(view);
                     }
                     tryAodSendFingerUp();
-                    if (acquiredGood) {
-                        mOverlay.onAcquiredGood();
-                    }
                 });
             }
         }
 
         @Override
-        public void onEnrollmentProgress(int sensorId, int remaining) {
-            mFgExecutor.execute(() -> {
-                if (mOverlay == null) {
-                    Log.e(TAG, "onEnrollProgress received but serverRequest is null");
-                    return;
-                }
-                mOverlay.onEnrollmentProgress(remaining);
-            });
-        }
+        public void onEnrollmentProgress(int sensorId, int remaining) { }
 
         @Override
-        public void onEnrollmentHelp(int sensorId) {
-            mFgExecutor.execute(() -> {
-                if (mOverlay == null) {
-                    Log.e(TAG, "onEnrollmentHelp received but serverRequest is null");
-                    return;
-                }
-                mOverlay.onEnrollmentHelp();
-            });
-        }
+        public void onEnrollmentHelp(int sensorId) { }
 
         @Override
         public void setDebugMessage(int sensorId, String message) {
@@ -473,27 +457,6 @@ public class UdfpsController implements DozeReceiver, Dumpable {
                 && mOverlayParams.getSensorBounds().contains((int) x, (int) y);
     }
 
-    private Point getTouchInNativeCoordinates(@NonNull MotionEvent event, int idx) {
-        Point portraitTouch = new Point(
-                (int) event.getRawX(idx),
-                (int) event.getRawY(idx)
-        );
-        final int rot = mOverlayParams.getRotation();
-        if (rot == Surface.ROTATION_90 || rot == Surface.ROTATION_270) {
-            RotationUtils.rotatePoint(portraitTouch,
-                    RotationUtils.deltaRotation(rot, Surface.ROTATION_0),
-                    mOverlayParams.getLogicalDisplayWidth(),
-                    mOverlayParams.getLogicalDisplayHeight()
-            );
-        }
-
-        // Scale the coordinates to native resolution.
-        final float scale = mOverlayParams.getScaleFactor();
-        portraitTouch.x = (int) (portraitTouch.x / scale);
-        portraitTouch.y = (int) (portraitTouch.y / scale);
-        return portraitTouch;
-    }
-
     private void tryDismissingKeyguard() {
         if (!mOnFingerDown) {
             playStartHaptic();
@@ -555,7 +518,8 @@ public class UdfpsController implements DozeReceiver, Dumpable {
         final InstanceId sessionIdProvider = mSessionTracker.getSessionId(
                 getBiometricSessionType());
         final int sessionId = (sessionIdProvider != null) ? sessionIdProvider.getId() : -1;
-        final int touchConfigId = BOUNDING_BOX_TOUCH_CONFIG_ID;
+        final int touchConfigId = mContext.getResources().getInteger(
+                com.android.internal.R.integer.config_selected_udfps_touch_detection);
 
         SysUiStatsLog.write(SysUiStatsLog.BIOMETRIC_TOUCH_REPORTED, biometricTouchReportedTouchType,
                 touchConfigId, sessionId, data.getX(), data.getY(), data.getMinor(),
@@ -710,7 +674,8 @@ public class UdfpsController implements DozeReceiver, Dumpable {
                         break;
                     }
                     // Map the touch to portrait mode if the device is in landscape mode.
-                    final Point scaledTouch = getTouchInNativeCoordinates(event, idx);
+                    final Point scaledTouch = mUdfpsUtils.getTouchInNativeCoordinates(
+                            idx, event, mOverlayParams);
                     if (actionMoveWithinSensorArea) {
                         if (mVelocityTracker == null) {
                             // touches could be injected, so the velocity tracker may not have
@@ -754,16 +719,7 @@ public class UdfpsController implements DozeReceiver, Dumpable {
                                         + "but serverRequest is null");
                                 return;
                             }
-                            // Scale the coordinates to native resolution.
-                            final float scale = mOverlayParams.getScaleFactor();
-                            final float scaledSensorX =
-                                    mOverlayParams.getSensorBounds().centerX() / scale;
-                            final float scaledSensorY =
-                                    mOverlayParams.getSensorBounds().centerY() / scale;
-
-                            mOverlay.onTouchOutsideOfSensorArea(
-                                    scaledTouch.x, scaledTouch.y, scaledSensorX, scaledSensorY,
-                                    mOverlayParams.getRotation());
+                            mOverlay.onTouchOutsideOfSensorArea(scaledTouch);
                         });
                     }
                 }
@@ -834,7 +790,9 @@ public class UdfpsController implements DozeReceiver, Dumpable {
             @NonNull PrimaryBouncerInteractor primaryBouncerInteractor,
             @NonNull SinglePointerTouchProcessor singlePointerTouchProcessor,
             @NonNull SessionTracker sessionTracker,
-            @NonNull AlternateBouncerInteractor alternateBouncerInteractor) {
+            @NonNull AlternateBouncerInteractor alternateBouncerInteractor,
+            @NonNull SecureSettings secureSettings,
+            @NonNull UdfpsUtils udfpsUtils) {
         mContext = context;
         mExecution = execution;
         mVibrator = vibrator;
@@ -875,6 +833,8 @@ public class UdfpsController implements DozeReceiver, Dumpable {
         mBiometricExecutor = biometricsExecutor;
         mPrimaryBouncerInteractor = primaryBouncerInteractor;
         mAlternateBouncerInteractor = alternateBouncerInteractor;
+        mSecureSettings = secureSettings;
+        mUdfpsUtils = udfpsUtils;
 
         mTouchProcessor = mFeatureFlags.isEnabled(Flags.UDFPS_NEW_TOUCH_DETECTION)
                 ? singlePointerTouchProcessor : null;

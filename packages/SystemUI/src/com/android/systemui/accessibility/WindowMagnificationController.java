@@ -49,6 +49,7 @@ import android.provider.Settings;
 import android.util.Log;
 import android.util.Range;
 import android.util.Size;
+import android.util.TypedValue;
 import android.view.Choreographer;
 import android.view.Display;
 import android.view.Gravity;
@@ -76,6 +77,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.graphics.SfVsyncFrameCallbackProvider;
 import com.android.systemui.R;
 import com.android.systemui.model.SysUiState;
+import com.android.systemui.util.settings.SecureSettings;
 
 import java.io.PrintWriter;
 import java.text.NumberFormat;
@@ -96,7 +98,7 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
     // Delay to avoid updating state description too frequently.
     private static final int UPDATE_STATE_DESCRIPTION_DELAY_MS = 100;
     // It should be consistent with the value defined in WindowMagnificationGestureHandler.
-    private static final Range<Float> A11Y_ACTION_SCALE_RANGE = new Range<>(2.0f, 8.0f);
+    private static final Range<Float> A11Y_ACTION_SCALE_RANGE = new Range<>(1.0f, 8.0f);
     private static final float A11Y_CHANGE_SCALE_DIFFERENCE = 1.0f;
     private static final float ANIMATION_BOUNCE_EFFECT_SCALE = 1.05f;
     private static final float[] MAGNIFICATION_SCALE_OPTIONS = {1.0f, 1.4f, 1.8f, 2.5f};
@@ -212,7 +214,9 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
     private static final int MAX_HORIZONTAL_MOVE_ANGLE = 50;
     private static final int HORIZONTAL = 1;
     private static final int VERTICAL = 0;
-    private static final double HORIZONTAL_LOCK_BASE =
+
+    @VisibleForTesting
+    static final double HORIZONTAL_LOCK_BASE =
             Math.tan(Math.toRadians(MAX_HORIZONTAL_MOVE_ANGLE));
 
     private boolean mAllowDiagonalScrolling = false;
@@ -230,7 +234,8 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
             SurfaceControl.Transaction transaction,
             @NonNull WindowMagnifierCallback callback,
             SysUiState sysUiState,
-            @NonNull Supplier<IWindowSession> globalWindowSessionSupplier) {
+            @NonNull Supplier<IWindowSession> globalWindowSessionSupplier,
+            SecureSettings secureSettings) {
         mContext = context;
         mHandler = handler;
         mAnimationController = animationController;
@@ -249,7 +254,7 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
         mWindowBounds = new Rect(mWm.getCurrentWindowMetrics().getBounds());
 
         mResources = mContext.getResources();
-        mScale = Settings.Secure.getFloatForUser(mContext.getContentResolver(),
+        mScale = secureSettings.getFloatForUser(
                 Settings.Secure.ACCESSIBILITY_DISPLAY_MAGNIFICATION_SCALE,
                 mResources.getInteger(R.integer.magnification_default_scale),
                 UserHandle.USER_CURRENT);
@@ -274,7 +279,7 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
 
         mWindowMagnificationSettings =
                 new WindowMagnificationSettings(mContext, mWindowMagnificationSettingsCallback,
-                        mSfVsyncFrameProvider);
+                        mSfVsyncFrameProvider, secureSettings);
 
         // Initialize listeners.
         mMirrorViewRunnable = () -> {
@@ -702,6 +707,11 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
         }
     }
 
+    @VisibleForTesting
+    WindowMagnificationSettings getMagnificationSettings() {
+        return mWindowMagnificationSettings;
+    }
+
     /**
      * Sets the window size with given width and height in pixels without changing the
      * window center. The width or the height will be clamped in the range
@@ -1073,7 +1083,7 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
 
     /**
      * Enables window magnification with specified parameters. If the given scale is <strong>less
-     * than or equal to 1.0f<strong>, then
+     * than 1.0f<strong>, then
      * {@link WindowMagnificationController#deleteWindowMagnification()} will be called instead to
      * be consistent with the behavior of display magnification.
      *
@@ -1091,7 +1101,7 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
      */
     void enableWindowMagnificationInternal(float scale, float centerX, float centerY,
                 float magnificationFrameOffsetRatioX, float magnificationFrameOffsetRatioY) {
-        if (Float.compare(scale, 1.0f)  <= 0) {
+        if (Float.compare(scale, 1.0f) < 0) {
             deleteWindowMagnification();
             return;
         }
@@ -1264,9 +1274,19 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
     }
 
     private void applyResourcesValues() {
-        mMirrorBorderView.setBackgroundColor(mResources.getColor(mEditSizeEnable
-                ? R.color.magnification_border_color_change : R.color.magnification_border_color));
+        // Sets the border appearance for the magnifier window
+        mMirrorBorderView.setBackground(mResources.getDrawable(mEditSizeEnable
+                ? R.drawable.accessibility_window_magnification_background_change
+                : R.drawable.accessibility_window_magnification_background));
 
+        // Changes the corner radius of the mMirrorSurfaceView
+        mMirrorSurfaceView.setCornerRadius(
+                        TypedValue.applyDimension(
+                                TypedValue.COMPLEX_UNIT_DIP,
+                                mEditSizeEnable ? 16f : 28f,
+                                mContext.getResources().getDisplayMetrics()));
+
+        // Sets visibility of components for the magnifier window
         if (mEditSizeEnable) {
             mDragView.setVisibility(View.GONE);
             mCloseView.setVisibility(View.VISIBLE);

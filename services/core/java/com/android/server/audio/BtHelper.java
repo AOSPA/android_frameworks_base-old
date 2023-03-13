@@ -311,7 +311,11 @@ public class BtHelper {
         }
         AudioService.sVolumeLogger.enqueue(new AudioServiceEvents.VolumeEvent(
                 AudioServiceEvents.VolumeEvent.VOL_SET_AVRCP_VOL, index));
-        mA2dp.setAvrcpAbsoluteVolume(index);
+        try {
+            mA2dp.setAvrcpAbsoluteVolume(index);
+        } catch (Exception e) {
+            Log.e(TAG, "Exception while changing abs volume", e);
+        }
     }
 
     /*package*/ synchronized @AudioSystem.AudioFormatNativeEnumForBtCodec int getA2dpCodec(
@@ -319,7 +323,12 @@ public class BtHelper {
         if (mA2dp == null) {
             return AudioSystem.AUDIO_FORMAT_DEFAULT;
         }
-        final BluetoothCodecStatus btCodecStatus = mA2dp.getCodecStatus(device);
+        final BluetoothCodecStatus btCodecStatus = null;
+        try {
+            mA2dp.getCodecStatus(device);
+        } catch (Exception e) {
+            Log.e(TAG, "Exception while getting status of " + device, e);
+        }
         if (btCodecStatus == null) {
             return AudioSystem.AUDIO_FORMAT_DEFAULT;
         }
@@ -618,7 +627,11 @@ public class BtHelper {
         }
         AudioService.sVolumeLogger.enqueue(new AudioServiceEvents.VolumeEvent(
                 AudioServiceEvents.VolumeEvent.VOL_SET_LE_AUDIO_VOL, index, maxIndex));
-        mLeAudio.setVolume(volume);
+        try {
+            mLeAudio.setVolume(volume);
+        } catch (Exception e) {
+            Log.e(TAG, "Exception while setting LE volume", e);
+        }
     }
 
     /*package*/ synchronized void setHearingAidVolume(int index, int streamType,
@@ -644,7 +657,11 @@ public class BtHelper {
             AudioService.sVolumeLogger.enqueue(new AudioServiceEvents.VolumeEvent(
                     AudioServiceEvents.VolumeEvent.VOL_SET_HEARING_AID_VOL, index, gainDB));
         }
-        mHearingAid.setVolume(gainDB);
+        try {
+            mHearingAid.setVolume(gainDB);
+        } catch (Exception e) {
+            Log.i(TAG, "Exception while setting hearing aid volume", e);
+        }
     }
 
     /*package*/ synchronized void onBroadcastScoConnectionState(int state) {
@@ -669,7 +686,7 @@ public class BtHelper {
     }
 
     // @GuardedBy("AudioDeviceBroker.mSetModeLock")
-    @GuardedBy("AudioDeviceBroker.mDeviceStateLock")
+    //@GuardedBy("AudioDeviceBroker.mDeviceStateLock")
     /*package*/ synchronized void resetBluetoothSco() {
         if (AudioService.DEBUG_SCO) {
             Log.i(TAG, "In resetBluetoothSco(), calling clearAllScoClients()");
@@ -687,6 +704,35 @@ public class BtHelper {
         mBluetoothHeadset = null;
     }
 
+    //@GuardedBy("AudioDeviceBroker.mDeviceStateLock")
+    /*package*/ synchronized void onBtProfileDisconnected(int profile) {
+        switch (profile) {
+            case BluetoothProfile.A2DP:
+                mA2dp = null;
+                break;
+            case BluetoothProfile.HEARING_AID:
+                mHearingAid = null;
+                break;
+            case BluetoothProfile.LE_AUDIO:
+                mLeAudio = null;
+                break;
+
+            case BluetoothProfile.A2DP_SINK:
+            case BluetoothProfile.LE_AUDIO_BROADCAST:
+                // shouldn't be received here as profile doesn't involve BtHelper
+                Log.e(TAG, "onBtProfileDisconnected: Not a profile handled by BtHelper "
+                        + BluetoothProfile.getProfileName(profile));
+                break;
+
+            default:
+                // Not a valid profile to disconnect
+                Log.e(TAG, "onBtProfileDisconnected: Not a valid profile to disconnect "
+                        + BluetoothProfile.getProfileName(profile));
+                break;
+        }
+    }
+
+    @GuardedBy("AudioDeviceBroker.mDeviceStateLock")
     /*package*/ synchronized void onBtProfileConnected(int profile, BluetoothProfile proxy) {
         if (profile == BluetoothProfile.HEADSET) {
             onHeadsetProfileConnected((BluetoothHeadset) proxy);
@@ -919,7 +965,6 @@ public class BtHelper {
                     }
                     switch(profile) {
                         case BluetoothProfile.A2DP:
-                        case BluetoothProfile.A2DP_SINK:
                         case BluetoothProfile.HEADSET:
                         case BluetoothProfile.HEARING_AID:
                         case BluetoothProfile.LE_AUDIO:
@@ -929,6 +974,10 @@ public class BtHelper {
                             mDeviceBroker.postBtProfileConnected(profile, proxy);
                             break;
 
+                        case BluetoothProfile.A2DP_SINK:
+                            // no A2DP sink functionality handled by BtHelper
+                        case BluetoothProfile.LE_AUDIO_BROADCAST:
+                            // no broadcast functionality handled by BtHelper
                         default:
                             break;
                     }
@@ -937,14 +986,19 @@ public class BtHelper {
 
                     switch (profile) {
                         case BluetoothProfile.A2DP:
-                        case BluetoothProfile.A2DP_SINK:
                         case BluetoothProfile.HEADSET:
                         case BluetoothProfile.HEARING_AID:
                         case BluetoothProfile.LE_AUDIO:
-                        case BluetoothProfile.LE_AUDIO_BROADCAST:
+                            AudioService.sDeviceLogger.enqueue(new EventLogger.StringEvent(
+                                    "BT profile service: disconnecting "
+                                        + BluetoothProfile.getProfileName(profile) + " profile"));
                             mDeviceBroker.postBtProfileDisconnected(profile);
                             break;
 
+                        case BluetoothProfile.A2DP_SINK:
+                            // no A2DP sink functionality handled by BtHelper
+                        case BluetoothProfile.LE_AUDIO_BROADCAST:
+                            // no broadcast functionality handled by BtHelper
                         default:
                             break;
                     }

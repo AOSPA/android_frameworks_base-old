@@ -79,12 +79,14 @@ import android.hardware.display.DisplayManagerInternal.DisplayTransactionListene
 import android.hardware.display.DisplayViewport;
 import android.hardware.display.DisplayedContentSample;
 import android.hardware.display.DisplayedContentSamplingAttributes;
+import android.hardware.display.HdrConversionMode;
 import android.hardware.display.IDisplayManager;
 import android.hardware.display.IDisplayManagerCallback;
 import android.hardware.display.IVirtualDisplayCallback;
 import android.hardware.display.VirtualDisplayConfig;
 import android.hardware.display.WifiDisplayStatus;
 import android.hardware.graphics.common.DisplayDecorationSupport;
+import android.hardware.input.HostUsiVersion;
 import android.media.projection.IMediaProjection;
 import android.media.projection.IMediaProjectionManager;
 import android.net.Uri;
@@ -141,6 +143,7 @@ import com.android.server.SystemService;
 import com.android.server.UiThread;
 import com.android.server.companion.virtual.VirtualDeviceManagerInternal;
 import com.android.server.display.DisplayDeviceConfig.SensorData;
+import com.android.server.display.layout.Layout;
 import com.android.server.display.utils.SensorUtils;
 import com.android.server.input.InputManagerInternal;
 import com.android.server.wm.SurfaceAnimationThread;
@@ -234,11 +237,19 @@ public final class DisplayManagerService extends SystemService {
     private InputManagerInternal mInputManagerInternal;
     private IMediaProjectionManager mProjectionService;
     private DeviceStateManagerInternal mDeviceStateManager;
+    @GuardedBy("mSyncRoot")
     private int[] mUserDisabledHdrTypes = {};
+    private int[] mSupportedHdrOutputType;
+    @GuardedBy("mSyncRoot")
     private boolean mAreUserDisabledHdrTypesAllowed = true;
 
     // Display mode chosen by user.
     private Display.Mode mUserPreferredMode;
+    // HDR conversion mode chosen by user
+    @GuardedBy("mSyncRoot")
+    private HdrConversionMode mHdrConversionMode = null;
+    // Actual HDR conversion mode, which takes app overrides into account.
+    private HdrConversionMode mOverrideHdrConversionMode = null;
 
     // The synchronization root for the display manager.
     // This lock guards most of the display manager's state.
@@ -648,6 +659,7 @@ public final class DisplayManagerService extends SystemService {
             updateSettingsLocked();
             updateUserDisabledHdrTypesFromSettingsLocked();
             updateUserPreferredDisplayModeSettingsLocked();
+            updateHdrConversionModeSettingsLocked();
         }
 
         mDisplayModeDirector.setDesiredDisplayModeSpecsListener(
@@ -891,8 +903,8 @@ public final class DisplayManagerService extends SystemService {
     }
 
     private void clearUserDisabledHdrTypesLocked() {
-        mUserDisabledHdrTypes = new int[]{};
         synchronized (mSyncRoot) {
+            mUserDisabledHdrTypes = new int[]{};
             Settings.Global.putString(mContext.getContentResolver(),
                     Settings.Global.USER_DISABLED_HDR_FORMATS, "");
         }
@@ -1331,8 +1343,9 @@ public final class DisplayManagerService extends SystemService {
 
         if (projection != null) {
             try {
-                if (!getProjectionService().isValidMediaProjection(projection)) {
-                    throw new SecurityException("Invalid media projection");
+                if (!getProjectionService().isCurrentProjection(projection)) {
+                    throw new SecurityException("Cannot create VirtualDisplay with "
+                            + "non-current MediaProjection");
                 }
                 flags = projection.applyVirtualDisplayFlags(flags);
             } catch (RemoteException e) {
@@ -1666,9 +1679,37 @@ public final class DisplayManagerService extends SystemService {
                 return;
             }
 
+            final int leadDisplayId = display.getLeadDisplayIdLocked();
+            updateDisplayPowerControllerLeaderLocked(dpc, leadDisplayId);
+
             final String uniqueId = device.getUniqueId();
             HighBrightnessModeMetadata hbmMetadata = mHighBrightnessModeMetadataMap.get(uniqueId);
-            dpc.onDisplayChanged(hbmMetadata);
+            dpc.onDisplayChanged(hbmMetadata, leadDisplayId);
+        }
+    }
+
+    private void updateDisplayPowerControllerLeaderLocked(DisplayPowerControllerInterface dpc,
+            int leadDisplayId) {
+        if (dpc.getLeadDisplayId() == leadDisplayId) {
+            // Lead display hasn't changed, nothing to do.
+            return;
+        }
+
+        // If it has changed, then we need to unregister from the previous leader if there was one.
+        final int prevLeaderId = dpc.getLeadDisplayId();
+        if (prevLeaderId != Layout.NO_LEAD_DISPLAY) {
+            final DisplayPowerControllerInterface prevLeader =
+                    mDisplayPowerControllers.get(prevLeaderId);
+            if (prevLeader != null) {
+                prevLeader.removeDisplayBrightnessFollower(dpc);
+            }
+        }
+
+        // And then, if it's following, register it with the new one.
+        if (leadDisplayId != Layout.NO_LEAD_DISPLAY) {
+            final DisplayPowerControllerInterface newLead =
+                    mDisplayPowerControllers.get(leadDisplayId);
+            newLead.addDisplayBrightnessFollower(dpc);
         }
     }
 
@@ -1717,6 +1758,10 @@ public final class DisplayManagerService extends SystemService {
         mHandler.sendEmptyMessage(MSG_LOAD_BRIGHTNESS_CONFIGURATIONS);
     }
 
+    private void handleLogicalDisplayHdrSdrRatioChangedLocked(@NonNull LogicalDisplay display) {
+        sendDisplayEventLocked(display, DisplayManagerGlobal.EVENT_DISPLAY_HDR_SDR_RATIO_CHANGED);
+    }
+
     private void notifyDefaultDisplayDeviceUpdated(LogicalDisplay display) {
         mDisplayModeDirector.defaultDisplayDeviceUpdated(display.getPrimaryDisplayDeviceLocked()
                 .mDisplayDeviceConfig);
@@ -1732,9 +1777,13 @@ public final class DisplayManagerService extends SystemService {
                         + display.getDisplayIdLocked());
                 return;
             }
+
+            final int leadDisplayId = display.getLeadDisplayIdLocked();
+            updateDisplayPowerControllerLeaderLocked(dpc, leadDisplayId);
+
             final String uniqueId = device.getUniqueId();
             HighBrightnessModeMetadata hbmMetadata = mHighBrightnessModeMetadataMap.get(uniqueId);
-            dpc.onDisplayChanged(hbmMetadata);
+            dpc.onDisplayChanged(hbmMetadata, leadDisplayId);
         }
     }
 
@@ -1803,6 +1852,31 @@ public final class DisplayManagerService extends SystemService {
             modeBuilder.setRefreshRate(refreshRate);
         }
         device.setUserPreferredDisplayModeLocked(modeBuilder.build());
+    }
+
+    @GuardedBy("mSyncRoot")
+    private void storeHdrConversionModeLocked(HdrConversionMode hdrConversionMode) {
+        Settings.Global.putInt(mContext.getContentResolver(),
+                Settings.Global.HDR_CONVERSION_MODE, hdrConversionMode.getConversionMode());
+        final int preferredHdrOutputType =
+                hdrConversionMode.getConversionMode() == HdrConversionMode.HDR_CONVERSION_FORCE
+                        ? hdrConversionMode.getPreferredHdrOutputType()
+                        : Display.HdrCapabilities.HDR_TYPE_INVALID;
+        Settings.Global.putInt(mContext.getContentResolver(),
+                Settings.Global.HDR_FORCE_CONVERSION_TYPE, preferredHdrOutputType);
+    }
+
+    @GuardedBy("mSyncRoot")
+    void updateHdrConversionModeSettingsLocked() {
+        final int conversionMode = Settings.Global.getInt(mContext.getContentResolver(),
+                Settings.Global.HDR_CONVERSION_MODE, HdrConversionMode.HDR_CONVERSION_SYSTEM);
+        final int preferredHdrOutputType = conversionMode == HdrConversionMode.HDR_CONVERSION_FORCE
+                ? Settings.Global.getInt(mContext.getContentResolver(),
+                Settings.Global.HDR_FORCE_CONVERSION_TYPE,
+                        Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION)
+                : Display.HdrCapabilities.HDR_TYPE_INVALID;
+        mHdrConversionMode = new HdrConversionMode(conversionMode, preferredHdrOutputType);
+        setHdrConversionModeInternal(mHdrConversionMode);
     }
 
     // If we've never recorded stable device stats for this device before and they aren't
@@ -1915,6 +1989,24 @@ public final class DisplayManagerService extends SystemService {
         });
     }
 
+    @GuardedBy("mSyncRoot")
+    private int[] getEnabledAutoHdrTypesLocked() {
+        IntArray autoHdrOutputTypesArray = new IntArray();
+        for (int type : getSupportedHdrOutputTypesInternal()) {
+            boolean isDisabled = false;
+            for (int disabledType : mUserDisabledHdrTypes) {
+                if (type == disabledType) {
+                    isDisabled = true;
+                    break;
+                }
+            }
+            if (!isDisabled) {
+                autoHdrOutputTypesArray.add(type);
+            }
+        }
+        return autoHdrOutputTypesArray.toArray();
+    }
+
     Display.Mode getUserPreferredDisplayModeInternal(int displayId) {
         synchronized (mSyncRoot) {
             if (displayId == Display.INVALID_DISPLAY) {
@@ -1936,6 +2028,60 @@ public final class DisplayManagerService extends SystemService {
             }
             return device.getSystemPreferredDisplayModeLocked();
         }
+    }
+
+    // TODO (b/264979880) - Add unit test for HDR output control methods.
+    private void setHdrConversionModeInternal(HdrConversionMode hdrConversionMode) {
+        int[] autoHdrOutputTypes = null;
+        synchronized (mSyncRoot) {
+            mHdrConversionMode = hdrConversionMode;
+            storeHdrConversionModeLocked(mHdrConversionMode);
+
+            // For auto mode, all supported HDR types are allowed except the ones specifically
+            // disabled by the user.
+            if (hdrConversionMode.getConversionMode() == HdrConversionMode.HDR_CONVERSION_SYSTEM) {
+                autoHdrOutputTypes = getEnabledAutoHdrTypesLocked();
+            }
+
+            if (!mInjector.getHdrOutputConversionSupport()) {
+                return;
+            }
+            // If the HDR conversion is disabled by an app through WindowManager.LayoutParams, then
+            // set HDR conversion mode to HDR_CONVERSION_PASSTHROUGH.
+            if (mOverrideHdrConversionMode == null) {
+                mInjector.setHdrConversionMode(hdrConversionMode.getConversionMode(),
+                        hdrConversionMode.getPreferredHdrOutputType(), autoHdrOutputTypes);
+            } else {
+                mInjector.setHdrConversionMode(mOverrideHdrConversionMode.getConversionMode(),
+                        mOverrideHdrConversionMode.getPreferredHdrOutputType(), null);
+            }
+        }
+    }
+
+    private HdrConversionMode getHdrConversionModeSettingInternal() {
+        synchronized (mSyncRoot) {
+            if (mHdrConversionMode != null) {
+                return mHdrConversionMode;
+            }
+        }
+        return new HdrConversionMode(HdrConversionMode.HDR_CONVERSION_SYSTEM);
+    }
+
+    private HdrConversionMode getHdrConversionModeInternal() {
+        HdrConversionMode mode;
+        synchronized (mSyncRoot) {
+            mode = mOverrideHdrConversionMode != null
+                    ? mOverrideHdrConversionMode
+                    : mHdrConversionMode;
+        }
+        return mode != null ? mode : new HdrConversionMode(HdrConversionMode.HDR_CONVERSION_SYSTEM);
+    }
+
+    private @Display.HdrCapabilities.HdrType int[] getSupportedHdrOutputTypesInternal() {
+        if (mSupportedHdrOutputType == null) {
+            mSupportedHdrOutputType = mInjector.getSupportedHdrOutputTypes();
+        }
+        return mSupportedHdrOutputType;
     }
 
     void setShouldAlwaysRespectAppRequestedModeInternal(boolean enabled) {
@@ -2073,7 +2219,7 @@ public final class DisplayManagerService extends SystemService {
     private void setDisplayPropertiesInternal(int displayId, boolean hasContent,
             float requestedRefreshRate, int requestedModeId, float requestedMinRefreshRate,
             float requestedMaxRefreshRate, boolean preferMinimalPostProcessing,
-            boolean inTraversal) {
+            boolean disableHdrConversion, boolean inTraversal) {
         synchronized (mSyncRoot) {
             final LogicalDisplay display = mLogicalDisplayMapper.getDisplayLocked(displayId);
             if (display == null) {
@@ -2117,6 +2263,20 @@ public final class DisplayManagerService extends SystemService {
 
             if (shouldScheduleTraversal) {
                 scheduleTraversalLocked(inTraversal);
+            }
+
+            if (mHdrConversionMode == null) {
+                return;
+            }
+            if (mOverrideHdrConversionMode == null && disableHdrConversion) {
+                mOverrideHdrConversionMode =
+                            new HdrConversionMode(HdrConversionMode.HDR_CONVERSION_PASSTHROUGH);
+                setHdrConversionModeInternal(mHdrConversionMode);
+                handleLogicalDisplayChangedLocked(display);
+            } else if (mOverrideHdrConversionMode != null && !disableHdrConversion) {
+                mOverrideHdrConversionMode = null;
+                setHdrConversionModeInternal(mHdrConversionMode);
+                handleLogicalDisplayChangedLocked(display);
             }
         }
     }
@@ -2345,7 +2505,9 @@ public final class DisplayManagerService extends SystemService {
                 }
                 // fallthrough
             default:
-                Slog.w(TAG, "Display " + info + " does not support input device matching.");
+                if (DEBUG) {
+                    Slog.w(TAG, "Display " + info + " does not support input device matching.");
+                }
         }
         return Optional.empty();
     }
@@ -2559,6 +2721,10 @@ public final class DisplayManagerService extends SystemService {
                 }
             }
 
+            if (mHdrConversionMode != null) {
+                pw.println("  mHdrConversionMode=" + mHdrConversionMode);
+            }
+
             pw.println();
             final int displayStateCount = mDisplayStates.size();
             pw.println("Display States: size=" + displayStateCount);
@@ -2669,6 +2835,20 @@ public final class DisplayManagerService extends SystemService {
 
         long getDefaultDisplayDelayTimeout() {
             return WAIT_FOR_DEFAULT_DISPLAY_TIMEOUT;
+        }
+
+        void setHdrConversionMode(int conversionMode, int preferredHdrOutputType,
+                int[] autoHdrTypes) {
+            DisplayControl.setHdrConversionMode(conversionMode, preferredHdrOutputType,
+                    autoHdrTypes);
+        }
+
+        int[] getSupportedHdrOutputTypes() {
+            return DisplayControl.getSupportedHdrOutputTypes();
+        }
+
+        boolean getHdrOutputConversionSupport() {
+            return DisplayControl.getHdrOutputConversionSupport();
         }
     }
 
@@ -2870,6 +3050,10 @@ public final class DisplayManagerService extends SystemService {
                 case LogicalDisplayMapper.LOGICAL_DISPLAY_EVENT_DEVICE_STATE_TRANSITION:
                     handleLogicalDisplayDeviceStateTransitionLocked(display);
                     break;
+
+                case LogicalDisplayMapper.LOGICAL_DISPLAY_EVENT_HDR_SDR_RATIO_CHANGED:
+                    handleLogicalDisplayHdrSdrRatioChangedLocked(display);
+                    break;
             }
         }
 
@@ -2939,6 +3123,8 @@ public final class DisplayManagerService extends SystemService {
                     return (mask & DisplayManager.EVENT_FLAG_DISPLAY_BRIGHTNESS) != 0;
                 case DisplayManagerGlobal.EVENT_DISPLAY_REMOVED:
                     return (mask & DisplayManager.EVENT_FLAG_DISPLAY_REMOVED) != 0;
+                case DisplayManagerGlobal.EVENT_DISPLAY_HDR_SDR_RATIO_CHANGED:
+                    return (mask & DisplayManager.EVENT_FLAG_HDR_SDR_RATIO_CHANGED) != 0;
                 default:
                     // This should never happen.
                     Slog.e(TAG, "Unknown display event " + event);
@@ -3210,7 +3396,9 @@ public final class DisplayManagerService extends SystemService {
 
         @Override // Binder call
         public int[] getUserDisabledHdrTypes() {
-            return mUserDisabledHdrTypes;
+            synchronized (mSyncRoot) {
+                return mUserDisabledHdrTypes;
+            }
         }
 
         @Override // Binder call
@@ -3629,6 +3817,50 @@ public final class DisplayManagerService extends SystemService {
         }
 
         @Override // Binder call
+        public void setHdrConversionMode(HdrConversionMode hdrConversionMode) {
+            mContext.enforceCallingOrSelfPermission(
+                    Manifest.permission.MODIFY_HDR_CONVERSION_MODE,
+                    "Permission required to set the HDR conversion mode.");
+            final long token = Binder.clearCallingIdentity();
+            try {
+                setHdrConversionModeInternal(hdrConversionMode);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override // Binder call
+        public HdrConversionMode getHdrConversionModeSetting() {
+            final long token = Binder.clearCallingIdentity();
+            try {
+                return getHdrConversionModeSettingInternal();
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override // Binder call
+        public HdrConversionMode getHdrConversionMode() {
+            final long token = Binder.clearCallingIdentity();
+            try {
+                return getHdrConversionModeInternal();
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Display.HdrCapabilities.HdrType
+        @Override // Binder call
+        public int[] getSupportedHdrOutputTypes() {
+            final long token = Binder.clearCallingIdentity();
+            try {
+                return getSupportedHdrOutputTypesInternal();
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override // Binder call
         public void setShouldAlwaysRespectAppRequestedMode(boolean enabled) {
             mContext.enforceCallingOrSelfPermission(
                     Manifest.permission.OVERRIDE_DISPLAY_MODE_REQUESTS,
@@ -3881,10 +4113,10 @@ public final class DisplayManagerService extends SystemService {
         public void setDisplayProperties(int displayId, boolean hasContent,
                 float requestedRefreshRate, int requestedMode, float requestedMinRefreshRate,
                 float requestedMaxRefreshRate, boolean requestedMinimalPostProcessing,
-                boolean inTraversal) {
+                boolean disableHdrConversion, boolean inTraversal) {
             setDisplayPropertiesInternal(displayId, hasContent, requestedRefreshRate,
                     requestedMode, requestedMinRefreshRate, requestedMaxRefreshRate,
-                    requestedMinimalPostProcessing, inTraversal);
+                    requestedMinimalPostProcessing, disableHdrConversion, inTraversal);
         }
 
         @Override
@@ -4076,6 +4308,36 @@ public final class DisplayManagerService extends SystemService {
             }
 
             return SurfaceControl.getDisplayNativePrimaries(displayToken);
+        }
+
+        @Override
+        public HostUsiVersion getHostUsiVersion(int displayId) {
+            synchronized (mSyncRoot) {
+                final LogicalDisplay display = mLogicalDisplayMapper.getDisplayLocked(displayId);
+                if (display == null) {
+                    return null;
+                }
+
+                return display.getPrimaryDisplayDeviceLocked().getDisplayDeviceConfig()
+                        .getHostUsiVersion();
+            }
+        }
+
+        @Override
+        public IntArray getDisplayGroupIds() {
+            Set<Integer> visitedIds = new ArraySet<>();
+            IntArray displayGroupIds = new IntArray();
+            synchronized (mSyncRoot) {
+                mLogicalDisplayMapper.forEachLocked(logicalDisplay -> {
+                    int groupId = mLogicalDisplayMapper.getDisplayGroupIdFromDisplayIdLocked(
+                            logicalDisplay.getDisplayIdLocked());
+                    if (!visitedIds.contains(groupId)) {
+                        visitedIds.add(groupId);
+                        displayGroupIds.add(groupId);
+                    }
+                });
+            }
+            return displayGroupIds;
         }
     }
 

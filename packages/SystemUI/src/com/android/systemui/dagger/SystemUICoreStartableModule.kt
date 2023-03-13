@@ -27,10 +27,14 @@ import com.android.systemui.accessibility.WindowMagnification
 import com.android.systemui.biometrics.AuthController
 import com.android.systemui.biometrics.UdfpsOverlay
 import com.android.systemui.clipboardoverlay.ClipboardListener
+import com.android.systemui.controls.dagger.StartControlsStartableModule
 import com.android.systemui.dagger.qualifiers.PerUser
+import com.android.systemui.dreams.AssistantAttentionMonitor
+import com.android.systemui.dreams.DreamMonitor
 import com.android.systemui.globalactions.GlobalActionsComponent
 import com.android.systemui.keyboard.KeyboardUI
 import com.android.systemui.keyguard.KeyguardViewMediator
+import com.android.systemui.keyguard.data.quickaffordance.MuteQuickAffordanceCoreStartable
 import com.android.systemui.log.SessionTracker
 import com.android.systemui.media.dialog.MediaOutputSwitcherDialogUI
 import com.android.systemui.media.RingtonePlayer
@@ -53,7 +57,6 @@ import com.android.systemui.theme.ThemeOverlayController
 import com.android.systemui.toast.ToastUI
 import com.android.systemui.usb.StorageNotification
 import com.android.systemui.util.NotificationChannels
-import com.android.systemui.util.leak.GarbageMonitor
 import com.android.systemui.volume.VolumeUI
 import com.android.systemui.wmshell.WMShell
 import dagger.Binds
@@ -64,7 +67,10 @@ import dagger.multibindings.IntoMap
 /**
  * Collection of {@link CoreStartable}s that should be run on AOSP.
  */
-@Module(includes = [MultiUserUtilsModule::class])
+@Module(includes = [
+    MultiUserUtilsModule::class,
+    StartControlsStartableModule::class
+])
 abstract class SystemUICoreStartableModule {
     /** Inject into AuthController.  */
     @Binds
@@ -101,12 +107,6 @@ abstract class SystemUICoreStartableModule {
     @IntoMap
     @ClassKey(FsiChromeViewBinder::class)
     abstract fun bindFsiChromeWindowBinder(sysui: FsiChromeViewBinder): CoreStartable
-
-    /** Inject into GarbageMonitor.Service.  */
-    @Binds
-    @IntoMap
-    @ClassKey(GarbageMonitor::class)
-    abstract fun bindGarbageMonitorService(sysui: GarbageMonitor.Service): CoreStartable
 
     /** Inject into GlobalActionsComponent.  */
     @Binds
@@ -293,4 +293,24 @@ abstract class SystemUICoreStartableModule {
     @IntoMap
     @ClassKey(StylusUsiPowerStartable::class)
     abstract fun bindStylusUsiPowerStartable(sysui: StylusUsiPowerStartable): CoreStartable
+
+    /** Inject into MuteQuickAffordanceCoreStartable*/
+    @Binds
+    @IntoMap
+    @ClassKey(MuteQuickAffordanceCoreStartable::class)
+    abstract fun bindMuteQuickAffordanceCoreStartable(
+            sysui: MuteQuickAffordanceCoreStartable
+    ): CoreStartable
+
+    /**Inject into DreamMonitor */
+    @Binds
+    @IntoMap
+    @ClassKey(DreamMonitor::class)
+    abstract fun bindDreamMonitor(sysui: DreamMonitor): CoreStartable
+
+    /**Inject into AssistantAttentionMonitor */
+    @Binds
+    @IntoMap
+    @ClassKey(AssistantAttentionMonitor::class)
+    abstract fun bindAssistantAttentionMonitor(sysui: AssistantAttentionMonitor): CoreStartable
 }

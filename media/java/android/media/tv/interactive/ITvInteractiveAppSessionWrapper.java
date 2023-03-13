@@ -95,6 +95,13 @@ public class ITvInteractiveAppSessionWrapper
     private static final int DO_NOTIFY_TIME_SHIFT_START_POSITION_CHANGED = 38;
     private static final int DO_NOTIFY_TIME_SHIFT_CURRENT_POSITION_CHANGED = 39;
     private static final int DO_SEND_CURRENT_VIDEO_BOUNDS = 40;
+    private static final int DO_NOTIFY_RECORDING_CONNECTION_FAILED = 41;
+    private static final int DO_NOTIFY_RECORDING_DISCONNECTED = 42;
+    private static final int DO_NOTIFY_RECORDING_TUNED = 43;
+    private static final int DO_NOTIFY_RECORDING_ERROR = 44;
+    private static final int DO_NOTIFY_RECORDING_SCHEDULED = 45;
+    private static final int DO_SEND_TIME_SHIFT_MODE = 46;
+    private static final int DO_SEND_AVAILABLE_SPEEDS = 47;
 
     private final HandlerCaller mCaller;
     private Session mSessionImpl;
@@ -182,6 +189,14 @@ public class ITvInteractiveAppSessionWrapper
                 mSessionImpl.sendCurrentTvInputId((String) msg.obj);
                 break;
             }
+            case DO_SEND_TIME_SHIFT_MODE: {
+                mSessionImpl.sendTimeShiftMode((Integer) msg.obj);
+                break;
+            }
+            case DO_SEND_AVAILABLE_SPEEDS: {
+                mSessionImpl.sendAvailableSpeeds((float[]) msg.obj);
+                break;
+            }
             case DO_SEND_RECORDING_INFO: {
                 mSessionImpl.sendTvRecordingInfo((TvRecordingInfo) msg.obj);
                 break;
@@ -191,7 +206,9 @@ public class ITvInteractiveAppSessionWrapper
                 break;
             }
             case DO_NOTIFY_RECORDING_STARTED: {
-                mSessionImpl.notifyRecordingStarted((String) msg.obj);
+                SomeArgs args = (SomeArgs) msg.obj;
+                mSessionImpl.notifyRecordingStarted((String) args.arg1, (String) args.arg2);
+                args.recycle();
                 break;
             }
             case DO_NOTIFY_RECORDING_STOPPED: {
@@ -311,6 +328,37 @@ public class ITvInteractiveAppSessionWrapper
                 args.recycle();
                 break;
             }
+            case DO_NOTIFY_RECORDING_CONNECTION_FAILED: {
+                SomeArgs args = (SomeArgs) msg.obj;
+                mSessionImpl.notifyRecordingConnectionFailed(
+                        (String) args.arg1, (String) args.arg2);
+                args.recycle();
+                break;
+            }
+            case DO_NOTIFY_RECORDING_DISCONNECTED: {
+                SomeArgs args = (SomeArgs) msg.obj;
+                mSessionImpl.notifyRecordingDisconnected((String) args.arg1, (String) args.arg2);
+                args.recycle();
+                break;
+            }
+            case DO_NOTIFY_RECORDING_TUNED: {
+                SomeArgs args = (SomeArgs) msg.obj;
+                mSessionImpl.notifyRecordingTuned((String) args.arg1, (Uri) args.arg2);
+                args.recycle();
+                break;
+            }
+            case DO_NOTIFY_RECORDING_ERROR: {
+                SomeArgs args = (SomeArgs) msg.obj;
+                mSessionImpl.notifyRecordingError((String) args.arg1, (Integer) args.arg2);
+                args.recycle();
+                break;
+            }
+            case DO_NOTIFY_RECORDING_SCHEDULED: {
+                SomeArgs args = (SomeArgs) msg.obj;
+                mSessionImpl.notifyRecordingScheduled((String) args.arg1, (String) args.arg2);
+                args.recycle();
+                break;
+            }
             default: {
                 Log.w(TAG, "Unhandled message code: " + msg.what);
                 break;
@@ -396,6 +444,18 @@ public class ITvInteractiveAppSessionWrapper
     }
 
     @Override
+    public void sendTimeShiftMode(int mode) {
+        mCaller.executeOrSendMessage(
+                mCaller.obtainMessageI(DO_SEND_TIME_SHIFT_MODE, mode));
+    }
+
+    @Override
+    public void sendAvailableSpeeds(float[] speeds) {
+        mCaller.executeOrSendMessage(
+                mCaller.obtainMessageO(DO_SEND_AVAILABLE_SPEEDS, speeds));
+    }
+
+    @Override
     public void sendTvRecordingInfo(@Nullable TvRecordingInfo recordingInfo) {
         mCaller.executeOrSendMessage(
                 mCaller.obtainMessageO(DO_SEND_RECORDING_INFO, recordingInfo));
@@ -463,7 +523,7 @@ public class ITvInteractiveAppSessionWrapper
     @Override
     public void notifyTvMessage(String type, Bundle data) {
         mCaller.executeOrSendMessage(
-                mCaller.obtainMessageOO(DO_NOTIFY_TRACK_SELECTED, type, data));
+                mCaller.obtainMessageOO(DO_NOTIFY_TV_MESSAGE, type, data));
     }
 
     @Override
@@ -497,15 +557,45 @@ public class ITvInteractiveAppSessionWrapper
     }
 
     @Override
-    public void notifyRecordingStarted(String recordingId) {
-        mCaller.executeOrSendMessage(mCaller.obtainMessageO(
-                DO_NOTIFY_RECORDING_STARTED, recordingId));
+    public void notifyRecordingStarted(String recordingId, String requestId) {
+        mCaller.executeOrSendMessage(mCaller.obtainMessageOO(
+                DO_NOTIFY_RECORDING_STARTED, recordingId, recordingId));
     }
 
     @Override
     public void notifyRecordingStopped(String recordingId) {
         mCaller.executeOrSendMessage(mCaller.obtainMessageO(
                 DO_NOTIFY_RECORDING_STOPPED, recordingId));
+    }
+
+    @Override
+    public void notifyRecordingConnectionFailed(String recordingId, String inputId) {
+        mCaller.executeOrSendMessage(mCaller.obtainMessageOO(
+                DO_NOTIFY_RECORDING_CONNECTION_FAILED, recordingId, inputId));
+    }
+
+    @Override
+    public void notifyRecordingDisconnected(String recordingId, String inputId) {
+        mCaller.executeOrSendMessage(mCaller.obtainMessageOO(
+                DO_NOTIFY_RECORDING_DISCONNECTED, recordingId, inputId));
+    }
+
+    @Override
+    public void notifyRecordingTuned(String recordingId, Uri channelUri) {
+        mCaller.executeOrSendMessage(mCaller.obtainMessageOO(
+                DO_NOTIFY_RECORDING_TUNED, recordingId, channelUri));
+    }
+
+    @Override
+    public void notifyRecordingError(String recordingId, int err) {
+        mCaller.executeOrSendMessage(mCaller.obtainMessageOO(
+                DO_NOTIFY_RECORDING_ERROR, recordingId, err));
+    }
+
+    @Override
+    public void notifyRecordingScheduled(String recordingId, String requestId) {
+        mCaller.executeOrSendMessage(mCaller.obtainMessageOO(
+                DO_NOTIFY_RECORDING_SCHEDULED, recordingId, recordingId));
     }
 
     @Override

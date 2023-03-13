@@ -49,6 +49,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -63,6 +64,8 @@ import org.mockito.junit.MockitoJUnitRunner;
  */
 @Presubmit
 @RunWith(MockitoJUnitRunner.class)
+@Ignore("TODO(b/226641572): this test is broken and it cannot use ExtendedMockitoTestCase as it "
+        + "uses TestableDeviceConfigRule, which creates its own mockito session")
 public final class CachedAppOptimizerTest {
 
     private ServiceThread mThread;
@@ -194,7 +197,7 @@ public final class CachedAppOptimizerTest {
     public void init_withDeviceConfigSetsParameters() {
         // When the DeviceConfig already has a flag value stored (note this test will need to
         // change if the default value changes from false).
-        assertThat(CachedAppOptimizer.DEFAULT_USE_COMPACTION).isFalse();
+        assertThat(CachedAppOptimizer.DEFAULT_USE_COMPACTION).isTrue();
         DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
                 CachedAppOptimizer.KEY_USE_COMPACTION, "true", false);
         DeviceConfig.setProperty(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
@@ -372,9 +375,8 @@ public final class CachedAppOptimizerTest {
                 CachedAppOptimizer.KEY_USE_COMPACTION, "foobar", false);
         assertThat(mCountDown.await(5, TimeUnit.SECONDS)).isTrue();
 
-        // Then we set the default.
-        assertThat(mCachedAppOptimizerUnderTest.useCompaction()).isEqualTo(
-                CachedAppOptimizer.DEFAULT_USE_COMPACTION);
+        // Invalid value is mapped to false
+        assertThat(mCachedAppOptimizerUnderTest.useCompaction()).isEqualTo(false);
     }
 
     @Test
@@ -1158,7 +1160,8 @@ public final class CachedAppOptimizerTest {
         }
 
         @Override
-        public AppOpsService getAppOpsService(File file, Handler handler) {
+        public AppOpsService getAppOpsService(File recentAccessesFile, File storageFile,
+                Handler handler) {
             return mAppOpsService;
         }
 

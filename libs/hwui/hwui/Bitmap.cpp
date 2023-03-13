@@ -34,16 +34,19 @@
 #include <binder/IServiceManager.h>
 #endif
 
+#include <Gainmap.h>
 #include <SkCanvas.h>
 #include <SkColor.h>
 #include <SkEncodedImageFormat.h>
 #include <SkHighContrastFilter.h>
 #include <SkImageEncoder.h>
 #include <SkImagePriv.h>
+#include <SkJpegGainmapEncoder.h>
 #include <SkPixmap.h>
 #include <SkRect.h>
 #include <SkStream.h>
 #include <SkWebpEncoder.h>
+
 #include <limits>
 
 namespace android {
@@ -456,6 +459,16 @@ BitmapPalette Bitmap::computePalette(const SkImageInfo& info, const void* addr, 
 }
 
 bool Bitmap::compress(JavaCompressFormat format, int32_t quality, SkWStream* stream) {
+#ifdef __ANDROID__  // TODO: This isn't built for host for some reason?
+    if (hasGainmap() && format == JavaCompressFormat::Jpeg) {
+        SkBitmap baseBitmap = getSkBitmap();
+        SkBitmap gainmapBitmap = gainmap()->bitmap->getSkBitmap();
+        SkJpegEncoder::Options options{.fQuality = quality};
+        return SkJpegGainmapEncoder::EncodeJpegR(stream, baseBitmap.pixmap(), options,
+                                                 gainmapBitmap.pixmap(), options, gainmap()->info);
+    }
+#endif
+
     SkBitmap skbitmap;
     getSkBitmap(&skbitmap);
     return compress(skbitmap, format, quality, stream);
@@ -494,4 +507,14 @@ bool Bitmap::compress(const SkBitmap& bitmap, JavaCompressFormat format,
 
     return SkEncodeImage(stream, bitmap, fm, quality);
 }
+
+sp<uirenderer::Gainmap> Bitmap::gainmap() const {
+    LOG_ALWAYS_FATAL_IF(!hasGainmap(), "Bitmap doesn't have a gainmap");
+    return mGainmap;
+}
+
+void Bitmap::setGainmap(sp<uirenderer::Gainmap>&& gainmap) {
+    mGainmap = std::move(gainmap);
+}
+
 }  // namespace android

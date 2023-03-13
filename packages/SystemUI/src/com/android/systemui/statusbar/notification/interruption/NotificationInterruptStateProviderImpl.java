@@ -19,6 +19,7 @@ package com.android.systemui.statusbar.notification.interruption;
 import static com.android.systemui.statusbar.StatusBarState.SHADE;
 import static com.android.systemui.statusbar.notification.interruption.NotificationInterruptStateProviderImpl.NotificationInterruptEvent.FSI_SUPPRESSED_NO_HUN_OR_KEYGUARD;
 import static com.android.systemui.statusbar.notification.interruption.NotificationInterruptStateProviderImpl.NotificationInterruptEvent.FSI_SUPPRESSED_SUPPRESSIVE_GROUP_ALERT_BEHAVIOR;
+import static com.android.systemui.statusbar.notification.interruption.NotificationInterruptStateProviderImpl.NotificationInterruptEvent.HUN_SNOOZE_BYPASSED_POTENTIALLY_SUPPRESSED_FSI;
 
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -28,7 +29,6 @@ import android.hardware.display.AmbientDisplayConfiguration;
 import android.os.Handler;
 import android.os.PowerManager;
 import android.os.RemoteException;
-import android.os.UserHandle;
 import android.provider.Settings;
 import android.service.dreams.IDreamManager;
 import android.service.notification.StatusBarNotification;
@@ -40,6 +40,7 @@ import com.android.internal.logging.UiEventLogger;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.settings.UserTracker;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.notification.NotifPipelineFlags;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
@@ -74,6 +75,7 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
     private final NotifPipelineFlags mFlags;
     private final KeyguardNotificationVisibilityProvider mKeyguardNotificationVisibilityProvider;
     private final UiEventLogger mUiEventLogger;
+    private final UserTracker mUserTracker;
 
     @VisibleForTesting
     protected boolean mUseHeadsUp = false;
@@ -86,7 +88,10 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
         FSI_SUPPRESSED_NO_HUN_OR_KEYGUARD(1236),
 
         @UiEvent(doc = "HUN suppressed for old when")
-        HUN_SUPPRESSED_OLD_WHEN(1237);
+        HUN_SUPPRESSED_OLD_WHEN(1237),
+
+        @UiEvent(doc = "HUN snooze bypassed for potentially suppressed FSI")
+        HUN_SNOOZE_BYPASSED_POTENTIALLY_SUPPRESSED_FSI(1269);
 
         private final int mId;
 
@@ -114,7 +119,8 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
             @Main Handler mainHandler,
             NotifPipelineFlags flags,
             KeyguardNotificationVisibilityProvider keyguardNotificationVisibilityProvider,
-            UiEventLogger uiEventLogger) {
+            UiEventLogger uiEventLogger,
+            UserTracker userTracker) {
         mContentResolver = contentResolver;
         mPowerManager = powerManager;
         mDreamManager = dreamManager;
@@ -127,6 +133,7 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
         mFlags = flags;
         mKeyguardNotificationVisibilityProvider = keyguardNotificationVisibilityProvider;
         mUiEventLogger = uiEventLogger;
+        mUserTracker = userTracker;
         ContentObserver headsUpObserver = new ContentObserver(mainHandler) {
             @Override
             public void onChange(boolean selfChange) {
@@ -236,6 +243,9 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
 
     @Override
     public FullScreenIntentDecision getFullScreenIntentDecision(NotificationEntry entry) {
+        if (mFlags.disableFsi()) {
+            return FullScreenIntentDecision.NO_FSI_DISABLED;
+        }
         if (entry.getSbn().getNotification().fullScreenIntent == null) {
             return FullScreenIntentDecision.NO_FULL_SCREEN_INTENT;
         }
@@ -325,6 +335,9 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
         final int uid = entry.getSbn().getUid();
         final String packageName = entry.getSbn().getPackageName();
         switch (decision) {
+            case NO_FSI_DISABLED:
+                mLogger.logNoFullscreen(entry, "Disabled");
+                return;
             case NO_FULL_SCREEN_INTENT:
                 return;
             case NO_FSI_SUPPRESSED_BY_DND:
@@ -400,7 +413,15 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
             return false;
         }
 
-        if (isSnoozedPackage(sbn)) {
+        final boolean isSnoozedPackage = isSnoozedPackage(sbn);
+        final boolean fsiRequiresKeyguard = mFlags.fullScreenIntentRequiresKeyguard();
+        final boolean hasFsi = sbn.getNotification().fullScreenIntent != null;
+
+        // Assume any notification with an FSI is time-sensitive (like an alarm or incoming call)
+        // and ignore whether HUNs have been snoozed for the package.
+        final boolean shouldBypassSnooze = fsiRequiresKeyguard && hasFsi;
+
+        if (isSnoozedPackage && !shouldBypassSnooze) {
             if (log) mLogger.logNoHeadsUpPackageSnoozed(entry);
             return false;
         }
@@ -438,6 +459,19 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
                 return false;
             }
         }
+
+        if (isSnoozedPackage) {
+            if (log) {
+                mLogger.logHeadsUpPackageSnoozeBypassedHasFsi(entry);
+                final int uid = entry.getSbn().getUid();
+                final String packageName = entry.getSbn().getPackageName();
+                mUiEventLogger.log(HUN_SNOOZE_BYPASSED_POTENTIALLY_SUPPRESSED_FSI, uid,
+                        packageName);
+            }
+
+            return true;
+        }
+
         if (log) mLogger.logHeadsUp(entry);
         return true;
     }
@@ -450,7 +484,7 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
      * @return true if the entry should ambient pulse, false otherwise
      */
     private boolean shouldHeadsUpWhenDozing(NotificationEntry entry, boolean log) {
-        if (!mAmbientDisplayConfiguration.pulseOnNotificationEnabled(UserHandle.USER_CURRENT)) {
+        if (!mAmbientDisplayConfiguration.pulseOnNotificationEnabled(mUserTracker.getUserId())) {
             if (log) mLogger.logNoPulsingSettingDisabled(entry);
             return false;
         }

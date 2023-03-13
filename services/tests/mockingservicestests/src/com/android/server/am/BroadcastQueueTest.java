@@ -20,6 +20,7 @@ import static android.os.UserHandle.USER_SYSTEM;
 
 import static com.android.server.am.BroadcastProcessQueue.reasonToString;
 import static com.android.server.am.BroadcastRecord.deliveryStateToString;
+import static com.android.server.am.BroadcastRecord.isReceiverEquals;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -76,8 +77,6 @@ import android.os.PowerExemptionManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.provider.Settings;
-import android.util.ArrayMap;
-import android.util.ArraySet;
 import android.util.Log;
 import android.util.Pair;
 import android.util.SparseArray;
@@ -160,7 +159,7 @@ public class BroadcastQueueTest {
     private ActivityManagerService mAms;
     private BroadcastQueue mQueue;
     BroadcastConstants mConstants;
-    private TestBroadcastSkipPolicy mSkipPolicy;
+    private BroadcastSkipPolicy mSkipPolicy;
 
     /**
      * Desired behavior of the next
@@ -287,7 +286,10 @@ public class BroadcastQueueTest {
         mConstants = new BroadcastConstants(Settings.Global.BROADCAST_FG_CONSTANTS);
         mConstants.TIMEOUT = 100;
         mConstants.ALLOW_BG_ACTIVITY_START_TIMEOUT = 0;
-        mSkipPolicy = new TestBroadcastSkipPolicy(mAms);
+
+        mSkipPolicy = spy(new BroadcastSkipPolicy(mAms));
+        doReturn(null).when(mSkipPolicy).shouldSkipMessage(any(), any());
+        doReturn(false).when(mSkipPolicy).disallowBackgroundStart(any());
 
         final BroadcastHistory emptyHistory = new BroadcastHistory(mConstants) {
             public void addBroadcastToHistoryLocked(BroadcastRecord original) {
@@ -324,55 +326,14 @@ public class BroadcastQueueTest {
         }
     }
 
-    private static class TestBroadcastSkipPolicy extends BroadcastSkipPolicy {
-        private final ArrayMap<String, ArraySet> mReceiversToSkip = new ArrayMap<>();
-
-        TestBroadcastSkipPolicy(ActivityManagerService service) {
-            super(service);
-        }
-
-        public String shouldSkipMessage(BroadcastRecord r, Object o) {
-            if (shouldSkipReceiver(r.intent.getAction(), o)) {
-                return "test skipped receiver";
-            }
-            return null;
-        }
-
-        private boolean shouldSkipReceiver(String action, Object o) {
-            final ArraySet<Object> receiversToSkip = mReceiversToSkip.get(action);
-            if (receiversToSkip == null) {
-                return false;
-            }
-            for (int i = 0; i < receiversToSkip.size(); ++i) {
-                if (BroadcastRecord.isReceiverEquals(o, receiversToSkip.valueAt(i))) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        public void setSkipReceiver(String action, Object o) {
-            ArraySet<Object> receiversToSkip = mReceiversToSkip.get(action);
-            if (receiversToSkip == null) {
-                receiversToSkip = new ArraySet<>();
-                mReceiversToSkip.put(action, receiversToSkip);
-            }
-            receiversToSkip.add(o);
-        }
-        public boolean disallowBackgroundStart(BroadcastRecord r) {
-            // Ignored
-            return false;
-        }
-
-    }
-
     private class TestInjector extends Injector {
         TestInjector(Context context) {
             super(context);
         }
 
         @Override
-        public AppOpsService getAppOpsService(File file, Handler handler) {
+        public AppOpsService getAppOpsService(File recentAccessesFile, File storageFile,
+                Handler handler) {
             return mAppOpsService;
         }
 
@@ -1401,10 +1362,10 @@ public class BroadcastQueueTest {
         // Confirm that we saw no registered receiver traffic
         final IApplicationThread oldThread = oldApp.getThread();
         verify(oldThread, never()).scheduleRegisteredReceiver(any(), any(), anyInt(), any(), any(),
-                anyBoolean(), anyBoolean(), anyBoolean(), anyInt(), anyInt());
+                anyBoolean(), anyBoolean(), anyBoolean(), anyInt(), anyInt(), anyInt(), any());
         final IApplicationThread newThread = newApp.getThread();
         verify(newThread, never()).scheduleRegisteredReceiver(any(), any(), anyInt(), any(), any(),
-                anyBoolean(), anyBoolean(), anyBoolean(), anyInt(), anyInt());
+                anyBoolean(), anyBoolean(), anyBoolean(), anyInt(), anyInt(), anyInt(), any());
 
         // Confirm that we saw final manifest broadcast
         verifyScheduleReceiver(times(1), newApp, airplane,
@@ -1876,6 +1837,54 @@ public class BroadcastQueueTest {
     }
 
     @Test
+    public void testReplacePending_withUrgentBroadcast() throws Exception {
+        // The behavior is same with the legacy queue but AMS takes care of finding
+        // the right queue and replacing the broadcast.
+        Assume.assumeTrue(mImpl == Impl.MODERN);
+
+        final ProcessRecord callerApp = makeActiveProcessRecord(PACKAGE_RED);
+
+        final Intent timeTickFirst = new Intent(Intent.ACTION_TIME_TICK);
+        timeTickFirst.putExtra(Intent.EXTRA_INDEX, "one");
+        timeTickFirst.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
+        timeTickFirst.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+
+        final Intent timeTickSecond = new Intent(Intent.ACTION_TIME_TICK);
+        timeTickFirst.putExtra(Intent.EXTRA_INDEX, "second");
+        timeTickSecond.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
+
+        final Intent timeTickThird = new Intent(Intent.ACTION_TIME_TICK);
+        timeTickFirst.putExtra(Intent.EXTRA_INDEX, "third");
+        timeTickThird.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
+
+        try (SyncBarrier b = new SyncBarrier()) {
+            enqueueBroadcast(makeBroadcastRecord(timeTickFirst, callerApp,
+                    List.of(makeManifestReceiver(PACKAGE_BLUE, CLASS_BLUE))));
+            enqueueBroadcast(makeBroadcastRecord(timeTickSecond, callerApp,
+                    List.of(makeManifestReceiver(PACKAGE_BLUE, CLASS_BLUE))));
+            enqueueBroadcast(makeBroadcastRecord(timeTickThird, callerApp,
+                    List.of(makeManifestReceiver(PACKAGE_BLUE, CLASS_BLUE))));
+        }
+
+        waitForIdle();
+        final IApplicationThread blueThread = mAms.getProcessRecordLocked(PACKAGE_BLUE,
+                getUidForPackage(PACKAGE_BLUE)).getThread();
+        final InOrder inOrder = inOrder(blueThread);
+
+        // First broadcast is delivered.
+        timeTickFirst.setClassName(PACKAGE_BLUE, CLASS_BLUE);
+        inOrder.verify(blueThread).scheduleReceiverList(manifestReceiver(
+                filterAndExtrasEquals(timeTickFirst),
+                null, null, null, null, null, false, false, null, null));
+
+        // Second broadcast should be replaced by third broadcast.
+        timeTickThird.setClassName(PACKAGE_BLUE, CLASS_BLUE);
+        inOrder.verify(blueThread).scheduleReceiverList(manifestReceiver(
+                filterAndExtrasEquals(timeTickThird),
+                null, null, null, null, null, false, false, null, null));
+    }
+
+    @Test
     public void testIdleAndBarrier() throws Exception {
         final ProcessRecord callerApp = makeActiveProcessRecord(PACKAGE_RED);
         final ProcessRecord receiverApp = makeActiveProcessRecord(PACKAGE_GREEN);
@@ -1990,8 +1999,16 @@ public class BroadcastQueueTest {
             enqueueBroadcast(makeBroadcastRecord(airplane, callerApp,
                     List.of(greenReceiver, blueReceiver, yellowReceiver, orangeReceiver)));
 
-            mSkipPolicy.setSkipReceiver(airplane.getAction(), greenReceiver);
-            mSkipPolicy.setSkipReceiver(airplane.getAction(), orangeReceiver);
+            doAnswer(invocation -> {
+                final BroadcastRecord r = invocation.getArgument(0);
+                final Object o = invocation.getArgument(1);
+                if (airplane.getAction().equals(r.intent.getAction())
+                        && (isReceiverEquals(o, greenReceiver)
+                                || isReceiverEquals(o, orangeReceiver))) {
+                    return "test skipped receiver";
+                }
+                return null;
+            }).when(mSkipPolicy).shouldSkipMessage(any(BroadcastRecord.class), any());
         }
 
         waitForIdle();

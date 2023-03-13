@@ -6429,7 +6429,7 @@ public final class ContactsContract {
              * for {@link #TYPE_CUSTOM}.
              */
             public static final CharSequence getTypeLabel(Resources res, int type,
-                    CharSequence label) {
+                    @Nullable CharSequence label) {
                 if ((type == TYPE_CUSTOM || type == TYPE_ASSISTANT) && !TextUtils.isEmpty(label)) {
                     return label;
                 } else {
@@ -6641,7 +6641,7 @@ public final class ContactsContract {
              * for {@link #TYPE_CUSTOM}.
              */
             public static final CharSequence getTypeLabel(Resources res, int type,
-                    CharSequence label) {
+                    @Nullable CharSequence label) {
                 if (type == TYPE_CUSTOM && !TextUtils.isEmpty(label)) {
                     return label;
                 } else {
@@ -6849,7 +6849,7 @@ public final class ContactsContract {
              * for {@link #TYPE_CUSTOM}.
              */
             public static final CharSequence getTypeLabel(Resources res, int type,
-                    CharSequence label) {
+                    @Nullable CharSequence label) {
                 if (type == TYPE_CUSTOM && !TextUtils.isEmpty(label)) {
                     return label;
                 } else {
@@ -7010,7 +7010,7 @@ public final class ContactsContract {
              * for {@link #TYPE_CUSTOM}.
              */
             public static final CharSequence getTypeLabel(Resources res, int type,
-                    CharSequence label) {
+                    @Nullable CharSequence label) {
                 if (type == TYPE_CUSTOM && !TextUtils.isEmpty(label)) {
                     return label;
                 } else {
@@ -7217,7 +7217,7 @@ public final class ContactsContract {
              * for {@link #TYPE_CUSTOM}.
              */
             public static final CharSequence getTypeLabel(Resources res, int type,
-                    CharSequence label) {
+                    @Nullable CharSequence label) {
                 if (type == TYPE_CUSTOM && !TextUtils.isEmpty(label)) {
                     return label;
                 } else {
@@ -7344,7 +7344,7 @@ public final class ContactsContract {
              * for {@link #TYPE_CUSTOM}.
              */
             public static final CharSequence getTypeLabel(Resources res, int type,
-                    CharSequence label) {
+                    @Nullable CharSequence label) {
                 if (type == TYPE_CUSTOM && !TextUtils.isEmpty(label)) {
                     return label;
                 } else {
@@ -7440,7 +7440,7 @@ public final class ContactsContract {
              * for {@link #TYPE_CUSTOM}.
              */
             public static final CharSequence getTypeLabel(Resources res, int type,
-                    CharSequence label) {
+                    @Nullable CharSequence label) {
                 if (type == TYPE_CUSTOM && !TextUtils.isEmpty(label)) {
                     return label;
                 } else {
@@ -7769,7 +7769,7 @@ public final class ContactsContract {
              * for {@link #TYPE_CUSTOM}.
              */
             public static final CharSequence getTypeLabel(Resources res, int type,
-                    CharSequence label) {
+                    @Nullable CharSequence label) {
                 if (type == TYPE_CUSTOM && !TextUtils.isEmpty(label)) {
                     return label;
                 } else {

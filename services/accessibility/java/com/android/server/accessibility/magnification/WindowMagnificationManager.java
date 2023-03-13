@@ -37,6 +37,7 @@ import android.os.Binder;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.SystemClock;
+import android.util.MathUtils;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
@@ -45,6 +46,7 @@ import android.view.accessibility.IWindowMagnificationConnection;
 import android.view.accessibility.IWindowMagnificationConnectionCallback;
 import android.view.accessibility.MagnificationAnimationCallback;
 
+import com.android.internal.accessibility.common.MagnificationConstants;
 import com.android.internal.accessibility.util.AccessibilityStatsLogUtils;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
@@ -631,7 +633,7 @@ public class WindowMagnificationManager implements
      * @param clear {@true} Clears the state of window magnification.
      * @return {@code true} if the magnification is turned to be disabled successfully
      */
-    boolean disableWindowMagnification(int displayId, boolean clear) {
+    public boolean disableWindowMagnification(int displayId, boolean clear) {
         return disableWindowMagnification(displayId, clear, STUB_ANIMATION_CALLBACK);
     }
 
@@ -696,7 +698,6 @@ public class WindowMagnificationManager implements
      * @param displayId The logical display id.
      * @return {@code true} if the window magnification is enabled.
      */
-    @VisibleForTesting
     public boolean isWindowMagnifierEnabled(int displayId) {
         synchronized (mLock) {
             WindowMagnifier magnifier = mWindowMagnifiers.get(displayId);
@@ -715,18 +716,24 @@ public class WindowMagnificationManager implements
      *         scale if none is available
      */
     float getPersistedScale(int displayId) {
-        return mScaleProvider.getScale(displayId);
+        return MathUtils.constrain(mScaleProvider.getScale(displayId),
+                MagnificationConstants.PERSISTED_SCALE_MIN_VALUE,
+                MagnificationScaleProvider.MAX_SCALE);
     }
 
     /**
-     * Persists the default display magnification scale to the current user's settings. Only the
-     * value of the default display is persisted in user's settings.
+     * Persists the default display magnification scale to the current user's settings
+     * <strong>if scale is >= {@link MagnificationConstants.PERSISTED_SCALE_MIN_VALUE}</strong>.
+     * We assume if the scale is < {@link MagnificationConstants.PERSISTED_SCALE_MIN_VALUE}, there
+     * will be no obvious magnification effect.
+     * Only the value of the default display is persisted in user's settings.
      */
     void persistScale(int displayId) {
         float scale = getScale(displayId);
-        if (scale != 1.0f) {
-            mScaleProvider.putScale(scale, displayId);
+        if (scale < MagnificationConstants.PERSISTED_SCALE_MIN_VALUE) {
+            return;
         }
+        mScaleProvider.putScale(scale, displayId);
     }
 
     /**

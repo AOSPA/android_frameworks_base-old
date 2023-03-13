@@ -55,6 +55,7 @@ class NotifCoordinatorsImpl @Inject constructor(
     viewConfigCoordinator: ViewConfigCoordinator,
     visualStabilityCoordinator: VisualStabilityCoordinator,
     sensitiveContentCoordinator: SensitiveContentCoordinator,
+    dismissibilityCoordinator: DismissibilityCoordinator
 ) : NotifCoordinators {
 
     private val mCoordinators: MutableList<Coordinator> = ArrayList()
@@ -88,13 +89,12 @@ class NotifCoordinatorsImpl @Inject constructor(
         mCoordinators.add(viewConfigCoordinator)
         mCoordinators.add(visualStabilityCoordinator)
         mCoordinators.add(sensitiveContentCoordinator)
-        if (notifPipelineFlags.isSmartspaceDedupingEnabled()) {
-            mCoordinators.add(smartspaceDedupingCoordinator)
-        }
+        mCoordinators.add(smartspaceDedupingCoordinator)
         mCoordinators.add(headsUpCoordinator)
         mCoordinators.add(gutsCoordinator)
         mCoordinators.add(preparationCoordinator)
         mCoordinators.add(remoteInputCoordinator)
+        mCoordinators.add(dismissibilityCoordinator)
 
         // Manually add Ordered Sections
         // HeadsUp > FGS > People > Alerting > Silent > Minimized > Unknown/Default

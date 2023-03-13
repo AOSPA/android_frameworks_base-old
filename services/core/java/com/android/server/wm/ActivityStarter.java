@@ -1037,10 +1037,33 @@ class ActivityStarter {
             return err;
         }
 
-        boolean abort = !mSupervisor.checkStartAnyActivityPermission(intent, aInfo, resultWho,
-                requestCode, callingPid, callingUid, callingPackage, callingFeatureId,
-                request.ignoreTargetSecurity, inTask != null, callerApp, resultRecord,
-                resultRootTask);
+        boolean abort;
+        try {
+            abort = !mSupervisor.checkStartAnyActivityPermission(intent, aInfo, resultWho,
+                    requestCode, callingPid, callingUid, callingPackage, callingFeatureId,
+                    request.ignoreTargetSecurity, inTask != null, callerApp, resultRecord,
+                    resultRootTask);
+        } catch (SecurityException e) {
+            // Return activity not found for the explicit intent if the caller can't see the target
+            // to prevent the disclosure of package existence.
+            final Intent originalIntent = request.ephemeralIntent;
+            if (originalIntent != null && (originalIntent.getComponent() != null
+                    || originalIntent.getPackage() != null)) {
+                final String targetPackageName = originalIntent.getComponent() != null
+                        ? originalIntent.getComponent().getPackageName()
+                        : originalIntent.getPackage();
+                if (mService.getPackageManagerInternalLocked()
+                        .filterAppAccess(targetPackageName, callingUid, userId)) {
+                    if (resultRecord != null) {
+                        resultRecord.sendResult(INVALID_UID, resultWho, requestCode,
+                                RESULT_CANCELED, null /* data */, null /* dataGrants */);
+                    }
+                    SafeActivityOptions.abort(options);
+                    return ActivityManager.START_CLASS_NOT_FOUND;
+                }
+            }
+            throw e;
+        }
         abort |= !mService.mIntentFirewall.checkStartActivity(intent, callingUid,
                 callingPid, resolvedType, aInfo.applicationInfo);
         abort |= !mService.getPermissionPolicyInternal().checkStartActivity(intent, callingUid,
@@ -1948,7 +1971,7 @@ class ActivityStarter {
 
         FrameworkStatsLog.write(FrameworkStatsLog.ACTIVITY_ACTION_BLOCKED,
                 /* caller_uid */
-                mSourceRecord != null ? mSourceRecord.getUid() : -1,
+                mSourceRecord != null ? mSourceRecord.getUid() : mCallingUid,
                 /* caller_activity_class_name */
                 mSourceRecord != null ? mSourceRecord.info.name : null,
                 /* target_task_top_activity_uid */
@@ -1969,30 +1992,33 @@ class ActivityStarter {
                 /* action */
                 action,
                 /* version */
-                1,
+                3,
                 /* multi_window - we have our source not in the target task, but both are visible */
                 targetTask != null && mSourceRecord != null
-                        && !targetTask.equals(mSourceRecord.getTask()) && targetTask.isVisible()
+                        && !targetTask.equals(mSourceRecord.getTask()) && targetTask.isVisible(),
+                /* bal_code */
+                mBalCode
         );
 
         boolean shouldBlockActivityStart =
-                ActivitySecurityModelFeatureFlags.shouldBlockActivityStart(mCallingUid);
+                ActivitySecurityModelFeatureFlags.shouldRestrictActivitySwitch(mCallingUid);
 
         if (ActivitySecurityModelFeatureFlags.shouldShowToast(mCallingUid)) {
             UiThread.getHandler().post(() -> Toast.makeText(mService.mContext,
-                    (shouldBlockActivityStart
-                            ? "Activity start blocked by "
-                            : "Activity start would be blocked by ")
-                            + ActivitySecurityModelFeatureFlags.DOC_LINK,
+                    "Activity start from " + r.launchedFromPackage
+                            + (shouldBlockActivityStart ? " " : " would be ")
+                            + "blocked by " + ActivitySecurityModelFeatureFlags.DOC_LINK,
                     Toast.LENGTH_SHORT).show());
         }
 
 
         if (shouldBlockActivityStart) {
             Slog.e(TAG, "Abort Launching r: " + r
-                    + " as source: " + mSourceRecord
-                    + "is in background. New task: " + newTask
-                    + ". Top activity: " + targetTopActivity);
+                    + " as source: "
+                    + (mSourceRecord != null ? mSourceRecord : r.launchedFromPackage)
+                    + " is in background. New task: " + newTask
+                    + ". Top activity: " + targetTopActivity
+                    + ". BAL Code: " + mBalCode);
 
             return false;
         }
@@ -2084,6 +2110,7 @@ class ActivityStarter {
                 reusedTask != null ? reusedTask.getTopNonFinishingActivity() : null, intentGrants);
 
         if (mAddingToTask) {
+            clearTopIfNeeded(targetTask, mCallingUid, mStartActivity.getUid(), mLaunchFlags);
             return START_SUCCESS;
         }
 
@@ -2113,6 +2140,55 @@ class ActivityStarter {
 
         mLastStartActivityRecord = targetTaskTop;
         return mMovedToFront ? START_TASK_TO_FRONT : START_DELIVERED_TO_TOP;
+    }
+
+    /**
+     * If the top activity uid does not match the launched activity, and the launch was not
+     * requested from the top uid, we want to clear out all non matching activities to prevent the
+     * top activity being sandwiched.
+     */
+    private void clearTopIfNeeded(@NonNull Task targetTask, int callingUid, int startingUid,
+            int launchFlags) {
+        if ((launchFlags & FLAG_ACTIVITY_NEW_TASK) != FLAG_ACTIVITY_NEW_TASK) {
+            // Launch is from the same task, so must be a top or privileged UID
+            return;
+        }
+
+        ActivityRecord targetTaskTop = targetTask.getTopNonFinishingActivity();
+        if (targetTaskTop != null && targetTaskTop.getUid() != startingUid) {
+            boolean shouldBlockActivityStart = ActivitySecurityModelFeatureFlags
+                    .shouldRestrictActivitySwitch(callingUid);
+            int[] finishCount = new int[0];
+            if (shouldBlockActivityStart) {
+                ActivityRecord activity = targetTask.getActivity(
+                        ar -> !ar.finishing && ar.isUid(startingUid));
+
+                if (activity == null) {
+                    // mStartActivity is not in task, so clear everything
+                    activity = mStartActivity;
+                }
+
+                finishCount = new int[1];
+                if (activity != null) {
+                    targetTask.performClearTop(activity, launchFlags, finishCount);
+                }
+
+                if (finishCount[0] > 0) {
+                    Slog.w(TAG, "Clearing top n: " + finishCount[0] + " activities from task t: "
+                            + targetTask + " not matching top uid: " + callingUid);
+                }
+            }
+
+            if (ActivitySecurityModelFeatureFlags.shouldShowToast(callingUid)
+                    && (!shouldBlockActivityStart || finishCount[0] > 0)) {
+                UiThread.getHandler().post(() -> Toast.makeText(mService.mContext,
+                        (shouldBlockActivityStart
+                                ? "Top activities cleared by "
+                                : "Top activities would be cleared by ")
+                                + ActivitySecurityModelFeatureFlags.DOC_LINK,
+                        Toast.LENGTH_SHORT).show());
+            }
+        }
     }
 
     /**

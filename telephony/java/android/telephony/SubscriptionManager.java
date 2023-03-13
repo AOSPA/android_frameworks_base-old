@@ -160,6 +160,10 @@ public class SubscriptionManager {
     private static final String CACHE_KEY_SUBSCRIPTION_MANAGER_SERVICE_PROPERTY =
             "cache_key.telephony.subscription_manager_service";
 
+    /** The temporarily cache key to indicate whether subscription manager service is enabled. */
+    private static final String CACHE_KEY_SUBSCRIPTION_MANAGER_SERVICE_ENABLED_PROPERTY =
+            "cache_key.telephony.subscription_manager_service_enabled";
+
     /** @hide */
     public static final String GET_SIM_SPECIFIC_SETTINGS_METHOD_NAME = "getSimSpecificSettings";
 
@@ -170,7 +174,7 @@ public class SubscriptionManager {
     /**
      * Key to the backup & restore data byte array in the Bundle that is returned by {@link
      * #getAllSimSpecificSettingsForBackup()} or to be pass in to {@link
-     * #restoreAllSimSpecificSettings()}.
+     * #restoreAllSimSpecificSettingsFromBackup(byte[])}.
      *
      * @hide
      */
@@ -339,6 +343,12 @@ public class SubscriptionManager {
             new IntegerPropertyInvalidatedCache<>(ISub::getPhoneId,
                     CACHE_KEY_SUBSCRIPTION_MANAGER_SERVICE_PROPERTY,
                     INVALID_PHONE_INDEX);
+
+    //TODO: Removed before U AOSP public release.
+    private static VoidPropertyInvalidatedCache<Boolean> sIsSubscriptionManagerServiceEnabled =
+            new VoidPropertyInvalidatedCache<>(ISub::isSubscriptionManagerServiceEnabled,
+                    CACHE_KEY_SUBSCRIPTION_MANAGER_SERVICE_ENABLED_PROPERTY,
+                    false);
 
     /**
      * Generates a content {@link Uri} used to receive updates on simInfo change
@@ -1139,6 +1149,14 @@ public class SubscriptionManager {
      */
     public static final String USER_HANDLE = SimInfo.COLUMN_USER_HANDLE;
 
+    /**
+     * TelephonyProvider column name for satellite enabled.
+     * By default, it's disabled.
+     * <P>Type: INTEGER (int)</P>
+     * @hide
+     */
+    public static final String SATELLITE_ENABLED = SimInfo.COLUMN_SATELLITE_ENABLED;
+
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(prefix = {"USAGE_SETTING_"},
@@ -1350,8 +1368,6 @@ public class SubscriptionManager {
 
     private final Context mContext;
 
-    private static boolean sIsSubscriptionManagerServiceEnabled = false;
-
     // Cache of Resource that has been created in getResourcesForSubId. Key is a Pair containing
     // the Context and subId.
     private static final Map<Pair<Context, Integer>, Resources> sResourcesCache =
@@ -1437,9 +1453,6 @@ public class SubscriptionManager {
     public SubscriptionManager(Context context) {
         if (DBG) logd("SubscriptionManager created");
         mContext = context;
-
-        sIsSubscriptionManagerServiceEnabled = mContext.getResources().getBoolean(
-                com.android.internal.R.bool.config_using_subscription_manager_service);
     }
 
     /**
@@ -1448,8 +1461,9 @@ public class SubscriptionManager {
      *
      * @hide
      */
+    //TODO: Removed before U AOSP public release.
     public static boolean isSubscriptionManagerServiceEnabled() {
-        return sIsSubscriptionManagerServiceEnabled;
+        return sIsSubscriptionManagerServiceEnabled.query(null);
     }
 
     private NetworkPolicyManager getNetworkPolicyManager() {
@@ -2672,10 +2686,10 @@ public class SubscriptionManager {
      * @param columnName Column name in subscription database.
      *
      * @return Value in string format associated with {@code subscriptionId} and {@code columnName}
-     * from the database.
+     * from the database. Empty string if the {@code subscriptionId} is invalid (for backward
+     * compatible).
      *
-     * @throws IllegalArgumentException if {@code subscriptionId} is invalid, or the field is not
-     * exposed.
+     * @throws IllegalArgumentException if the field is not exposed.
      *
      * @see android.provider.Telephony.SimInfo for all the columns.
      *
@@ -3963,6 +3977,13 @@ public class SubscriptionManager {
         PropertyInvalidatedCache.invalidateCache(CACHE_KEY_SUBSCRIPTION_MANAGER_SERVICE_PROPERTY);
     }
 
+    /** @hide */
+    //TODO: Removed before U AOSP public release.
+    public static void invalidateSubscriptionManagerServiceEnabledCaches() {
+        PropertyInvalidatedCache.invalidateCache(
+                CACHE_KEY_SUBSCRIPTION_MANAGER_SERVICE_ENABLED_PROPERTY);
+    }
+
     /**
      * Allows a test process to disable client-side caching operations.
      *
@@ -3984,6 +4005,8 @@ public class SubscriptionManager {
         sGetSlotIndexCache.disableLocal();
         sGetSubIdCache.disableLocal();
         sGetPhoneIdCache.disableLocal();
+
+        sIsSubscriptionManagerServiceEnabled.disableLocal();
     }
 
     /**
@@ -4006,6 +4029,8 @@ public class SubscriptionManager {
         sGetSlotIndexCache.clear();
         sGetSubIdCache.clear();
         sGetPhoneIdCache.clear();
+
+        sIsSubscriptionManagerServiceEnabled.clear();
     }
 
     /**
@@ -4026,39 +4051,16 @@ public class SubscriptionManager {
     }
 
     /**
-     * Called to attempt to restore the backed up sim-specific configs to device for specific sim.
-     * This will try to restore the data that was stored internally when {@link
-     * #restoreAllSimSpecificSettingsFromBackup(byte[] data)} was called during setup wizard.
-     * End result is SimInfoDB is modified to match any backed up configs for the requested
-     * inserted sim.
-     *
-     * <p>
-     * The {@link Uri} {@link #SIM_INFO_BACKUP_AND_RESTORE_CONTENT_URI} is notified if any SimInfoDB
-     * entry is updated as the result of this method call.
-     *
-     * @param iccId of the sim that a restore is requested for.
-     *
-     * @hide
-     */
-    @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
-    public void restoreSimSpecificSettingsForIccIdFromBackup(@NonNull String iccId) {
-        mContext.getContentResolver().call(
-                SIM_INFO_BACKUP_AND_RESTORE_CONTENT_URI,
-                RESTORE_SIM_SPECIFIC_SETTINGS_METHOD_NAME,
-                iccId, null);
-    }
-
-    /**
      * Called during setup wizard restore flow to attempt to restore the backed up sim-specific
-     * configs to device for all existing SIMs in SimInfoDB. Internally, it will store the backup
-     * data in an internal file. This file will persist on device for device's lifetime and will be
-     * used later on when a SIM is inserted to restore that specific SIM's settings by calling
-     * {@link #restoreSimSpecificSettingsForIccIdFromBackup(String iccId)}. End result is
-     * SimInfoDB is modified to match any backed up configs for the appropriate inserted SIMs.
+     * configs to device for all existing SIMs in the subscription database {@link SimInfo}.
+     * Internally, it will store the backup data in an internal file. This file will persist on
+     * device for device's lifetime and will be used later on when a SIM is inserted to restore that
+     * specific SIM's settings. End result is subscription database is modified to match any backed
+     * up configs for the appropriate inserted SIMs.
      *
      * <p>
-     * The {@link Uri} {@link #SIM_INFO_BACKUP_AND_RESTORE_CONTENT_URI} is notified if any SimInfoDB
-     * entry is updated as the result of this method call.
+     * The {@link Uri} {@link #SIM_INFO_BACKUP_AND_RESTORE_CONTENT_URI} is notified if any
+     * {@link SimInfo} entry is updated as the result of this method call.
      *
      * @param data with the sim specific configs to be backed up.
      *
@@ -4067,12 +4069,18 @@ public class SubscriptionManager {
     @SystemApi
     @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
     public void restoreAllSimSpecificSettingsFromBackup(@NonNull byte[] data) {
-        Bundle bundle = new Bundle();
-        bundle.putByteArray(KEY_SIM_SPECIFIC_SETTINGS_DATA, data);
-        mContext.getContentResolver().call(
-                SIM_INFO_BACKUP_AND_RESTORE_CONTENT_URI,
-                RESTORE_SIM_SPECIFIC_SETTINGS_METHOD_NAME,
-                null, bundle);
+        try {
+            ISub iSub = TelephonyManager.getSubscriptionService();
+            if (iSub != null) {
+                iSub.restoreAllSimSpecificSettingsFromBackup(data);
+            } else {
+                throw new IllegalStateException("subscription service unavailable.");
+            }
+        } catch (RemoteException ex) {
+            if (!isSystemProcess()) {
+                ex.rethrowAsRuntimeException();
+            }
+        }
     }
 
     /**

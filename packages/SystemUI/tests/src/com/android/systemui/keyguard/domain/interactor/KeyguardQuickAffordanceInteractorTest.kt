@@ -18,6 +18,7 @@
 package com.android.systemui.keyguard.domain.interactor
 
 import android.os.UserHandle
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SmallTest
 import com.android.internal.widget.LockPatternUtils
 import com.android.systemui.R
@@ -60,7 +61,6 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.junit.runners.JUnit4
 import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mock
@@ -68,7 +68,7 @@ import org.mockito.MockitoAnnotations
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @SmallTest
-@RunWith(JUnit4::class)
+@RunWith(AndroidJUnit4::class)
 class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
 
     @Mock private lateinit var lockPatternUtils: LockPatternUtils
@@ -150,12 +150,17 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
         featureFlags =
             FakeFeatureFlags().apply {
                 set(Flags.CUSTOMIZABLE_LOCK_SCREEN_QUICK_AFFORDANCES, false)
+                set(Flags.FACE_AUTH_REFACTOR, true)
             }
 
         underTest =
             KeyguardQuickAffordanceInteractor(
                 keyguardInteractor =
-                    KeyguardInteractor(repository = repository, commandQueue = commandQueue),
+                    KeyguardInteractor(
+                        repository = repository,
+                        commandQueue = commandQueue,
+                        featureFlags = featureFlags
+                    ),
                 registry =
                     FakeKeyguardQuickAffordanceRegistry(
                         mapOf(

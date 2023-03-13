@@ -16,6 +16,7 @@
 
 package android.credentials.ui;
 
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.Bundle;
@@ -24,6 +25,9 @@ import android.os.Parcel;
 import android.os.Parcelable;
 
 import com.android.internal.util.AnnotationValidations;
+
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /**
  * Base dialog result data.
@@ -52,32 +56,34 @@ public class BaseDialogResult implements Parcelable {
      * The intent extra key for the {@code BaseDialogResult} object when the credential
      * selector activity finishes.
      */
-    private static final String EXTRA_BASE_RESULT =
-            "android.credentials.ui.extra.BASE_RESULT";
+    private static final String EXTRA_BASE_RESULT = "android.credentials.ui.extra.BASE_RESULT";
+
+    /** @hide **/
+    @IntDef(prefix = {"RESULT_CODE_"}, value = {
+            RESULT_CODE_DIALOG_USER_CANCELED,
+            RESULT_CODE_CANCELED_AND_LAUNCHED_SETTINGS,
+            RESULT_CODE_DIALOG_COMPLETE_WITH_SELECTION,
+            RESULT_CODE_DATA_PARSING_FAILURE,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface ResultCode {}
 
     /** User intentionally canceled the dialog. */
-    public static final int RESULT_CODE_DIALOG_CANCELED = 0;
-    /**
-     * User made a selection and the dialog finished. The user selection result is in the
-     * {@code resultData}.
-     */
-    public static final int RESULT_CODE_DIALOG_COMPLETE_WITH_SELECTION = 1;
-    /**
-     * The user has acknowledged the consent page rendered for when they first used Credential
-     * Manager on this device.
-     */
-    public static final int RESULT_CODE_CREDENTIAL_MANAGER_CONSENT_ACKNOWLEDGED = 2;
-    /**
-     * The user has acknowledged the consent page rendered for enabling a new provider.
-     * This should only happen during the first time use. The provider info is in the
-     * {@code resultData}.
-     */
-    public static final int RESULT_CODE_PROVIDER_ENABLED = 3;
+    public static final int RESULT_CODE_DIALOG_USER_CANCELED = 0;
     /**
      * The user has consented to switching to a new default provider. The provider info is in the
      * {@code resultData}.
      */
-    public static final int RESULT_CODE_DEFAULT_PROVIDER_CHANGED = 4;
+    public static final int RESULT_CODE_CANCELED_AND_LAUNCHED_SETTINGS = 1;
+    /**
+     * User made a selection and the dialog finished. The user selection result is in the
+     * {@code resultData}.
+     */
+    public static final int RESULT_CODE_DIALOG_COMPLETE_WITH_SELECTION = 2;
+    /**
+     * The UI was canceled because it failed to parse the incoming data.
+     */
+    public static final int RESULT_CODE_DATA_PARSING_FAILURE = 3;
 
     @NonNull
     private final IBinder mRequestToken;

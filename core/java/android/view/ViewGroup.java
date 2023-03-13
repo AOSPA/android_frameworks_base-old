@@ -3532,7 +3532,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
     @Override
     public boolean dispatchPopulateAccessibilityEventInternal(AccessibilityEvent event) {
         boolean handled = false;
-        if (includeForAccessibility()) {
+        if (includeForAccessibility(false)) {
             handled = super.dispatchPopulateAccessibilityEventInternal(event);
             if (handled) {
                 return handled;
@@ -4631,7 +4631,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         final View[] children = mChildren;
         final int count = mChildrenCount;
         for (int i = 0; i < count; i++) {
-            children[i].setSelected(selected, false);
+            children[i].setSelected(selected);
         }
     }
 

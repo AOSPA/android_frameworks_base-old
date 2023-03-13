@@ -32,6 +32,7 @@ import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityOptions;
 import android.app.BackgroundStartPrivileges;
+import android.app.ComponentOptions;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -86,7 +87,8 @@ public class BackgroundActivityStartController {
     /** Apps that fulfill a certain role that can can always launch new tasks */
     static final int BAL_ALLOW_ALLOWLISTED_COMPONENT = 3;
 
-    /** Apps which currently have a visible window */
+    /** Apps which currently have a visible window or are bound by a service with a visible
+     * window */
     static final int BAL_ALLOW_VISIBLE_WINDOW = 4;
 
     /** Allowed due to the PendingIntent sender */
@@ -165,7 +167,8 @@ public class BackgroundActivityStartController {
         final boolean useCallingUidState =
                 originatingPendingIntent == null
                         || checkedOptions == null
-                        || !checkedOptions.getIgnorePendingIntentCreatorForegroundState();
+                        || checkedOptions.getPendingIntentCreatorBackgroundActivityStartMode()
+                                != ComponentOptions.MODE_BACKGROUND_ACTIVITY_START_DENIED;
         if (useCallingUidState) {
             if (callingUid == Process.ROOT_UID
                     || callingAppId == Process.SYSTEM_UID

@@ -43,9 +43,9 @@ import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger
 import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger.Companion.logInputChange
 import com.android.systemui.statusbar.pipeline.shared.data.model.DataActivityModel
 import com.android.systemui.statusbar.pipeline.shared.data.model.toWifiDataActivityModel
-import com.android.systemui.statusbar.pipeline.wifi.data.model.WifiNetworkModel
 import com.android.systemui.statusbar.pipeline.wifi.data.repository.RealWifiRepository
 import com.android.systemui.statusbar.pipeline.wifi.data.repository.WifiRepository
+import com.android.systemui.statusbar.pipeline.wifi.shared.model.WifiNetworkModel
 import java.util.concurrent.Executor
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -95,7 +95,7 @@ constructor(
             .logDiffsForTable(
                 wifiTableLogBuffer,
                 columnPrefix = "",
-                columnName = "isWifiEnabled",
+                columnName = "isEnabled",
                 initialValue = wifiManager.isWifiEnabled,
             )
             .stateIn(
@@ -114,13 +114,17 @@ constructor(
                             network: Network,
                             networkCapabilities: NetworkCapabilities
                         ) {
+                            logger.logOnCapabilitiesChanged(
+                                network,
+                                networkCapabilities,
+                                isDefaultNetworkCallback = true,
+                            )
+
                             // This method will always be called immediately after the network
                             // becomes the default, in addition to any time the capabilities change
                             // while the network is the default.
-                            // If this network contains valid wifi info, then wifi is the default
-                            // network.
-                            val wifiInfo = networkCapabilitiesToWifiInfo(networkCapabilities)
-                            trySend(wifiInfo != null)
+                            // If this network is a wifi network, then wifi is the default network.
+                            trySend(isWifiNetwork(networkCapabilities))
                         }
 
                         override fun onLost(network: Network) {
@@ -137,7 +141,7 @@ constructor(
             .logDiffsForTable(
                 wifiTableLogBuffer,
                 columnPrefix = "",
-                columnName = "isWifiDefault",
+                columnName = "isDefault",
                 initialValue = false,
             )
             .stateIn(scope, started = SharingStarted.WhileSubscribed(), initialValue = false)
@@ -152,7 +156,11 @@ constructor(
                             network: Network,
                             networkCapabilities: NetworkCapabilities
                         ) {
-                            logger.logOnCapabilitiesChanged(network, networkCapabilities)
+                            logger.logOnCapabilitiesChanged(
+                                network,
+                                networkCapabilities,
+                                isDefaultNetworkCallback = false,
+                            )
 
                             wifiNetworkChangeEvents.tryEmit(Unit)
 
@@ -204,7 +212,7 @@ constructor(
             .distinctUntilChanged()
             .logDiffsForTable(
                 wifiTableLogBuffer,
-                columnPrefix = "wifiNetwork",
+                columnPrefix = "",
                 initialValue = WIFI_NETWORK_DEFAULT,
             )
             // There will be multiple wifi icons in different places that will frequently
@@ -253,13 +261,27 @@ constructor(
             networkCapabilities: NetworkCapabilities
         ): WifiInfo? {
             return when {
-                networkCapabilities.hasTransport(TRANSPORT_WIFI) ->
-                    networkCapabilities.transportInfo as WifiInfo?
                 networkCapabilities.hasTransport(TRANSPORT_CELLULAR) ->
                     // Sometimes, cellular networks can act as wifi networks (known as VCN --
                     // virtual carrier network). So, see if this cellular network has wifi info.
                     Utils.tryGetWifiInfoForVcn(networkCapabilities)
+                networkCapabilities.hasTransport(TRANSPORT_WIFI) ->
+                    if (networkCapabilities.transportInfo is WifiInfo) {
+                        networkCapabilities.transportInfo as WifiInfo
+                    } else {
+                        null
+                    }
                 else -> null
+            }
+        }
+
+        /** True if these capabilities represent a wifi network. */
+        private fun isWifiNetwork(networkCapabilities: NetworkCapabilities): Boolean {
+            return when {
+                networkCapabilities.hasTransport(TRANSPORT_WIFI) -> true
+                networkCapabilities.hasTransport(TRANSPORT_CELLULAR) ->
+                    Utils.tryGetWifiInfoForVcn(networkCapabilities) != null
+                else -> false
             }
         }
 

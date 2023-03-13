@@ -28,6 +28,7 @@ import com.android.keyguard.dagger.ClockRegistryModule;
 import com.android.keyguard.dagger.KeyguardBouncerComponent;
 import com.android.systemui.BootCompleteCache;
 import com.android.systemui.BootCompleteCacheImpl;
+import com.android.systemui.accessibility.AccessibilityModule;
 import com.android.systemui.appops.dagger.AppOpsModule;
 import com.android.systemui.assist.AssistModule;
 import com.android.systemui.biometrics.AlternateUdfpsTouchProvider;
@@ -58,17 +59,22 @@ import com.android.systemui.people.PeopleModule;
 import com.android.systemui.plugins.BcSmartspaceConfigPlugin;
 import com.android.systemui.plugins.BcSmartspaceDataPlugin;
 import com.android.systemui.privacy.PrivacyModule;
+import com.android.systemui.qrcodescanner.dagger.QRCodeScannerModule;
 import com.android.systemui.qs.FgsManagerController;
 import com.android.systemui.qs.FgsManagerControllerImpl;
 import com.android.systemui.qs.footer.dagger.FooterActionsModule;
 import com.android.systemui.recents.Recents;
+import com.android.systemui.screenrecord.ScreenRecordModule;
 import com.android.systemui.screenshot.dagger.ScreenshotModule;
 import com.android.systemui.security.data.repository.SecurityRepositoryModule;
+import com.android.systemui.settings.DisplayTracker;
 import com.android.systemui.shade.ShadeController;
 import com.android.systemui.smartspace.dagger.SmartspaceModule;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
+import com.android.systemui.statusbar.connectivity.ConnectivityModule;
+import com.android.systemui.statusbar.notification.NotifPipelineFlags;
 import com.android.systemui.statusbar.notification.collection.NotifPipeline;
 import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinder;
 import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinderImpl;
@@ -84,6 +90,7 @@ import com.android.systemui.statusbar.phone.dagger.CentralSurfacesComponent;
 import com.android.systemui.statusbar.pipeline.dagger.StatusBarPipelineModule;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
+import com.android.systemui.statusbar.policy.PolicyModule;
 import com.android.systemui.statusbar.policy.ZenModeController;
 import com.android.systemui.statusbar.policy.dagger.SmartRepliesInflationModule;
 import com.android.systemui.statusbar.policy.dagger.StatusBarPolicyModule;
@@ -96,6 +103,7 @@ import com.android.systemui.user.UserModule;
 import com.android.systemui.util.concurrency.SysUIConcurrencyModule;
 import com.android.systemui.util.dagger.UtilModule;
 import com.android.systemui.util.kotlin.CoroutinesModule;
+import com.android.systemui.util.leak.GarbageMonitorModule;
 import com.android.systemui.util.sensors.SensorModule;
 import com.android.systemui.util.settings.SettingsUtilModule;
 import com.android.systemui.util.time.SystemClock;
@@ -106,6 +114,8 @@ import com.android.wm.shell.bubbles.Bubbles;
 
 import java.util.Optional;
 import java.util.concurrent.Executor;
+
+import javax.inject.Named;
 
 import dagger.Binds;
 import dagger.BindsOptionalOf;
@@ -123,6 +133,7 @@ import dagger.Provides;
  * may not appreciate that.
  */
 @Module(includes = {
+            AccessibilityModule.class,
             AppOpsModule.class,
             AssistModule.class,
             BiometricsModule.class,
@@ -130,23 +141,29 @@ import dagger.Provides;
             ClipboardOverlayModule.class,
             ClockInfoModule.class,
             ClockRegistryModule.class,
+            ConnectivityModule.class,
             CoroutinesModule.class,
             DreamModule.class,
             ControlsModule.class,
             DemoModeModule.class,
             FalsingModule.class,
             FlagsModule.class,
+            SystemPropertiesFlagsModule.class,
             FooterActionsModule.class,
+            GarbageMonitorModule.class,
             LogModule.class,
             MediaProjectionModule.class,
             MotionToolModule.class,
             PeopleHubModule.class,
             PeopleModule.class,
             PluginModule.class,
+            PolicyModule.class,
             PrivacyModule.class,
+            QRCodeScannerModule.class,
             ScreenshotModule.class,
             SensorModule.class,
             SecurityRepositoryModule.class,
+            ScreenRecordModule.class,
             SettingsUtilModule.class,
             SmartRepliesInflationModule.class,
             SmartspaceModule.class,
@@ -196,8 +213,8 @@ public abstract class SystemUIModule {
 
     @SysUISingleton
     @Provides
-    static SysUiState provideSysUiState(DumpManager dumpManager) {
-        final SysUiState state = new SysUiState();
+    static SysUiState provideSysUiState(DisplayTracker displayTracker, DumpManager dumpManager) {
+        final SysUiState state = new SysUiState(displayTracker);
         dumpManager.registerDumpable(state);
         return state;
     }
@@ -213,6 +230,14 @@ public abstract class SystemUIModule {
 
     @BindsOptionalOf
     abstract BcSmartspaceConfigPlugin optionalBcSmartspaceConfigPlugin();
+
+    @BindsOptionalOf
+    @Named(SmartspaceModule.DATE_SMARTSPACE_DATA_PLUGIN)
+    abstract BcSmartspaceDataPlugin optionalDateSmartspaceConfigPlugin();
+
+    @BindsOptionalOf
+    @Named(SmartspaceModule.WEATHER_SMARTSPACE_DATA_PLUGIN)
+    abstract BcSmartspaceDataPlugin optionalWeatherSmartspaceConfigPlugin();
 
     @BindsOptionalOf
     abstract Recents optionalRecents();
@@ -254,6 +279,7 @@ public abstract class SystemUIModule {
             NotifPipeline notifPipeline,
             SysUiState sysUiState,
             FeatureFlags featureFlags,
+            NotifPipelineFlags notifPipelineFlags,
             @Main Executor sysuiMainExecutor) {
         return Optional.ofNullable(BubblesManager.create(context,
                 bubblesOptional,
@@ -271,6 +297,7 @@ public abstract class SystemUIModule {
                 notifPipeline,
                 sysUiState,
                 featureFlags,
+                notifPipelineFlags,
                 sysuiMainExecutor));
     }
 

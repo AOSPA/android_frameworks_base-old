@@ -87,6 +87,7 @@ import android.util.Slog;
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.app.IHotwordRecognitionStatusCallback;
+import com.android.internal.app.IVisualQueryDetectionAttentionListener;
 import com.android.internal.app.IVoiceActionCheckCallback;
 import com.android.internal.app.IVoiceInteractionManagerService;
 import com.android.internal.app.IVoiceInteractionSessionListener;
@@ -229,7 +230,7 @@ public class VoiceInteractionManagerService extends SystemService {
     class LocalService extends VoiceInteractionManagerInternal {
         @Override
         public void startLocalVoiceInteraction(@NonNull IBinder callingActivity,
-                @Nullable String attributionTag, @NonNull Bundle options) {
+                @Nullable String attributionTag, @Nullable Bundle options) {
             if (DEBUG) {
                 Slog.i(TAG, "startLocalVoiceInteraction " + callingActivity);
             }
@@ -425,7 +426,7 @@ public class VoiceInteractionManagerService extends SystemService {
 
         // TODO: VI Make sure the caller is the current user or profile
         void startLocalVoiceInteraction(@NonNull final IBinder token,
-                @Nullable String attributionTag, @NonNull Bundle options) {
+                @Nullable String attributionTag, @Nullable Bundle options) {
             if (mImpl == null) return;
 
             final int callingUid = Binder.getCallingUid();
@@ -944,7 +945,7 @@ public class VoiceInteractionManagerService extends SystemService {
         }
 
         @Override
-        public void showSession(@NonNull Bundle args, int flags, @Nullable String attributionTag) {
+        public void showSession(@Nullable Bundle args, int flags, @Nullable String attributionTag) {
             synchronized (this) {
                 enforceIsCurrentVoiceInteractionService();
 
@@ -975,7 +976,7 @@ public class VoiceInteractionManagerService extends SystemService {
         }
 
         @Override
-        public boolean showSessionFromSession(@NonNull IBinder token, @NonNull Bundle sessionArgs,
+        public boolean showSessionFromSession(@NonNull IBinder token, @Nullable Bundle sessionArgs,
                 int flags, @Nullable String attributionTag) {
             synchronized (this) {
                 if (mImpl == null) {
@@ -1335,6 +1336,39 @@ public class VoiceInteractionManagerService extends SystemService {
                 } finally {
                     Binder.restoreCallingIdentity(caller);
                 }
+            }
+        }
+
+        @android.annotation.EnforcePermission(
+                android.Manifest.permission.ACCESS_VOICE_INTERACTION_SERVICE)
+        @Override
+        public void enableVisualQueryDetection(
+                IVisualQueryDetectionAttentionListener listener) {
+            super.enableVisualQueryDetection_enforcePermission();
+            synchronized (this) {
+
+                if (mImpl == null) {
+                    Slog.w(TAG,
+                            "enableVisualQueryDetection without running voice interaction service");
+                    return;
+                }
+                this.mImpl.setVisualQueryDetectionAttentionListenerLocked(listener);
+            }
+        }
+
+        @android.annotation.EnforcePermission(
+                android.Manifest.permission.ACCESS_VOICE_INTERACTION_SERVICE)
+        @Override
+        public void disableVisualQueryDetection() {
+            super.disableVisualQueryDetection_enforcePermission();
+            synchronized (this) {
+                if (mImpl == null) {
+                    Slog.w(TAG,
+                            "disableVisualQueryDetection without running voice interaction"
+                                    + " service");
+                    return;
+                }
+                this.mImpl.setVisualQueryDetectionAttentionListenerLocked(null);
             }
         }
 
@@ -1794,7 +1828,7 @@ public class VoiceInteractionManagerService extends SystemService {
 
         @android.annotation.EnforcePermission(android.Manifest.permission.ACCESS_VOICE_INTERACTION_SERVICE)
         @Override
-        public boolean showSessionForActiveService(@NonNull Bundle args, int sourceFlags,
+        public boolean showSessionForActiveService(@Nullable Bundle args, int sourceFlags,
                 @Nullable String attributionTag,
                 @Nullable IVoiceInteractionSessionShowCallback showCallback,
                 @Nullable IBinder activityToken) {

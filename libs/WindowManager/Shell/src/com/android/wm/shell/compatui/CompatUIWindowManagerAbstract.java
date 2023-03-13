@@ -151,6 +151,7 @@ public abstract class CompatUIWindowManagerAbstract extends WindowlessWindowMana
     @Override
     public void setConfiguration(Configuration configuration) {
         super.setConfiguration(configuration);
+        // TODO(b/266262111): Investigate loss of theme configuration when switching TaskListener
         mContext = mContext.createConfigurationContext(configuration);
     }
 
@@ -166,6 +167,10 @@ public abstract class CompatUIWindowManagerAbstract extends WindowlessWindowMana
         mLeash = builder.build();
         initSurface(mLeash);
         return mLeash;
+    }
+
+    protected ShellTaskOrganizer.TaskListener getTaskListener() {
+        return mTaskListener;
     }
 
     /** Inits the z-order of the surface. */
@@ -358,7 +363,8 @@ public abstract class CompatUIWindowManagerAbstract extends WindowlessWindowMana
     /** Creates a {@link SurfaceControlViewHost} for this window manager. */
     @VisibleForTesting(visibility = PRIVATE)
     public SurfaceControlViewHost createSurfaceViewHost() {
-        return new SurfaceControlViewHost(mContext, mContext.getDisplay(), this);
+        return new SurfaceControlViewHost(mContext, mContext.getDisplay(), this,
+                getClass().getSimpleName());
     }
 
     /** Gets the layout params. */

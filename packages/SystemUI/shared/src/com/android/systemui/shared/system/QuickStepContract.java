@@ -43,6 +43,7 @@ public class QuickStepContract {
     public static final String KEY_EXTRA_SYSUI_PROXY = "extra_sysui_proxy";
     public static final String KEY_EXTRA_WINDOW_CORNER_RADIUS = "extra_window_corner_radius";
     public static final String KEY_EXTRA_SUPPORTS_WINDOW_CORNERS = "extra_supports_window_corners";
+    public static final String KEY_EXTRA_UNFOLD_ANIMATION_FORWARDER = "extra_unfold_animation";
     // See ISysuiUnlockAnimationController.aidl
     public static final String KEY_EXTRA_UNLOCK_ANIMATION_CONTROLLER = "unlock_animation";
 
@@ -112,7 +113,8 @@ public class QuickStepContract {
     public static final int SYSUI_STATE_VOICE_INTERACTION_WINDOW_SHOWING = 1 << 25;
     // Freeform windows are showing in desktop mode
     public static final int SYSUI_STATE_FREEFORM_ACTIVE_IN_DESKTOP_MODE = 1 << 26;
-
+    // Device dreaming state
+    public static final int SYSUI_STATE_DEVICE_DREAMING = 1 << 27;
 
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({SYSUI_STATE_SCREEN_PINNING,
@@ -141,7 +143,8 @@ public class QuickStepContract {
             SYSUI_STATE_BUBBLES_MANAGE_MENU_EXPANDED,
             SYSUI_STATE_IMMERSIVE_MODE,
             SYSUI_STATE_VOICE_INTERACTION_WINDOW_SHOWING,
-            SYSUI_STATE_FREEFORM_ACTIVE_IN_DESKTOP_MODE
+            SYSUI_STATE_FREEFORM_ACTIVE_IN_DESKTOP_MODE,
+            SYSUI_STATE_DEVICE_DREAMING
     })
     public @interface SystemUiStateFlags {}
 
@@ -179,6 +182,8 @@ public class QuickStepContract {
         str.add((flags & SYSUI_STATE_VOICE_INTERACTION_WINDOW_SHOWING) != 0 ? "vis_win_showing" : "");
         str.add((flags & SYSUI_STATE_FREEFORM_ACTIVE_IN_DESKTOP_MODE) != 0
                 ? "freeform_active_in_desktop_mode" : "");
+        str.add((flags & SYSUI_STATE_DEVICE_DREAMING) != 0 ? "device_dreaming" : "");
+
         return str.toString();
     }
 

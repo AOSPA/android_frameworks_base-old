@@ -70,6 +70,7 @@ import static com.android.server.pm.PackageManagerService.SCAN_AS_ODM;
 import static com.android.server.pm.PackageManagerService.SCAN_AS_OEM;
 import static com.android.server.pm.PackageManagerService.SCAN_AS_PRIVILEGED;
 import static com.android.server.pm.PackageManagerService.SCAN_AS_PRODUCT;
+import static com.android.server.pm.PackageManagerService.SCAN_AS_STOPPED_SYSTEM_APP;
 import static com.android.server.pm.PackageManagerService.SCAN_AS_SYSTEM;
 import static com.android.server.pm.PackageManagerService.SCAN_AS_SYSTEM_EXT;
 import static com.android.server.pm.PackageManagerService.SCAN_AS_VENDOR;
@@ -99,7 +100,9 @@ import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.apex.ApexInfo;
 import android.app.AppOpsManager;
+import android.app.ApplicationExitInfo;
 import android.app.ApplicationPackageManager;
+import android.app.BroadcastOptions;
 import android.app.backup.IBackupManager;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -489,8 +492,10 @@ final class InstallPackageHelper {
             if (pkg.getStaticSharedLibraryName() == null || isReplace) {
                 for (int i = 0; i < clientLibPkgs.size(); i++) {
                     AndroidPackage clientPkg = clientLibPkgs.get(i);
-                    mPm.killApplication(clientPkg.getPackageName(),
-                            clientPkg.getUid(), "update lib");
+                    String packageName = clientPkg.getPackageName();
+                    mPm.killApplication(packageName,
+                            clientPkg.getUid(), "update lib",
+                            ApplicationExitInfo.REASON_DEPENDENCY_DIED);
                 }
             }
         }
@@ -687,7 +692,10 @@ final class InstallPackageHelper {
         fillIn.putExtra(PackageInstaller.EXTRA_STATUS,
                 PackageManager.installStatusToPublicStatus(returnCode));
         try {
-            target.sendIntent(context, 0, fillIn, null, null);
+            final BroadcastOptions options = BroadcastOptions.makeBasic();
+            options.setPendingIntentBackgroundActivityLaunchAllowed(false);
+            target.sendIntent(context, 0, fillIn, null /* onFinished*/, null /* handler */,
+                    null /* requiredPermission */, options.toBundle());
         } catch (IntentSender.SendIntentException ignored) {
         }
     }
@@ -1172,7 +1180,8 @@ final class InstallPackageHelper {
         request.setName(pkgName);
         if (parsedPackage.isTestOnly()) {
             if ((installFlags & PackageManager.INSTALL_ALLOW_TEST) == 0) {
-                throw new PrepareFailure(INSTALL_FAILED_TEST_ONLY, "installPackageLI");
+                throw new PrepareFailure(INSTALL_FAILED_TEST_ONLY,
+                        "Failed to install test-only apk. Did you forget to add -t?");
             }
         }
 
@@ -1547,7 +1556,8 @@ final class InstallPackageHelper {
         }
 
         final PackageFreezer freezer =
-                freezePackageForInstall(pkgName, installFlags, "installPackageLI");
+                freezePackageForInstall(pkgName, UserHandle.USER_ALL, installFlags,
+                        "installPackageLI", ApplicationExitInfo.REASON_PACKAGE_UPDATED);
         boolean shouldCloseFreezerBeforeReturn = true;
         try {
             final PackageState oldPackageState;
@@ -1996,17 +2006,12 @@ final class InstallPackageHelper {
         }
     }
 
-    private PackageFreezer freezePackageForInstall(String packageName, int installFlags,
-            String killReason) {
-        return freezePackageForInstall(packageName, UserHandle.USER_ALL, installFlags, killReason);
-    }
-
     private PackageFreezer freezePackageForInstall(String packageName, int userId, int installFlags,
-            String killReason) {
+            String killReason, int exitInfoReason) {
         if ((installFlags & PackageManager.INSTALL_DONT_KILL_APP) != 0) {
             return new PackageFreezer(mPm);
         } else {
-            return mPm.freezePackage(packageName, userId, killReason);
+            return mPm.freezePackage(packageName, userId, killReason, exitInfoReason);
         }
     }
 
@@ -2300,14 +2305,23 @@ final class InstallPackageHelper {
                 final PermissionManagerServiceInternal.PackageInstalledParams.Builder
                         permissionParamsBuilder =
                         new PermissionManagerServiceInternal.PackageInstalledParams.Builder();
-                final boolean grantPermissions = (installRequest.getInstallFlags()
-                        & PackageManager.INSTALL_GRANT_RUNTIME_PERMISSIONS) != 0;
-                if (grantPermissions) {
-                    final List<String> grantedPermissions =
-                            installRequest.getInstallGrantPermissions() != null
-                                    ? Arrays.asList(installRequest.getInstallGrantPermissions())
-                                    : pkg.getRequestedPermissions();
-                    permissionParamsBuilder.setGrantedPermissions(grantedPermissions);
+                final boolean grantRequestedPermissions = (installRequest.getInstallFlags()
+                        & PackageManager.INSTALL_GRANT_ALL_REQUESTED_PERMISSIONS) != 0;
+                if (grantRequestedPermissions) {
+                    var permissionStates = new ArrayMap<String, Integer>();
+                    var requestedPermissions = pkg.getRequestedPermissions();
+                    for (int index = 0; index < requestedPermissions.size(); index++) {
+                        var permissionName = requestedPermissions.get(index);
+                        permissionStates.put(permissionName,
+                                PackageInstaller.SessionParams.PERMISSION_STATE_GRANTED);
+                    }
+                    permissionParamsBuilder.setPermissionStates(permissionStates);
+                } else {
+                    var permissionStates = installRequest.getPermissionStates();
+                    if (permissionStates != null) {
+                        permissionParamsBuilder
+                                .setPermissionStates(permissionStates);
+                    }
                 }
                 final boolean allowlistAllRestrictedPermissions =
                         (installRequest.getInstallFlags()
@@ -2538,10 +2552,10 @@ final class InstallPackageHelper {
             // will be null whereas dataOwnerPkg will contain information about the package
             // which was uninstalled while keeping its data.
             AndroidPackage dataOwnerPkg = mPm.mPackages.get(packageName);
+            PackageSetting dataOwnerPs = mPm.mSettings.getPackageLPr(packageName);
             if (dataOwnerPkg  == null) {
-                PackageSetting ps = mPm.mSettings.getPackageLPr(packageName);
-                if (ps != null) {
-                    dataOwnerPkg = ps.getPkg();
+                if (dataOwnerPs != null) {
+                    dataOwnerPkg = dataOwnerPs.getPkg();
                 }
             }
 
@@ -2569,6 +2583,7 @@ final class InstallPackageHelper {
             if (dataOwnerPkg != null && !dataOwnerPkg.isSdkLibrary()) {
                 if (!PackageManagerServiceUtils.isDowngradePermitted(installFlags,
                         dataOwnerPkg.isDebuggable())) {
+                    // Downgrade is not permitted; a lower version of the app will not be allowed
                     try {
                         PackageManagerServiceUtils.checkDowngrade(dataOwnerPkg, pkgLite);
                     } catch (PackageManagerException e) {
@@ -2576,6 +2591,28 @@ final class InstallPackageHelper {
                         Slog.w(TAG, errorMsg);
                         return Pair.create(
                                 PackageManager.INSTALL_FAILED_VERSION_DOWNGRADE, errorMsg);
+                    }
+                } else if (dataOwnerPs.isSystem()) {
+                    // Downgrade is permitted, but system apps can't be downgraded below
+                    // the version preloaded onto the system image
+                    final PackageSetting disabledPs = mPm.mSettings.getDisabledSystemPkgLPr(
+                            dataOwnerPs);
+                    if (disabledPs != null) {
+                        dataOwnerPkg = disabledPs.getPkg();
+                    }
+                    if (!Build.IS_DEBUGGABLE && !dataOwnerPkg.isDebuggable()) {
+                        // Only restrict non-debuggable builds and non-debuggable version of the app
+                        try {
+                            PackageManagerServiceUtils.checkDowngrade(dataOwnerPkg, pkgLite);
+                        } catch (PackageManagerException e) {
+                            String errorMsg =
+                                    "System app: " + packageName + " cannot be downgraded to"
+                                            + " older than its preloaded version on the system"
+                                            + " image. " + e.getMessage();
+                            Slog.w(TAG, errorMsg);
+                            return Pair.create(
+                                    PackageManager.INSTALL_FAILED_VERSION_DOWNGRADE, errorMsg);
+                        }
                     }
                 }
             }
@@ -2860,10 +2897,12 @@ final class InstallPackageHelper {
                 }
                 // Send to PermissionController for all update users, even if it may not be running
                 // for some users
-                mPm.sendPackageBroadcast(Intent.ACTION_PACKAGE_ADDED, packageName,
-                        extras, 0 /*flags*/,
-                        mPm.mRequiredPermissionControllerPackage, null /*finishedReceiver*/,
-                        updateUserIds, instantUserIds, null /* broadcastAllowList */, null);
+                if (BroadcastHelper.isPrivacySafetyLabelChangeNotificationsEnabled()) {
+                    mPm.sendPackageBroadcast(Intent.ACTION_PACKAGE_ADDED, packageName,
+                            extras, 0 /*flags*/,
+                            mPm.mRequiredPermissionControllerPackage, null /*finishedReceiver*/,
+                            updateUserIds, instantUserIds, null /* broadcastAllowList */, null);
+                }
                 // Notify required verifier(s) that are not the installer of record for the package.
                 for (String verifierPackageName : mPm.mRequiredVerifierPackages) {
                     if (verifierPackageName != null && !verifierPackageName.equals(
@@ -3124,7 +3163,9 @@ final class InstallPackageHelper {
         synchronized (mPm.mInstallLock) {
             final AndroidPackage pkg;
             try (PackageFreezer freezer =
-                         mPm.freezePackage(stubPkg.getPackageName(), "setEnabledSetting")) {
+                         mPm.freezePackage(stubPkg.getPackageName(), UserHandle.USER_ALL,
+                                 "setEnabledSetting",
+                                 ApplicationExitInfo.REASON_PACKAGE_UPDATED)) {
                 pkg = installStubPackageLI(stubPkg, parseFlags, 0 /*scanFlags*/);
                 mAppDataHelper.prepareAppDataAfterInstallLIF(pkg);
                 synchronized (mPm.mLock) {
@@ -3146,7 +3187,9 @@ final class InstallPackageHelper {
             } catch (PackageManagerException e) {
                 // Whoops! Something went very wrong; roll back to the stub and disable the package
                 try (PackageFreezer freezer =
-                             mPm.freezePackage(stubPkg.getPackageName(), "setEnabledSetting")) {
+                             mPm.freezePackage(stubPkg.getPackageName(), UserHandle.USER_ALL,
+                                     "setEnabledSetting",
+                                     ApplicationExitInfo.REASON_PACKAGE_UPDATED)) {
                     synchronized (mPm.mLock) {
                         // NOTE: Ensure the system package is enabled; even for a compressed stub.
                         // If we don't, installing the system package fails during scan
@@ -4202,8 +4245,8 @@ final class InstallPackageHelper {
                         "System package signature mismatch;"
                                 + " name: " + pkgSetting.getPackageName());
                 try (@SuppressWarnings("unused") PackageFreezer freezer = mPm.freezePackage(
-                        parsedPackage.getPackageName(),
-                        "scanPackageInternalLI")) {
+                        parsedPackage.getPackageName(), UserHandle.USER_ALL,
+                        "scanPackageInternalLI", ApplicationExitInfo.REASON_OTHER)) {
                     DeletePackageHelper deletePackageHelper = new DeletePackageHelper(mPm);
                     deletePackageHelper.deletePackageLIF(parsedPackage.getPackageName(), null, true,
                             mPm.mUserManager.getUserIds(), 0, null, false);
@@ -4234,6 +4277,18 @@ final class InstallPackageHelper {
                                 + pkgSetting.getVersionCode()
                                 + "; new: " + parsedPackage.getPath() + " @ "
                                 + parsedPackage.getPath());
+            }
+        }
+
+        // A new application appeared on /system, and we are seeing it for the first time.
+        // Its also not updated as we don't have a copy of it on /data. So, scan it in a
+        // STOPPED state. Ignore if it's an APEX package since stopped state does not affect them.
+        final boolean isApexPkg = (scanFlags & SCAN_AS_APEX) != 0;
+        if (mPm.mShouldStopSystemPackagesByDefault && scanSystemPartition
+                && !pkgAlreadyExists && !isApexPkg) {
+            String packageName = parsedPackage.getPackageName();
+            if (!mPm.mInitialNonStoppedSystemPackages.contains(packageName)) {
+                scanFlags |= SCAN_AS_STOPPED_SYSTEM_APP;
             }
         }
 

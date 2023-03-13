@@ -40,8 +40,10 @@ import static dalvik.system.DexFile.isProfileGuidedCompilerFilter;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.AppGlobals;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.ResolveInfo;
 import android.content.pm.SharedLibraryInfo;
 import android.content.pm.dex.ArtManager;
@@ -57,7 +59,11 @@ import android.util.Log;
 import android.util.Slog;
 
 import com.android.internal.logging.MetricsLogger;
+import com.android.internal.util.FrameworkStatsLog;
+import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.LocalManagerRegistry;
+import com.android.server.LocalServices;
+import com.android.server.PinnerService;
 import com.android.server.art.ArtManagerLocal;
 import com.android.server.art.DexUseManagerLocal;
 import com.android.server.art.ReasonMapping;
@@ -560,7 +566,10 @@ public final class DexOptHelper {
                 mPm.getDexManager().getPackageUseInfoOrDefault(p.getPackageName()), options);
     }
 
-    public void forceDexOpt(@NonNull Computer snapshot, String packageName) {
+    /** @deprecated For legacy shell command only. */
+    @Deprecated
+    public void forceDexOpt(@NonNull Computer snapshot, String packageName)
+            throws LegacyDexoptDisabledException {
         PackageManagerServiceUtils.enforceSystemOrRoot("forceDexOpt");
 
         final PackageStateInternal packageState = snapshot.getPackageStateInternal(packageName);
@@ -580,19 +589,7 @@ public final class DexOptHelper {
                 getDefaultCompilerFilter(), null /* splitName */,
                 DexoptOptions.DEXOPT_FORCE | DexoptOptions.DEXOPT_BOOT_COMPLETE);
 
-        @DexOptResult int res;
-        if (useArtService()) {
-            // performDexOptWithArtService ignores the snapshot and takes its own, so it can race
-            // with the package checks above, but at worst the effect is only a bit less friendly
-            // error below.
-            res = performDexOptWithArtService(options, ArtFlags.FLAG_SHOULD_INCLUDE_DEPENDENCIES);
-        } else {
-            try {
-                res = performDexOptInternalWithDependenciesLI(pkg, packageState, options);
-            } catch (LegacyDexoptDisabledException e) {
-                throw new RuntimeException(e);
-            }
-        }
+        @DexOptResult int res = performDexOptInternalWithDependenciesLI(pkg, packageState, options);
 
         Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
         if (res != PackageDexOptimizer.DEX_OPT_PERFORMED) {
@@ -844,6 +841,26 @@ public final class DexOptHelper {
     }
 
     /**
+     * Dumps the dexopt state for the given package, or all packages if it is null.
+     */
+    public static void dumpDexoptState(
+            @NonNull IndentingPrintWriter ipw, @Nullable String packageName) {
+        try (PackageManagerLocal.FilteredSnapshot snapshot =
+                        getPackageManagerLocal().withFilteredSnapshot()) {
+            if (packageName != null) {
+                try {
+                    DexOptHelper.getArtManagerLocal().dumpPackage(ipw, snapshot, packageName);
+                } catch (IllegalArgumentException e) {
+                    // Package isn't found, but that should only happen due to race.
+                    ipw.println(e);
+                }
+            } else {
+                DexOptHelper.getArtManagerLocal().dump(ipw, snapshot);
+            }
+        }
+    }
+
+    /**
      * Returns the module names of the APEXes that contribute to bootclasspath.
      */
     private static List<String> getBcpApexes() {
@@ -949,6 +966,35 @@ public final class DexOptHelper {
                 mPm.getPackageUsage().maybeWriteAsync(mPm.mSettings.getPackagesLocked());
                 mPm.mCompilerStats.maybeWriteAsync();
             }
+
+            if (result.getReason().equals(ReasonMapping.REASON_INACTIVE)) {
+                for (DexoptResult.PackageDexoptResult pkgRes : result.getPackageDexoptResults()) {
+                    if (pkgRes.getStatus() == DexoptResult.DEXOPT_PERFORMED) {
+                        long pkgSizeBytes = 0;
+                        long pkgSizeBeforeBytes = 0;
+                        for (DexoptResult.DexContainerFileDexoptResult dexRes :
+                                pkgRes.getDexContainerFileDexoptResults()) {
+                            long dexContainerSize = new File(dexRes.getDexContainerFile()).length();
+                            pkgSizeBytes += dexRes.getSizeBytes() + dexContainerSize;
+                            pkgSizeBeforeBytes += dexRes.getSizeBeforeBytes() + dexContainerSize;
+                        }
+                        FrameworkStatsLog.write(FrameworkStatsLog.APP_DOWNGRADED,
+                                pkgRes.getPackageName(), pkgSizeBeforeBytes, pkgSizeBytes,
+                                false /* aggressive */);
+                    }
+                }
+            }
+
+            var updatedPackages = new ArraySet<String>();
+            for (DexoptResult.PackageDexoptResult pkgRes : result.getPackageDexoptResults()) {
+                if (pkgRes.hasUpdatedArtifacts()) {
+                    updatedPackages.add(pkgRes.getPackageName());
+                }
+            }
+            if (!updatedPackages.isEmpty()) {
+                LocalServices.getService(PinnerService.class)
+                        .update(updatedPackages, false /* force */);
+            }
         }
     }
 
@@ -966,7 +1012,15 @@ public final class DexOptHelper {
                 pm.getDexOptHelper().new DexoptDoneHandler());
         LocalManagerRegistry.addManager(ArtManagerLocal.class, artManager);
 
-        artManager.scheduleBackgroundDexoptJob();
+        // Schedule the background job when boot is complete. This decouples us from when
+        // JobSchedulerService is initialized.
+        systemContext.registerReceiver(new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                context.unregisterReceiver(this);
+                artManager.scheduleBackgroundDexoptJob();
+            }
+        }, new IntentFilter(Intent.ACTION_BOOT_COMPLETED));
     }
 
     /**

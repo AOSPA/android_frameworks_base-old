@@ -26,7 +26,7 @@ import com.android.server.wm.flicker.FlickerTestFactory
 import com.android.server.wm.flicker.helpers.ShowWhenLockedAppHelper
 import com.android.server.wm.flicker.helpers.wakeUpAndGoToHomeScreen
 import com.android.server.wm.flicker.junit.FlickerParametersRunnerFactory
-import com.android.server.wm.traces.common.ComponentNameMatcher
+import com.android.server.wm.traces.common.component.matchers.ComponentNameMatcher
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -113,6 +113,10 @@ class OpenAppFromLockNotificationWithLockOverlayApp(flicker: FlickerTest) :
     @FlakyTest(bugId = 209599395)
     @Test
     override fun navBarWindowIsAlwaysVisible() = super.navBarWindowIsAlwaysVisible()
+
+    @FlakyTest(bugId = 266730606)
+    @Test
+    override fun entireScreenCovered() = super.entireScreenCovered()
 
     companion object {
         /**

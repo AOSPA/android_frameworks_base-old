@@ -491,7 +491,7 @@ public final class CompanionDeviceManager {
      * @param associationId id of the device association.
      * @param flags system data types to be enabled.
      */
-    public void enableSystemDataSync(int associationId, @DataSyncTypes int flags) {
+    public void enableSystemDataSyncForTypes(int associationId, @DataSyncTypes int flags) {
         if (!checkFeaturePresent()) {
             return;
         }
@@ -513,7 +513,7 @@ public final class CompanionDeviceManager {
      * @param associationId id of the device association.
      * @param flags system data types to be disabled.
      */
-    public void disableSystemDataSync(int associationId, @DataSyncTypes int flags) {
+    public void disableSystemDataSyncForTypes(int associationId, @DataSyncTypes int flags) {
         if (!checkFeaturePresent()) {
             return;
         }
@@ -718,7 +718,9 @@ public final class CompanionDeviceManager {
      * @return the associations list
      * @see #addOnAssociationsChangedListener(Executor, OnAssociationsChangedListener)
      * @see #removeOnAssociationsChangedListener(OnAssociationsChangedListener)
+     * @hide
      */
+    @SystemApi
     @UserHandleAware
     @RequiresPermission(android.Manifest.permission.MANAGE_COMPANION_DEVICES)
     public @NonNull List<AssociationInfo> getAllAssociations() {
@@ -732,7 +734,10 @@ public final class CompanionDeviceManager {
 
     /**
      * Listener for any changes to {@link AssociationInfo}.
+     *
+     * @hide
      */
+    @SystemApi
     public interface OnAssociationsChangedListener {
         /**
          * Invoked when a change occurs to any of the associations for the user (including adding
@@ -747,7 +752,9 @@ public final class CompanionDeviceManager {
      * Register listener for any changes to {@link AssociationInfo}.
      *
      * @see #getAllAssociations()
+     * @hide
      */
+    @SystemApi
     @UserHandleAware
     @RequiresPermission(android.Manifest.permission.MANAGE_COMPANION_DEVICES)
     public void addOnAssociationsChangedListener(
@@ -769,7 +776,9 @@ public final class CompanionDeviceManager {
      * Unregister listener for any changes to {@link AssociationInfo}.
      *
      * @see #getAllAssociations()
+     * @hide
      */
+    @SystemApi
     @UserHandleAware
     @RequiresPermission(android.Manifest.permission.MANAGE_COMPANION_DEVICES)
     public void removeOnAssociationsChangedListener(
@@ -924,14 +933,25 @@ public final class CompanionDeviceManager {
         Log.w(LOG_TAG, "dispatchMessage replaced by attachSystemDataTransport");
     }
 
-    /** {@hide} */
+    /**
+     * Attach a bidirectional communication stream to be used as a transport channel for
+     * transporting system data between associated devices.
+     *
+     * @param associationId id of the associated device.
+     * @param in Already connected stream of data incoming from remote
+     *           associated device.
+     * @param out Already connected stream of data outgoing to remote associated
+     *            device.
+     * @throws DeviceNotAssociatedException Thrown if the associationId was not previously
+     * associated with this app.
+     *
+     * @see #buildPermissionTransferUserConsentIntent(int)
+     * @see #startSystemDataTransfer(int, Executor, OutcomeReceiver)
+     * @see #detachSystemDataTransport(int)
+     */
     @RequiresPermission(android.Manifest.permission.DELIVER_COMPANION_MESSAGES)
     public void attachSystemDataTransport(int associationId, @NonNull InputStream in,
             @NonNull OutputStream out) throws DeviceNotAssociatedException {
-        if (!FeatureUtils.isPermSyncEnabled()) {
-            Log.e(LOG_TAG, "Calling attachSystemDataTransport, but perm sync is disabled.");
-            return;
-        }
         synchronized (mTransports) {
             if (mTransports.contains(associationId)) {
                 detachSystemDataTransport(associationId);
@@ -947,14 +967,19 @@ public final class CompanionDeviceManager {
         }
     }
 
-    /** {@hide} */
+    /**
+     * Detach the transport channel that's previously attached for the associated device. The system
+     * will stop transferring any system data when this method is called.
+     *
+     * @param associationId id of the associated device.
+     * @throws DeviceNotAssociatedException Thrown if the associationId was not previously
+     * associated with this app.
+     *
+     * @see #attachSystemDataTransport(int, InputStream, OutputStream)
+     */
     @RequiresPermission(android.Manifest.permission.DELIVER_COMPANION_MESSAGES)
     public void detachSystemDataTransport(int associationId)
             throws DeviceNotAssociatedException {
-        if (!FeatureUtils.isPermSyncEnabled()) {
-            Log.e(LOG_TAG, "Calling detachSystemDataTransport, but perm sync is disabled.");
-            return;
-        }
         synchronized (mTransports) {
             final Transport transport = mTransports.get(associationId);
             if (transport != null) {
@@ -1044,28 +1069,33 @@ public final class CompanionDeviceManager {
      *
      * <p>Only the companion app which owns the association can call this method. Otherwise a null
      * IntentSender will be returned from this method and an error will be logged.
-     * The The app should launch the {@link Activity} in the returned {@code intentSender}
+     * The app should launch the {@link Activity} in the returned {@code intentSender}
      * {@link IntentSender} by calling
      * {@link Activity#startIntentSenderForResult(IntentSender, int, Intent, int, int, int)}.</p>
      *
-     * <p>The permission transfer doesn't happen immediately after the call or user consented.
-     * The app needs to trigger the system data transfer manually by calling
-     * {@code #startSystemDataTransfer(int)}, when it confirms the communication channel between
-     * the two devices is established.</p>
+     * <p>The permission transfer doesn't happen immediately after the call or when the user
+     * consents. The app needs to call
+     * {@link #attachSystemDataTransport(int, InputStream, OutputStream)} to attach a transport
+     * channel and
+     * {@link #startSystemDataTransfer(int, Executor, OutcomeReceiver)} to trigger the system data
+     * transfer}.</p>
      *
      * @param associationId The unique {@link AssociationInfo#getId ID} assigned to the association
      *                      of the companion device recorded by CompanionDeviceManager
      * @return An {@link IntentSender} that the app should use to launch the UI for
      *         the user to confirm the system data transfer request.
+     *
+     * @see #attachSystemDataTransport(int, InputStream, OutputStream)
+     * @see #startSystemDataTransfer(int, Executor, OutcomeReceiver)
      */
     @UserHandleAware
     @Nullable
     public IntentSender buildPermissionTransferUserConsentIntent(int associationId)
             throws DeviceNotAssociatedException {
         if (!FeatureUtils.isPermSyncEnabled()) {
-            Log.e(LOG_TAG, "Calling buildPermissionTransferUserConsentIntent,"
-                    + " but perm sync is disabled.");
-            return null;
+            throw new UnsupportedOperationException("Calling"
+                    + " buildPermissionTransferUserConsentIntent, but this API is disabled by the"
+                    + " system.");
         }
         try {
             PendingIntent pendingIntent = mService.buildPermissionTransferUserConsentIntent(
@@ -1100,8 +1130,8 @@ public final class CompanionDeviceManager {
     @UserHandleAware
     public void startSystemDataTransfer(int associationId) throws DeviceNotAssociatedException {
         if (!FeatureUtils.isPermSyncEnabled()) {
-            Log.e(LOG_TAG, "Calling startSystemDataTransfer, but perm sync is disabled.");
-            return;
+            throw new UnsupportedOperationException("Calling startSystemDataTransfer, but this API"
+                    + " is disabled by the system.");
         }
         try {
             mService.startSystemDataTransfer(mContext.getOpPackageName(), mContext.getUserId(),
@@ -1115,17 +1145,19 @@ public final class CompanionDeviceManager {
     /**
      * Start system data transfer which has been previously approved by the user.
      *
-     * <p>Before calling this method, the app needs to make sure there's a communication channel
-     * between two devices, and has prompted user consent dialogs built by one of these methods:
-     * {@link #buildPermissionTransferUserConsentIntent(int)}.
-     * The transfer may fail if the communication channel is disconnected during the transfer.</p>
+     * <p>Before calling this method, the app needs to make sure
+     * {@link #attachSystemDataTransport(int, InputStream, OutputStream) the transport channel is
+     * attached}, and
+     * {@link #buildPermissionTransferUserConsentIntent(int) the user consent dialog has prompted to
+     * the user}.
+     * The transfer will fail if the transport channel is disconnected or
+     * {@link #detachSystemDataTransport(int) detached} during the transfer.</p>
      *
      * @param associationId The unique {@link AssociationInfo#getId ID} assigned to the Association
      *                      of the companion device recorded by CompanionDeviceManager
      * @param executor The executor which will be used to invoke the result callback.
      * @param result The callback to notify the app of the result of the system data transfer.
      * @throws DeviceNotAssociatedException Exception if the companion device is not associated
-     * @hide
      */
     @UserHandleAware
     public void startSystemDataTransfer(
@@ -1133,6 +1165,10 @@ public final class CompanionDeviceManager {
             @NonNull Executor executor,
             @NonNull OutcomeReceiver<Void, CompanionException> result)
             throws DeviceNotAssociatedException {
+        if (!FeatureUtils.isPermSyncEnabled()) {
+            throw new UnsupportedOperationException("Calling startSystemDataTransfer, but this API"
+                    + " is disabled by the system.");
+        }
         try {
             mService.startSystemDataTransfer(mContext.getOpPackageName(), mContext.getUserId(),
                     associationId, new SystemDataTransferCallbackProxy(executor, result));

@@ -153,6 +153,7 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
     @Nullable private RemoveTracker mRemoveTracker;
     private Handler mHandler;
     @Nullable private float[] mEnrollStageThresholds;
+    private List<FingerprintSensorPropertiesInternal> mProps = new ArrayList<>();
 
     /**
      * Retrieves a list of properties for all fingerprint sensors on the device.
@@ -470,6 +471,16 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
          * @param isAcquiredGood whether the fingerprint image was good.
          */
         public void onAcquired(boolean isAcquiredGood){ }
+
+        /**
+         * Called when a pointer down event has occurred.
+         */
+        public void onPointerDown(int sensorId){ }
+
+        /**
+         * Called when a pointer up event has occurred.
+         */
+        public void onPointerUp(int sensorId){ }
     }
 
     /**
@@ -1175,8 +1186,8 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
     @NonNull
     public List<FingerprintSensorPropertiesInternal> getSensorPropertiesInternal() {
         try {
-            if (mService == null) {
-                return new ArrayList<>();
+            if (!mProps.isEmpty() || mService == null) {
+                return mProps;
             }
             return mService.getSensorPropertiesInternal(mContext.getOpPackageName());
         } catch (RemoteException e) {
@@ -1398,7 +1409,7 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
         if (mAuthenticationCallback != null) {
             mAuthenticationCallback.onAuthenticationAcquired(acquireInfo);
         }
-        if (mEnrollmentCallback != null) {
+        if (mEnrollmentCallback != null && acquireInfo != FINGERPRINT_ACQUIRED_START) {
             mEnrollmentCallback.onAcquired(acquireInfo == FINGERPRINT_ACQUIRED_GOOD);
         }
         final String msg = getAcquiredString(mContext, acquireInfo, vendorCode);
@@ -1454,17 +1465,24 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
     private void sendUdfpsPointerDown(int sensorId) {
         if (mAuthenticationCallback == null) {
             Slog.e(TAG, "sendUdfpsPointerDown, callback null");
-            return;
+        } else {
+            mAuthenticationCallback.onUdfpsPointerDown(sensorId);
         }
-        mAuthenticationCallback.onUdfpsPointerDown(sensorId);
+
+        if (mEnrollmentCallback != null) {
+            mEnrollmentCallback.onPointerDown(sensorId);
+        }
     }
 
     private void sendUdfpsPointerUp(int sensorId) {
         if (mAuthenticationCallback == null) {
             Slog.e(TAG, "sendUdfpsPointerUp, callback null");
-            return;
+        } else {
+            mAuthenticationCallback.onUdfpsPointerUp(sensorId);
         }
-        mAuthenticationCallback.onUdfpsPointerUp(sensorId);
+        if (mEnrollmentCallback != null) {
+            mEnrollmentCallback.onPointerUp(sensorId);
+        }
     }
 
     private void sendPowerPressed() {
@@ -1485,6 +1503,17 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
             Slog.v(TAG, "FingerprintService was null");
         }
         mHandler = new MyHandler(context);
+        if (context.checkCallingOrSelfPermission(USE_BIOMETRIC_INTERNAL)
+                == PackageManager.PERMISSION_GRANTED) {
+            addAuthenticatorsRegisteredCallback(
+                    new IFingerprintAuthenticatorsRegisteredCallback.Stub() {
+                        @Override
+                        public void onAllAuthenticatorsRegistered(
+                                @NonNull List<FingerprintSensorPropertiesInternal> sensors) {
+                            mProps = sensors;
+                        }
+                    });
+        }
     }
 
     private int getCurrentUserId() {

@@ -26,8 +26,6 @@
     <string name="install_done" msgid="5987363587661783896">"Programa įdiegta."</string>
     <string name="install_confirm_question" msgid="7663733664476363311">"Ar norite įdiegti šią programą?"</string>
     <string name="install_confirm_question_update" msgid="3348888852318388584">"Ar norite atnaujinti šią programą?"</string>
-    <string name="install_confirm_question_update_owner_changed" msgid="4215696609006069124">"Šios programos naujinius šiuo metu valdo <xliff:g id="EXISTING_UPDATE_OWNER">%1$s</xliff:g>.\n\nAtnaujinę būsimus naujinius gausite iš <xliff:g id="NEW_UPDATE_OWNER">%2$s</xliff:g>."</string>
-    <string name="install_confirm_question_update_owner_reminder" msgid="8778026710268011466">"Šios programos naujinius šiuo metu valdo <xliff:g id="EXISTING_UPDATE_OWNER">%1$s</xliff:g>.\n\nAr norite įdiegti šį naujinį iš <xliff:g id="NEW_UPDATE_OWNER">%2$s</xliff:g>."</string>
     <string name="install_failed" msgid="5777824004474125469">"Programa neįdiegta."</string>
     <string name="install_failed_blocked" msgid="8512284352994752094">"Paketas užblokuotas ir negali būti įdiegtas."</string>
     <string name="install_failed_conflict" msgid="3493184212162521426">"Programa neįdiegta, nes paketas nesuderinamas su esamu paketu."</string>
@@ -70,6 +68,7 @@
     <string name="uninstalling_app" msgid="8866082646836981397">"Pašalinamas paketas „<xliff:g id="PACKAGE_LABEL">%1$s</xliff:g>“…"</string>
     <string name="uninstall_done" msgid="439354138387969269">"Pašalinimas baigtas."</string>
     <string name="uninstall_done_app" msgid="4588850984473605768">"Paketas „<xliff:g id="PACKAGE_LABEL">%1$s</xliff:g>“ pašalintas"</string>
+    <string name="uninstall_done_clone_app" msgid="5578308154544195413">"Ištrinta „<xliff:g id="PACKAGE_LABEL">%1$s</xliff:g>“ kopija"</string>
     <string name="uninstall_failed" msgid="1847750968168364332">"Nepavyko pašalinti."</string>
     <string name="uninstall_failed_app" msgid="5506028705017601412">"Paketo „<xliff:g id="PACKAGE_LABEL">%1$s</xliff:g>“ pašalinimo veiksmas nesėkmingas."</string>
     <string name="uninstalling_cloned_app" msgid="1826380164974984870">"Ištrinama „<xliff:g id="PACKAGE_LABEL">%1$s</xliff:g>“ kopija…"</string>

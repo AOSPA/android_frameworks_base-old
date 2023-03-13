@@ -4898,6 +4898,14 @@ public final class Telephony {
          */
         public static final String COLUMN_USER_HANDLE = "user_handle";
 
+        /**
+         * TelephonyProvider column name for satellite enabled.
+         * By default, it's disabled.
+         *
+         * @hide
+         */
+        public static final String COLUMN_SATELLITE_ENABLED = "satellite_enabled";
+
         /** All columns in {@link SimInfo} table. */
         private static final List<String> ALL_COLUMNS = List.of(
                 COLUMN_UNIQUE_KEY_SUBSCRIPTION_ID,
@@ -4966,7 +4974,8 @@ public final class Telephony {
                 COLUMN_PORT_INDEX,
                 COLUMN_USAGE_SETTING,
                 COLUMN_TP_MESSAGE_REF,
-                COLUMN_USER_HANDLE
+                COLUMN_USER_HANDLE,
+                COLUMN_SATELLITE_ENABLED
         );
 
         /**

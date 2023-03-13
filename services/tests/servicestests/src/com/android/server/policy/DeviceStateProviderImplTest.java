@@ -19,6 +19,9 @@ package com.android.server.policy;
 
 import static android.content.Context.SENSOR_SERVICE;
 
+import static com.android.server.devicestate.DeviceStateProvider.SUPPORTED_DEVICE_STATES_CHANGED_INITIALIZED;
+import static com.android.server.devicestate.DeviceStateProvider.SUPPORTED_DEVICE_STATES_CHANGED_THERMAL_CRITICAL;
+import static com.android.server.devicestate.DeviceStateProvider.SUPPORTED_DEVICE_STATES_CHANGED_THERMAL_NORMAL;
 import static com.android.server.policy.DeviceStateProviderImpl.DEFAULT_DEVICE_STATE;
 
 import static org.junit.Assert.assertArrayEquals;
@@ -35,6 +38,7 @@ import android.content.Context;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorManager;
+import android.os.PowerManager;
 
 import androidx.annotation.NonNull;
 
@@ -123,7 +127,8 @@ public final class DeviceStateProviderImplTest {
         DeviceStateProvider.Listener listener = mock(DeviceStateProvider.Listener.class);
         provider.setListener(listener);
 
-        verify(listener).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture());
+        verify(listener).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture(),
+                eq(SUPPORTED_DEVICE_STATES_CHANGED_INITIALIZED));
         assertArrayEquals(new DeviceState[]{DEFAULT_DEVICE_STATE},
                 mDeviceStateArrayCaptor.getValue());
 
@@ -150,7 +155,8 @@ public final class DeviceStateProviderImplTest {
         DeviceStateProvider.Listener listener = mock(DeviceStateProvider.Listener.class);
         provider.setListener(listener);
 
-        verify(listener).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture());
+        verify(listener).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture(),
+                eq(SUPPORTED_DEVICE_STATES_CHANGED_INITIALIZED));
         final DeviceState[] expectedStates = new DeviceState[]{
                 new DeviceState(1, "", 0 /* flags */),
                 new DeviceState(2, "", 0 /* flags */) };
@@ -182,7 +188,8 @@ public final class DeviceStateProviderImplTest {
         DeviceStateProvider.Listener listener = mock(DeviceStateProvider.Listener.class);
         provider.setListener(listener);
 
-        verify(listener).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture());
+        verify(listener).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture(),
+                eq(SUPPORTED_DEVICE_STATES_CHANGED_INITIALIZED));
         final DeviceState[] expectedStates = new DeviceState[]{
                 new DeviceState(1, "", DeviceState.FLAG_CANCEL_OVERRIDE_REQUESTS),
                 new DeviceState(2, "", 0 /* flags */) };
@@ -211,7 +218,8 @@ public final class DeviceStateProviderImplTest {
         DeviceStateProvider.Listener listener = mock(DeviceStateProvider.Listener.class);
         provider.setListener(listener);
 
-        verify(listener).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture());
+        verify(listener).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture(),
+                eq(SUPPORTED_DEVICE_STATES_CHANGED_INITIALIZED));
         final DeviceState[] expectedStates = new DeviceState[]{
                 new DeviceState(1, "", 0 /* flags */),
                 new DeviceState(2, "", 0 /* flags */) };
@@ -246,7 +254,8 @@ public final class DeviceStateProviderImplTest {
         DeviceStateProvider.Listener listener = mock(DeviceStateProvider.Listener.class);
         provider.setListener(listener);
 
-        verify(listener).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture());
+        verify(listener).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture(),
+                eq(SUPPORTED_DEVICE_STATES_CHANGED_INITIALIZED));
         final DeviceState[] expectedStates = new DeviceState[]{
                 new DeviceState(1, "", 0 /* flags */),
                 new DeviceState(2, "CLOSED", 0 /* flags */) };
@@ -264,7 +273,8 @@ public final class DeviceStateProviderImplTest {
         Mockito.clearInvocations(listener);
 
         provider.notifyLidSwitchChanged(1, true /* lidOpen */);
-        verify(listener, never()).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture());
+        verify(listener, never()).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture(),
+                eq(SUPPORTED_DEVICE_STATES_CHANGED_INITIALIZED));
         verify(listener).onStateChanged(mIntegerCaptor.capture());
         assertEquals(1, mIntegerCaptor.getValue().intValue());
     }
@@ -312,6 +322,14 @@ public final class DeviceStateProviderImplTest {
                 + "            </sensor>\n"
                 + "        </conditions>\n"
                 + "    </device-state>\n"
+                + "    <device-state>\n"
+                + "        <identifier>4</identifier>\n"
+                + "        <name>THERMAL_TEST</name>\n"
+                + "        <flags>\n"
+                + "            <flag>FLAG_EMULATED_ONLY</flag>\n"
+                + "            <flag>FLAG_DISABLE_WHEN_THERMAL_STATUS_CRITICAL</flag>\n"
+                + "        </flags>\n"
+                + "    </device-state>\n"
                 + "</device-state-config>\n";
         DeviceStateProviderImpl.ReadableConfig config = new TestReadableConfig(configString);
         return DeviceStateProviderImpl.createFromConfig(mContext,
@@ -327,12 +345,16 @@ public final class DeviceStateProviderImplTest {
         DeviceStateProvider.Listener listener = mock(DeviceStateProvider.Listener.class);
         provider.setListener(listener);
 
-        verify(listener).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture());
+        verify(listener).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture(),
+                eq(SUPPORTED_DEVICE_STATES_CHANGED_INITIALIZED));
         assertArrayEquals(
                 new DeviceState[]{
                         new DeviceState(1, "CLOSED", 0 /* flags */),
                         new DeviceState(2, "HALF_OPENED", 0 /* flags */),
-                        new DeviceState(3, "OPENED", 0 /* flags */) },
+                        new DeviceState(3, "OPENED", 0 /* flags */),
+                        new DeviceState(4, "THERMAL_TEST",
+                                DeviceState.FLAG_EMULATED_ONLY
+                                        | DeviceState.FLAG_DISABLE_WHEN_THERMAL_STATUS_CRITICAL) },
                 mDeviceStateArrayCaptor.getValue());
         // onStateChanged() should not be called because the provider has not yet been notified of
         // the initial sensor state.
@@ -346,7 +368,8 @@ public final class DeviceStateProviderImplTest {
 
         provider.onSensorChanged(event0);
 
-        verify(listener, never()).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture());
+        verify(listener, never()).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture(),
+                eq(SUPPORTED_DEVICE_STATES_CHANGED_INITIALIZED));
         verify(listener).onStateChanged(mIntegerCaptor.capture());
         assertEquals(3, mIntegerCaptor.getValue().intValue());
 
@@ -358,7 +381,8 @@ public final class DeviceStateProviderImplTest {
 
         provider.onSensorChanged(event1);
 
-        verify(listener, never()).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture());
+        verify(listener, never()).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture(),
+                eq(SUPPORTED_DEVICE_STATES_CHANGED_INITIALIZED));
         verify(listener).onStateChanged(mIntegerCaptor.capture());
         assertEquals(2, mIntegerCaptor.getValue().intValue());
 
@@ -370,9 +394,65 @@ public final class DeviceStateProviderImplTest {
 
         provider.onSensorChanged(event2);
 
-        verify(listener, never()).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture());
+        verify(listener, never()).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture(),
+                eq(SUPPORTED_DEVICE_STATES_CHANGED_INITIALIZED));
         verify(listener).onStateChanged(mIntegerCaptor.capture());
         assertEquals(1, mIntegerCaptor.getValue().intValue());
+    }
+
+    @Test
+    public void test_flagDisableWhenThermalStatusCritical() throws Exception {
+        Sensor sensor = newSensor("sensor", Sensor.STRING_TYPE_HINGE_ANGLE);
+        when(mSensorManager.getSensorList(anyInt())).thenReturn(List.of(sensor));
+        DeviceStateProviderImpl provider = create_sensorBasedProvider(sensor);
+
+        provider.onThermalStatusChanged(PowerManager.THERMAL_STATUS_LIGHT);
+        DeviceStateProvider.Listener listener = mock(DeviceStateProvider.Listener.class);
+        provider.setListener(listener);
+
+        verify(listener).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture(),
+                eq(SUPPORTED_DEVICE_STATES_CHANGED_INITIALIZED));
+        assertArrayEquals(
+                new DeviceState[]{
+                        new DeviceState(1, "CLOSED", 0 /* flags */),
+                        new DeviceState(2, "HALF_OPENED", 0 /* flags */),
+                        new DeviceState(3, "OPENED", 0 /* flags */),
+                        new DeviceState(4, "THERMAL_TEST",
+                                DeviceState.FLAG_EMULATED_ONLY
+                                        | DeviceState.FLAG_DISABLE_WHEN_THERMAL_STATUS_CRITICAL) },
+                mDeviceStateArrayCaptor.getValue());
+        Mockito.clearInvocations(listener);
+
+        provider.onThermalStatusChanged(PowerManager.THERMAL_STATUS_MODERATE);
+        verify(listener, never()).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture(),
+                eq(SUPPORTED_DEVICE_STATES_CHANGED_INITIALIZED));
+        Mockito.clearInvocations(listener);
+
+        // The THERMAL_TEST state should be disabled.
+        provider.onThermalStatusChanged(PowerManager.THERMAL_STATUS_CRITICAL);
+        verify(listener).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture(),
+                eq(SUPPORTED_DEVICE_STATES_CHANGED_THERMAL_CRITICAL));
+        assertArrayEquals(
+                new DeviceState[]{
+                        new DeviceState(1, "CLOSED", 0 /* flags */),
+                        new DeviceState(2, "HALF_OPENED", 0 /* flags */),
+                        new DeviceState(3, "OPENED", 0 /* flags */) },
+                mDeviceStateArrayCaptor.getValue());
+        Mockito.clearInvocations(listener);
+
+        // The THERMAL_TEST state should be re-enabled.
+        provider.onThermalStatusChanged(PowerManager.THERMAL_STATUS_LIGHT);
+        verify(listener).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture(),
+                eq(SUPPORTED_DEVICE_STATES_CHANGED_THERMAL_NORMAL));
+        assertArrayEquals(
+                new DeviceState[]{
+                        new DeviceState(1, "CLOSED", 0 /* flags */),
+                        new DeviceState(2, "HALF_OPENED", 0 /* flags */),
+                        new DeviceState(3, "OPENED", 0 /* flags */),
+                        new DeviceState(4, "THERMAL_TEST",
+                                DeviceState.FLAG_EMULATED_ONLY
+                                        | DeviceState.FLAG_DISABLE_WHEN_THERMAL_STATUS_CRITICAL) },
+                mDeviceStateArrayCaptor.getValue());
     }
 
     @Test
@@ -405,7 +485,8 @@ public final class DeviceStateProviderImplTest {
 
         provider.onSensorChanged(event2);
 
-        verify(listener, never()).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture());
+        verify(listener, never()).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture(),
+                eq(SUPPORTED_DEVICE_STATES_CHANGED_INITIALIZED));
         verify(listener, never()).onStateChanged(mIntegerCaptor.capture());
     }
 
@@ -450,7 +531,8 @@ public final class DeviceStateProviderImplTest {
         DeviceStateProvider.Listener listener = mock(DeviceStateProvider.Listener.class);
         provider.setListener(listener);
 
-        verify(listener).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture());
+        verify(listener).onSupportedDeviceStatesChanged(mDeviceStateArrayCaptor.capture(),
+                eq(SUPPORTED_DEVICE_STATES_CHANGED_INITIALIZED));
         assertArrayEquals(
                 new DeviceState[]{
                         new DeviceState(1, "CLOSED", 0 /* flags */),

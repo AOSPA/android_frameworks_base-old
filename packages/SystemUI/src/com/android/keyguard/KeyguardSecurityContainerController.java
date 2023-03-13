@@ -237,7 +237,7 @@ public class KeyguardSecurityContainerController extends ViewController<Keyguard
             }
             if (mUpdateMonitor.isFaceEnrolled()) {
                 mUpdateMonitor.requestActiveUnlock(
-                        ActiveUnlockConfig.ACTIVE_UNLOCK_REQUEST_ORIGIN.UNLOCK_INTENT,
+                        ActiveUnlockConfig.ActiveUnlockRequestOrigin.UNLOCK_INTENT,
                         "swipeUpOnBouncer");
             }
         }
@@ -247,6 +247,7 @@ public class KeyguardSecurityContainerController extends ViewController<Keyguard
                 @Override
                 public void onThemeChanged() {
                     reloadColors();
+                    reset();
                 }
 
                 @Override
@@ -743,17 +744,20 @@ public class KeyguardSecurityContainerController extends ViewController<Keyguard
     }
 
     private void reloadColors() {
-        resetViewFlipper();
+        reinflateViewFlipper();
         mView.reloadColors();
     }
 
     /** Handles density or font scale changes. */
     private void onDensityOrFontScaleChanged() {
-        resetViewFlipper();
+        reinflateViewFlipper();
         mView.onDensityOrFontScaleChanged();
     }
 
-    private void resetViewFlipper() {
+    /**
+     * Reinflate the view flipper child view.
+     */
+    public void reinflateViewFlipper() {
         mSecurityViewFlipperController.clearViews();
         mSecurityViewFlipperController.getSecurityView(mCurrentSecurityMode,
                 mKeyguardSecurityCallback);

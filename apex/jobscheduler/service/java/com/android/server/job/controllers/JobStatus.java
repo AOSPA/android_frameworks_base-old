@@ -373,6 +373,11 @@ public final class JobStatus {
      * @hide
      */
     public static final int INTERNAL_FLAG_HAS_FOREGROUND_EXEMPTION = 1 << 0;
+    /**
+     * Flag for {@link #mInternalFlags}: this job was stopped by the user for some reason
+     * and is thus considered demoted from whatever privileged state it had in the past.
+     */
+    public static final int INTERNAL_FLAG_DEMOTED_BY_USER = 1 << 1;
 
     /** Minimum difference between start and end time to have flexible constraint */
     @VisibleForTesting
@@ -397,6 +402,11 @@ public final class JobStatus {
      * running. This isn't copied over when a job is rescheduled.
      */
     public boolean startedAsExpeditedJob = false;
+    /**
+     * Whether or not this particular JobStatus instance was treated as a user-initiated job
+     * when it started running. This isn't copied over when a job is rescheduled.
+     */
+    public boolean startedAsUserInitiatedJob = false;
 
     public boolean startedWithImmediacyPrivilege = false;
 
@@ -1380,8 +1390,8 @@ public final class JobStatus {
      * for any reason.
      */
     public boolean shouldTreatAsUserInitiatedJob() {
-        // TODO(248386641): update implementation to handle loss of privilege
-        return getJob().isUserInitiated();
+        return getJob().isUserInitiated()
+                && (getInternalFlags() & INTERNAL_FLAG_DEMOTED_BY_USER) == 0;
     }
 
     /**
@@ -1391,7 +1401,8 @@ public final class JobStatus {
     public UserVisibleJobSummary getUserVisibleJobSummary() {
         if (mUserVisibleJobSummary == null) {
             mUserVisibleJobSummary = new UserVisibleJobSummary(
-                    callingUid, getSourceUserId(), getSourcePackageName(),
+                    callingUid, getServiceComponent().getPackageName(),
+                    getSourceUserId(), getSourcePackageName(),
                     getNamespace(), getJobId());
         }
         return mUserVisibleJobSummary;
@@ -1401,7 +1412,7 @@ public final class JobStatus {
      * @return true if this is a job whose execution should be made visible to the user.
      */
     public boolean isUserVisibleJob() {
-        return shouldTreatAsUserInitiatedJob();
+        return shouldTreatAsUserInitiatedJob() || startedAsUserInitiatedJob;
     }
 
     /**
@@ -1411,16 +1422,18 @@ public final class JobStatus {
     public boolean canRunInDoze() {
         return appHasDozeExemption
                 || (getFlags() & JobInfo.FLAG_WILL_BE_FOREGROUND) != 0
-                || ((shouldTreatAsExpeditedJob() || startedAsExpeditedJob)
                 || shouldTreatAsUserInitiatedJob()
-                && (mDynamicConstraints & CONSTRAINT_DEVICE_NOT_DOZING) == 0);
+                // EJs can't run in Doze if we explicitly require that the device is not Dozing.
+                || ((shouldTreatAsExpeditedJob() || startedAsExpeditedJob)
+                        && (mDynamicConstraints & CONSTRAINT_DEVICE_NOT_DOZING) == 0);
     }
 
     boolean canRunInBatterySaver() {
         return (getInternalFlags() & INTERNAL_FLAG_HAS_FOREGROUND_EXEMPTION) != 0
-                || ((shouldTreatAsExpeditedJob() || startedAsExpeditedJob)
                 || shouldTreatAsUserInitiatedJob()
-                && (mDynamicConstraints & CONSTRAINT_BACKGROUND_NOT_RESTRICTED) == 0);
+                // EJs can't run in Battery Saver if we explicitly require that Battery Saver is off
+                || ((shouldTreatAsExpeditedJob() || startedAsExpeditedJob)
+                        && (mDynamicConstraints & CONSTRAINT_BACKGROUND_NOT_RESTRICTED) == 0);
     }
 
     /** @return true if the constraint was changed, false otherwise. */
@@ -2558,6 +2571,13 @@ public final class JobStatus {
             pw.print(mExpeditedTareApproved);
             pw.print(" (started as EJ: ");
             pw.print(startedAsExpeditedJob);
+            pw.println(")");
+        }
+        if ((getFlags() & JobInfo.FLAG_USER_INITIATED) != 0) {
+            pw.print("userInitiatedApproved: ");
+            pw.print(shouldTreatAsUserInitiatedJob());
+            pw.print(" (started as UIJ: ");
+            pw.print(startedAsUserInitiatedJob);
             pw.println(")");
         }
         pw.decreaseIndent();

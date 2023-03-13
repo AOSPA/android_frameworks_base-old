@@ -22,6 +22,7 @@ import android.content.Context;
 import android.os.LocaleList;
 import android.provider.Settings;
 import android.telephony.TelephonyManager;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.inputmethod.InputMethodSubtype;
 
@@ -29,6 +30,7 @@ import com.android.internal.annotations.VisibleForTesting;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IllformedLocaleException;
@@ -106,6 +108,9 @@ public class LocaleStore {
             return mParent;
         }
 
+        /**
+         * TODO: This method may rename to be more generic i.e. toLanguageTag().
+         */
         @UnsupportedAppUsage
         public String getId() {
             return mId;
@@ -136,8 +141,9 @@ public class LocaleStore {
         @UnsupportedAppUsage
         public String getFullNameNative() {
             if (mFullNameNative == null) {
+                Locale locale = mLocale.stripExtensions();
                 mFullNameNative =
-                        LocaleHelper.getDisplayName(mLocale, mLocale, true /* sentence case */);
+                        LocaleHelper.getDisplayName(locale, locale, true /* sentence case */);
             }
             return mFullNameNative;
         }
@@ -161,8 +167,9 @@ public class LocaleStore {
          */
         @UnsupportedAppUsage
         public String getFullNameInUiLanguage() {
+            Locale locale = mLocale.stripExtensions();
             // We don't cache the UI name because the default locale keeps changing
-            return LocaleHelper.getDisplayName(mLocale, true /* sentence case */);
+            return LocaleHelper.getDisplayName(locale, true /* sentence case */);
         }
 
         private String getLangScriptKey() {
@@ -456,11 +463,30 @@ public class LocaleStore {
     @UnsupportedAppUsage
     public static Set<LocaleInfo> getLevelLocales(Context context, Set<String> ignorables,
             LocaleInfo parent, boolean translatedOnly) {
+        return getLevelLocales(context, ignorables, parent, translatedOnly, null);
+    }
+
+    /**
+     * @param explicitLocales Indicates only the locales within this list should be shown in the
+     *                       locale picker.
+     *
+     * Returns a list of locales for language or region selection.
+     * If the parent is null, then it is the language list.
+     * If it is not null, then the list will contain all the locales that belong to that parent.
+     * Example: if the parent is "ar", then the region list will contain all Arabic locales.
+     * (this is not language based, but language-script, so that it works for zh-Hant and so on.
+     */
+    public static Set<LocaleInfo> getLevelLocales(Context context, Set<String> ignorables,
+            LocaleInfo parent, boolean translatedOnly, LocaleList explicitLocales) {
         fillCache(context);
         String parentId = parent == null ? null : parent.getId();
-
         HashSet<LocaleInfo> result = new HashSet<>();
-        for (LocaleStore.LocaleInfo li : sLocaleCache.values()) {
+        HashMap<String, LocaleInfo> supportedLcoaleInfos =
+                explicitLocales == null
+                        ? sLocaleCache
+                        : convertExplicitLocales(explicitLocales, sLocaleCache.values());
+
+        for (LocaleStore.LocaleInfo li : supportedLcoaleInfos.values()) {
             int level = getLevel(ignorables, li, translatedOnly);
             if (level == 2) {
                 if (parent != null) { // region selection
@@ -479,11 +505,82 @@ public class LocaleStore {
         return result;
     }
 
+    /** Converts string array of explicit locales to HashMap */
+    public static HashMap<String, LocaleInfo> convertExplicitLocales(
+            LocaleList explicitLocales, Collection<LocaleInfo> localeinfo) {
+        // Trys to find the matched locale within android supported locales. If there is no matched
+        // locale, it will still keep the unsupported lcoale in list.
+        // Note: This currently does not support unicode extension check.
+        LocaleList localeList = matchLocaleFromSupportedLocaleList(
+                explicitLocales, localeinfo);
+
+        HashMap<String, LocaleInfo> localeInfos = new HashMap<>();
+        for (int i = 0; i < localeList.size(); i++) {
+            Locale locale = localeList.get(i);
+            if (locale.toString().isEmpty()) {
+                throw new IllformedLocaleException("Bad locale entry");
+            }
+
+            LocaleInfo li = new LocaleInfo(locale);
+            if (localeInfos.containsKey(li.getId())) {
+                continue;
+            }
+            localeInfos.put(li.getId(), li);
+            Locale parent = li.getParent();
+            if (parent != null) {
+                String parentId = parent.toLanguageTag();
+                if (!localeInfos.containsKey(parentId)) {
+                    localeInfos.put(parentId, new LocaleInfo(parent));
+                }
+            }
+        }
+        return localeInfos;
+    }
+
+    private static LocaleList matchLocaleFromSupportedLocaleList(
+            LocaleList explicitLocales, Collection<LocaleInfo> localeinfo) {
+        //TODO: Adds a function for unicode extension if needed.
+        Locale[] resultLocales = new Locale[explicitLocales.size()];
+        for (int i = 0; i < explicitLocales.size(); i++) {
+            Locale locale = explicitLocales.get(i).stripExtensions();
+            if (!TextUtils.isEmpty(locale.getCountry())) {
+                for (LocaleInfo localeInfo :localeinfo) {
+                    if (LocaleList.matchesLanguageAndScript(locale, localeInfo.getLocale())
+                            && TextUtils.equals(locale.getCountry(),
+                            localeInfo.getLocale().getCountry())) {
+                        resultLocales[i] = localeInfo.getLocale();
+                        continue;
+                    }
+                }
+            }
+            if (resultLocales[i] == null) {
+                resultLocales[i] = locale;
+            }
+        }
+        return new LocaleList(resultLocales);
+    }
+
     @UnsupportedAppUsage
     public static LocaleInfo getLocaleInfo(Locale locale) {
         String id = locale.toLanguageTag();
         LocaleInfo result;
         if (!sLocaleCache.containsKey(id)) {
+            // Locale preferences can modify the language tag to current system languages, so we
+            // need to check the input locale without extra u extension except numbering system.
+            Locale filteredLocale = new Locale.Builder()
+                    .setLocale(locale.stripExtensions())
+                    .setUnicodeLocaleKeyword("nu", locale.getUnicodeLocaleType("nu"))
+                    .build();
+            if (sLocaleCache.containsKey(filteredLocale.toLanguageTag())) {
+                result = new LocaleInfo(locale);
+                LocaleInfo localeInfo = sLocaleCache.get(filteredLocale.toLanguageTag());
+                // This locale is included in supported locales, so follow the settings
+                // of supported locales.
+                result.mIsPseudo = localeInfo.mIsPseudo;
+                result.mIsTranslated = localeInfo.mIsTranslated;
+                result.mSuggestionFlags = localeInfo.mSuggestionFlags;
+                return result;
+            }
             result = new LocaleInfo(locale);
             sLocaleCache.put(id, result);
         } else {

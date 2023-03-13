@@ -156,6 +156,7 @@ public class DesktopModeWindowDecorViewModel implements WindowDecorViewModel {
         }
 
         decoration.relayout(taskInfo);
+        setupCaptionColor(taskInfo, decoration);
     }
 
     @Override
@@ -205,30 +206,29 @@ public class DesktopModeWindowDecorViewModel implements WindowDecorViewModel {
     }
 
     private class DesktopModeTouchEventListener implements
-            View.OnClickListener, View.OnTouchListener {
+            View.OnClickListener, View.OnTouchListener, DragDetector.MotionEventHandler {
 
         private final int mTaskId;
         private final WindowContainerToken mTaskToken;
-        private final DragResizeCallback mDragResizeCallback;
+        private final DragPositioningCallback mDragPositioningCallback;
         private final DragDetector mDragDetector;
 
         private int mDragPointerId = -1;
 
         private DesktopModeTouchEventListener(
                 RunningTaskInfo taskInfo,
-                DragResizeCallback dragResizeCallback,
-                DragDetector dragDetector) {
+                DragPositioningCallback dragPositioningCallback) {
             mTaskId = taskInfo.taskId;
             mTaskToken = taskInfo.token;
-            mDragResizeCallback = dragResizeCallback;
-            mDragDetector = dragDetector;
+            mDragPositioningCallback = dragPositioningCallback;
+            mDragDetector = new DragDetector(this);
         }
 
         @Override
         public void onClick(View v) {
             final DesktopModeWindowDecoration decoration = mWindowDecorByTaskId.get(mTaskId);
             final int id = v.getId();
-            if (id == R.id.close_window) {
+            if (id == R.id.close_window || id == R.id.close_button) {
                 mTaskOperations.closeTask(mTaskToken);
             } else if (id == R.id.back_button) {
                 mTaskOperations.injectBackKey();
@@ -243,6 +243,8 @@ public class DesktopModeWindowDecorViewModel implements WindowDecorViewModel {
                 mDesktopTasksController.ifPresent(c -> c.moveToFullscreen(mTaskId));
                 decoration.closeHandleMenu();
                 decoration.setButtonVisibility(false);
+            } else if (id == R.id.collapse_menu_button) {
+                decoration.closeHandleMenu();
             }
         }
 
@@ -254,8 +256,7 @@ public class DesktopModeWindowDecorViewModel implements WindowDecorViewModel {
                 return false;
             }
             if (id == R.id.caption_handle) {
-                isDrag = mDragDetector.detectDragEvent(e);
-                handleEventForMove(e);
+                isDrag = mDragDetector.onMotionEvent(e);
             }
             if (e.getAction() != MotionEvent.ACTION_DOWN) {
                 return isDrag;
@@ -272,30 +273,30 @@ public class DesktopModeWindowDecorViewModel implements WindowDecorViewModel {
 
         /**
          * @param e {@link MotionEvent} to process
-         * @return {@code true} if a drag is happening; or {@code false} if it is not
+         * @return {@code true} if the motion event is handled.
          */
-        private void handleEventForMove(MotionEvent e) {
+        @Override
+        public boolean handleMotionEvent(MotionEvent e) {
             final RunningTaskInfo taskInfo = mTaskOrganizer.getRunningTaskInfo(mTaskId);
             if (DesktopModeStatus.isProto2Enabled()
                     && taskInfo.getWindowingMode() == WINDOWING_MODE_FULLSCREEN) {
-                return;
+                return false;
             }
             if (DesktopModeStatus.isProto1Enabled() && mDesktopModeController.isPresent()
-                    && mDesktopModeController.get().getDisplayAreaWindowingMode(
-                    taskInfo.displayId)
+                    && mDesktopModeController.get().getDisplayAreaWindowingMode(taskInfo.displayId)
                     == WINDOWING_MODE_FULLSCREEN) {
-                return;
+                return false;
             }
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN: {
                     mDragPointerId = e.getPointerId(0);
-                    mDragResizeCallback.onDragResizeStart(
+                    mDragPositioningCallback.onDragPositioningStart(
                             0 /* ctrlType */, e.getRawX(0), e.getRawY(0));
                     break;
                 }
                 case MotionEvent.ACTION_MOVE: {
                     final int dragPointerIdx = e.findPointerIndex(mDragPointerId);
-                    mDragResizeCallback.onDragResizeMove(
+                    mDragPositioningCallback.onDragPositioningMove(
                             e.getRawX(dragPointerIdx), e.getRawY(dragPointerIdx));
                     break;
                 }
@@ -304,26 +305,20 @@ public class DesktopModeWindowDecorViewModel implements WindowDecorViewModel {
                     final int dragPointerIdx = e.findPointerIndex(mDragPointerId);
                     final int statusBarHeight = mDisplayController
                             .getDisplayLayout(taskInfo.displayId).stableInsets().top;
-                    mDragResizeCallback.onDragResizeEnd(
+                    mDragPositioningCallback.onDragPositioningEnd(
                             e.getRawX(dragPointerIdx), e.getRawY(dragPointerIdx));
                     if (e.getRawY(dragPointerIdx) <= statusBarHeight) {
-                        if (DesktopModeStatus.isProto2Enabled()) {
-                            if (taskInfo.getWindowingMode() == WINDOWING_MODE_FREEFORM) {
-                                // Switch a single task to fullscreen
-                                mDesktopTasksController.ifPresent(
-                                        c -> c.moveToFullscreen(taskInfo));
-                            }
-                        } else if (DesktopModeStatus.isProto1Enabled()) {
-                            if (DesktopModeStatus.isActive(mContext)) {
-                                // Turn off desktop mode
-                                mDesktopModeController.ifPresent(
-                                        c -> c.setDesktopModeActive(false));
-                            }
+                        if (DesktopModeStatus.isProto2Enabled()
+                                && taskInfo.getWindowingMode() == WINDOWING_MODE_FREEFORM) {
+                            // Switch a single task to fullscreen
+                            mDesktopTasksController.ifPresent(
+                                    c -> c.moveToFullscreen(taskInfo));
                         }
                     }
                     break;
                 }
             }
+            return true;
         }
     }
 
@@ -407,10 +402,6 @@ public class DesktopModeWindowDecorViewModel implements WindowDecorViewModel {
                     || focusedDecor.mTaskInfo.getWindowingMode() != WINDOWING_MODE_FREEFORM) {
                 handleCaptionThroughStatusBar(ev);
             }
-        } else if (DesktopModeStatus.isProto1Enabled()) {
-            if (!DesktopModeStatus.isActive(mContext)) {
-                handleCaptionThroughStatusBar(ev);
-            }
         }
         handleEventOutsideFocusedCaption(ev);
         // Prevent status bar from reacting to a caption drag.
@@ -456,9 +447,6 @@ public class DesktopModeWindowDecorViewModel implements WindowDecorViewModel {
                         // In proto2 any full screen task can be dragged to freeform
                         dragFromStatusBarAllowed = focusedDecor.mTaskInfo.getWindowingMode()
                                 == WINDOWING_MODE_FULLSCREEN;
-                    } else if (DesktopModeStatus.isProto1Enabled()) {
-                        // In proto1 task can be dragged to freeform when not in desktop mode
-                        dragFromStatusBarAllowed = !DesktopModeStatus.isActive(mContext);
                     }
 
                     if (dragFromStatusBarAllowed && focusedDecor.checkTouchEventInHandle(ev)) {
@@ -527,9 +515,16 @@ public class DesktopModeWindowDecorViewModel implements WindowDecorViewModel {
         }
     }
 
+    private void setupCaptionColor(RunningTaskInfo taskInfo,
+            DesktopModeWindowDecoration decoration) {
+        if (taskInfo == null || taskInfo.taskDescription == null) return;
+        final int statusBarColor = taskInfo.taskDescription.getStatusBarColor();
+        decoration.setCaptionColor(statusBarColor);
+    }
+
     private boolean shouldShowWindowDecor(RunningTaskInfo taskInfo) {
         if (taskInfo.getWindowingMode() == WINDOWING_MODE_FREEFORM) return true;
-        return DesktopModeStatus.isAnyEnabled()
+        return DesktopModeStatus.isProto2Enabled()
                 && taskInfo.getActivityType() == ACTIVITY_TYPE_STANDARD
                 && mDisplayController.getDisplayContext(taskInfo.displayId)
                 .getResources().getConfiguration().smallestScreenWidthDp >= 600;
@@ -560,11 +555,12 @@ public class DesktopModeWindowDecorViewModel implements WindowDecorViewModel {
         final TaskPositioner taskPositioner =
                 new TaskPositioner(mTaskOrganizer, windowDecoration, mDragStartListener);
         final DesktopModeTouchEventListener touchEventListener =
-                new DesktopModeTouchEventListener(
-                        taskInfo, taskPositioner, windowDecoration.getDragDetector());
+                new DesktopModeTouchEventListener(taskInfo, taskPositioner);
         windowDecoration.setCaptionListeners(touchEventListener, touchEventListener);
-        windowDecoration.setDragResizeCallback(taskPositioner);
+        windowDecoration.setDragPositioningCallback(taskPositioner);
+        windowDecoration.setDragDetector(touchEventListener.mDragDetector);
         windowDecoration.relayout(taskInfo, startT, finishT);
+        setupCaptionColor(taskInfo, windowDecoration);
         incrementEventReceiverTasks(taskInfo.displayId);
     }
 

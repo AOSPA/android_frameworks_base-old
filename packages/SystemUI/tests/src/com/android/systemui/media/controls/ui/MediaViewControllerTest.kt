@@ -22,6 +22,7 @@ import android.view.View
 import androidx.test.filters.SmallTest
 import com.android.systemui.R
 import com.android.systemui.SysuiTestCase
+import com.android.systemui.media.controls.util.MediaFlags
 import com.android.systemui.util.animation.MeasurementInput
 import com.android.systemui.util.animation.TransitionLayout
 import com.android.systemui.util.animation.TransitionViewState
@@ -32,6 +33,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.ArgumentMatchers.floatThat
 import org.mockito.Mock
+import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when` as whenever
 import org.mockito.MockitoAnnotations
@@ -55,6 +57,7 @@ class MediaViewControllerTest : SysuiTestCase() {
     @Mock private lateinit var mediaTitleWidgetState: WidgetState
     @Mock private lateinit var mediaSubTitleWidgetState: WidgetState
     @Mock private lateinit var mediaContainerWidgetState: WidgetState
+    @Mock private lateinit var mediaFlags: MediaFlags
 
     val delta = 0.1F
 
@@ -64,7 +67,13 @@ class MediaViewControllerTest : SysuiTestCase() {
     fun setup() {
         MockitoAnnotations.initMocks(this)
         mediaViewController =
-            MediaViewController(context, configurationController, mediaHostStatesManager, logger)
+            MediaViewController(
+                context,
+                configurationController,
+                mediaHostStatesManager,
+                logger,
+                mediaFlags,
+            )
     }
 
     @Test
@@ -131,14 +140,12 @@ class MediaViewControllerTest : SysuiTestCase() {
         whenever(controlWidgetState.y).thenReturn(150F)
         whenever(controlWidgetState.height).thenReturn(20)
         // in current beizer, when the progress reach 0.38, the result will be 0.5
-        mediaViewController.squishViewState(mockViewState, 119F / 200F)
-        verify(detailWidgetState).alpha = floatThat { kotlin.math.abs(it - 0.5F) < delta }
-        mediaViewController.squishViewState(mockViewState, 150F / 200F)
-        verify(detailWidgetState).alpha = floatThat { kotlin.math.abs(it - 1.0F) < delta }
         mediaViewController.squishViewState(mockViewState, 181.4F / 200F)
         verify(controlWidgetState).alpha = floatThat { kotlin.math.abs(it - 0.5F) < delta }
+        verify(detailWidgetState).alpha = floatThat { kotlin.math.abs(it - 1.0F) < delta }
         mediaViewController.squishViewState(mockViewState, 200F / 200F)
         verify(controlWidgetState).alpha = floatThat { kotlin.math.abs(it - 1.0F) < delta }
+        verify(detailWidgetState, times(2)).alpha = floatThat { kotlin.math.abs(it - 1.0F) < delta }
     }
 
     @Test

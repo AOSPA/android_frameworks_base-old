@@ -35,6 +35,7 @@ import android.accessibilityservice.AccessibilityService;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.content.res.Configuration;
+import android.os.Binder;
 import android.os.IBinder;
 import android.util.PrintWriterPrinter;
 import android.util.Printer;
@@ -182,10 +183,10 @@ public final class ImeVisibilityStateComputer {
      */
     boolean onImeShowFlags(@NonNull ImeTracker.Token statsToken, int showFlags) {
         if (mPolicy.mA11yRequestingNoSoftKeyboard || mPolicy.mImeHiddenByDisplayPolicy) {
-            ImeTracker.get().onFailed(statsToken, ImeTracker.PHASE_SERVER_ACCESSIBILITY);
+            ImeTracker.forLogging().onFailed(statsToken, ImeTracker.PHASE_SERVER_ACCESSIBILITY);
             return false;
         }
-        ImeTracker.get().onProgress(statsToken, ImeTracker.PHASE_SERVER_ACCESSIBILITY);
+        ImeTracker.forLogging().onProgress(statsToken, ImeTracker.PHASE_SERVER_ACCESSIBILITY);
         if ((showFlags & InputMethodManager.SHOW_FORCED) != 0) {
             mRequestedShowExplicitly = true;
             mShowForced = true;
@@ -206,15 +207,15 @@ public final class ImeVisibilityStateComputer {
         if ((hideFlags & InputMethodManager.HIDE_IMPLICIT_ONLY) != 0
                 && (mRequestedShowExplicitly || mShowForced)) {
             if (DEBUG) Slog.v(TAG, "Not hiding: explicit show not cancelled by non-explicit hide");
-            ImeTracker.get().onFailed(statsToken, ImeTracker.PHASE_SERVER_HIDE_IMPLICIT);
+            ImeTracker.forLogging().onFailed(statsToken, ImeTracker.PHASE_SERVER_HIDE_IMPLICIT);
             return false;
         }
         if (mShowForced && (hideFlags & InputMethodManager.HIDE_NOT_ALWAYS) != 0) {
             if (DEBUG) Slog.v(TAG, "Not hiding: forced show not cancelled by not-always hide");
-            ImeTracker.get().onFailed(statsToken, ImeTracker.PHASE_SERVER_HIDE_NOT_ALWAYS);
+            ImeTracker.forLogging().onFailed(statsToken, ImeTracker.PHASE_SERVER_HIDE_NOT_ALWAYS);
             return false;
         }
-        ImeTracker.get().onProgress(statsToken, ImeTracker.PHASE_SERVER_HIDE_NOT_ALWAYS);
+        ImeTracker.forLogging().onProgress(statsToken, ImeTracker.PHASE_SERVER_HIDE_NOT_ALWAYS);
         return true;
     }
 
@@ -263,6 +264,8 @@ public final class ImeVisibilityStateComputer {
             // policy.
             mPolicy.mPendingA11yRequestingHideKeyboard = false;
         }
+        // create a placeholder token for IMS so that IMS cannot inject windows into client app.
+        state.setRequestImeToken(new Binder());
         setWindowStateInner(windowToken, state);
     }
 
@@ -277,14 +280,6 @@ public final class ImeVisibilityStateComputer {
     ImeTargetWindowState getWindowStateOrNull(IBinder windowToken) {
         ImeTargetWindowState state = mRequestWindowStateMap.get(windowToken);
         return state;
-    }
-
-    void setRequestImeTokenToWindow(IBinder windowToken, IBinder token) {
-        ImeTargetWindowState state = getWindowStateOrNull(windowToken);
-        if (state != null) {
-            state.setRequestImeToken(token);
-            setWindowStateInner(windowToken, state);
-        }
     }
 
     void setWindowState(IBinder windowToken, @NonNull ImeTargetWindowState newState) {

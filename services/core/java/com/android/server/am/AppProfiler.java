@@ -1836,7 +1836,7 @@ public class AppProfiler {
             final BatteryStatsImpl bstats = mService.mBatteryStatsService.getActiveStatistics();
             synchronized (bstats) {
                 if (haveNewCpuStats) {
-                    if (bstats.startAddingCpuLocked()) {
+                    if (bstats.startAddingCpuStatsLocked()) {
                         int totalUTime = 0;
                         int totalSTime = 0;
                         final int statsCount = mProcessCpuTracker.countStats();
@@ -1882,9 +1882,10 @@ public class AppProfiler {
                         final int irqTime = mProcessCpuTracker.getLastIrqTime();
                         final int softIrqTime = mProcessCpuTracker.getLastSoftIrqTime();
                         final int idleTime = mProcessCpuTracker.getLastIdleTime();
-                        bstats.finishAddingCpuLocked(totalUTime, totalSTime, userTime,
+                        bstats.addCpuStatsLocked(totalUTime, totalSTime, userTime,
                                 systemTime, iowaitTime, irqTime, softIrqTime, idleTime);
                     }
+                    bstats.finishAddingCpuStatsLocked();
                 }
 
                 if (mLastWriteTime < (now - BATTERY_STATS_TIME)) {
@@ -2059,7 +2060,7 @@ public class AppProfiler {
                 }
             } else if (instr != null && instr.mProfileFile != null) {
                 profilerInfo = new ProfilerInfo(instr.mProfileFile, null, 0, false, false,
-                        null, false);
+                        null, false, 0);
             }
             if (mAppAgentMap != null && mAppAgentMap.containsKey(processName)) {
                 // We need to do a debuggable check here. See setAgentApp for why the check is
@@ -2069,7 +2070,7 @@ public class AppProfiler {
                     // Do not overwrite already requested agent.
                     if (profilerInfo == null) {
                         profilerInfo = new ProfilerInfo(null, null, 0, false, false,
-                                mAppAgentMap.get(processName), true);
+                                mAppAgentMap.get(processName), true, 0);
                     } else if (profilerInfo.agent == null) {
                         profilerInfo = profilerInfo.setAgent(mAppAgentMap.get(processName), true);
                     }
@@ -2201,7 +2202,9 @@ public class AppProfiler {
                             + " mAutoStopProfiler="
                             + mProfileData.getProfilerInfo().autoStopProfiler
                             + " mStreamingOutput="
-                            + mProfileData.getProfilerInfo().streamingOutput);
+                            + mProfileData.getProfilerInfo().streamingOutput
+                            + " mClockType="
+                            + mProfileData.getProfilerInfo().clockType);
                     pw.println("  mProfileType=" + mProfileType);
                 }
             }

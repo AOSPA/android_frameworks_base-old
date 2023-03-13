@@ -125,9 +125,18 @@ class KeyguardBottomAreaViewModelTest : SysuiTestCase() {
                 ),
             )
         repository = FakeKeyguardRepository()
+        val featureFlags =
+            FakeFeatureFlags().apply {
+                set(Flags.CUSTOMIZABLE_LOCK_SCREEN_QUICK_AFFORDANCES, false)
+                set(Flags.FACE_AUTH_REFACTOR, true)
+            }
 
         val keyguardInteractor =
-            KeyguardInteractor(repository = repository, commandQueue = commandQueue)
+            KeyguardInteractor(
+                repository = repository,
+                commandQueue = commandQueue,
+                featureFlags = featureFlags,
+            )
         whenever(userTracker.userHandle).thenReturn(mock())
         whenever(lockPatternUtils.getStrongAuthForUser(anyInt()))
             .thenReturn(LockPatternUtils.StrongAuthTracker.STRONG_AUTH_NOT_REQUIRED)
@@ -191,10 +200,7 @@ class KeyguardBottomAreaViewModelTest : SysuiTestCase() {
                         keyguardStateController = keyguardStateController,
                         userTracker = userTracker,
                         activityStarter = activityStarter,
-                        featureFlags =
-                            FakeFeatureFlags().apply {
-                                set(Flags.CUSTOMIZABLE_LOCK_SCREEN_QUICK_AFFORDANCES, false)
-                            },
+                        featureFlags = featureFlags,
                         repository = { quickAffordanceRepository },
                         launchAnimator = launchAnimator,
                     ),
@@ -234,7 +240,10 @@ class KeyguardBottomAreaViewModelTest : SysuiTestCase() {
     @Test
     fun `startButton - in preview mode - visible even when keyguard not showing`() =
         testScope.runTest {
-            underTest.enablePreviewMode(KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_START)
+            underTest.enablePreviewMode(
+                initiallySelectedSlotId = KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_START,
+                shouldHighlightSelectedAffordance = true,
+            )
             repository.setKeyguardShowing(false)
             val latest = collectLastValue(underTest.startButton)
 
@@ -263,10 +272,65 @@ class KeyguardBottomAreaViewModelTest : SysuiTestCase() {
                         icon = icon,
                         canShowWhileLocked = false,
                         intent = Intent("action"),
+                        isSelected = true,
                     ),
                 configKey = configKey,
             )
             assertThat(latest()?.isSelected).isTrue()
+        }
+
+    @Test
+    fun `endButton - in higlighted preview mode - dimmed when other is selected`() =
+        testScope.runTest {
+            underTest.enablePreviewMode(
+                initiallySelectedSlotId = KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_START,
+                shouldHighlightSelectedAffordance = true,
+            )
+            repository.setKeyguardShowing(false)
+            val startButton = collectLastValue(underTest.startButton)
+            val endButton = collectLastValue(underTest.endButton)
+
+            val icon: Icon = mock()
+            setUpQuickAffordanceModel(
+                position = KeyguardQuickAffordancePosition.BOTTOM_START,
+                testConfig =
+                    TestConfig(
+                        isVisible = true,
+                        isClickable = true,
+                        isActivated = true,
+                        icon = icon,
+                        canShowWhileLocked = false,
+                        intent = Intent("action"),
+                    ),
+            )
+            val configKey =
+                setUpQuickAffordanceModel(
+                    position = KeyguardQuickAffordancePosition.BOTTOM_END,
+                    testConfig =
+                        TestConfig(
+                            isVisible = true,
+                            isClickable = true,
+                            isActivated = true,
+                            icon = icon,
+                            canShowWhileLocked = false,
+                            intent = Intent("action"),
+                        ),
+                )
+
+            assertQuickAffordanceViewModel(
+                viewModel = endButton(),
+                testConfig =
+                    TestConfig(
+                        isVisible = true,
+                        isClickable = false,
+                        isActivated = true,
+                        icon = icon,
+                        canShowWhileLocked = false,
+                        intent = Intent("action"),
+                        isDimmed = true,
+                    ),
+                configKey = configKey,
+            )
         }
 
     @Test
@@ -377,7 +441,10 @@ class KeyguardBottomAreaViewModelTest : SysuiTestCase() {
     @Test
     fun `alpha - in preview mode - does not change`() =
         testScope.runTest {
-            underTest.enablePreviewMode(null)
+            underTest.enablePreviewMode(
+                initiallySelectedSlotId = null,
+                shouldHighlightSelectedAffordance = false,
+            )
             val value = collectLastValue(underTest.alpha)
 
             assertThat(value()).isEqualTo(1f)
@@ -639,6 +706,8 @@ class KeyguardBottomAreaViewModelTest : SysuiTestCase() {
         assertThat(viewModel.isVisible).isEqualTo(testConfig.isVisible)
         assertThat(viewModel.isClickable).isEqualTo(testConfig.isClickable)
         assertThat(viewModel.isActivated).isEqualTo(testConfig.isActivated)
+        assertThat(viewModel.isSelected).isEqualTo(testConfig.isSelected)
+        assertThat(viewModel.isDimmed).isEqualTo(testConfig.isDimmed)
         if (testConfig.isVisible) {
             assertThat(viewModel.icon).isEqualTo(testConfig.icon)
             viewModel.onClicked.invoke(
@@ -664,6 +733,8 @@ class KeyguardBottomAreaViewModelTest : SysuiTestCase() {
         val icon: Icon? = null,
         val canShowWhileLocked: Boolean = false,
         val intent: Intent? = null,
+        val isSelected: Boolean = false,
+        val isDimmed: Boolean = false,
     ) {
         init {
             check(!isVisible || icon != null) { "Must supply non-null icon if visible!" }

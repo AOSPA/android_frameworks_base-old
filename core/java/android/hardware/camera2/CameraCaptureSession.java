@@ -124,7 +124,7 @@ public abstract class CameraCaptureSession implements AutoCloseable {
      *
      * <p>Note that if 2 surfaces share the same stream via {@link
      * OutputConfiguration#enableSurfaceSharing} and {@link OutputConfiguration#addSurface},
-     * prepare() only needs to be called on one surface, and {link
+     * prepare() only needs to be called on one surface, and {@link
      * StateCallback#onSurfacePrepared} will be triggered for both surfaces.</p>
      *
      * <p>{@link android.hardware.camera2.CameraCharacteristics#INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY LEGACY}
@@ -1246,7 +1246,7 @@ public abstract class CameraCaptureSession implements AutoCloseable {
          * between frames.</p>
          *
          * <p>The timestamps match the timestamps of the output surfaces with readout timestamp
-         * enabled (via {@link OutputConfiguration#useReadoutTimestamp}) if:</p>
+         * enabled (via {@link OutputConfiguration#setReadoutTimestampEnabled}) if:</p>
          * <ul>
          * <li> Timestamp base is {@link OutputConfiguration#TIMESTAMP_BASE_DEFAULT} and the
          * output

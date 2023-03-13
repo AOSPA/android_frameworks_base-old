@@ -372,7 +372,7 @@ class KeyguardUpdateMonitorLogger @Inject constructor(
     }
 
     fun logUserRequestedUnlock(
-        requestOrigin: ActiveUnlockConfig.ACTIVE_UNLOCK_REQUEST_ORIGIN,
+        requestOrigin: ActiveUnlockConfig.ActiveUnlockRequestOrigin,
         reason: String?,
         dismissKeyguard: Boolean
     ) {
@@ -430,5 +430,21 @@ class KeyguardUpdateMonitorLogger @Inject constructor(
         logBuffer.log(TAG, VERBOSE, {
             str1 = PowerManager.wakeReasonToString(pmWakeReason)
         }, { "Skip updating face listening state on wakeup from $str1"})
+    }
+
+    fun logTaskStackChangedForAssistant(assistantVisible: Boolean) {
+        logBuffer.log(TAG, VERBOSE, {
+            bool1 = assistantVisible
+        }, {
+            "TaskStackChanged for ACTIVITY_TYPE_ASSISTANT, assistant visible: $bool1"
+        })
+    }
+
+    fun logAssistantVisible(assistantVisible: Boolean) {
+        logBuffer.log(TAG, VERBOSE, {
+            bool1 = assistantVisible
+        }, {
+            "Updating mAssistantVisible to new value: $bool1"
+        })
     }
 }

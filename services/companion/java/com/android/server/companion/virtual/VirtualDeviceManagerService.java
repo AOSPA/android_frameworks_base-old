@@ -34,6 +34,7 @@ import android.companion.virtual.IVirtualDeviceSoundEffectListener;
 import android.companion.virtual.VirtualDevice;
 import android.companion.virtual.VirtualDeviceManager;
 import android.companion.virtual.VirtualDeviceParams;
+import android.companion.virtual.sensor.VirtualSensor;
 import android.content.Context;
 import android.content.Intent;
 import android.hardware.display.DisplayManagerInternal;
@@ -67,7 +68,6 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -176,6 +176,11 @@ public class VirtualDeviceManagerService extends SystemService {
     @VisibleForTesting
     void notifyRunningAppsChanged(int deviceId, ArraySet<Integer> uids) {
         synchronized (mVirtualDeviceManagerLock) {
+            if (!mVirtualDevices.contains(deviceId)) {
+                Slog.e(TAG, "notifyRunningAppsChanged called for unknown deviceId:" + deviceId
+                        + " (maybe it was recently closed?)");
+                return;
+            }
             mAppsOnVirtualDevices.put(deviceId, uids);
         }
         mLocalService.onAppsOnVirtualDeviceChanged();
@@ -466,7 +471,18 @@ public class VirtualDeviceManagerService extends SystemService {
         }
 
         @Override
-        public @NonNull Set<Integer> getDeviceIdsForUid(int uid) {
+        public @Nullable VirtualSensor getVirtualSensor(int deviceId, int handle) {
+            synchronized (mVirtualDeviceManagerLock) {
+                VirtualDeviceImpl virtualDevice = mVirtualDevices.get(deviceId);
+                if (virtualDevice != null) {
+                    return virtualDevice.getVirtualSensorByHandle(handle);
+                }
+            }
+            return null;
+        }
+
+        @Override
+        public @NonNull ArraySet<Integer> getDeviceIdsForUid(int uid) {
             ArraySet<Integer> result = new ArraySet<>();
             synchronized (mVirtualDeviceManagerLock) {
                 int size = mVirtualDevices.size();
@@ -579,6 +595,20 @@ public class VirtualDeviceManagerService extends SystemService {
                 }
             }
             return false;
+        }
+
+        @Override
+        public @NonNull ArraySet<Integer> getDisplayIdsForDevice(int deviceId) {
+            synchronized (mVirtualDeviceManagerLock) {
+                int size = mVirtualDevices.size();
+                for (int i = 0; i < size; i++) {
+                    VirtualDeviceImpl device = mVirtualDevices.valueAt(i);
+                    if (device.getDeviceId() == deviceId) {
+                        return new ArraySet<>(device.mVirtualDisplayIds);
+                    }
+                }
+            }
+            return new ArraySet<>();
         }
 
         @Override

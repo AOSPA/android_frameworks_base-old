@@ -47,7 +47,7 @@
                   android:theme="@style/CutoutShortEdges"
                   android:taskAffinity="com.android.server.wm.flicker.testapp.ImeActivityAutoFocus"
                   android:windowSoftInputMode="stateVisible"
-                  android:configChanges="orientation|screenSize"
+                  android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"
                   android:label="ImeAppAutoFocus"
                   android:exported="true">
             <intent-filter>
@@ -178,6 +178,13 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <activity
+            android:name=".ActivityEmbeddingSecondaryActivity"
+            android:label="ActivityEmbedding Secondary"
+            android:taskAffinity="com.android.server.wm.flicker.testapp.ActivityEmbedding"
+            android:theme="@style/CutoutShortEdges"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"
+            android:exported="false"/>
         <activity
             android:name=".ActivityEmbeddingPlaceholderPrimaryActivity"
             android:label="ActivityEmbedding Placeholder Primary"

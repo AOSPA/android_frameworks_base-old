@@ -29,6 +29,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.android.settingslib.graph.SignalDrawable
 import com.android.systemui.R
+import com.android.systemui.common.ui.binder.ContentDescriptionViewBinder
 import com.android.systemui.common.ui.binder.IconViewBinder
 import com.android.systemui.lifecycle.repeatWhenAttached
 import com.android.systemui.statusbar.StatusBarIconView
@@ -90,10 +91,23 @@ object MobileIconBinder {
                     }
                 }
 
+                launch { viewModel.isVisible.collect { isVisible -> view.isVisible = isVisible } }
+
                 // Set the icon for the triangle
                 launch {
-                    viewModel.iconId.distinctUntilChanged().collect { iconId ->
-                        mobileDrawable.level = iconId
+                    viewModel.icon.distinctUntilChanged().collect { icon ->
+                        mobileDrawable.level =
+                            SignalDrawable.getState(
+                                icon.level,
+                                icon.numberOfLevels,
+                                icon.showExclamationMark,
+                            )
+                    }
+                }
+
+                launch {
+                    viewModel.contentDescription.distinctUntilChanged().collect {
+                        ContentDescriptionViewBinder.bind(it, view)
                     }
                 }
 
@@ -141,8 +155,7 @@ object MobileIconBinder {
 
         return object : ModernStatusBarViewBinding {
             override fun getShouldIconBeVisible(): Boolean {
-                // If this view model exists, then the icon should be visible.
-                return true
+                return viewModel.isVisible.value
             }
 
             override fun onVisibilityStateChanged(@StatusBarIconView.VisibleState state: Int) {
