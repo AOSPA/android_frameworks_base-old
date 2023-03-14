@@ -127,10 +127,6 @@ interface MobileIconInteractor {
 
     /** True if the no internet icon should be hidden.  */
     val hideNoInternetState: StateFlow<Boolean>
-
-    val imsInfo: StateFlow<MobileConnectionModel>
-
-    val showVolteIcon: StateFlow<Boolean>
 }
 
 /** Interactor for a single mobile connection. This connection _should_ have one subscription ID */
@@ -150,7 +146,6 @@ class MobileIconInteractorImpl(
     connectionRepository: MobileConnectionRepository,
     override val alwaysUseRsrpLevelForLte: StateFlow<Boolean>,
     override val hideNoInternetState: StateFlow<Boolean>,
-    override val showVolteIcon: StateFlow<Boolean>,
 ) : MobileIconInteractor {
     private val connectionInfo = connectionRepository.connectionInfo
 
@@ -161,8 +156,6 @@ class MobileIconInteractorImpl(
     override val isConnected: Flow<Boolean> = defaultMobileConnectivity.mapLatest { it.isConnected }
 
     override val isDataEnabled: StateFlow<Boolean> = connectionRepository.dataEnabled
-
-    override val imsInfo: StateFlow<MobileConnectionModel> = connectionRepository.imsInfo
 
     private val isDefault =
         defaultDataSubId

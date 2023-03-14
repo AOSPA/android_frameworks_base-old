@@ -388,6 +388,4 @@ class DemoMobileConnectionRepository(
     override val cdmaRoaming = MutableStateFlow(false)
 
     override val networkName = MutableStateFlow(NetworkNameModel.IntentDerived("demo network"))
-
-    override val imsInfo = MutableStateFlow(MobileConnectionModel())
 }

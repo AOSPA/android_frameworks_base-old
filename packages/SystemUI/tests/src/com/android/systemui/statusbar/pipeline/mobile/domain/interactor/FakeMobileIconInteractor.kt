@@ -20,7 +20,6 @@ import android.telephony.CellSignalStrength
 import com.android.settingslib.SignalIcon
 import com.android.settingslib.mobile.TelephonyIcons
 import com.android.systemui.log.table.TableLogBuffer
-import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectionModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameModel
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionRepository.Companion.DEFAULT_NUM_LEVELS
 import com.android.systemui.statusbar.pipeline.shared.data.model.DataActivityModel
@@ -79,10 +78,6 @@ class FakeMobileIconInteractor(
 
     private val _hideNoInternetState = MutableStateFlow(false)
     override val hideNoInternetState = _hideNoInternetState
-
-    override val showVolteIcon = MutableStateFlow(false)
-
-    override val imsInfo = MutableStateFlow(MobileConnectionModel())
 
     fun setIconGroup(group: SignalIcon.MobileIconGroup) {
         _iconGroup.value = group

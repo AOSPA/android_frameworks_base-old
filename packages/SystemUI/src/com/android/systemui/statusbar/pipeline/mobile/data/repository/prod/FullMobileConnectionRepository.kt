@@ -150,11 +150,6 @@ class FullMobileConnectionRepository(
             )
             .stateIn(scope, SharingStarted.WhileSubscribed(), activeRepo.value.networkName.value)
 
-    override val imsInfo =
-        activeRepo
-            .flatMapLatest { it.imsInfo }
-            .stateIn(scope, SharingStarted.WhileSubscribed(), activeRepo.value.imsInfo.value)
-
     class Factory
     @Inject
     constructor(

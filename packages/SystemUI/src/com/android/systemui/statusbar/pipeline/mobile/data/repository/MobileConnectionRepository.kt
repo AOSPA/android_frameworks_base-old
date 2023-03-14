@@ -68,8 +68,6 @@ interface MobileConnectionRepository {
     /** The service provider name for this network connection, or the default name */
     val networkName: StateFlow<NetworkNameModel>
 
-    val imsInfo: StateFlow<MobileConnectionModel>
-
     companion object {
         /** The default number of levels to use for [numberOfLevels]. */
         const val DEFAULT_NUM_LEVELS = 4
