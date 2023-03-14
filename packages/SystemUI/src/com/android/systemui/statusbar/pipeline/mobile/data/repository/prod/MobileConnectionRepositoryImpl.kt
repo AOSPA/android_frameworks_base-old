@@ -14,18 +14,10 @@
  * limitations under the License.
  */
 
-/*
- * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
- * SPDX-License-Identifier: BSD-3-Clause-Clear
- */
-
 package com.android.systemui.statusbar.pipeline.mobile.data.repository.prod
 
 import android.content.Context
 import android.content.IntentFilter
-import android.database.ContentObserver
-import android.provider.Settings.Global
 import android.telephony.CellSignalStrength
 import android.telephony.CellSignalStrengthCdma
 import android.telephony.CellSignalStrengthLte
@@ -59,7 +51,6 @@ import com.android.systemui.common.coroutine.ConflatedCallbackFlow.conflatedCall
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.log.table.TableLogBuffer
-import com.android.systemui.log.table.logDiffsForTable
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectionModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.ResolvedNetworkType.DefaultNetworkType
@@ -89,7 +80,6 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
@@ -444,37 +434,6 @@ class MobileConnectionRepositoryImpl(
             }
         }
         return slotIndex
-    }
-
-    /** Produces whenever the mobile data roaming setting changes for this subId */
-    private val dataRoamingSettingChangedEvent: Flow<Unit> = conflatedCallbackFlow {
-        val observer =
-            object : ContentObserver(null) {
-                override fun onChange(selfChange: Boolean) {
-                    trySend(Unit)
-                }
-            }
-
-        context.contentResolver.registerContentObserver(
-            Global.getUriFor("${Global.DATA_ROAMING}$subId"),
-            true,
-            observer)
-
-        awaitClose { context.contentResolver.unregisterContentObserver(observer) }
-    }
-
-    override val dataRoamingEnabled: StateFlow<Boolean> = run {
-        val initial = telephonyManager.isDataRoamingEnabled
-        dataRoamingSettingChangedEvent
-            .mapLatest { telephonyManager.isDataRoamingEnabled }
-            .distinctUntilChanged()
-            .logDiffsForTable(
-                tableLogBuffer,
-                columnPrefix = "",
-                columnName = "dataRoamingEnabled",
-                initialValue = initial,
-            )
-            .stateIn(scope, SharingStarted.WhileSubscribed(), initial)
     }
 
     class Factory
