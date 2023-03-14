@@ -18,7 +18,6 @@ package com.android.systemui.statusbar.pipeline.mobile.data.model
 
 import android.annotation.IntRange
 import android.telephony.CellSignalStrength
-import android.telephony.ims.stub.ImsRegistrationImplBase
 import android.telephony.TelephonyCallback.CarrierNetworkListener
 import android.telephony.TelephonyCallback.DataActivityListener
 import android.telephony.TelephonyCallback.DataConnectionStateListener
@@ -104,7 +103,6 @@ data class MobileConnectionModel(
     val voiceCapable: Boolean = false,
     val videoCapable: Boolean = false,
     val imsRegistered: Boolean = false,
-    val imsRegistrationTech: Int = ImsRegistrationImplBase.REGISTRATION_TECH_NONE,
 ) : Diffable<MobileConnectionModel> {
     override fun logDiffs(prevVal: MobileConnectionModel, row: TableRowLogger) {
         if (prevVal.dataConnectionState != dataConnectionState) {
@@ -186,10 +184,6 @@ data class MobileConnectionModel(
         if (prevVal.imsRegistered != imsRegistered) {
             row.logChange(COL_IMS_REGISTERED, imsRegistered)
         }
-
-        if (prevVal.imsRegistrationTech != imsRegistrationTech) {
-            row.logChange(COL_IMS_REGISTRATION_TECH, imsRegistrationTech)
-        }
     }
 
     override fun logFull(row: TableRowLogger) {
@@ -213,7 +207,6 @@ data class MobileConnectionModel(
         row.logChange(COL_VOICE_CAPABLE, voiceCapable)
         row.logChange(COL_VIDEO_CAPABLE, videoCapable)
         row.logChange(COL_IMS_REGISTERED, imsRegistered)
-        row.logChange(COL_IMS_REGISTRATION_TECH, imsRegistrationTech)
     }
 
     @VisibleForTesting
@@ -238,6 +231,5 @@ data class MobileConnectionModel(
         const val COL_VOICE_CAPABLE = "voiceCapable"
         const val COL_VIDEO_CAPABLE = "videoCapable"
         const val COL_IMS_REGISTERED = "imsRegistered"
-        const val COL_IMS_REGISTRATION_TECH = "imsRegistrationTech"
     }
 }

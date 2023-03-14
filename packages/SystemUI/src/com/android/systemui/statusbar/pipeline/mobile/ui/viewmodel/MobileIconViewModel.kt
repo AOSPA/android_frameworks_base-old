@@ -20,7 +20,6 @@ import android.telephony.TelephonyManager
 import com.android.settingslib.AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH
 import com.android.settingslib.AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH_NONE
 import com.android.settingslib.graph.SignalDrawable
-import com.android.settingslib.mobile.TelephonyIcons
 import com.android.systemui.common.shared.model.ContentDescription
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.log.table.logDiffsForTable
@@ -174,18 +173,12 @@ constructor(
         combine(
                 iconInteractor.networkTypeIconGroup,
                 showNetworkTypeIcon,
-                iconInteractor.voWifiAvailable,
-            ) { networkTypeIconGroup, shouldShow, voWifiAvailable ->
+            ) { networkTypeIconGroup, shouldShow ->
                 val desc =
                     if (networkTypeIconGroup.dataContentDescription != 0)
                         ContentDescription.Resource(networkTypeIconGroup.dataContentDescription)
                     else null
-                val icon =
-                    if (voWifiAvailable) {
-                        Icon.Resource(TelephonyIcons.VOWIFI.dataType, desc)
-                    } else {
-                        Icon.Resource(networkTypeIconGroup.dataType, desc)
-                    }
+                val icon = Icon.Resource(networkTypeIconGroup.dataType, desc)
                 return@combine when {
                     !shouldShow -> null
                     else -> icon

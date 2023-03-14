@@ -27,7 +27,6 @@ import android.telephony.ims.ImsRegistrationAttributes
 import android.telephony.ims.ImsStateCallback
 import android.telephony.ims.feature.MmTelFeature.MmTelCapabilities
 import android.telephony.ims.RegistrationManager
-import android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_NONE
 import android.telephony.ServiceState
 import android.telephony.SignalStrength
 import android.telephony.SignalStrength.SIGNAL_STRENGTH_GREAT
@@ -367,7 +366,6 @@ class MobileConnectionRepositoryImpl(
             override fun onRegistered(attributes: ImsRegistrationAttributes) {
                 imsState = imsState.copy(
                     imsRegistered = true,
-                    imsRegistrationTech = attributes.getRegistrationTechnology(),
                 )
                 imsCallbackEvent.value = imsState
             }
@@ -375,7 +373,6 @@ class MobileConnectionRepositoryImpl(
             override fun onUnregistered(info: ImsReasonInfo) {
                 imsState = imsState.copy(
                     imsRegistered = false,
-                    imsRegistrationTech = REGISTRATION_TECH_NONE,
                 )
                 imsCallbackEvent.value = imsState
             }

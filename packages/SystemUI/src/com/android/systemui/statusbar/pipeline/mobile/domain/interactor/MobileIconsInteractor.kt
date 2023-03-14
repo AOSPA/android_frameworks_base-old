@@ -108,8 +108,6 @@ interface MobileIconsInteractor {
     val hideNoInternetState: StateFlow<Boolean>
 
     val showVolteIcon: StateFlow<Boolean>
-
-    val showVowifiIcon: StateFlow<Boolean>
 }
 
 @Suppress("EXPERIMENTAL_IS_NOT_ENABLED")
@@ -331,17 +329,11 @@ constructor(
             alwaysUseRsrpLevelForLte,
             hideNoInternetState,
             showVolteIcon,
-            showVowifiIcon,
         )
 
     override val showVolteIcon: StateFlow<Boolean> =
         mobileConnectionsRepo.defaultDataSubRatConfig
             .mapLatest { it.showVolteIcon }
-            .stateIn(scope, SharingStarted.WhileSubscribed(), false)
-
-    override val showVowifiIcon: StateFlow<Boolean> =
-        mobileConnectionsRepo.defaultDataSubRatConfig
-            .mapLatest { it.showVowifiIcon }
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
     companion object {
