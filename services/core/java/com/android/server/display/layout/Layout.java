@@ -271,6 +271,9 @@ public class Layout {
         @Nullable
         private String mRefreshRateZoneId;
 
+        @Nullable
+        private String mRefreshRateThermalThrottlingMapId;
+
         Display(@NonNull DisplayAddress address, int logicalDisplayId, boolean isEnabled,
                 @NonNull String displayGroupName, String brightnessThrottlingMapId, int position,
                 int leadDisplayId) {
@@ -300,6 +303,7 @@ public class Layout {
                     + ", brightnessThrottlingMapId: " + mBrightnessThrottlingMapId
                     + ", mRefreshRateZoneId: " + mRefreshRateZoneId
                     + ", mLeadDisplayId: " + mLeadDisplayId
+                    + ", mRefreshRateThermalThrottlingMapId: " + mRefreshRateThermalThrottlingMapId
                     + "}";
         }
 
@@ -319,7 +323,9 @@ public class Layout {
                     && Objects.equals(mBrightnessThrottlingMapId,
                     otherDisplay.mBrightnessThrottlingMapId)
                     && Objects.equals(otherDisplay.mRefreshRateZoneId, this.mRefreshRateZoneId)
-                    && this.mLeadDisplayId == otherDisplay.mLeadDisplayId;
+                    && this.mLeadDisplayId == otherDisplay.mLeadDisplayId
+                    && Objects.equals(mRefreshRateThermalThrottlingMapId,
+                    otherDisplay.mRefreshRateThermalThrottlingMapId);
         }
 
         @Override
@@ -333,6 +339,7 @@ public class Layout {
             result = 31 * result + mBrightnessThrottlingMapId.hashCode();
             result = 31 * result + Objects.hashCode(mRefreshRateZoneId);
             result = 31 * result + mLeadDisplayId;
+            result = 31 * result + Objects.hashCode(mRefreshRateThermalThrottlingMapId);
             return result;
         }
 
@@ -401,6 +408,14 @@ public class Layout {
          */
         public int getLeadDisplayId() {
             return mLeadDisplayId;
+        }
+
+        public void setRefreshRateThermalThrottlingMapId(String refreshRateThermalThrottlingMapId) {
+            mRefreshRateThermalThrottlingMapId = refreshRateThermalThrottlingMapId;
+        }
+
+        public String getRefreshRateThermalThrottlingMapId() {
+            return mRefreshRateThermalThrottlingMapId;
         }
     }
 }
