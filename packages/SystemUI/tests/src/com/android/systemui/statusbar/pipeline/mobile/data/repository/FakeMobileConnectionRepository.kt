@@ -14,12 +14,6 @@
  * limitations under the License.
  */
 
-/*
- * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
- * SPDX-License-Identifier: BSD-3-Clause-Clear
- */
-
 package com.android.systemui.statusbar.pipeline.mobile.data.repository
 
 import com.android.systemui.log.table.TableLogBuffer
@@ -46,20 +40,11 @@ class FakeMobileConnectionRepository(
     override val networkName =
         MutableStateFlow<NetworkNameModel>(NetworkNameModel.Default("default"))
 
-    private val _dataRoamingEnabled = MutableStateFlow(true)
-    override val dataRoamingEnabled = _dataRoamingEnabled
-
     fun setConnectionInfo(model: MobileConnectionModel) {
         _connectionInfo.value = model
     }
 
     fun setDataEnabled(enabled: Boolean) {
         _dataEnabled.value = enabled
-    }
-
-    override val imsInfo = MutableStateFlow(MobileConnectionModel())
-
-    fun setDataRoamingEnabled(enabled: Boolean) {
-        _dataRoamingEnabled.value= enabled
     }
 }

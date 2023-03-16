@@ -14,16 +14,9 @@
  * limitations under the License.
  */
 
-/*
- * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
- * SPDX-License-Identifier: BSD-3-Clause-Clear
- */
-
 package com.android.systemui.statusbar.pipeline.mobile.domain.interactor
 
 import android.telephony.CarrierConfigManager
-import android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN
 import android.telephony.TelephonyDisplayInfo
 import android.telephony.TelephonyManager
 import com.android.settingslib.SignalIcon.MobileIconGroup
@@ -35,7 +28,6 @@ import com.android.systemui.statusbar.pipeline.mobile.data.model.DataConnectionS
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectionModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectivityModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameModel
-import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkTypeIconCustomizationMode
 import com.android.systemui.statusbar.pipeline.mobile.data.model.ResolvedNetworkType
 import com.android.systemui.statusbar.pipeline.mobile.data.model.ResolvedNetworkType.DefaultNetworkType
 import com.android.systemui.statusbar.pipeline.mobile.data.model.ResolvedNetworkType.OverrideNetworkType
@@ -135,16 +127,6 @@ interface MobileIconInteractor {
 
     /** True if the no internet icon should be hidden.  */
     val hideNoInternetState: StateFlow<Boolean>
-
-    val imsInfo: StateFlow<MobileConnectionModel>
-
-    val showVolteIcon: StateFlow<Boolean>
-
-    val showVowifiIcon: StateFlow<Boolean>
-
-    val voWifiAvailable: StateFlow<Boolean>
-
-    val networkTypeIconCustomization: StateFlow<NetworkTypeIconCustomizationMode>
 }
 
 /** Interactor for a single mobile connection. This connection _should_ have one subscription ID */
@@ -164,9 +146,6 @@ class MobileIconInteractorImpl(
     connectionRepository: MobileConnectionRepository,
     override val alwaysUseRsrpLevelForLte: StateFlow<Boolean>,
     override val hideNoInternetState: StateFlow<Boolean>,
-    override val showVolteIcon: StateFlow<Boolean>,
-    override val showVowifiIcon: StateFlow<Boolean>,
-    networkTypeIconCustomizationFlow: StateFlow<NetworkTypeIconCustomizationMode>,
 ) : MobileIconInteractor {
     private val connectionInfo = connectionRepository.connectionInfo
 
@@ -177,8 +156,6 @@ class MobileIconInteractorImpl(
     override val isConnected: Flow<Boolean> = defaultMobileConnectivity.mapLatest { it.isConnected }
 
     override val isDataEnabled: StateFlow<Boolean> = connectionRepository.dataEnabled
-
-    override val imsInfo: StateFlow<MobileConnectionModel> = connectionRepository.imsInfo
 
     private val isDefault =
         defaultDataSubId
@@ -207,39 +184,6 @@ class MobileIconInteractorImpl(
                 connectionRepository.networkName.value
             )
 
-    override val isRoaming: StateFlow<Boolean> =
-        combine(connectionInfo, connectionRepository.cdmaRoaming) { connection, cdmaRoaming ->
-            if (connection.carrierNetworkChangeActive) {
-                false
-            } else if (connection.isGsm) {
-                connection.isRoaming
-            } else {
-                cdmaRoaming
-            }
-        }
-        .stateIn(scope, SharingStarted.WhileSubscribed(), false)
-
-    override val networkTypeIconCustomization: StateFlow<NetworkTypeIconCustomizationMode> =
-        combine(
-            networkTypeIconCustomizationFlow,
-            isDataEnabled,
-            isDefault,
-            connectionRepository.dataRoamingEnabled,
-            isRoaming,
-        ){ state, mobileDataEnabled, isDefault, dataRoamingEnabled, isRoaming ->
-            val newState = NetworkTypeIconCustomizationMode(
-                state.enabled,
-                state.alwaysShowNetworkTypeIcon,
-                state.ddsRatIconEnhancementEnabled,
-                state.nonDdsRatIconEnhancementEnabled,
-                mobileDataEnabled,
-                dataRoamingEnabled,
-                isDefault,
-                isRoaming
-            )
-            newState
-        }.stateIn(scope, SharingStarted.WhileSubscribed(), NetworkTypeIconCustomizationMode())
-
     /** Observable for the current RAT indicator icon ([MobileIconGroup]) */
     override val networkTypeIconGroup: StateFlow<MobileIconGroup> =
         combine(
@@ -247,9 +191,8 @@ class MobileIconInteractorImpl(
                 defaultMobileIconMapping,
                 defaultMobileIconGroup,
                 isDefault,
-                networkTypeIconCustomization,
-            ) { info, mapping, defaultGroup, isDefault, customization ->
-                if (!isDefault && !customization.enabled) {
+            ) { info, mapping, defaultGroup, isDefault ->
+                if (!isDefault) {
                     return@combine NOT_DEFAULT_DATA
                 }
 
@@ -274,6 +217,18 @@ class MobileIconInteractorImpl(
     override val isEmergencyOnly: StateFlow<Boolean> =
         connectionInfo
             .mapLatest { it.isEmergencyOnly }
+            .stateIn(scope, SharingStarted.WhileSubscribed(), false)
+
+    override val isRoaming: StateFlow<Boolean> =
+        combine(connectionInfo, connectionRepository.cdmaRoaming) { connection, cdmaRoaming ->
+                if (connection.carrierNetworkChangeActive) {
+                    false
+                } else if (connection.isGsm) {
+                    connection.isRoaming
+                } else {
+                    cdmaRoaming
+                }
+            }
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
     override val level: StateFlow<Int> =
@@ -313,17 +268,6 @@ class MobileIconInteractorImpl(
     override val isInService =
         connectionRepository.connectionInfo
             .mapLatest { it.isInService }
-            .stateIn(scope, SharingStarted.WhileSubscribed(), false)
-
-    override val voWifiAvailable: StateFlow<Boolean> =
-        combine(
-                imsInfo,
-                showVowifiIcon,
-            ) { imsInfo, showVowifiIcon ->
-                imsInfo.voiceCapable
-                        && imsInfo.imsRegistrationTech == REGISTRATION_TECH_IWLAN
-                        && showVowifiIcon
-            }
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
     private fun isLteCamped(connectionInfo: MobileConnectionModel): Boolean {

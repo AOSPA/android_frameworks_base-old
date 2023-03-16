@@ -14,28 +14,13 @@
  * limitations under the License.
  */
 
-/*
- * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
- * SPDX-License-Identifier: BSD-3-Clause-Clear
- */
-
 package com.android.systemui.statusbar.pipeline.mobile.data.repository.prod
 
 import android.content.Context
 import android.content.IntentFilter
-import android.database.ContentObserver
-import android.provider.Settings.Global
 import android.telephony.CellSignalStrength
 import android.telephony.CellSignalStrengthCdma
 import android.telephony.CellSignalStrengthLte
-import android.telephony.ims.ImsMmTelManager
-import android.telephony.ims.ImsReasonInfo
-import android.telephony.ims.ImsRegistrationAttributes
-import android.telephony.ims.ImsStateCallback
-import android.telephony.ims.feature.MmTelFeature.MmTelCapabilities
-import android.telephony.ims.RegistrationManager
-import android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_NONE
 import android.telephony.ServiceState
 import android.telephony.SignalStrength
 import android.telephony.SignalStrength.SIGNAL_STRENGTH_GREAT
@@ -59,7 +44,6 @@ import com.android.systemui.common.coroutine.ConflatedCallbackFlow.conflatedCall
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.log.table.TableLogBuffer
-import com.android.systemui.log.table.logDiffsForTable
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectionModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.ResolvedNetworkType.DefaultNetworkType
@@ -83,18 +67,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.mapNotNull
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.scan
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
@@ -130,7 +111,6 @@ class MobileConnectionRepositoryImpl(
     }
 
     private val telephonyCallbackEvent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    private val imsMmTelManager: ImsMmTelManager = ImsMmTelManager.createForSubscriptionId(subId);
 
     /**
      * This flow defines the single shared connection to system_server via TelephonyCallback. Any
@@ -200,14 +180,9 @@ class MobileConnectionRepositoryImpl(
                     }
                 telephonyManager.registerTelephonyCallback(bgDispatcher.asExecutor(), callback)
                 fiveGServiceClient.registerListener(getSlotIndex(subId), callback)
-                imsMmTelManager.registerImsStateCallback(
-                    context.getMainExecutor() , imsStateCallback)
                 awaitClose {
                     telephonyManager.unregisterTelephonyCallback(callback)
                     fiveGServiceClient.unregisterListener(getSlotIndex(subId))
-                    imsMmTelManager.unregisterImsStateCallback(imsStateCallback)
-                    imsMmTelManager.unregisterMmTelCapabilityCallback(capabilityCallback)
-                    imsMmTelManager.unregisterImsRegistrationCallback(registrationCallback)
                 }
             }
             .shareIn(scope, SharingStarted.WhileSubscribed())
@@ -298,10 +273,7 @@ class MobileConnectionRepositoryImpl(
                             telephonyDisplayInfo.overrideNetworkType
                         )
                     }
-                prevState.copy(
-                    resolvedNetworkType = networkType,
-                    originNetworkType = telephonyDisplayInfo.networkType
-                )
+                prevState.copy(resolvedNetworkType = networkType)
             }
             is CallbackEvent.OnDataEnabledChanged -> {
                 // Not part of this object, handled in a separate flow
@@ -331,76 +303,6 @@ class MobileConnectionRepositoryImpl(
             }
             .stateIn(scope, SharingStarted.WhileSubscribed(), DEFAULT_NUM_LEVELS)
 
-    val imsStateCallback =
-        object : ImsStateCallback() {
-            override fun onAvailable() {
-                imsMmTelManager.registerImsRegistrationCallback(
-                    context.mainExecutor, registrationCallback)
-                imsMmTelManager.registerMmTelCapabilityCallback(
-                    context.mainExecutor, capabilityCallback)
-            }
-
-            override fun onUnavailable(reason: Int) {
-                imsMmTelManager.unregisterMmTelCapabilityCallback(capabilityCallback)
-                imsMmTelManager.unregisterImsRegistrationCallback(registrationCallback)
-            }
-
-            override fun onError() {
-                imsMmTelManager.unregisterMmTelCapabilityCallback(capabilityCallback)
-                imsMmTelManager.unregisterImsRegistrationCallback(registrationCallback)
-            }
-        }
-
-    private var imsState = MobileConnectionModel()
-    private val imsCallbackEvent: MutableStateFlow<MobileConnectionModel> =
-        MutableStateFlow<MobileConnectionModel>(MobileConnectionModel())
-
-
-    override val imsInfo: StateFlow<MobileConnectionModel> =
-        combine(
-            connectionInfo,
-            imsCallbackEvent,
-        ) { connection, imsInfo ->
-            imsState = imsState.copy(
-                originNetworkType = connection.originNetworkType,
-                voiceNetworkType = connection.voiceNetworkType,
-                voiceCapable = imsInfo.voiceCapable,
-                videoCapable = imsInfo.videoCapable,
-                imsRegistered = imsInfo.imsRegistered,
-            )
-            imsState
-        }
-            .stateIn(scope, SharingStarted.WhileSubscribed(), imsState)
-
-    private val registrationCallback =
-        object : RegistrationManager.RegistrationCallback() {
-            override fun onRegistered(attributes: ImsRegistrationAttributes) {
-                imsState = imsState.copy(
-                    imsRegistered = true,
-                    imsRegistrationTech = attributes.getRegistrationTechnology(),
-                )
-                imsCallbackEvent.value = imsState
-            }
-
-            override fun onUnregistered(info: ImsReasonInfo) {
-                imsState = imsState.copy(
-                    imsRegistered = false,
-                    imsRegistrationTech = REGISTRATION_TECH_NONE,
-                )
-                imsCallbackEvent.value = imsState
-            }
-        }
-
-    private val capabilityCallback =
-        object : ImsMmTelManager.CapabilityCallback() {
-            override fun onCapabilitiesStatusChanged(config: MmTelCapabilities) {
-                imsState = imsState.copy(
-                    voiceCapable = config.isCapable(MmTelCapabilities.CAPABILITY_TYPE_VOICE),
-                    videoCapable = config.isCapable(MmTelCapabilities.CAPABILITY_TYPE_VIDEO),
-                )
-                imsCallbackEvent.value = imsState
-            }
-        }
     /**
      * There are a few cases where we will need to poll [TelephonyManager] so we can update some
      * internal state where callbacks aren't provided. Any of those events should be merged into
@@ -444,37 +346,6 @@ class MobileConnectionRepositoryImpl(
             }
         }
         return slotIndex
-    }
-
-    /** Produces whenever the mobile data roaming setting changes for this subId */
-    private val dataRoamingSettingChangedEvent: Flow<Unit> = conflatedCallbackFlow {
-        val observer =
-            object : ContentObserver(null) {
-                override fun onChange(selfChange: Boolean) {
-                    trySend(Unit)
-                }
-            }
-
-        context.contentResolver.registerContentObserver(
-            Global.getUriFor("${Global.DATA_ROAMING}$subId"),
-            true,
-            observer)
-
-        awaitClose { context.contentResolver.unregisterContentObserver(observer) }
-    }
-
-    override val dataRoamingEnabled: StateFlow<Boolean> = run {
-        val initial = telephonyManager.isDataRoamingEnabled
-        dataRoamingSettingChangedEvent
-            .mapLatest { telephonyManager.isDataRoamingEnabled }
-            .distinctUntilChanged()
-            .logDiffsForTable(
-                tableLogBuffer,
-                columnPrefix = "",
-                columnName = "dataRoamingEnabled",
-                initialValue = initial,
-            )
-            .stateIn(scope, SharingStarted.WhileSubscribed(), initial)
     }
 
     class Factory

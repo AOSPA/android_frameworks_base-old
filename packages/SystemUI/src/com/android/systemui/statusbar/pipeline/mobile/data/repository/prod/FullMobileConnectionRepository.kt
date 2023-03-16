@@ -14,12 +14,6 @@
  * limitations under the License.
  */
 
-/*
- * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
- * SPDX-License-Identifier: BSD-3-Clause-Clear
- */
-
 package com.android.systemui.statusbar.pipeline.mobile.data.repository.prod
 
 import androidx.annotation.VisibleForTesting
@@ -155,20 +149,6 @@ class FullMobileConnectionRepository(
                 initialValue = activeRepo.value.networkName.value,
             )
             .stateIn(scope, SharingStarted.WhileSubscribed(), activeRepo.value.networkName.value)
-
-    override val imsInfo =
-        activeRepo
-            .flatMapLatest { it.imsInfo }
-            .stateIn(scope, SharingStarted.WhileSubscribed(), activeRepo.value.imsInfo.value)
-
-    override val dataRoamingEnabled =
-        activeRepo
-            .flatMapLatest { it.dataRoamingEnabled }
-            .stateIn(
-                scope,
-                SharingStarted.WhileSubscribed(),
-                activeRepo.value.dataRoamingEnabled.value
-            )
 
     class Factory
     @Inject

@@ -14,12 +14,6 @@
  * limitations under the License.
  */
 
-/*
- * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
- * SPDX-License-Identifier: BSD-3-Clause-Clear
- */
-
 package com.android.systemui.statusbar.pipeline.mobile.data.repository
 
 import android.telephony.SubscriptionInfo
@@ -73,11 +67,6 @@ interface MobileConnectionRepository {
 
     /** The service provider name for this network connection, or the default name */
     val networkName: StateFlow<NetworkNameModel>
-
-    val imsInfo: StateFlow<MobileConnectionModel>
-
-    /** Observable tracking [Settings.Global.DATA_ROAMING] */
-    val dataRoamingEnabled: StateFlow<Boolean>
 
     companion object {
         /** The default number of levels to use for [numberOfLevels]. */
