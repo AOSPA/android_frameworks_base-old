@@ -25,11 +25,6 @@ import static android.app.StatusBarManager.WindowType;
 import static android.app.StatusBarManager.WindowVisibleState;
 import static android.app.StatusBarManager.windowStateToString;
 import static android.app.WindowConfiguration.ROTATION_UNDEFINED;
-import static android.view.InsetsState.ITYPE_BOTTOM_MANDATORY_GESTURES;
-import static android.view.InsetsState.ITYPE_BOTTOM_TAPPABLE_ELEMENT;
-import static android.view.InsetsState.ITYPE_LEFT_GESTURES;
-import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
-import static android.view.InsetsState.ITYPE_RIGHT_GESTURES;
 import static android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
 import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_NO_MOVE_ANIMATION;
@@ -292,6 +287,7 @@ public class NavigationBar extends ViewController<NavigationBarView> implements 
     private final DeadZone mDeadZone;
     private boolean mImeVisible;
     private final Rect mSamplingBounds = new Rect();
+    private final Binder mInsetsSourceOwner = new Binder();
 
     /**
      * When quickswitching between apps of different orientations, we draw a secondary home handle
@@ -1709,65 +1705,46 @@ public class NavigationBar extends ViewController<NavigationBarView> implements 
     }
 
     private InsetsFrameProvider[] getInsetsFrameProvider(int insetsHeight, Context userContext) {
-        final InsetsFrameProvider navBarProvider;
+        final InsetsFrameProvider navBarProvider =
+                new InsetsFrameProvider(mInsetsSourceOwner, 0, WindowInsets.Type.navigationBars())
+                        .setInsetsSizeOverrides(new InsetsFrameProvider.InsetsSizeOverride[] {
+                                new InsetsFrameProvider.InsetsSizeOverride(
+                                        TYPE_INPUT_METHOD, null)});
         if (insetsHeight != -1 && !mIsButtonForceVisible) {
-            navBarProvider = new InsetsFrameProvider(
-                    ITYPE_NAVIGATION_BAR, Insets.of(0, 0, 0, insetsHeight));
-            // Use window frame for IME.
-            navBarProvider.insetsSizeOverrides = new InsetsFrameProvider.InsetsSizeOverride[] {
-                    new InsetsFrameProvider.InsetsSizeOverride(TYPE_INPUT_METHOD, null)
-            };
-        } else {
-            navBarProvider = new InsetsFrameProvider(ITYPE_NAVIGATION_BAR);
-            navBarProvider.insetsSizeOverrides = new InsetsFrameProvider.InsetsSizeOverride[]{
-                    new InsetsFrameProvider.InsetsSizeOverride(TYPE_INPUT_METHOD, null)
-            };
-        }
-        final boolean navBarTapThrough = userContext.getResources().getBoolean(
-                com.android.internal.R.bool.config_navBarTapThrough);
-        final InsetsFrameProvider bottomTappableProvider;
-        if (navBarTapThrough) {
-            bottomTappableProvider = new InsetsFrameProvider(ITYPE_BOTTOM_TAPPABLE_ELEMENT,
-                    Insets.of(0, 0, 0, 0));
-        } else {
-            bottomTappableProvider = new InsetsFrameProvider(ITYPE_BOTTOM_TAPPABLE_ELEMENT);
+            navBarProvider.setInsetsSize(Insets.of(0, 0, 0, insetsHeight));
         }
 
-        if (!mEdgeBackGestureHandler.isHandlingGestures()) {
-            // 2/3 button navigation is on. Do not provide any gesture insets here. But need to keep
-            // the provider to support runtime update.
-            return new InsetsFrameProvider[] {
-                    navBarProvider,
-                    new InsetsFrameProvider(
-                            ITYPE_BOTTOM_MANDATORY_GESTURES, Insets.NONE),
-                    new InsetsFrameProvider(ITYPE_LEFT_GESTURES, InsetsFrameProvider.SOURCE_DISPLAY,
-                            Insets.NONE, null),
-                    new InsetsFrameProvider(ITYPE_RIGHT_GESTURES,
-                            InsetsFrameProvider.SOURCE_DISPLAY,
-                            Insets.NONE, null),
-                    bottomTappableProvider
-            };
-        } else {
-            // Gesture navigation
-            final int gestureHeight = userContext.getResources().getDimensionPixelSize(
-                    com.android.internal.R.dimen.navigation_bar_gesture_height);
-            final DisplayCutout cutout = userContext.getDisplay().getCutout();
-            final int safeInsetsLeft = cutout != null ? cutout.getSafeInsetLeft() : 0;
-            final int safeInsetsRight = cutout != null ? cutout.getSafeInsetRight() : 0;
-            return new InsetsFrameProvider[] {
-                    navBarProvider,
-                    new InsetsFrameProvider(
-                            ITYPE_BOTTOM_MANDATORY_GESTURES, Insets.of(0, 0, 0, gestureHeight)),
-                    new InsetsFrameProvider(ITYPE_LEFT_GESTURES, InsetsFrameProvider.SOURCE_DISPLAY,
-                            Insets.of(safeInsetsLeft
-                                    + mEdgeBackGestureHandler.getEdgeWidthLeft(), 0, 0, 0), null),
-                    new InsetsFrameProvider(ITYPE_RIGHT_GESTURES,
-                            InsetsFrameProvider.SOURCE_DISPLAY,
-                            Insets.of(0, 0, safeInsetsRight
-                                    + mEdgeBackGestureHandler.getEdgeWidthRight(), 0), null),
-                    bottomTappableProvider
-            };
+        final InsetsFrameProvider tappableElementProvider = new InsetsFrameProvider(
+                mInsetsSourceOwner, 0, WindowInsets.Type.tappableElement());
+        final boolean navBarTapThrough = userContext.getResources().getBoolean(
+                com.android.internal.R.bool.config_navBarTapThrough);
+        if (navBarTapThrough) {
+            tappableElementProvider.setInsetsSize(Insets.NONE);
         }
+
+        final DisplayCutout cutout = userContext.getDisplay().getCutout();
+        final int safeInsetsLeft = cutout != null ? cutout.getSafeInsetLeft() : 0;
+        final int safeInsetsRight = cutout != null ? cutout.getSafeInsetRight() : 0;
+        final int gestureHeight = userContext.getResources().getDimensionPixelSize(
+                com.android.internal.R.dimen.navigation_bar_gesture_height);
+        final boolean handlingGesture = mEdgeBackGestureHandler.isHandlingGestures();
+        final int gestureInsetsLeft = handlingGesture
+                ? mEdgeBackGestureHandler.getEdgeWidthLeft() + safeInsetsLeft : 0;
+        final int gestureInsetsRight = handlingGesture
+                ? mEdgeBackGestureHandler.getEdgeWidthRight() + safeInsetsRight : 0;
+        return new InsetsFrameProvider[] {
+                navBarProvider,
+                tappableElementProvider,
+                new InsetsFrameProvider(
+                        mInsetsSourceOwner, 0, WindowInsets.Type.mandatorySystemGestures())
+                        .setInsetsSize(Insets.of(0, 0, 0, gestureHeight)),
+                new InsetsFrameProvider(mInsetsSourceOwner, 0, WindowInsets.Type.systemGestures())
+                        .setSource(InsetsFrameProvider.SOURCE_DISPLAY)
+                        .setInsetsSize(Insets.of(gestureInsetsLeft, 0, 0, 0)),
+                new InsetsFrameProvider(mInsetsSourceOwner, 1, WindowInsets.Type.systemGestures())
+                        .setSource(InsetsFrameProvider.SOURCE_DISPLAY)
+                        .setInsetsSize(Insets.of(0, 0, gestureInsetsRight, 0))
+        };
     }
 
     private boolean canShowSecondaryHandle() {

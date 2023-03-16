@@ -1781,14 +1781,11 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
         }
 
         if (ActivitySecurityModelFeatureFlags.shouldShowToast(callingUid)) {
-            Toast toast = Toast.makeText(mService.mContext,
+            UiThread.getHandler().post(() -> Toast.makeText(mService.mContext,
                     (ActivitySecurityModelFeatureFlags.DOC_LINK
-                            + (restrictActivitySwitch
-                            ? "returned home due to "
-                            : "would return home due to ")
-                            + callingLabel),
-                    Toast.LENGTH_LONG);
-            UiThread.getHandler().post(toast::show);
+                            + (restrictActivitySwitch ? " returned home due to "
+                                    : " would return home due to ")
+                            + callingLabel), Toast.LENGTH_LONG).show());
         }
 
         // If the activity switch should be restricted, return home rather than the
@@ -2357,7 +2354,14 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
 
     static boolean printThisActivity(PrintWriter pw, ActivityRecord activity, String dumpPackage,
             boolean needSep, String prefix, Runnable header) {
-        if (activity != null) {
+        return printThisActivity(pw, activity, dumpPackage, INVALID_DISPLAY, needSep, prefix,
+                header);
+    }
+
+    static boolean printThisActivity(PrintWriter pw, ActivityRecord activity, String dumpPackage,
+            int displayIdFilter, boolean needSep, String prefix, Runnable header) {
+        if (activity != null && (displayIdFilter == INVALID_DISPLAY
+                || displayIdFilter == activity.getDisplayId())) {
             if (dumpPackage == null || dumpPackage.equals(activity.packageName)) {
                 if (needSep) {
                     pw.println();
