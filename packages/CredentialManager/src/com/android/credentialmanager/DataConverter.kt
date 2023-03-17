@@ -60,8 +60,7 @@ import androidx.credentials.provider.CreateEntry
 import androidx.credentials.provider.CustomCredentialEntry
 import androidx.credentials.provider.PasswordCredentialEntry
 import androidx.credentials.provider.PublicKeyCredentialEntry
-import androidx.credentials.provider.RemoteCreateEntry
-import androidx.credentials.provider.RemoteCredentialEntry
+import androidx.credentials.provider.RemoteEntry
 import org.json.JSONObject
 
 // TODO: remove all !! checks
@@ -149,7 +148,10 @@ class GetFlowUtils {
                         icon = providerIcon,
                         displayName = providerLabel,
                         credentialEntryList = getCredentialOptionInfoList(
-                            it.providerFlattenedComponentName, it.credentialEntries, context
+                            providerId = it.providerFlattenedComponentName,
+                            providerLabel = providerLabel,
+                            credentialEntries = it.credentialEntries,
+                            context = context
                         ),
                         authenticationEntryList = getAuthenticationEntryList(
                             it.providerFlattenedComponentName,
@@ -202,6 +204,7 @@ class GetFlowUtils {
          */
         private fun getCredentialOptionInfoList(
             providerId: String,
+            providerLabel: String,
             credentialEntries: List<Entry>,
             context: Context,
         ): List<CredentialEntryInfo> {
@@ -212,6 +215,7 @@ class GetFlowUtils {
                     is PasswordCredentialEntry -> {
                         result.add(CredentialEntryInfo(
                             providerId = providerId,
+                            providerDisplayName = providerLabel,
                             entryKey = it.key,
                             entrySubkey = it.subkey,
                             pendingIntent = credentialEntry.pendingIntent,
@@ -221,12 +225,16 @@ class GetFlowUtils {
                             userName = credentialEntry.username.toString(),
                             displayName = credentialEntry.displayName?.toString(),
                             icon = credentialEntry.icon.loadDrawable(context),
+                            shouldTintIcon = credentialEntry.isDefaultIcon ?: false,
                             lastUsedTimeMillis = credentialEntry.lastUsedTime,
+                            isAutoSelectable = credentialEntry.isAutoSelectAllowed &&
+                                credentialEntry.autoSelectAllowedFromOption,
                         ))
                     }
                     is PublicKeyCredentialEntry -> {
                         result.add(CredentialEntryInfo(
                             providerId = providerId,
+                            providerDisplayName = providerLabel,
                             entryKey = it.key,
                             entrySubkey = it.subkey,
                             pendingIntent = credentialEntry.pendingIntent,
@@ -236,12 +244,16 @@ class GetFlowUtils {
                             userName = credentialEntry.username.toString(),
                             displayName = credentialEntry.displayName?.toString(),
                             icon = credentialEntry.icon.loadDrawable(context),
+                            shouldTintIcon = credentialEntry.isDefaultIcon,
                             lastUsedTimeMillis = credentialEntry.lastUsedTime,
+                            isAutoSelectable = credentialEntry.isAutoSelectAllowed &&
+                                credentialEntry.autoSelectAllowedFromOption,
                         ))
                     }
                     is CustomCredentialEntry -> {
                         result.add(CredentialEntryInfo(
                             providerId = providerId,
+                            providerDisplayName = providerLabel,
                             entryKey = it.key,
                             entrySubkey = it.subkey,
                             pendingIntent = credentialEntry.pendingIntent,
@@ -251,7 +263,10 @@ class GetFlowUtils {
                             userName = credentialEntry.title.toString(),
                             displayName = credentialEntry.subtitle?.toString(),
                             icon = credentialEntry.icon.loadDrawable(context),
+                            shouldTintIcon = credentialEntry.isDefaultIcon,
                             lastUsedTimeMillis = credentialEntry.lastUsedTime,
+                            isAutoSelectable = credentialEntry.isAutoSelectAllowed &&
+                                credentialEntry.autoSelectAllowedFromOption,
                         ))
                     }
                     else -> Log.d(
@@ -320,7 +335,7 @@ class GetFlowUtils {
             if (remoteEntry == null) {
                 return null
             }
-            val structuredRemoteEntry = RemoteCredentialEntry.fromSlice(remoteEntry.slice)
+            val structuredRemoteEntry = RemoteEntry.fromSlice(remoteEntry.slice)
                 ?: return null
             return RemoteEntryInfo(
                 providerId = providerId,
@@ -612,7 +627,7 @@ class CreateFlowUtils {
             remoteEntry: Entry?,
         ): RemoteInfo? {
             return if (remoteEntry != null) {
-                val structuredRemoteEntry = RemoteCreateEntry.fromSlice(remoteEntry.slice)
+                val structuredRemoteEntry = RemoteEntry.fromSlice(remoteEntry.slice)
                     ?: return null
                 RemoteInfo(
                     providerId = providerId,

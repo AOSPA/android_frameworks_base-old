@@ -856,6 +856,8 @@
     <protected-broadcast android:name="com.android.internal.telephony.cat.SMS_SENT_ACTION" />
     <protected-broadcast android:name="com.android.internal.telephony.cat.SMS_DELIVERY_ACTION" />
     <protected-broadcast android:name="android.companion.virtual.action.VIRTUAL_DEVICE_REMOVED" />
+    <protected-broadcast android:name="com.android.internal.intent.action.FLASH_NOTIFICATION_START_PREVIEW" />
+    <protected-broadcast android:name="com.android.internal.intent.action.FLASH_NOTIFICATION_STOP_PREVIEW" />
 
     <!-- ====================================================================== -->
     <!--                          RUNTIME PERMISSIONS                           -->
@@ -3809,10 +3811,9 @@
     <permission android:name="android.permission.START_FOREGROUND_SERVICES_FROM_BACKGROUND"
                 android:protectionLevel="signature|privileged|vendorPrivileged|oem|verifier|role"/>
 
-    <!-- Allows an application to hint that a component lifecycle operation such as sending
-         a broadcast is associated with an "interactive" usage scenario.
+    <!-- Allows an application to request interactive options when sending a broadcast.
          @hide -->
-    <permission android:name="android.permission.COMPONENT_OPTION_INTERACTIVE"
+    <permission android:name="android.permission.BROADCAST_OPTION_INTERACTIVE"
                 android:protectionLevel="signature|privileged" />
 
     <!-- @SystemApi Must be required by activities that handle the intent action
@@ -4521,8 +4522,8 @@
     <!-- Allows an application to be able to store and retrieve credentials from a remote
          device.
          @hide @SystemApi -->
-    <permission android:name="android.permission.PROVIDE_HYBRID_CREDENTIAL_SERVICE"
-                android:protectionLevel="signature|privileged" />
+    <permission android:name="android.permission.PROVIDE_REMOTE_CREDENTIALS"
+                android:protectionLevel="signature|privileged|role" />
 
     <!-- ========================================= -->
     <!-- Permissions for special development tools -->
@@ -8211,6 +8212,10 @@
 
         <service android:name="com.android.server.healthconnect.HealthConnectDailyService"
                  android:permission="android.permission.BIND_JOB_SERVICE" >
+        </service>
+
+        <service android:name="com.android.server.healthconnect.migration.MigrationBroadcastJobService"
+            android:permission="android.permission.BIND_JOB_SERVICE">
         </service>
 
         <service android:name="com.android.server.pm.PackageManagerShellCommandDataLoader"

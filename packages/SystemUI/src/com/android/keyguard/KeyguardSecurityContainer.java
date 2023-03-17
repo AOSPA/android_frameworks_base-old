@@ -39,7 +39,6 @@ import static java.lang.Integer.max;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
-import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.app.Activity;
@@ -1068,13 +1067,10 @@ public class KeyguardSecurityContainer extends ConstraintLayout {
 
             int yTranslation = mResources.getDimensionPixelSize(R.dimen.disappear_y_translation);
 
-            AnimatorSet anims = new AnimatorSet();
             ObjectAnimator yAnim = ObjectAnimator.ofFloat(mView, View.TRANSLATION_Y, yTranslation);
-            ObjectAnimator alphaAnim = ObjectAnimator.ofFloat(mView, View.ALPHA, 0f);
-
-            anims.setInterpolator(Interpolators.STANDARD_ACCELERATE);
-            anims.playTogether(alphaAnim, yAnim);
-            anims.start();
+            yAnim.setInterpolator(Interpolators.STANDARD_ACCELERATE);
+            yAnim.setDuration(500);
+            yAnim.start();
         }
 
         private void setupUserSwitcher() {
@@ -1224,8 +1220,7 @@ public class KeyguardSecurityContainer extends ConstraintLayout {
                 constraintSet.connect(rightElement, LEFT, leftElement, RIGHT);
                 constraintSet.connect(rightElement, RIGHT, PARENT_ID, RIGHT);
                 constraintSet.connect(mUserSwitcherViewGroup.getId(), TOP, PARENT_ID, TOP);
-                constraintSet.connect(mUserSwitcherViewGroup.getId(), BOTTOM, PARENT_ID, BOTTOM,
-                        yTrans);
+                constraintSet.connect(mUserSwitcherViewGroup.getId(), BOTTOM, PARENT_ID, BOTTOM);
                 constraintSet.connect(mViewFlipper.getId(), TOP, PARENT_ID, TOP);
                 constraintSet.connect(mViewFlipper.getId(), BOTTOM, PARENT_ID, BOTTOM);
                 constraintSet.setHorizontalChainStyle(mUserSwitcherViewGroup.getId(), CHAIN_SPREAD);

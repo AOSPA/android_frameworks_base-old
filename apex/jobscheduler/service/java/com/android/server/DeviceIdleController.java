@@ -1327,7 +1327,7 @@ public class DeviceIdleController extends SystemService
                 IDLE_AFTER_INACTIVE_TIMEOUT = DEFAULT_IDLE_AFTER_INACTIVE_TIMEOUT_SMALL_BATTERY;
             }
             DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_DEVICE_IDLE,
-                    JobSchedulerBackgroundThread.getExecutor(), this);
+                    AppSchedulingModuleThread.getExecutor(), this);
             // Load all the constants.
             onPropertiesChanged(DeviceConfig.getProperties(DeviceConfig.NAMESPACE_DEVICE_IDLE));
         }
@@ -2416,7 +2416,7 @@ public class DeviceIdleController extends SystemService
         }
 
         MyHandler getHandler(DeviceIdleController controller) {
-            return controller.new MyHandler(JobSchedulerBackgroundThread.getHandler().getLooper());
+            return controller.new MyHandler(AppSchedulingModuleThread.getHandler().getLooper());
         }
 
         Sensor getMotionSensor() {
@@ -2488,7 +2488,7 @@ public class DeviceIdleController extends SystemService
         mConfigFile = new AtomicFile(new File(getSystemDir(), "deviceidle.xml"));
         mHandler = mInjector.getHandler(this);
         mAppStateTracker = mInjector.getAppStateTracker(context,
-                JobSchedulerBackgroundThread.get().getLooper());
+                AppSchedulingModuleThread.get().getLooper());
         LocalServices.addService(AppStateTracker.class, mAppStateTracker);
         mUseMotionSensor = mInjector.useMotionSensor();
     }
@@ -2681,7 +2681,7 @@ public class DeviceIdleController extends SystemService
                 mLocalActivityTaskManager.registerScreenObserver(mScreenObserver);
 
                 mInjector.getTelephonyManager().registerTelephonyCallback(
-                        JobSchedulerBackgroundThread.getExecutor(), mEmergencyCallListener);
+                        AppSchedulingModuleThread.getExecutor(), mEmergencyCallListener);
 
                 passWhiteListsToForceAppStandbyTrackerLocked();
                 updateInteractivityLocked();
@@ -5277,6 +5277,8 @@ public class DeviceIdleController extends SystemService
             pw.print("  mScreenLocked="); pw.println(mScreenLocked);
             pw.print("  mNetworkConnected="); pw.println(mNetworkConnected);
             pw.print("  mCharging="); pw.println(mCharging);
+            pw.print("  activeEmergencyCall=");
+            pw.println(mEmergencyCallListener.isEmergencyCallActive());
             if (mConstraints.size() != 0) {
                 pw.println("  mConstraints={");
                 for (int i = 0; i < mConstraints.size(); i++) {

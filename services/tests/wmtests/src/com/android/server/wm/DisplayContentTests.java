@@ -34,7 +34,6 @@ import static android.view.Display.FLAG_PRIVATE;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.DisplayCutout.BOUNDS_POSITION_TOP;
 import static android.view.DisplayCutout.fromBoundingRect;
-import static android.view.InsetsState.ITYPE_STATUS_BAR;
 import static android.view.Surface.ROTATION_0;
 import static android.view.Surface.ROTATION_180;
 import static android.view.Surface.ROTATION_270;
@@ -1557,15 +1556,16 @@ public class DisplayContentTests extends WindowTestsBase {
         assertFalse(mNotificationShadeWindow.isAnimating(PARENTS, ANIMATION_TYPE_TOKEN_TRANSFORM));
 
         // If the visibility of insets state is changed, the rotated state should be updated too.
+        final int statusBarId = mStatusBarWindow.getControllableInsetProvider().getSource().getId();
         final InsetsState rotatedState = app.getFixedRotationTransformInsetsState();
         final InsetsState state = mDisplayContent.getInsetsStateController().getRawInsetsState();
-        assertEquals(state.isSourceOrDefaultVisible(ITYPE_STATUS_BAR, statusBars()),
-                rotatedState.isSourceOrDefaultVisible(ITYPE_STATUS_BAR, statusBars()));
-        state.setSourceVisible(ITYPE_STATUS_BAR,
-                !rotatedState.isSourceOrDefaultVisible(ITYPE_STATUS_BAR, statusBars()));
+        assertEquals(state.isSourceOrDefaultVisible(statusBarId, statusBars()),
+                rotatedState.isSourceOrDefaultVisible(statusBarId, statusBars()));
+        state.setSourceVisible(statusBarId,
+                !rotatedState.isSourceOrDefaultVisible(statusBarId, statusBars()));
         mDisplayContent.getInsetsStateController().notifyInsetsChanged();
-        assertEquals(state.isSourceOrDefaultVisible(ITYPE_STATUS_BAR, statusBars()),
-                rotatedState.isSourceOrDefaultVisible(ITYPE_STATUS_BAR, statusBars()));
+        assertEquals(state.isSourceOrDefaultVisible(statusBarId, statusBars()),
+                rotatedState.isSourceOrDefaultVisible(statusBarId, statusBars()));
 
         final Rect outFrame = new Rect();
         final Rect outInsets = new Rect();
@@ -1620,7 +1620,6 @@ public class DisplayContentTests extends WindowTestsBase {
 
         // If the rotated activity requests to show IME, the IME window should use the
         // transformation from activity to lay out in the same orientation.
-        mDisplayContent.setImeLayeringTarget(mAppWindow);
         LocalServices.getService(WindowManagerInternal.class).onToggleImeRequested(true /* show */,
                 app.token, app.token, mDisplayContent.mDisplayId);
         assertTrue(asyncRotationController.isTargetToken(mImeWindow.mToken));

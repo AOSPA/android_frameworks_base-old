@@ -1,4 +1,18 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+/*
+ * Copyright (C) 2022 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package com.android.credentialmanager.createflow
 
@@ -15,7 +29,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material3.Divider
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.NewReleases
@@ -54,6 +67,8 @@ import com.android.credentialmanager.common.ui.SheetContainerCard
 import com.android.credentialmanager.common.ui.PasskeyBenefitRow
 import com.android.credentialmanager.common.ui.HeadlineText
 import com.android.credentialmanager.common.ui.setBottomSheetSystemBarsColor
+import com.android.credentialmanager.logging.CreateCredentialEvent
+import com.android.internal.logging.UiEventLogger.UiEventEnum
 
 @Composable
 fun CreateCredentialScreen(
@@ -72,80 +87,89 @@ fun CreateCredentialScreen(
                 ProviderActivityState.NOT_APPLICABLE -> {
                     when (createCredentialUiState.currentScreenState) {
                         CreateScreenState.PASSKEY_INTRO -> PasskeyIntroCard(
-                            onConfirm = viewModel::createFlowOnConfirmIntro,
-                            onLearnMore = viewModel::createFlowOnLearnMore,
+                                onConfirm = viewModel::createFlowOnConfirmIntro,
+                                onLearnMore = viewModel::createFlowOnLearnMore,
+                                onLog = { viewModel.logUiEvent(it) },
                         )
                         CreateScreenState.PROVIDER_SELECTION -> ProviderSelectionCard(
-                            requestDisplayInfo = createCredentialUiState.requestDisplayInfo,
-                            disabledProviderList = createCredentialUiState.disabledProviders,
-                            sortedCreateOptionsPairs =
-                            createCredentialUiState.sortedCreateOptionsPairs,
-                            hasRemoteEntry = createCredentialUiState.remoteEntry != null,
-                            onOptionSelected =
-                            viewModel::createFlowOnEntrySelectedFromFirstUseScreen,
-                            onDisabledProvidersSelected =
-                            viewModel::createFlowOnDisabledProvidersSelected,
-                            onMoreOptionsSelected =
-                            viewModel::createFlowOnMoreOptionsSelectedOnProviderSelection,
+                                requestDisplayInfo = createCredentialUiState.requestDisplayInfo,
+                                disabledProviderList = createCredentialUiState
+                                        .disabledProviders,
+                                sortedCreateOptionsPairs =
+                                createCredentialUiState.sortedCreateOptionsPairs,
+                                hasRemoteEntry = createCredentialUiState.remoteEntry != null,
+                                onOptionSelected =
+                                viewModel::createFlowOnEntrySelectedFromFirstUseScreen,
+                                onDisabledProvidersSelected =
+                                viewModel::createFlowOnDisabledProvidersSelected,
+                                onMoreOptionsSelected =
+                                viewModel::createFlowOnMoreOptionsSelectedOnProviderSelection,
+                                onLog = { viewModel.logUiEvent(it) },
                         )
                         CreateScreenState.CREATION_OPTION_SELECTION -> CreationSelectionCard(
-                            requestDisplayInfo = createCredentialUiState.requestDisplayInfo,
-                            enabledProviderList = createCredentialUiState.enabledProviders,
-                            providerInfo = createCredentialUiState.activeEntry?.activeProvider!!,
-                            hasDefaultProvider = createCredentialUiState.hasDefaultProvider,
-                            createOptionInfo =
-                            createCredentialUiState.activeEntry.activeEntryInfo
-                                as CreateOptionInfo,
-                            onOptionSelected = viewModel::createFlowOnEntrySelected,
-                            onConfirm = viewModel::createFlowOnConfirmEntrySelected,
-                            onMoreOptionsSelected =
-                            viewModel::createFlowOnMoreOptionsSelectedOnCreationSelection,
+                                requestDisplayInfo = createCredentialUiState.requestDisplayInfo,
+                                enabledProviderList = createCredentialUiState.enabledProviders,
+                                providerInfo = createCredentialUiState
+                                        .activeEntry?.activeProvider!!,
+                                hasDefaultProvider = createCredentialUiState.hasDefaultProvider,
+                                createOptionInfo =
+                                createCredentialUiState.activeEntry.activeEntryInfo
+                                        as CreateOptionInfo,
+                                onOptionSelected = viewModel::createFlowOnEntrySelected,
+                                onConfirm = viewModel::createFlowOnConfirmEntrySelected,
+                                onMoreOptionsSelected =
+                                viewModel::createFlowOnMoreOptionsSelectedOnCreationSelection,
+                                onLog = { viewModel.logUiEvent(it) },
                         )
                         CreateScreenState.MORE_OPTIONS_SELECTION -> MoreOptionsSelectionCard(
-                            requestDisplayInfo = createCredentialUiState.requestDisplayInfo,
-                            enabledProviderList = createCredentialUiState.enabledProviders,
-                            disabledProviderList = createCredentialUiState.disabledProviders,
-                            sortedCreateOptionsPairs =
-                            createCredentialUiState.sortedCreateOptionsPairs,
-                            hasDefaultProvider = createCredentialUiState.hasDefaultProvider,
-                            isFromProviderSelection =
-                            createCredentialUiState.isFromProviderSelection!!,
-                            onBackProviderSelectionButtonSelected =
-                            viewModel::createFlowOnBackProviderSelectionButtonSelected,
-                            onBackCreationSelectionButtonSelected =
-                            viewModel::createFlowOnBackCreationSelectionButtonSelected,
-                            onOptionSelected =
-                            viewModel::createFlowOnEntrySelectedFromMoreOptionScreen,
-                            onDisabledProvidersSelected =
-                            viewModel::createFlowOnDisabledProvidersSelected,
-                            onRemoteEntrySelected = viewModel::createFlowOnEntrySelected,
+                                requestDisplayInfo = createCredentialUiState.requestDisplayInfo,
+                                enabledProviderList = createCredentialUiState.enabledProviders,
+                                disabledProviderList = createCredentialUiState
+                                        .disabledProviders,
+                                sortedCreateOptionsPairs =
+                                createCredentialUiState.sortedCreateOptionsPairs,
+                                hasDefaultProvider = createCredentialUiState.hasDefaultProvider,
+                                isFromProviderSelection =
+                                createCredentialUiState.isFromProviderSelection!!,
+                                onBackProviderSelectionButtonSelected =
+                                viewModel::createFlowOnBackProviderSelectionButtonSelected,
+                                onBackCreationSelectionButtonSelected =
+                                viewModel::createFlowOnBackCreationSelectionButtonSelected,
+                                onOptionSelected =
+                                viewModel::createFlowOnEntrySelectedFromMoreOptionScreen,
+                                onDisabledProvidersSelected =
+                                viewModel::createFlowOnDisabledProvidersSelected,
+                                onRemoteEntrySelected = viewModel::createFlowOnEntrySelected,
+                                onLog = { viewModel.logUiEvent(it) },
                         )
                         CreateScreenState.MORE_OPTIONS_ROW_INTRO -> {
                             if (createCredentialUiState.activeEntry == null) {
                                 viewModel.onIllegalUiState("Expect active entry to be non-null" +
-                                    " upon default provider dialog.")
+                                        " upon default provider dialog.")
                             } else {
                                 MoreOptionsRowIntroCard(
-                                    selectedEntry = createCredentialUiState.activeEntry,
-                                    onIllegalScreenState = viewModel::onIllegalUiState,
-                                    onChangeDefaultSelected =
-                                    viewModel::createFlowOnChangeDefaultSelected,
-                                    onUseOnceSelected = viewModel::createFlowOnUseOnceSelected,
+                                        selectedEntry = createCredentialUiState.activeEntry,
+                                        onIllegalScreenState = viewModel::onIllegalUiState,
+                                        onChangeDefaultSelected =
+                                        viewModel::createFlowOnChangeDefaultSelected,
+                                        onUseOnceSelected = viewModel::createFlowOnUseOnceSelected,
+                                        onLog = { viewModel.logUiEvent(it) },
                                 )
                             }
                         }
                         CreateScreenState.EXTERNAL_ONLY_SELECTION -> ExternalOnlySelectionCard(
-                            requestDisplayInfo = createCredentialUiState.requestDisplayInfo,
-                            activeRemoteEntry =
-                            createCredentialUiState.activeEntry?.activeEntryInfo!!,
-                            onOptionSelected = viewModel::createFlowOnEntrySelected,
-                            onConfirm = viewModel::createFlowOnConfirmEntrySelected,
+                                requestDisplayInfo = createCredentialUiState.requestDisplayInfo,
+                                activeRemoteEntry =
+                                createCredentialUiState.activeEntry?.activeEntryInfo!!,
+                                onOptionSelected = viewModel::createFlowOnEntrySelected,
+                                onConfirm = viewModel::createFlowOnConfirmEntrySelected,
+                                onLog = { viewModel.logUiEvent(it) },
                         )
-                        CreateScreenState.MORE_ABOUT_PASSKEYS_INTRO ->
-                            MoreAboutPasskeysIntroCard(
+                        CreateScreenState.MORE_ABOUT_PASSKEYS_INTRO -> MoreAboutPasskeysIntroCard(
                                 onBackPasskeyIntroButtonSelected =
                                 viewModel::createFlowOnBackPasskeyIntroButtonSelected,
-                            )
+                                onLog = { viewModel.logUiEvent(it) },
+                        )
                     }
                 }
                 ProviderActivityState.READY_TO_LAUNCH -> {
@@ -154,9 +178,14 @@ fun CreateCredentialScreen(
                     LaunchedEffect(viewModel.uiState.providerActivityState) {
                         viewModel.launchProviderUi(providerActivityLauncher)
                     }
+                    viewModel.uiMetrics.log(
+                            CreateCredentialEvent
+                                    .CREDMAN_CREATE_CRED_PROVIDER_ACTIVITY_READY_TO_LAUNCH)
                 }
                 ProviderActivityState.PENDING -> {
                     // Hide our content when the provider activity is active.
+                    viewModel.uiMetrics.log(
+                            CreateCredentialEvent.CREDMAN_CREATE_CRED_PROVIDER_ACTIVITY_PENDING)
                 }
             }
         },
@@ -168,6 +197,7 @@ fun CreateCredentialScreen(
 fun PasskeyIntroCard(
     onConfirm: () -> Unit,
     onLearnMore: () -> Unit,
+    onLog: @Composable (UiEventEnum) -> Unit,
 ) {
     SheetContainerCard {
         item {
@@ -232,6 +262,7 @@ fun PasskeyIntroCard(
             )
         }
     }
+    onLog(CreateCredentialEvent.CREDMAN_CREATE_CRED_PASSKEY_INTRO)
 }
 
 @Composable
@@ -243,6 +274,7 @@ fun ProviderSelectionCard(
     onOptionSelected: (ActiveEntry) -> Unit,
     onDisabledProvidersSelected: () -> Unit,
     onMoreOptionsSelected: () -> Unit,
+    onLog: @Composable (UiEventEnum) -> Unit,
 ) {
     SheetContainerCard {
         item { HeadlineIcon(bitmap = requestDisplayInfo.typeIcon.toBitmap().asImageBitmap()) }
@@ -306,21 +338,23 @@ fun ProviderSelectionCard(
             }
         }
     }
+    onLog(CreateCredentialEvent.CREDMAN_CREATE_CRED_PROVIDER_SELECTION)
 }
 
 @Composable
 fun MoreOptionsSelectionCard(
-    requestDisplayInfo: RequestDisplayInfo,
-    enabledProviderList: List<EnabledProviderInfo>,
-    disabledProviderList: List<DisabledProviderInfo>?,
-    sortedCreateOptionsPairs: List<Pair<CreateOptionInfo, EnabledProviderInfo>>,
-    hasDefaultProvider: Boolean,
-    isFromProviderSelection: Boolean,
-    onBackProviderSelectionButtonSelected: () -> Unit,
-    onBackCreationSelectionButtonSelected: () -> Unit,
-    onOptionSelected: (ActiveEntry) -> Unit,
-    onDisabledProvidersSelected: () -> Unit,
-    onRemoteEntrySelected: (BaseEntry) -> Unit,
+        requestDisplayInfo: RequestDisplayInfo,
+        enabledProviderList: List<EnabledProviderInfo>,
+        disabledProviderList: List<DisabledProviderInfo>?,
+        sortedCreateOptionsPairs: List<Pair<CreateOptionInfo, EnabledProviderInfo>>,
+        hasDefaultProvider: Boolean,
+        isFromProviderSelection: Boolean,
+        onBackProviderSelectionButtonSelected: () -> Unit,
+        onBackCreationSelectionButtonSelected: () -> Unit,
+        onOptionSelected: (ActiveEntry) -> Unit,
+        onDisabledProvidersSelected: () -> Unit,
+        onRemoteEntrySelected: (BaseEntry) -> Unit,
+        onLog: @Composable (UiEventEnum) -> Unit,
 ) {
     SheetContainerCard(topAppBar = {
         MoreOptionTopAppBar(
@@ -381,14 +415,16 @@ fun MoreOptionsSelectionCard(
             }
         }
     }
+    onLog(CreateCredentialEvent.CREDMAN_CREATE_CRED_MORE_OPTIONS_SELECTION)
 }
 
 @Composable
 fun MoreOptionsRowIntroCard(
-    selectedEntry: ActiveEntry,
-    onIllegalScreenState: (String) -> Unit,
-    onChangeDefaultSelected: () -> Unit,
-    onUseOnceSelected: () -> Unit,
+        selectedEntry: ActiveEntry,
+        onIllegalScreenState: (String) -> Unit,
+        onChangeDefaultSelected: () -> Unit,
+        onUseOnceSelected: () -> Unit,
+        onLog: @Composable (UiEventEnum) -> Unit,
 ) {
     val entryInfo = selectedEntry.activeEntryInfo
     if (entryInfo !is CreateOptionInfo) {
@@ -427,18 +463,20 @@ fun MoreOptionsRowIntroCard(
             )
         }
     }
+    onLog(CreateCredentialEvent.CREDMAN_CREATE_CRED_MORE_OPTIONS_ROW_INTRO)
 }
 
 @Composable
 fun CreationSelectionCard(
-    requestDisplayInfo: RequestDisplayInfo,
-    enabledProviderList: List<EnabledProviderInfo>,
-    providerInfo: EnabledProviderInfo,
-    createOptionInfo: CreateOptionInfo,
-    onOptionSelected: (BaseEntry) -> Unit,
-    onConfirm: () -> Unit,
-    onMoreOptionsSelected: () -> Unit,
-    hasDefaultProvider: Boolean,
+        requestDisplayInfo: RequestDisplayInfo,
+        enabledProviderList: List<EnabledProviderInfo>,
+        providerInfo: EnabledProviderInfo,
+        createOptionInfo: CreateOptionInfo,
+        onOptionSelected: (BaseEntry) -> Unit,
+        onConfirm: () -> Unit,
+        onMoreOptionsSelected: () -> Unit,
+        hasDefaultProvider: Boolean,
+        onLog: @Composable (UiEventEnum) -> Unit,
 ) {
     SheetContainerCard {
         item {
@@ -524,14 +562,16 @@ fun CreationSelectionCard(
             item { BodySmallText(text = createOptionInfo.footerDescription) }
         }
     }
+    onLog(CreateCredentialEvent.CREDMAN_CREATE_CRED_CREATION_OPTION_SELECTION)
 }
 
 @Composable
 fun ExternalOnlySelectionCard(
-    requestDisplayInfo: RequestDisplayInfo,
-    activeRemoteEntry: BaseEntry,
-    onOptionSelected: (BaseEntry) -> Unit,
-    onConfirm: () -> Unit,
+        requestDisplayInfo: RequestDisplayInfo,
+        activeRemoteEntry: BaseEntry,
+        onOptionSelected: (BaseEntry) -> Unit,
+        onConfirm: () -> Unit,
+        onLog: @Composable (UiEventEnum) -> Unit,
 ) {
     SheetContainerCard {
         item { HeadlineIcon(imageVector = Icons.Outlined.QrCodeScanner) }
@@ -559,11 +599,13 @@ fun ExternalOnlySelectionCard(
             )
         }
     }
+    onLog(CreateCredentialEvent.CREDMAN_CREATE_CRED_EXTERNAL_ONLY_SELECTION)
 }
 
 @Composable
 fun MoreAboutPasskeysIntroCard(
     onBackPasskeyIntroButtonSelected: () -> Unit,
+    onLog: @Composable (UiEventEnum) -> Unit,
 ) {
     SheetContainerCard(
         topAppBar = {
@@ -599,6 +641,7 @@ fun MoreAboutPasskeysIntroCard(
             BodyMediumText(text = stringResource(R.string.seamless_transition_detail))
         }
     }
+    onLog(CreateCredentialEvent.CREDMAN_CREATE_CRED_MORE_ABOUT_PASSKEYS_INTRO)
 }
 
 @Composable
@@ -637,6 +680,7 @@ fun PrimaryCreateOptionRow(
         // This subtitle would never be null for create password
             requestDisplayInfo.subtitle ?: ""
         else null,
+        enforceOneLine = true,
     )
 }
 

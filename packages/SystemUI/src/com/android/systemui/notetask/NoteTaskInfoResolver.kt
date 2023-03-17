@@ -17,19 +17,19 @@
 package com.android.systemui.notetask
 
 import android.app.role.RoleManager
-import android.content.Context
 import android.content.pm.PackageManager
 import android.content.pm.PackageManager.ApplicationInfoFlags
 import android.os.UserHandle
 import android.util.Log
+import com.android.systemui.settings.UserTracker
 import javax.inject.Inject
 
 class NoteTaskInfoResolver
 @Inject
 constructor(
-    private val context: Context,
     private val roleManager: RoleManager,
     private val packageManager: PackageManager,
+    private val userTracker: UserTracker,
 ) {
 
     fun resolveInfo(
@@ -38,7 +38,7 @@ constructor(
         isKeyguardLocked: Boolean = false,
     ): NoteTaskInfo? {
         // TODO(b/267634412): Select UserHandle depending on where the user initiated note-taking.
-        val user = context.user
+        val user = userTracker.userHandle
         val packageName =
             roleManager.getRoleHoldersAsUser(RoleManager.ROLE_NOTES, user).firstOrNull()
 
@@ -55,9 +55,6 @@ constructor(
 
     companion object {
         private val TAG = NoteTaskInfoResolver::class.simpleName.orEmpty()
-
-        // TODO(b/265912743): Use RoleManager.NOTES_ROLE instead.
-        const val ROLE_NOTES = "android.app.role.NOTES"
 
         private val EMPTY_APPLICATION_INFO_FLAGS = ApplicationInfoFlags.of(0)!!
 

@@ -16,12 +16,10 @@
 
 package com.android.server.credentials;
 
-import static com.android.server.credentials.MetricUtilities.METRICS_PROVIDER_STATUS_FINAL_FAILURE;
-import static com.android.server.credentials.MetricUtilities.METRICS_PROVIDER_STATUS_FINAL_SUCCESS;
-
 import android.annotation.Nullable;
 import android.content.ComponentName;
 import android.content.Context;
+import android.credentials.CredentialProviderInfo;
 import android.credentials.GetCredentialException;
 import android.credentials.GetCredentialRequest;
 import android.credentials.GetCredentialResponse;
@@ -31,11 +29,11 @@ import android.credentials.ui.RequestInfo;
 import android.os.CancellationSignal;
 import android.os.RemoteException;
 import android.service.credentials.CallingAppInfo;
-import android.service.credentials.CredentialProviderInfo;
 import android.util.Log;
 
 import com.android.server.credentials.metrics.ApiName;
 import com.android.server.credentials.metrics.ApiStatus;
+import com.android.server.credentials.metrics.ProviderStatusForMetrics;
 
 import java.util.ArrayList;
 
@@ -43,7 +41,7 @@ import java.util.ArrayList;
  * Central session for a single getCredentials request. This class listens to the
  * responses from providers, and the UX app, and updates the provider(S) state.
  */
-public final class GetRequestSession extends RequestSession<GetCredentialRequest,
+public class GetRequestSession extends RequestSession<GetCredentialRequest,
         IGetCredentialCallback>
         implements ProviderSession.ProviderInternalCallback<GetCredentialResponse> {
     private static final String TAG = "GetRequestSession";
@@ -95,11 +93,11 @@ public final class GetRequestSession extends RequestSession<GetCredentialRequest
         setChosenMetric(componentName);
         if (response != null) {
             mChosenProviderMetric.setChosenProviderStatus(
-                    METRICS_PROVIDER_STATUS_FINAL_SUCCESS);
+                    ProviderStatusForMetrics.FINAL_SUCCESS.getMetricCode());
             respondToClientWithResponseAndFinish(response);
         } else {
             mChosenProviderMetric.setChosenProviderStatus(
-                    METRICS_PROVIDER_STATUS_FINAL_FAILURE);
+                    ProviderStatusForMetrics.FINAL_FAILURE.getMetricCode());
             respondToClientWithErrorAndFinish(GetCredentialException.TYPE_NO_CREDENTIAL,
                     "Invalid response from provider");
         }
@@ -119,20 +117,19 @@ public final class GetRequestSession extends RequestSession<GetCredentialRequest
             return;
         }
         if (isSessionCancelled()) {
-            // TODO: Differentiate btw cancelled and false
             logApiCall(ApiName.GET_CREDENTIAL, /* apiStatus */
-                    ApiStatus.METRICS_API_STATUS_CLIENT_CANCELED);
+                    ApiStatus.CLIENT_CANCELED);
             finishSession(/*propagateCancellation=*/true);
             return;
         }
         try {
             mClientCallback.onResponse(response);
             logApiCall(ApiName.GET_CREDENTIAL, /* apiStatus */
-                    ApiStatus.METRICS_API_STATUS_SUCCESS);
+                    ApiStatus.SUCCESS);
         } catch (RemoteException e) {
             Log.i(TAG, "Issue while responding to client with a response : " + e.getMessage());
             logApiCall(ApiName.GET_CREDENTIAL, /* apiStatus */
-                    ApiStatus.METRICS_API_STATUS_FAILURE);
+                    ApiStatus.FAILURE);
         }
         finishSession(/*propagateCancellation=*/false);
     }
@@ -144,7 +141,7 @@ public final class GetRequestSession extends RequestSession<GetCredentialRequest
         }
         if (isSessionCancelled()) {
             logApiCall(ApiName.GET_CREDENTIAL, /* apiStatus */
-                    ApiStatus.METRICS_API_STATUS_CLIENT_CANCELED);
+                    ApiStatus.CLIENT_CANCELED);
             finishSession(/*propagateCancellation=*/true);
             return;
         }
@@ -161,10 +158,10 @@ public final class GetRequestSession extends RequestSession<GetCredentialRequest
     private void logFailureOrUserCancel(String errorType) {
         if (GetCredentialException.TYPE_USER_CANCELED.equals(errorType)) {
             logApiCall(ApiName.GET_CREDENTIAL,
-                    /* apiStatus */ ApiStatus.METRICS_API_STATUS_USER_CANCELED);
+                    /* apiStatus */ ApiStatus.USER_CANCELED);
         } else {
             logApiCall(ApiName.GET_CREDENTIAL,
-                    /* apiStatus */ ApiStatus.METRICS_API_STATUS_FAILURE);
+                    /* apiStatus */ ApiStatus.FAILURE);
         }
     }
 
