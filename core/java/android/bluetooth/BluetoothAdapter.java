@@ -15,6 +15,12 @@
  * limitations under the License.
  */
 
+/*
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 package android.bluetooth;
 
 import static java.util.Objects.requireNonNull;
@@ -394,6 +400,25 @@ public final class BluetoothAdapter {
      */
     public static final String EXTRA_PREVIOUS_SCAN_MODE =
             "android.bluetooth.adapter.extra.PREVIOUS_SCAN_MODE";
+
+     /**
+     * Broadcast Action: Broadcast details of IOT device when an IOT
+     * related issue is observed.
+     * <p>Always contains the extra fields {@link #EXTRA_NAME}.
+     * <p>Requires {@link android.Manifest.permission#BLUETOOTH} to receive.
+     * @hide
+     **/
+
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_REMOTE_ISSUE_OCCURRED  =
+            "org.codeaurora.intent.bluetooth.action.REMOTE_ISSUE_OCCURRED";
+
+    /**
+     * Used as a Parcelable {@link BluetoothQualityReport} extra field in
+     * {@link #ACTION_REMOTE_ISSUE_OCCURRED} intent. It contains the {@link BluetoothQualityReport}.
+     * @hide
+     */
+    public static final String EXTRA_BQR = "android.bluetooth.qti.extra.EXTRA_BQR";
 
     /** @hide */
     @IntDef(prefix = { "SCAN_" }, value = {
