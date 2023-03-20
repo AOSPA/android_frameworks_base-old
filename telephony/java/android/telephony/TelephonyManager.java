@@ -720,6 +720,17 @@ public class TelephonyManager {
     }
 
     /**
+     * Returns true if Multi SIM voice capability is DSDS.
+     * Returns false for other cases.
+     */
+    /** {@hide} */
+    public static boolean isDsdsMode() {
+        int mSimVoiceConfig = TelephonyProperties.multi_sim_voice_capability().orElse(
+                MultiSimVoiceCapability.UNKNOWN);
+        return mSimVoiceConfig == MultiSimVoiceCapability.DSDS;
+    }
+
+    /**
      * Returns the number of phones available.
      * Returns 0 if none of voice, sms, data is not supported
      * Returns 1 for Single standby mode (Single SIM functionality).
