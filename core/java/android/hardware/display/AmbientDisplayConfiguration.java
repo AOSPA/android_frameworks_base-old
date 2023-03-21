@@ -40,6 +40,7 @@ public class AmbientDisplayConfiguration {
     private static final String TAG = "AmbientDisplayConfig";
     private final Context mContext;
     private final boolean mAlwaysOnByDefault;
+    private final boolean mPickupGestureEnabledByDefault;
 
     /** {@hide} */
     public static final String DOZE_NO_PROXIMITY_CHECK = "NoProximityCheck";
@@ -68,6 +69,8 @@ public class AmbientDisplayConfiguration {
     public AmbientDisplayConfiguration(Context context) {
         mContext = context;
         mAlwaysOnByDefault = mContext.getResources().getBoolean(R.bool.config_dozeAlwaysOnEnabled);
+        mPickupGestureEnabledByDefault =
+                mContext.getResources().getBoolean(R.bool.config_dozePickupGestureEnabled);
     }
 
     /** @hide */
@@ -98,7 +101,8 @@ public class AmbientDisplayConfiguration {
 
     /** @hide */
     public boolean pickupGestureEnabled(int user) {
-        return boolSettingDefaultOn(Settings.Secure.DOZE_PICK_UP_GESTURE, user)
+        return boolSetting(Settings.Secure.DOZE_PICK_UP_GESTURE, user,
+                mPickupGestureEnabledByDefault ? 1 : 0)
                 && dozePickupSensorAvailable();
     }
 

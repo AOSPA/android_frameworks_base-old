@@ -47,6 +47,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+import android.os.SystemClock;
 import android.os.UserManager;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -454,7 +455,8 @@ public class FingerprintProvider implements IBinder.DeathRecipient, ServiceProvi
                     mBiometricContext, isStrongBiometric,
                     mTaskStackListener, mSensors.get(sensorId).getLockoutCache(),
                     mUdfpsOverlayController, mSidefpsController, allowBackgroundAuthentication,
-                    mSensors.get(sensorId).getSensorProperties(), mHandler);
+                    mSensors.get(sensorId).getSensorProperties(), mHandler,
+                    SystemClock.elapsedRealtimeClock());
             scheduleForSensor(sensorId, client, mBiometricStateCallback);
         });
     }

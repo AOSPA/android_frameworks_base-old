@@ -66,6 +66,7 @@ import com.android.systemui.Dumpable;
 import com.android.systemui.R;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.SysUISingleton;
+import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.plugins.VolumeDialogController;
 import com.android.systemui.qs.tiles.DndTile;
@@ -185,7 +186,8 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
             WakefulnessLifecycle wakefulnessLifecycle,
             CaptioningManager captioningManager,
             KeyguardManager keyguardManager,
-            ActivityManager activityManager
+            ActivityManager activityManager,
+            DumpManager dumpManager
     ) {
         mContext = context.getApplicationContext();
         mPackageManager = packageManager;
@@ -214,7 +216,7 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
         mCaptioningManager = captioningManager;
         mKeyguardManager = keyguardManager;
         mActivityManager = activityManager;
-
+        dumpManager.registerDumpable("VolumeDialogControllerImpl", this);
 
         mAdaptivePlaybackEnabled = Settings.System.getIntForUser(mContext.getContentResolver(),
                 Settings.System.ADAPTIVE_PLAYBACK_ENABLED, 0, UserHandle.USER_CURRENT) == 1;

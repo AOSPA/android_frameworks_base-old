@@ -2317,9 +2317,9 @@ public class MediaSessionService extends SystemService implements Monitor {
                     PendingIntent pi = mCustomMediaKeyDispatcher.getMediaButtonReceiver(keyEvent,
                             uid, asSystemService);
                     if (pi != null) {
-                        mediaButtonReceiverHolder = MediaButtonReceiverHolder.create(mContext,
-                                mCurrentFullUserRecord.mFullUserId, pi,
-                                /* sessionPackageName= */ "");
+                        mediaButtonReceiverHolder =
+                                MediaButtonReceiverHolder.create(
+                                        mCurrentFullUserRecord.mFullUserId, pi, "");
                     }
                 }
             }
