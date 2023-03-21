@@ -12,6 +12,11 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ *
  */
 package com.android.server.audio;
 
@@ -1276,6 +1281,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
         sendILMsg(MSG_IL_BTA2DP_TIMEOUT, SENDMSG_QUEUE, a2dpCodec, address, delayMs);
     }
 
+    /*package*/ void setLeAudioTimeout(String address, int device, int delayMs) {
+        sendILMsg(MSG_IL_BTLEA_TIMEOUT, SENDMSG_QUEUE, device, address, delayMs);
+    }
+
     /*package*/ void setAvrcpAbsoluteVolumeSupported(boolean supported) {
         synchronized (mDeviceStateLock) {
             mBtHelper.setAvrcpAbsoluteVolumeSupported(supported);
@@ -1670,6 +1679,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
                     final int capturePreset = msg.arg1;
                     mDeviceInventory.onSaveClearPreferredDevicesForCapturePreset(capturePreset);
                 } break;
+                case MSG_IL_BTLEA_TIMEOUT:
+                    synchronized (mDeviceStateLock) {
+                        mDeviceInventory.onMakeLeAudioUnavailableNow((String) msg.obj, msg.arg1);
+                }
+                break;
                 default:
                     Log.wtf(TAG, "Invalid message " + msg.what);
             }
@@ -1748,6 +1762,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
     private static final int MSG_IL_SAVE_NDEF_DEVICE_FOR_STRATEGY = 47;
     private static final int MSG_IL_SAVE_REMOVE_NDEF_DEVICE_FOR_STRATEGY = 48;
 
+    private static final int MSG_IL_BTLEA_TIMEOUT = 50;
+
     private static boolean isMessageHandledUnderWakelock(int msgId) {
         switch(msgId) {
             case MSG_L_SET_WIRED_DEVICE_CONNECTION_STATE:
@@ -1760,6 +1776,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
             case MSG_L_HEARING_AID_DEVICE_CONNECTION_CHANGE_EXT:
             case MSG_CHECK_MUTE_MUSIC:
             case MSG_L_A2DP_ACTIVE_DEVICE_CHANGE_EXT:
+            case MSG_IL_BTLEA_TIMEOUT:
                 return true;
             default:
                 return false;
@@ -1846,6 +1863,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
                 case MSG_L_SET_BT_ACTIVE_DEVICE:
                 case MSG_L_SET_WIRED_DEVICE_CONNECTION_STATE:
                 case MSG_IL_BTA2DP_TIMEOUT:
+                case MSG_IL_BTLEA_TIMEOUT:
                 case MSG_L_A2DP_DEVICE_CONFIG_CHANGE:
                 case MSG_L_A2DP_DEVICE_CONFIG_CHANGE_SHO:
                     if (sLastDeviceConnectMsgTime >= time) {

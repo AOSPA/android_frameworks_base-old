@@ -75,6 +75,12 @@ class FakeMobileIconsInteractor(
 
     override val isForceHidden = MutableStateFlow(false)
 
+    private val _alwaysUseRsrpLevelForLte = MutableStateFlow(false)
+    override val alwaysUseRsrpLevelForLte = _alwaysUseRsrpLevelForLte
+
+    private val _hideNoInternetState = MutableStateFlow(false)
+    override val hideNoInternetState = _hideNoInternetState
+
     /** Always returns a new fake interactor */
     override fun createMobileConnectionInteractorForSubId(subId: Int): MobileIconInteractor {
         return FakeMobileIconInteractor(tableLogBuffer)

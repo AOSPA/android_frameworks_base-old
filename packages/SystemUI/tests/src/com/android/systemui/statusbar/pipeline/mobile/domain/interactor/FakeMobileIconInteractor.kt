@@ -73,6 +73,12 @@ class FakeMobileIconInteractor(
 
     override val isForceHidden = MutableStateFlow(false)
 
+    private val _alwaysUseRsrpLevelForLte = MutableStateFlow(false)
+    override val alwaysUseRsrpLevelForLte = _alwaysUseRsrpLevelForLte
+
+    private val _hideNoInternetState = MutableStateFlow(false)
+    override val hideNoInternetState = _hideNoInternetState
+
     fun setIconGroup(group: SignalIcon.MobileIconGroup) {
         _iconGroup.value = group
     }
@@ -99,5 +105,13 @@ class FakeMobileIconInteractor(
 
     fun setNumberOfLevels(num: Int) {
         _numberOfLevels.value = num
+    }
+
+    fun setAlwaysUseRsrpLevelForLte(alwaysUseRsrpLevelForLte: Boolean) {
+        _alwaysUseRsrpLevelForLte.value = alwaysUseRsrpLevelForLte
+    }
+
+    fun setHideNoInternetState(hideNoInternetState: Boolean) {
+        _hideNoInternetState.value = hideNoInternetState
     }
 }

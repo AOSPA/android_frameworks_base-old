@@ -338,7 +338,6 @@ public final class Choreographer {
         synchronized(this) {
             mTouchMoveNum = touchMoveNum;
             mMotionEventType = motionEventType;
-            ScrollOptimizer.setMotionType(mMotionEventType);
         }
     }
 

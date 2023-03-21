@@ -69,10 +69,14 @@ import com.android.systemui.statusbar.pipeline.mobile.util.FakeMobileMappingsPro
 import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger
 import com.android.systemui.statusbar.pipeline.shared.data.model.DataActivityModel
 import com.android.systemui.statusbar.pipeline.shared.data.model.toMobileDataActivityModel
+import com.android.systemui.statusbar.policy.FiveGServiceClient
+import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState
 import com.android.systemui.util.mockito.any
+import com.android.systemui.util.mockito.argumentCaptor
 import com.android.systemui.util.mockito.mock
 import com.android.systemui.util.mockito.whenever
 import com.google.common.truth.Truth.assertThat
+import com.qti.extphone.NrIconType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -84,6 +88,7 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.mockito.Mock
+import org.mockito.Mockito
 import org.mockito.MockitoAnnotations
 
 @Suppress("EXPERIMENTAL_IS_NOT_ENABLED")
@@ -104,6 +109,7 @@ class MobileConnectionRepositoryTest : SysuiTestCase() {
             SUB_1_ID,
             createTestConfig(),
         )
+    private val fiveGServiceClient = FiveGServiceClient(mContext)
 
     @Before
     fun setUp() {
@@ -126,6 +132,7 @@ class MobileConnectionRepositoryTest : SysuiTestCase() {
                 logger,
                 tableLogger,
                 scope,
+                fiveGServiceClient,
             )
     }
 
@@ -733,6 +740,26 @@ class MobileConnectionRepositoryTest : SysuiTestCase() {
             putExtra(EXTRA_SHOW_PLMN, showPlmn)
             putExtra(EXTRA_PLMN, plmn)
         }
+
+    @Test
+    fun testFlowForSubId_fiveGServiceState_nrIconTypeUpdate() =
+        runBlocking(IMMEDIATE) {
+            var latest: MobileConnectionModel? = null
+            val job = underTest.connectionInfo.onEach { latest = it }.launchIn(this)
+
+            val callback = getFiveGStateCallback()
+            callback.onStateChanged(FiveGServiceState(NrIconType.TYPE_5G_BASIC))
+
+            assertThat(latest?.fiveGServiceState?.nrIconType).isEqualTo(NrIconType.TYPE_5G_BASIC)
+            job.cancel()
+        }
+
+    private fun getFiveGStateCallback(): FiveGServiceClient.IFiveGStateListener {
+        val callbackCaptor = argumentCaptor<FiveGServiceClient.IFiveGStateListener>()
+        Mockito.verify(fiveGServiceClient)
+                .registerListener(any(), callbackCaptor.capture())
+        return callbackCaptor.value!!
+    }
 
     companion object {
         private val IMMEDIATE = Dispatchers.Main.immediate
