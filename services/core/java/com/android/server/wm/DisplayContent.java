@@ -187,6 +187,7 @@ import android.hardware.display.DisplayManagerInternal;
 import android.metrics.LogMaker;
 import android.os.Bundle;
 import android.os.Debug;
+import android.os.DeviceIntegrationUtils;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
@@ -6605,7 +6606,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * has content or the display is not on.
      */
     @VisibleForTesting void updateRecording() {
-        if (getContentRecorder().updateMirroringIfSurfaceSizeChanged()) {
+        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION
+            && getContentRecorder().updateMirroringIfSurfaceSizeChanged()) {
             return;
         }
         if (mContentRecorder == null || !mContentRecorder.isContentRecordingSessionSet()) {

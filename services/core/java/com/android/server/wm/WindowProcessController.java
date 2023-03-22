@@ -65,6 +65,7 @@ import android.content.pm.ServiceInfo;
 import android.content.res.Configuration;
 import android.os.Binder;
 import android.os.Build;
+import android.os.DeviceIntegrationUtils;
 import android.os.FactoryTest;
 import android.os.LocaleList;
 import android.os.Message;
@@ -295,7 +296,8 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
 
     public void setPid(int pid) {
         mPid = pid;
-        if(pid != 0) {
+        if(!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION
+            && pid != 0) {
             mRemoteTaskPid = pid;
         }
     }

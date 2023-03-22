@@ -40,6 +40,7 @@ import android.annotation.Nullable;
 import android.app.WindowConfiguration;
 import android.graphics.Insets;
 import android.graphics.Rect;
+import android.os.DeviceIntegrationUtils;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.SparseArray;
@@ -152,7 +153,7 @@ public class InsetsState implements Parcelable {
         final Rect relativeFrameMax = new Rect(frame);
         for (int i = mSources.size() - 1; i >= 0; i--) {
             // Handle inset source updates if the task is moved from md to vd, or vd to md
-            if (mRTWindowInsetHelper != null) {
+            if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION && mRTWindowInsetHelper != null) {
                 InsetsSource updateSource = mSources.valueAt(i);
                 updateSource = mRTWindowInsetHelper.updateInsetSourceIfNeeded(updateSource, new Rect(frame));
                 mSources.setValueAt(i, updateSource);
