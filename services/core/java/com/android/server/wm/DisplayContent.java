@@ -6605,6 +6605,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * has content or the display is not on.
      */
     @VisibleForTesting void updateRecording() {
+        if (getContentRecorder().updateMirroringIfSurfaceSizeChanged()) {
+            return;
+        }
         if (mContentRecorder == null || !mContentRecorder.isContentRecordingSessionSet()) {
             if (!setDisplayMirroring()) {
                 return;

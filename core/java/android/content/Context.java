@@ -42,6 +42,7 @@ import android.annotation.UserIdInt;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.BroadcastOptions;
+import android.app.CrossDeviceManager;
 import android.app.GameManager;
 import android.app.GrammaticalInflectionManager;
 import android.app.IApplicationThread;
@@ -4189,6 +4190,7 @@ public abstract class Context {
             //@hide: ATTESTATION_VERIFICATION_SERVICE,
             //@hide: SAFETY_CENTER_SERVICE,
             DISPLAY_HASH_SERVICE,
+            //@hide: CROSS_DEVICE_SERVICE,
             CREDENTIAL_SERVICE,
             DEVICE_LOCK_SERVICE,
             VIRTUALIZATION_SERVICE,
@@ -4518,6 +4520,13 @@ public abstract class Context {
      * @hide
      */
     public static final String ACTIVITY_TASK_SERVICE = "activity_task";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link CrossDeviceManager} for interacting with the global system state.
+     * @hide
+     */
+    public static final String CROSS_DEVICE_SERVICE = "cross_device_service";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a

@@ -957,6 +957,9 @@ public final class ViewRootImpl implements ViewParent,
     private String mTag = TAG;
     boolean mHaveMoveEvent = false;
 
+    // Device Integration:
+    private final RemoteTaskWindowInsetHelper mRTWindowInsetHelper;
+
     public ViewRootImpl(Context context, Display display) {
         this(context, display, WindowManagerGlobal.getWindowSession(), new WindowLayout());
     }
@@ -1035,6 +1038,9 @@ public final class ViewRootImpl implements ViewParent,
 
         mScrollCaptureRequestTimeout = SCROLL_CAPTURE_REQUEST_TIMEOUT_MILLIS;
         mOnBackInvokedDispatcher = new WindowOnBackInvokedDispatcher(context);
+
+        mRTWindowInsetHelper = new RemoteTaskWindowInsetHelper(context);
+        mInsetsController.getState().setRTWindowInsetHelper(mRTWindowInsetHelper);
     }
 
     public static void addFirstDrawHandler(Runnable callback) {
@@ -1952,6 +1958,9 @@ public final class ViewRootImpl implements ViewParent,
         if (mDisplay.getDisplayId() == displayId) {
             return;
         }
+
+        // Device Integration:
+        mRTWindowInsetHelper.updateDisplayId(displayId);
 
         // Get new instance of display based on current display adjustments. It may be updated later
         // if moving between the displays also involved a configuration change.
@@ -10313,6 +10322,17 @@ public final class ViewRootImpl implements ViewParent,
             final ViewRootImpl viewAncestor = mViewAncestor.get();
             if (viewAncestor != null) {
                 viewAncestor.dispatchGetNewSurface();
+            }
+        }
+
+        @Override
+        public void dispatchBlackScreenKeyEvent(KeyEvent event) {
+            final ViewRootImpl viewAncestor = mViewAncestor.get();
+            if (viewAncestor != null) {
+                final View view = viewAncestor.mView;
+                if (view != null) {
+                    view.dispatchKeyEvent(event);
+                }
             }
         }
 
