@@ -111,4 +111,7 @@
     <!-- Expected value from fast charging status file  -->
     <string name="config_oemFastChargerStatusValue" translatable="false">1</string>
 
+    <!-- Whether usage of the proximity sensor during doze is supported -->
+    <bool name="config_doze_proximity_sensor_supported">true</bool>
+
 </resources>
