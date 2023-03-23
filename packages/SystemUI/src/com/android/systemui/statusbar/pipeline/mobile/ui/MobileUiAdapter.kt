@@ -14,8 +14,15 @@
  * limitations under the License.
  */
 
+/**
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 package com.android.systemui.statusbar.pipeline.mobile.ui
 
+import android.telephony.TelephonyManager
 import com.android.systemui.CoreStartable
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
@@ -57,6 +64,7 @@ constructor(
     private val logger: MobileViewLogger,
     @Application private val scope: CoroutineScope,
     private val statusBarPipelineFlags: StatusBarPipelineFlags,
+    private val telephonyManager: TelephonyManager,
 ) : CoreStartable {
     private val mobileSubIds: Flow<List<Int>> =
         interactor.filteredSubscriptions.mapLatest { subscriptions ->
@@ -81,6 +89,7 @@ constructor(
 
     private var isCollecting: Boolean = false
     private var lastValue: List<Int>? = null
+    private var isMultiSimEnabled: Boolean = telephonyManager.isMultiSimEnabled()
 
     override fun start() {
         // Only notify the icon controller if we want to *render* the new icons.
@@ -92,6 +101,12 @@ constructor(
                 isCollecting = true
                 mobileSubIds.collectLatest {
                     logger.logUiAdapterSubIdsSentToIconController(it)
+                    if (isMultiSimConfigChanged()) {
+                        isMultiSimEnabled = telephonyManager.isMultiSimEnabled()
+                        if (lastValue != null && lastValue!!.size != it.size) {
+                            iconController.setNewMobileIconSubIds(emptyList())
+                        }
+                    }
                     lastValue = it
                     iconController.setNewMobileIconSubIds(it)
                 }
@@ -102,5 +117,9 @@ constructor(
     override fun dump(pw: PrintWriter, args: Array<out String>) {
         pw.println("isCollecting=$isCollecting")
         pw.println("Last values sent to icon controller: $lastValue")
+    }
+
+    private fun isMultiSimConfigChanged(): Boolean {
+        return isMultiSimEnabled != telephonyManager.isMultiSimEnabled()
     }
 }
