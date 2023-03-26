@@ -89,7 +89,7 @@ public class KeyguardPasswordViewController
         public void afterTextChanged(Editable s) {
             if (!TextUtils.isEmpty(s)) {
                 onUserInput();
-                if (s.length() == mLockPatternUtils.getCredentialLength(
+                if (s.length() == mLockPatternUtils.getPinPasswordLength(
                         KeyguardUpdateMonitor.getCurrentUser())) {
                     verifyPasswordAndUnlock();
                 }

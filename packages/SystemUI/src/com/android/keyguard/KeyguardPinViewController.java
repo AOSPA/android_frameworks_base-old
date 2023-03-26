@@ -68,7 +68,7 @@ public class KeyguardPinViewController
     protected void onViewAttached() {
         super.onViewAttached();
 
-        int passwordLength = mLockPatternUtils.getCredentialLength(
+        int passwordLength = mLockPatternUtils.getPinPasswordLength(
                 KeyguardUpdateMonitor.getCurrentUser());
 
         mPasswordEntry.setQuickUnlockListener(new QuickUnlockListener() {
