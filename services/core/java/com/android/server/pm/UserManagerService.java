@@ -161,7 +161,9 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -278,6 +280,8 @@ public class UserManagerService extends IUserManager.Stub {
     static final int WRITE_USER_MSG = 1;
     static final int WRITE_USER_DELAY = 2*1000;  // 2 seconds
 
+    private static final long BOOT_USER_SET_TIMEOUT_MS = 300_000;
+
     // Tron counters
     private static final String TRON_GUEST_CREATED = "users_guest_created";
     private static final String TRON_USER_CREATED = "users_user_created";
@@ -333,6 +337,8 @@ public class UserManagerService extends IUserManager.Stub {
     /** Indicates that this is the 1st boot after the system user mode was changed by emulation. */
     private boolean mUpdatingSystemUserMode;
 
+    /** Count down latch to wait while boot user is not set.*/
+    private final CountDownLatch mBootUserLatch = new CountDownLatch(1);
     /**
      * Internal non-parcelable wrapper for UserInfo that is not exposed to other system apps.
      */
@@ -952,17 +958,61 @@ public class UserManagerService extends IUserManager.Stub {
             Slogf.i(LOG_TAG, "setBootUser %d", userId);
             mBootUser = userId;
         }
+        mBootUserLatch.countDown();
     }
 
     @Override
     public @UserIdInt int getBootUser() {
         checkCreateUsersPermission("Get boot user");
         try {
-            return mLocalService.getBootUser();
+            return getBootUserUnchecked();
         } catch (UserManager.CheckedUserOperationException e) {
             throw e.toServiceSpecificException();
         }
     }
+
+    private @UserIdInt int getBootUserUnchecked() throws UserManager.CheckedUserOperationException {
+        synchronized (mUsersLock) {
+            if (mBootUser != UserHandle.USER_NULL) {
+                final UserData userData = mUsers.get(mBootUser);
+                if (userData != null && userData.info.supportsSwitchToByUser()) {
+                    Slogf.i(LOG_TAG, "Using provided boot user: %d", mBootUser);
+                    return mBootUser;
+                } else {
+                    Slogf.w(LOG_TAG,
+                            "Provided boot user cannot be switched to: %d", mBootUser);
+                }
+            }
+        }
+
+        if (isHeadlessSystemUserMode()) {
+            // Return the previous foreground user, if there is one.
+            final int previousUser = getPreviousFullUserToEnterForeground();
+            if (previousUser != UserHandle.USER_NULL) {
+                Slogf.i(LOG_TAG, "Boot user is previous user %d", previousUser);
+                return previousUser;
+            }
+            // No previous user. Return the first switchable user if there is one.
+            synchronized (mUsersLock) {
+                final int userSize = mUsers.size();
+                for (int i = 0; i < userSize; i++) {
+                    final UserData userData = mUsers.valueAt(i);
+                    if (userData.info.supportsSwitchToByUser()) {
+                        int firstSwitchable = userData.info.id;
+                        Slogf.i(LOG_TAG,
+                                "Boot user is first switchable user %d", firstSwitchable);
+                        return firstSwitchable;
+                    }
+                }
+            }
+            // No switchable users found. Uh oh!
+            throw new UserManager.CheckedUserOperationException(
+                    "No switchable users found", USER_OPERATION_ERROR_UNKNOWN);
+        }
+        // Not HSUM, return system user.
+        return UserHandle.USER_SYSTEM;
+    }
+
 
     @Override
     public int getPreviousFullUserToEnterForeground() {
@@ -1495,7 +1545,8 @@ public class UserManagerService extends IUserManager.Stub {
         // intentSender
         unlockIntent.putExtra(Intent.EXTRA_INTENT, pendingIntent.getIntentSender());
         unlockIntent.setFlags(FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
-        mContext.startActivity(unlockIntent);
+        mContext.startActivityAsUser(
+                unlockIntent, UserHandle.of(getProfileParentIdUnchecked(userId)));
     }
 
     @Override
@@ -3504,15 +3555,15 @@ public class UserManagerService extends IUserManager.Stub {
                     return;
                 }
                 final int oldMainUserId = getMainUserIdUnchecked();
-                final int oldFlags = systemUserData.info.flags;
-                final int newFlags;
+                final int oldSysFlags = systemUserData.info.flags;
+                final int newSysFlags;
                 final String newUserType;
                 if (newHeadlessSystemUserMode) {
                     newUserType = UserManager.USER_TYPE_SYSTEM_HEADLESS;
-                    newFlags = oldFlags & ~UserInfo.FLAG_FULL & ~UserInfo.FLAG_MAIN;
+                    newSysFlags = oldSysFlags & ~UserInfo.FLAG_FULL & ~UserInfo.FLAG_MAIN;
                 } else {
                     newUserType = UserManager.USER_TYPE_FULL_SYSTEM;
-                    newFlags = oldFlags | UserInfo.FLAG_FULL;
+                    newSysFlags = oldSysFlags | UserInfo.FLAG_FULL | UserInfo.FLAG_MAIN;
                 }
 
                 if (systemUserData.info.userType.equals(newUserType)) {
@@ -3523,18 +3574,19 @@ public class UserManagerService extends IUserManager.Stub {
                 Slogf.i(LOG_TAG, "Persisting emulated system user data: type changed from %s to "
                         + "%s, flags changed from %s to %s",
                         systemUserData.info.userType, newUserType,
-                        UserInfo.flagsToString(oldFlags), UserInfo.flagsToString(newFlags));
+                        UserInfo.flagsToString(oldSysFlags), UserInfo.flagsToString(newSysFlags));
 
                 systemUserData.info.userType = newUserType;
-                systemUserData.info.flags = newFlags;
+                systemUserData.info.flags = newSysFlags;
                 writeUserLP(systemUserData);
 
-                // Switch the MainUser to a reasonable choice if needed.
-                // (But if there was no MainUser, we deliberately continue to have no MainUser.)
+                // Designate the MainUser to a reasonable choice if needed.
                 final UserData oldMain = getUserDataNoChecks(oldMainUserId);
                 if (newHeadlessSystemUserMode) {
-                    if (oldMain != null && (oldMain.info.flags & UserInfo.FLAG_SYSTEM) != 0) {
-                        // System was MainUser. So we need a new choice for Main. Pick the oldest.
+                    final boolean mainIsAlreadyNonSystem =
+                            oldMain != null && (oldMain.info.flags & UserInfo.FLAG_SYSTEM) == 0;
+                    if (!mainIsAlreadyNonSystem && isMainUserPermanentAdmin()) {
+                        // We need a new choice for Main. Pick the oldest.
                         // If no oldest, don't set any. Let the BootUserInitializer do that later.
                         final UserInfo newMainUser = getEarliestCreatedFullUser();
                         if (newMainUser != null) {
@@ -3544,16 +3596,16 @@ public class UserManagerService extends IUserManager.Stub {
                         }
                     }
                 } else {
+                    // We already made user 0 Main above. Now strip it from the old Main user.
                     // TODO(b/256624031): For now, we demand the Main user (if there is one) is
                     //  always the system in non-HSUM. In the future, when we relax this, change how
                     //  we handle MAIN.
                     if (oldMain != null && (oldMain.info.flags & UserInfo.FLAG_SYSTEM) == 0) {
-                        // Someone else was the MainUser; transfer it to System.
                         Slogf.i(LOG_TAG, "Transferring Main to user 0 from " + oldMain.info.id);
                         oldMain.info.flags &= ~UserInfo.FLAG_MAIN;
-                        systemUserData.info.flags |= UserInfo.FLAG_MAIN;
                         writeUserLP(oldMain);
-                        writeUserLP(systemUserData);
+                    } else {
+                        Slogf.i(LOG_TAG, "Designated user 0 to be Main");
                     }
                 }
             }
@@ -3817,12 +3869,14 @@ public class UserManagerService extends IUserManager.Stub {
         if (userVersion < 11) {
             // Add FLAG_MAIN
             if (isHeadlessSystemUserMode()) {
-                final UserInfo earliestCreatedUser = getEarliestCreatedFullUser();
-                if (earliestCreatedUser != null) {
-                    earliestCreatedUser.flags |= UserInfo.FLAG_MAIN;
-                    userIdsToWrite.add(earliestCreatedUser.id);
+                if (isMainUserPermanentAdmin()) {
+                    final UserInfo earliestCreatedUser = getEarliestCreatedFullUser();
+                    if (earliestCreatedUser != null) {
+                        earliestCreatedUser.flags |= UserInfo.FLAG_MAIN;
+                        userIdsToWrite.add(earliestCreatedUser.id);
+                    }
                 }
-            } else {
+            } else { // not isHeadlessSystemUserMode
                 synchronized (mUsersLock) {
                     final UserData userData = mUsers.get(UserHandle.USER_SYSTEM);
                     userData.info.flags |= UserInfo.FLAG_MAIN;
@@ -7136,6 +7190,11 @@ public class UserManagerService extends IUserManager.Stub {
         }
 
         @Override
+        public @Nullable int[] getDisplaysAssignedToUser(@UserIdInt int userId) {
+            return mUserVisibilityMediator.getDisplaysAssignedToUser(userId);
+        }
+
+        @Override
         public @UserIdInt int getUserAssignedToDisplay(int displayId) {
             return mUserVisibilityMediator.getUserAssignedToDisplay(displayId);
         }
@@ -7179,47 +7238,29 @@ public class UserManagerService extends IUserManager.Stub {
         }
 
         @Override
-        public @UserIdInt int getBootUser() throws UserManager.CheckedUserOperationException {
-            synchronized (mUsersLock) {
-                // TODO(b/242195409): On Automotive, block if boot user not provided.
-                if (mBootUser != UserHandle.USER_NULL) {
-                    final UserData userData = mUsers.get(mBootUser);
-                    if (userData != null && userData.info.supportsSwitchToByUser()) {
-                        Slogf.i(LOG_TAG, "Using provided boot user: %d", mBootUser);
-                        return mBootUser;
-                    } else {
-                        Slogf.w(LOG_TAG,
-                                "Provided boot user cannot be switched to: %d", mBootUser);
+        public @UserIdInt int getBootUser(boolean waitUntilSet)
+                throws UserManager.CheckedUserOperationException {
+            if (waitUntilSet) {
+                final TimingsTraceAndSlog t = new TimingsTraceAndSlog();
+                t.traceBegin("wait-boot-user");
+                try {
+                    if (mBootUserLatch.getCount() != 0) {
+                        Slogf.d(LOG_TAG,
+                                "Sleeping for boot user to be set. "
+                                + "Max sleep for Time: %d", BOOT_USER_SET_TIMEOUT_MS);
                     }
+                    if (!mBootUserLatch.await(BOOT_USER_SET_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                        Slogf.w(LOG_TAG, "Boot user not set. Timeout: %d",
+                                BOOT_USER_SET_TIMEOUT_MS);
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    Slogf.w(LOG_TAG, e, "InterruptedException during wait for boot user.");
                 }
+                t.traceEnd();
             }
 
-            if (isHeadlessSystemUserMode()) {
-                // Return the previous foreground user, if there is one.
-                final int previousUser = getPreviousFullUserToEnterForeground();
-                if (previousUser != UserHandle.USER_NULL) {
-                    Slogf.i(LOG_TAG, "Boot user is previous user %d", previousUser);
-                    return previousUser;
-                }
-                // No previous user. Return the first switchable user if there is one.
-                synchronized (mUsersLock) {
-                    final int userSize = mUsers.size();
-                    for (int i = 0; i < userSize; i++) {
-                        final UserData userData = mUsers.valueAt(i);
-                        if (userData.info.supportsSwitchToByUser()) {
-                            int firstSwitchable = userData.info.id;
-                            Slogf.i(LOG_TAG,
-                                    "Boot user is first switchable user %d", firstSwitchable);
-                            return firstSwitchable;
-                        }
-                    }
-                }
-                // No switchable users found. Uh oh!
-                throw new UserManager.CheckedUserOperationException(
-                        "No switchable users found", USER_OPERATION_ERROR_UNKNOWN);
-            }
-            // Not HSUM, return system user.
-            return UserHandle.USER_SYSTEM;
+            return getBootUserUnchecked();
         }
 
     } // class LocalService

@@ -520,6 +520,47 @@ public class TransitionTests extends WindowTestsBase {
     }
 
     @Test
+    public void testCreateInfo_MultiDisplay() {
+        DisplayContent otherDisplay = createNewDisplay();
+        final Transition transition = createTestTransition(TRANSIT_OPEN);
+        ArrayMap<WindowContainer, Transition.ChangeInfo> changes = transition.mChanges;
+        ArraySet<WindowContainer> participants = transition.mParticipants;
+
+        final Task display0Task = createTask(mDisplayContent);
+        final Task display1Task = createTask(otherDisplay);
+        // Start states.
+        changes.put(display0Task,
+                new Transition.ChangeInfo(display0Task, false /* vis */, true /* exChg */));
+        changes.put(display1Task,
+                new Transition.ChangeInfo(display1Task, false /* vis */, true /* exChg */));
+        fillChangeMap(changes, display0Task);
+        fillChangeMap(changes, display1Task);
+        // End states.
+        display0Task.setVisibleRequested(true);
+        display1Task.setVisibleRequested(true);
+
+        final int transit = transition.mType;
+        int flags = 0;
+
+        participants.add(display0Task);
+        participants.add(display1Task);
+        ArrayList<Transition.ChangeInfo> targets =
+                Transition.calculateTargets(participants, changes);
+        TransitionInfo info = Transition.calculateTransitionInfo(transit, flags, targets, mMockT);
+        assertEquals(2, info.getRootCount());
+        // Check that the changes are assigned to the correct display
+        assertEquals(mDisplayContent.getDisplayId(), info.getChange(
+                display0Task.mRemoteToken.toWindowContainerToken()).getEndDisplayId());
+        assertEquals(otherDisplay.getDisplayId(), info.getChange(
+                display1Task.mRemoteToken.toWindowContainerToken()).getEndDisplayId());
+        // Check that roots can be found by display and have the correct display
+        assertEquals(mDisplayContent.getDisplayId(),
+                info.getRoot(info.findRootIndex(mDisplayContent.getDisplayId())).getDisplayId());
+        assertEquals(otherDisplay.getDisplayId(),
+                info.getRoot(info.findRootIndex(otherDisplay.getDisplayId())).getDisplayId());
+    }
+
+    @Test
     public void testTargets_noIntermediatesToWallpaper() {
         final Transition transition = createTestTransition(TRANSIT_OPEN);
 
@@ -1704,7 +1745,8 @@ public class TransitionTests extends WindowTestsBase {
                 mDisplayContent, WINDOWING_MODE_MULTI_WINDOW, ACTIVITY_TYPE_STANDARD);
         final Transition transition = new Transition(TRANSIT_OPEN, 0 /* flags */,
                 app.mTransitionController, mWm.mSyncEngine);
-        app.mTransitionController.moveToCollecting(transition, BLASTSyncEngine.METHOD_NONE);
+        app.mTransitionController.moveToCollecting(transition);
+        mWm.mSyncEngine.setSyncMethod(transition.getSyncId(), BLASTSyncEngine.METHOD_NONE);
         final ArrayList<WindowContainer> freezeCalls = new ArrayList<>();
         transition.setContainerFreezer(new Transition.IContainerFreezer() {
             @Override
@@ -1755,7 +1797,8 @@ public class TransitionTests extends WindowTestsBase {
                 mDisplayContent, WINDOWING_MODE_MULTI_WINDOW, ACTIVITY_TYPE_STANDARD);
         final Transition transition = new Transition(TRANSIT_CHANGE, 0 /* flags */,
                 app.mTransitionController, mWm.mSyncEngine);
-        app.mTransitionController.moveToCollecting(transition, BLASTSyncEngine.METHOD_NONE);
+        app.mTransitionController.moveToCollecting(transition);
+        mWm.mSyncEngine.setSyncMethod(transition.getSyncId(), BLASTSyncEngine.METHOD_NONE);
         final SurfaceControl mockSnapshot = mock(SurfaceControl.class);
         transition.setContainerFreezer(new Transition.IContainerFreezer() {
             @Override

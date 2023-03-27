@@ -135,7 +135,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
      */
     static final int CONTROLLABLE_CONFIGS = ActivityInfo.CONFIG_WINDOW_CONFIGURATION
             | ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE | ActivityInfo.CONFIG_SCREEN_SIZE
-            | ActivityInfo.CONFIG_LAYOUT_DIRECTION;
+            | ActivityInfo.CONFIG_LAYOUT_DIRECTION | ActivityInfo.CONFIG_DENSITY;
     static final int CONTROLLABLE_WINDOW_CONFIGS = WINDOW_CONFIG_BOUNDS
             | WindowConfiguration.WINDOW_CONFIG_APP_BOUNDS;
 
@@ -1648,7 +1648,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
     private BLASTSyncEngine.SyncGroup prepareSyncWithOrganizer(
             IWindowContainerTransactionCallback callback) {
         final BLASTSyncEngine.SyncGroup s = mService.mWindowManager.mSyncEngine
-                .prepareSyncSet(this, "", BLASTSyncEngine.METHOD_BLAST);
+                .prepareSyncSet(this, "Organizer");
         mTransactionCallbacksByPendingSyncId.put(s.mSyncId, callback);
         return s;
     }
