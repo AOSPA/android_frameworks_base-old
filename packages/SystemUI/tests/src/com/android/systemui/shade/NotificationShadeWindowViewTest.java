@@ -40,8 +40,11 @@ import com.android.keyguard.LockIconViewController;
 import com.android.keyguard.dagger.KeyguardBouncerComponent;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.biometrics.domain.interactor.UdfpsOverlayInteractor;
 import com.android.systemui.classifier.FalsingCollectorFake;
 import com.android.systemui.dock.DockManager;
+import com.android.systemui.flags.FakeFeatureFlags;
+import com.android.systemui.flags.Flags;
 import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
 import com.android.systemui.keyguard.domain.interactor.AlternateBouncerInteractor;
 import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor;
@@ -101,6 +104,7 @@ public class NotificationShadeWindowViewTest extends SysuiTestCase {
     @Mock private KeyguardSecurityContainerController mKeyguardSecurityContainerController;
     @Mock private NotificationInsetsController mNotificationInsetsController;
     @Mock private AlternateBouncerInteractor mAlternateBouncerInteractor;
+    @Mock private UdfpsOverlayInteractor mUdfpsOverlayInteractor;
     @Mock private KeyguardTransitionInteractor mKeyguardTransitionInteractor;
     @Mock private PrimaryBouncerToGoneTransitionViewModel mPrimaryBouncerToGoneTransitionViewModel;
 
@@ -130,6 +134,8 @@ public class NotificationShadeWindowViewTest extends SysuiTestCase {
         when(mKeyguardTransitionInteractor.getLockscreenToDreamingTransition())
                 .thenReturn(emptyFlow());
 
+        FakeFeatureFlags featureFlags = new FakeFeatureFlags();
+        featureFlags.set(Flags.TRACKPAD_GESTURE_BACK, false);
         mController = new NotificationShadeWindowViewController(
                 mLockscreenShadeTransitionController,
                 new FalsingCollectorFake(),
@@ -152,8 +158,10 @@ public class NotificationShadeWindowViewTest extends SysuiTestCase {
                 mKeyguardBouncerViewModel,
                 mKeyguardBouncerComponentFactory,
                 mAlternateBouncerInteractor,
+                mUdfpsOverlayInteractor,
                 mKeyguardTransitionInteractor,
-                mPrimaryBouncerToGoneTransitionViewModel
+                mPrimaryBouncerToGoneTransitionViewModel,
+                featureFlags
         );
         mController.setupExpandedStatusBar();
         mController.setDragDownHelper(mDragDownHelper);
@@ -177,6 +185,7 @@ public class NotificationShadeWindowViewTest extends SysuiTestCase {
         // WHEN showing alt auth, not dozing, drag down helper doesn't want to intercept
         when(mStatusBarStateController.isDozing()).thenReturn(false);
         when(mAlternateBouncerInteractor.isVisibleState()).thenReturn(true);
+        when(mUdfpsOverlayInteractor.canInterceptTouchInUdfpsBounds(any())).thenReturn(true);
         when(mDragDownHelper.onInterceptTouchEvent(any())).thenReturn(false);
 
         // THEN we should intercept touch

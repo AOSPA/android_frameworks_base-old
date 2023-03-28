@@ -5,6 +5,7 @@ package android {
     field public static final String ACCESS_NOTIFICATIONS = "android.permission.ACCESS_NOTIFICATIONS";
     field public static final String ACTIVITY_EMBEDDING = "android.permission.ACTIVITY_EMBEDDING";
     field public static final String ADJUST_RUNTIME_PERMISSIONS_POLICY = "android.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY";
+    field public static final String ALLOWLISTED_WRITE_DEVICE_CONFIG = "android.permission.ALLOWLISTED_WRITE_DEVICE_CONFIG";
     field public static final String APPROVE_INCIDENT_REPORTS = "android.permission.APPROVE_INCIDENT_REPORTS";
     field public static final String BACKGROUND_CAMERA = "android.permission.BACKGROUND_CAMERA";
     field public static final String BIND_CELL_BROADCAST_SERVICE = "android.permission.BIND_CELL_BROADCAST_SERVICE";
@@ -39,6 +40,7 @@ package android {
     field public static final String QUERY_AUDIO_STATE = "android.permission.QUERY_AUDIO_STATE";
     field public static final String READ_CELL_BROADCASTS = "android.permission.READ_CELL_BROADCASTS";
     field public static final String READ_PRIVILEGED_PHONE_STATE = "android.permission.READ_PRIVILEGED_PHONE_STATE";
+    field public static final String READ_WRITE_SYNC_DISABLED_MODE_CONFIG = "android.permission.READ_WRITE_SYNC_DISABLED_MODE_CONFIG";
     field public static final String RECORD_BACKGROUND_AUDIO = "android.permission.RECORD_BACKGROUND_AUDIO";
     field public static final String REMAP_MODIFIER_KEYS = "android.permission.REMAP_MODIFIER_KEYS";
     field public static final String REMOVE_TASKS = "android.permission.REMOVE_TASKS";
@@ -1957,7 +1959,7 @@ package android.media.tv {
   }
 
   public class TvView extends android.view.ViewGroup {
-    method public void notifyTvMessage(@NonNull String, @NonNull android.os.Bundle);
+    method public void notifyTvMessage(int, @NonNull android.os.Bundle);
   }
 
 }
@@ -2025,7 +2027,9 @@ package android.os {
     method public static boolean is64BitAbi(String);
     method public static boolean isDebuggable();
     field @Nullable public static final String BRAND_FOR_ATTESTATION;
+    field @Nullable public static final String DEVICE_FOR_ATTESTATION;
     field public static final boolean IS_EMULATOR;
+    field @Nullable public static final String MANUFACTURER_FOR_ATTESTATION;
     field @Nullable public static final String MODEL_FOR_ATTESTATION;
     field @Nullable public static final String PRODUCT_FOR_ATTESTATION;
   }
@@ -3028,7 +3032,6 @@ package android.telephony {
     field public static final int HAL_SERVICE_MESSAGING = 2; // 0x2
     field public static final int HAL_SERVICE_MODEM = 3; // 0x3
     field public static final int HAL_SERVICE_NETWORK = 4; // 0x4
-    field public static final int HAL_SERVICE_SATELLITE = 8; // 0x8
     field public static final int HAL_SERVICE_SIM = 5; // 0x5
     field public static final int HAL_SERVICE_VOICE = 6; // 0x6
     field public static final android.util.Pair HAL_VERSION_UNKNOWN;
@@ -3985,6 +3988,7 @@ package android.window {
 
   public static class WindowInfosListenerForTest.WindowInfo {
     field @NonNull public final android.graphics.Rect bounds;
+    field public final boolean isTrustedOverlay;
     field @NonNull public final String name;
     field @NonNull public final android.os.IBinder windowToken;
   }

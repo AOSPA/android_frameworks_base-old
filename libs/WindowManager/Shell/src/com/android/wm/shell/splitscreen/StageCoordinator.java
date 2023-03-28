@@ -207,6 +207,7 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
     private boolean mIsDividerRemoteAnimating;
     private boolean mIsDropEntering;
     private boolean mIsExiting;
+    private boolean mIsRootTranslucent;
 
     private DefaultMixedHandler mMixedHandler;
     private final Toast mSplitUnsupportedToast;
@@ -255,37 +256,6 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
                     if (mDividerVisible) {
                         mSyncQueue.runInSync(t -> applyDividerVisibility(t));
                     }
-                }
-            };
-
-    private final SplitScreenTransitions.TransitionFinishedCallback
-            mRecentTransitionFinishedCallback =
-            new SplitScreenTransitions.TransitionFinishedCallback() {
-                @Override
-                public void onFinished(WindowContainerTransaction finishWct,
-                        SurfaceControl.Transaction finishT) {
-                    // Check if the recent transition is finished by returning to the current
-                    // split, so we
-                    // can restore the divider bar.
-                    for (int i = 0; i < finishWct.getHierarchyOps().size(); ++i) {
-                        final WindowContainerTransaction.HierarchyOp op =
-                                finishWct.getHierarchyOps().get(i);
-                        final IBinder container = op.getContainer();
-                        if (op.getType() == HIERARCHY_OP_TYPE_REORDER && op.getToTop()
-                                && (mMainStage.containsContainer(container)
-                                || mSideStage.containsContainer(container))) {
-                            updateSurfaceBounds(mSplitLayout, finishT,
-                                    false /* applyResizingOffset */);
-                            setDividerVisibility(true, finishT);
-                            return;
-                        }
-                    }
-
-                    // Dismiss the split screen if it's not returning to split.
-                    prepareExitSplitScreen(STAGE_TYPE_UNDEFINED, finishWct);
-                    setSplitsVisible(false);
-                    setDividerVisibility(false, finishT);
-                    logExit(EXIT_REASON_UNKNOWN);
                 }
             };
 
@@ -387,6 +357,11 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
         return mMainStage.isActive();
     }
 
+    /** Checks if `transition` is a pending enter-split transition. */
+    public boolean isPendingEnter(IBinder transition) {
+        return mSplitTransitions.isPendingEnter(transition);
+    }
+
     @StageType
     int getStageOfTask(int taskId) {
         if (mMainStage.containsTask(taskId)) {
@@ -422,6 +397,11 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
             }
         }
 
+        if (!isSplitActive()) {
+            // prevent the fling divider to center transitioni if split screen didn't active.
+            mIsDropEntering = true;
+        }
+
         setSideStagePosition(sideStagePosition, wct);
         final WindowContainerTransaction evictWct = new WindowContainerTransaction();
         targetStage.evictAllChildren(evictWct);
@@ -436,28 +416,13 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
         // reparent the task to an invisible split root will make the activity invisible.  Reorder
         // the root task to front to make the entering transition from pip to split smooth.
         wct.reorder(mRootTaskInfo.token, true);
-        wct.setForceTranslucent(mRootTaskInfo.token, true);
         wct.reorder(targetStage.mRootTaskInfo.token, true);
-        wct.setForceTranslucent(targetStage.mRootTaskInfo.token, true);
-        // prevent the fling divider to center transition
-        mIsDropEntering = true;
-
         targetStage.addTask(task, wct);
 
-        if (ENABLE_SHELL_TRANSITIONS) {
-            prepareEnterSplitScreen(wct);
-            mSplitTransitions.startEnterTransition(TRANSIT_SPLIT_SCREEN_OPEN_TO_SIDE, wct,
-                    null, this, null /* consumedCallback */, (finishWct, finishT) -> {
-                        if (!evictWct.isEmpty()) {
-                            finishWct.merge(evictWct, true);
-                        }
-                    } /* finishedCallback */);
-        } else {
-            if (!evictWct.isEmpty()) {
-                wct.merge(evictWct, true /* transfer */);
-            }
-            mTaskOrganizer.applyTransaction(wct);
+        if (!evictWct.isEmpty()) {
+            wct.merge(evictWct, true /* transfer */);
         }
+        mTaskOrganizer.applyTransaction(wct);
         return true;
     }
 
@@ -716,7 +681,7 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
         mSplitLayout.setDivideRatio(splitRatio);
         updateWindowBounds(mSplitLayout, wct);
         wct.reorder(mRootTaskInfo.token, true);
-        wct.setForceTranslucent(mRootTaskInfo.token, false);
+        setRootForceTranslucent(false, wct);
 
         // Make sure the launch options will put tasks in the corresponding split roots
         mainOptions = mainOptions != null ? mainOptions : new Bundle();
@@ -923,7 +888,7 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
 
         updateWindowBounds(mSplitLayout, wct);
         wct.reorder(mRootTaskInfo.token, true);
-        wct.setForceTranslucent(mRootTaskInfo.token, false);
+        setRootForceTranslucent(false, wct);
 
         // TODO(b/268008375): Merge APIs to start a split pair into one.
         if (mainTaskId != INVALID_TASK_ID) {
@@ -1351,7 +1316,7 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
             mSideStage.removeAllTasks(wct, false /* toTop */);
             mMainStage.deactivate(wct, false /* toTop */);
             wct.reorder(mRootTaskInfo.token, false /* onTop */);
-            wct.setForceTranslucent(mRootTaskInfo.token, true);
+            setRootForceTranslucent(true, wct);
             wct.setBounds(mSideStage.mRootTaskInfo.token, mTempRect1);
             onTransitionAnimationComplete();
         } else {
@@ -1383,7 +1348,7 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
                     mMainStage.deactivate(finishedWCT, childrenToTop == mMainStage /* toTop */);
                     mSideStage.removeAllTasks(finishedWCT, childrenToTop == mSideStage /* toTop */);
                     finishedWCT.reorder(mRootTaskInfo.token, false /* toTop */);
-                    finishedWCT.setForceTranslucent(mRootTaskInfo.token, true);
+                    setRootForceTranslucent(true, wct);
                     finishedWCT.setBounds(mSideStage.mRootTaskInfo.token, mTempRect1);
                     mSyncQueue.queue(finishedWCT);
                     mSyncQueue.runInSync(at -> {
@@ -1505,7 +1470,7 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
         mMainStage.activate(wct, true /* includingTopTask */);
         updateWindowBounds(mSplitLayout, wct);
         wct.reorder(mRootTaskInfo.token, true);
-        wct.setForceTranslucent(mRootTaskInfo.token, false);
+        setRootForceTranslucent(false, wct);
     }
 
     void finishEnterSplitScreen(SurfaceControl.Transaction t) {
@@ -1709,6 +1674,7 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
 
         mRootTaskInfo = null;
         mRootTaskLeash = null;
+        mIsRootTranslucent = false;
     }
 
 
@@ -1727,7 +1693,7 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
         // Make the stages adjacent to each other so they occlude what's behind them.
         wct.setAdjacentRoots(mMainStage.mRootTaskInfo.token, mSideStage.mRootTaskInfo.token);
         wct.setLaunchAdjacentFlagRoot(mSideStage.mRootTaskInfo.token);
-        wct.setForceTranslucent(mRootTaskInfo.token, true);
+        setRootForceTranslucent(true, wct);
         mSplitLayout.getInvisibleBounds(mTempRect1);
         wct.setBounds(mSideStage.mRootTaskInfo.token, mTempRect1);
         mSyncQueue.queue(wct);
@@ -1751,7 +1717,7 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
             mSideStage.evictOtherChildren(wct, taskId);
             updateWindowBounds(mSplitLayout, wct);
             wct.reorder(mRootTaskInfo.token, true);
-            wct.setForceTranslucent(mRootTaskInfo.token, false);
+            setRootForceTranslucent(false, wct);
 
             mSyncQueue.queue(wct);
             mSyncQueue.runInSync(t -> {
@@ -1773,6 +1739,13 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
         }
         applyExitSplitScreen(null /* childrenToTop */, wct, EXIT_REASON_ROOT_TASK_VANISHED);
         mDisplayInsetsController.removeInsetsChangedListener(mDisplayId, mSplitLayout);
+    }
+
+    private void setRootForceTranslucent(boolean translucent, WindowContainerTransaction wct) {
+        if (mIsRootTranslucent == translucent) return;
+
+        mIsRootTranslucent = translucent;
+        wct.setForceTranslucent(mRootTaskInfo.token, translucent);
     }
 
     private void onStageVisibilityChanged(StageListenerImpl stageListener) {
@@ -1801,12 +1774,11 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
             // Split entering background.
             wct.setReparentLeafTaskIfRelaunch(mRootTaskInfo.token,
                     true /* setReparentLeafTaskIfRelaunch */);
-            if (!mMainStage.mRootTaskInfo.isSleeping && !mSideStage.mRootTaskInfo.isSleeping) {
-                wct.setForceTranslucent(mRootTaskInfo.token, true);
-            }
+            setRootForceTranslucent(true, wct);
         } else {
             wct.setReparentLeafTaskIfRelaunch(mRootTaskInfo.token,
                     false /* setReparentLeafTaskIfRelaunch */);
+            setRootForceTranslucent(false, wct);
         }
 
         mSyncQueue.queue(wct);
@@ -1938,7 +1910,7 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
                 mMainStage.activate(wct, true /* includingTopTask */);
                 updateWindowBounds(mSplitLayout, wct);
                 wct.reorder(mRootTaskInfo.token, true);
-                wct.setForceTranslucent(mRootTaskInfo.token, false);
+                setRootForceTranslucent(false, wct);
             }
 
             mSyncQueue.queue(wct);
@@ -2268,9 +2240,8 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
                 final int activityType = triggerTask.getActivityType();
                 if (activityType == ACTIVITY_TYPE_HOME
                         || activityType == ACTIVITY_TYPE_RECENTS) {
-                    // Enter overview panel, so start recent transition.
-                    mSplitTransitions.setRecentTransition(transition, request.getRemoteTransition(),
-                            mRecentTransitionFinishedCallback);
+                    // starting recents, so don't handle this.
+                    return null;
                 }
             }
         } else {
@@ -2399,8 +2370,6 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
         if (mSplitTransitions.isPendingEnter(transition)) {
             shouldAnimate = startPendingEnterAnimation(
                     transition, info, startTransaction, finishTransaction);
-        } else if (mSplitTransitions.isPendingRecent(transition)) {
-            shouldAnimate = startPendingRecentAnimation(transition, info, startTransaction);
         } else if (mSplitTransitions.isPendingDismiss(transition)) {
             shouldAnimate = startPendingDismissAnimation(
                     mSplitTransitions.mPendingDismiss, info, startTransaction, finishTransaction);
@@ -2655,10 +2624,35 @@ public class StageCoordinator implements SplitLayout.SplitLayoutHandler,
         return true;
     }
 
-    private boolean startPendingRecentAnimation(@NonNull IBinder transition,
-            @NonNull TransitionInfo info, @NonNull SurfaceControl.Transaction t) {
+    /** Call this when starting the open-recents animation while split-screen is active. */
+    public void onRecentsInSplitAnimationStart(@NonNull SurfaceControl.Transaction t) {
         setDividerVisibility(false, t);
-        return true;
+    }
+
+    /** Call this when the recents animation during split-screen finishes. */
+    public void onRecentsInSplitAnimationFinish(WindowContainerTransaction finishWct,
+            SurfaceControl.Transaction finishT) {
+        // Check if the recent transition is finished by returning to the current
+        // split, so we can restore the divider bar.
+        for (int i = 0; i < finishWct.getHierarchyOps().size(); ++i) {
+            final WindowContainerTransaction.HierarchyOp op =
+                    finishWct.getHierarchyOps().get(i);
+            final IBinder container = op.getContainer();
+            if (op.getType() == HIERARCHY_OP_TYPE_REORDER && op.getToTop()
+                    && (mMainStage.containsContainer(container)
+                    || mSideStage.containsContainer(container))) {
+                updateSurfaceBounds(mSplitLayout, finishT,
+                        false /* applyResizingOffset */);
+                setDividerVisibility(true, finishT);
+                return;
+            }
+        }
+
+        // Dismiss the split screen if it's not returning to split.
+        prepareExitSplitScreen(STAGE_TYPE_UNDEFINED, finishWct);
+        setSplitsVisible(false);
+        setDividerVisibility(false, finishT);
+        logExit(EXIT_REASON_UNKNOWN);
     }
 
     private void addDividerBarToTransition(@NonNull TransitionInfo info,

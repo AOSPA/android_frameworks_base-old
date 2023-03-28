@@ -137,7 +137,7 @@ object Flags {
      * the digits when the clock moves.
      */
     @JvmField
-    val STEP_CLOCK_ANIMATION = unreleasedFlag(212, "step_clock_animation", teamfood = true)
+    val STEP_CLOCK_ANIMATION = releasedFlag(212, "step_clock_animation")
 
     /**
      * Migration from the legacy isDozing/dozeAmount paths to the new KeyguardTransitionRepository
@@ -220,6 +220,11 @@ object Flags {
             "lock_screen_long_press_enabled"
         )
 
+    /** Whether to inflate the bouncer view on a background thread. */
+    // TODO(b/272091103): Tracking Bug
+    @JvmField
+    val ASYNC_INFLATE_BOUNCER = unreleasedFlag(229, "async_inflate_bouncer", teamfood = true)
+
     // 300 - power menu
     // TODO(b/254512600): Tracking Bug
     @JvmField val POWER_MENU_LITE = releasedFlag(300, "power_menu_lite")
@@ -238,6 +243,11 @@ object Flags {
     // TODO(b/270223352): Tracking Bug
     @JvmField
     val HIDE_SMARTSPACE_ON_DREAM_OVERLAY = unreleasedFlag(404, "hide_smartspace_on_dream_overlay")
+
+    // TODO(b/271460958): Tracking Bug
+    @JvmField
+    val SHOW_WEATHER_COMPLICATION_ON_DREAM_OVERLAY = unreleasedFlag(405,
+        "show_weather_complication_on_dream_overlay")
 
     // 500 - quick settings
 
@@ -303,7 +313,8 @@ object Flags {
         unreleasedFlag(611, "new_status_bar_icons_debug_coloring")
 
     // TODO(b/265892345): Tracking Bug
-    val PLUG_IN_STATUS_BAR_CHIP = unreleasedFlag(265892345, "plug_in_status_bar_chip")
+    val PLUG_IN_STATUS_BAR_CHIP =
+            unreleasedFlag(265892345, "plug_in_status_bar_chip", teamfood = true)
 
     // 700 - dialer/calls
     // TODO(b/254512734): Tracking Bug
@@ -485,6 +496,13 @@ object Flags {
     val ENABLE_PIP_APP_ICON_OVERLAY =
         sysPropBooleanFlag(1115, "persist.wm.debug.enable_pip_app_icon_overlay", default = true)
 
+    // TODO(b/272110828): Tracking bug
+    @Keep
+    @JvmField
+    val ENABLE_MOVE_FLOATING_WINDOW_IN_TABLETOP =
+        sysPropBooleanFlag(
+            1116, "persist.wm.debug.enable_move_floating_window_in_tabletop", default = false)
+
     // 1200 - predictive back
     @Keep
     @JvmField
@@ -616,14 +634,12 @@ object Flags {
     @JvmField val UDFPS_ELLIPSE_DETECTION = releasedFlag(2201, "udfps_ellipse_detection")
 
     // 2300 - stylus
+    @JvmField val TRACK_STYLUS_EVER_USED = releasedFlag(2300, "track_stylus_ever_used")
     @JvmField
-    val TRACK_STYLUS_EVER_USED = unreleasedFlag(2300, "track_stylus_ever_used", teamfood = true)
-    @JvmField
-    val ENABLE_STYLUS_CHARGING_UI =
-        unreleasedFlag(2301, "enable_stylus_charging_ui", teamfood = true)
+    val ENABLE_STYLUS_CHARGING_UI = releasedFlag(2301, "enable_stylus_charging_ui")
     @JvmField
     val ENABLE_USI_BATTERY_NOTIFICATIONS =
-        unreleasedFlag(2302, "enable_usi_battery_notifications", teamfood = true)
+        releasedFlag(2302, "enable_usi_battery_notifications")
     @JvmField val ENABLE_STYLUS_EDUCATION = unreleasedFlag(2303, "enable_stylus_education")
 
     // 2400 - performance tools and debugging info
@@ -658,10 +674,11 @@ object Flags {
 
     // TODO(b/259428678): Tracking Bug
     @JvmField
-    val KEYBOARD_BACKLIGHT_INDICATOR = unreleasedFlag(2601, "keyboard_backlight_indicator")
+    val KEYBOARD_BACKLIGHT_INDICATOR =
+            unreleasedFlag(2601, "keyboard_backlight_indicator", teamfood = true)
 
     // TODO(b/272036292): Tracking Bug
     @JvmField
     val LARGE_SHADE_GRANULAR_ALPHA_INTERPOLATION =
-            unreleasedFlag(2602, "large_shade_granular_alpha_interpolation")
+            unreleasedFlag(2602, "large_shade_granular_alpha_interpolation", teamfood = true)
 }

@@ -371,9 +371,9 @@ fun MoreOptionsSelectionCard(
             onNavigationIconClicked =
             if (isFromProviderSelection) onBackProviderSelectionButtonSelected
             else onBackCreationSelectionButtonSelected,
+            bottomPadding = 16.dp,
         )
     }) {
-        item { Divider(thickness = 8.dp, color = Color.Transparent) } // Top app bar has a 8dp
         // bottom padding already
         item {
             CredentialContainerCard {
@@ -446,6 +446,7 @@ fun MoreOptionsRowIntroCard(
             BodyMediumText(text = stringResource(
                 R.string.use_provider_for_all_description, entryInfo.userProviderDisplayName))
         }
+        item { Divider(thickness = 24.dp, color = Color.Transparent) }
         item {
             CtaButtonRow(
                 leftButton = {
@@ -559,7 +560,11 @@ fun CreationSelectionCard(
                     modifier = Modifier.padding(vertical = 16.dp)
                 )
             }
-            item { BodySmallText(text = createOptionInfo.footerDescription) }
+            item {
+                Row(modifier = Modifier.fillMaxWidth().wrapContentHeight()) {
+                    BodySmallText(text = createOptionInfo.footerDescription)
+                }
+            }
         }
     }
     onLog(CreateCredentialEvent.CREDMAN_CREATE_CRED_CREATION_OPTION_SELECTION)
@@ -612,9 +617,9 @@ fun MoreAboutPasskeysIntroCard(
             MoreOptionTopAppBar(
                 text = stringResource(R.string.more_about_passkeys_title),
                 onNavigationIconClicked = onBackPasskeyIntroButtonSelected,
+                bottomPadding = 0.dp,
             )
         },
-        contentVerticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
             MoreAboutPasskeySectionHeader(

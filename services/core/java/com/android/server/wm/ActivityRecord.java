@@ -1750,7 +1750,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 : null;
     }
 
-    private void clearLastParentBeforePip() {
+    void clearLastParentBeforePip() {
         if (mLastParentBeforePip != null) {
             mLastParentBeforePip.mChildPipActivity = null;
             mLastParentBeforePip = null;
@@ -2117,7 +2117,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         mTaskSupervisor = supervisor;
 
         info.taskAffinity = computeTaskAffinity(info.taskAffinity, info.applicationInfo.uid,
-                launchMode);
+                info.launchMode, mActivityComponent);
         taskAffinity = info.taskAffinity;
         final String uid = Integer.toString(info.applicationInfo.uid);
         if (info.windowLayout != null && info.windowLayout.windowLayoutAffinity != null
@@ -2221,12 +2221,18 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * @param affinity The affinity of the activity.
      * @param uid The user-ID that has been assigned to this application.
      * @param launchMode The activity launch mode
+     * @param componentName The activity component name. This is only useful when the given
+     *                      launchMode is {@link ActivityInfo#LAUNCH_SINGLE_INSTANCE}
      * @return The task affinity
      */
-    static String computeTaskAffinity(String affinity, int uid, int launchMode) {
+    static String computeTaskAffinity(String affinity, int uid, int launchMode,
+            ComponentName componentName) {
         final String uidStr = Integer.toString(uid);
         if (affinity != null && !affinity.startsWith(uidStr)) {
-            affinity = uidStr + (launchMode == LAUNCH_SINGLE_INSTANCE ? "-si:" : ":") + affinity;
+            affinity = uidStr + ":" + affinity;
+            if (launchMode == LAUNCH_SINGLE_INSTANCE && componentName != null) {
+                affinity += ":" + componentName.hashCode();
+            }
         }
         return affinity;
     }
@@ -4161,9 +4167,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         } else if (!mVisibleRequested && launchCount > 2
                 && lastLaunchTime > (SystemClock.uptimeMillis() - 60000)) {
             // We have launched this activity too many times since it was able to run, so give up
-            // and remove it. (Note if the activity is visible, we don't remove the record. We leave
-            // the dead window on the screen but the process will not be restarted unless user
-            // explicitly tap on it.)
+            // and remove it.
             remove = true;
         } else {
             // The process may be gone, but the activity lives on!
@@ -4185,11 +4189,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             if (DEBUG_APP) {
                 Slog.v(TAG_APP, "Keeping entry during removeHistory for activity " + this);
             }
-            // Set nowVisible to previous visible state. If the app was visible while it died, we
-            // leave the dead window on screen so it's basically visible. This is needed when user
-            // later tap on the dead window, we need to stop other apps when user transfers focus
-            // to the restarted activity.
-            nowVisible = mVisibleRequested;
         }
         // upgrade transition trigger to task if this is the last activity since it means we are
         // closing the task.
@@ -5316,10 +5315,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         mLastDeferHidingClient = deferHidingClient;
 
         if (!visible) {
-            // If the app is dead while it was visible, we kept its dead window on screen.
-            // Now that the app is going invisible, we can remove it. It will be restarted
-            // if made visible again.
-            removeDeadWindows();
             // If this activity is about to finish/stopped and now becomes invisible, remove it
             // from the unknownApp list in case the activity does not want to draw anything, which
             // keep the user waiting for the next transition to start.
@@ -6756,9 +6751,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // stop tracking
         mSplashScreenStyleSolidColor = true;
 
-        // We now have a good window to show, remove dead placeholders
-        removeDeadWindows();
-
         if (mStartingWindow != null) {
             ProtoLog.v(WM_DEBUG_STARTING_WINDOW, "Finish starting %s"
                     + ": first real window is shown, no animation", win.mToken);
@@ -7502,20 +7494,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
     }
 
-    void removeDeadWindows() {
-        for (int winNdx = mChildren.size() - 1; winNdx >= 0; --winNdx) {
-            WindowState win = mChildren.get(winNdx);
-            if (win.mAppDied) {
-                ProtoLog.w(WM_DEBUG_ADD_REMOVE,
-                        "removeDeadWindows: %s", win);
-                // Set mDestroying, we don't want any animation or delayed removal here.
-                win.mDestroying = true;
-                // Also removes child windows.
-                win.removeIfPossible();
-            }
-        }
-    }
-
     void setWillReplaceWindows(boolean animate) {
         ProtoLog.d(WM_DEBUG_ADD_REMOVE,
                 "Marking app token %s with replacing windows.", this);
@@ -7961,25 +7939,35 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     /**
      * Returns the requested {@link Configuration.Orientation} for the current activity.
-     *
-     * <p>When The current orientation is set to {@link SCREEN_ORIENTATION_BEHIND} it returns the
-     * requested orientation for the activity below which is the first activity with an explicit
-     * (different from {@link SCREEN_ORIENTATION_UNSET}) orientation which is not {@link
-     * SCREEN_ORIENTATION_BEHIND}.
      */
     @Configuration.Orientation
     @Override
     int getRequestedConfigurationOrientation(boolean forDisplay) {
+        return getRequestedConfigurationOrientation(forDisplay, getOverrideOrientation());
+    }
+
+    /**
+     * Returns the requested {@link Configuration.Orientation} for the requested
+     * {@link ActivityInfo.ScreenOrientation}.
+     *
+     * <p>When the current screen orientation is set to {@link SCREEN_ORIENTATION_BEHIND} it returns
+     * the requested orientation for the activity below which is the first activity with an explicit
+     * (different from {@link SCREEN_ORIENTATION_UNSET}) orientation which is not {@link
+     * SCREEN_ORIENTATION_BEHIND}.
+     */
+    @Configuration.Orientation
+    int getRequestedConfigurationOrientation(boolean forDisplay,
+            @ActivityInfo.ScreenOrientation int requestedOrientation) {
         if (mLetterboxUiController.hasInheritedOrientation()) {
             final RootDisplayArea root = getRootDisplayArea();
             if (forDisplay && root != null && root.isOrientationDifferentFromDisplay()) {
-                return ActivityInfo.reverseOrientation(
+                return reverseConfigurationOrientation(
                         mLetterboxUiController.getInheritedOrientation());
             } else {
                 return mLetterboxUiController.getInheritedOrientation();
             }
         }
-        if (task != null && getOverrideOrientation() == SCREEN_ORIENTATION_BEHIND) {
+        if (task != null && requestedOrientation == SCREEN_ORIENTATION_BEHIND) {
             // We use Task here because we want to be consistent with what happens in
             // multi-window mode where other tasks orientations are ignored.
             final ActivityRecord belowCandidate = task.getActivity(
@@ -7990,7 +7978,23 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 return belowCandidate.getRequestedConfigurationOrientation(forDisplay);
             }
         }
-        return super.getRequestedConfigurationOrientation(forDisplay);
+        return super.getRequestedConfigurationOrientation(forDisplay, requestedOrientation);
+    }
+
+    /**
+     * Returns the reversed configuration orientation.
+     * @hide
+     */
+    @Configuration.Orientation
+    public static int reverseConfigurationOrientation(@Configuration.Orientation int orientation) {
+        switch (orientation) {
+            case ORIENTATION_LANDSCAPE:
+                return ORIENTATION_PORTRAIT;
+            case ORIENTATION_PORTRAIT:
+                return ORIENTATION_LANDSCAPE;
+            default:
+                return orientation;
+        }
     }
 
     /**
@@ -8036,6 +8040,19 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (mLetterboxUiController.shouldIgnoreRequestedOrientation(requestedOrientation)) {
             return;
         }
+        // This is necessary in order to avoid going into size compat mode when the orientation
+        // change request comes from the app
+        if (mWmService.mLetterboxConfiguration
+                    .isSizeCompatModeDisabledAfterOrientationChangeFromApp()
+                && getRequestedConfigurationOrientation(false, requestedOrientation)
+                    != getRequestedConfigurationOrientation(false /*forDisplay */)) {
+            // Do not change the requested configuration now, because this will be done when setting
+            // the orientation below with the new mCompatDisplayInsets
+            clearSizeCompatModeAttributes();
+        }
+        ProtoLog.v(WM_DEBUG_ORIENTATION,
+                "Setting requested orientation %s for %s",
+                ActivityInfo.screenOrientationToString(requestedOrientation), this);
         setOrientation(requestedOrientation, this);
 
         // Push the new configuration to the requested app in case where it's not pushed, e.g. when
@@ -8276,17 +8293,20 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                         mDisplayContent, this, mLetterboxBoundsForFixedOrientationAndAspectRatio);
     }
 
-    @VisibleForTesting
-    void clearSizeCompatMode() {
-        final float lastSizeCompatScale = mSizeCompatScale;
+    private void clearSizeCompatModeAttributes() {
         mInSizeCompatModeForBounds = false;
         mSizeCompatScale = 1f;
         mSizeCompatBounds = null;
         mCompatDisplayInsets = null;
+    }
+
+    @VisibleForTesting
+    void clearSizeCompatMode() {
+        final float lastSizeCompatScale = mSizeCompatScale;
+        clearSizeCompatModeAttributes();
         if (mSizeCompatScale != lastSizeCompatScale) {
             forAllWindows(WindowState::updateGlobalScale, false /* traverseTopToBottom */);
         }
-
         // Clear config override in #updateCompatDisplayInsets().
         final int activityType = getActivityType();
         final Configuration overrideConfig = getRequestedOverrideConfiguration();
@@ -9163,6 +9183,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         final boolean wasInPictureInPicture = inPinnedWindowingMode();
         final DisplayContent display = mDisplayContent;
+        final int activityType = getActivityType();
         if (wasInPictureInPicture && attachedToProcess() && display != null) {
             // If the PIP activity is changing to fullscreen with display orientation change, the
             // fixed rotation will take effect that requires to send fixed rotation adjustments
@@ -9186,6 +9207,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             }
         } else {
             super.onConfigurationChanged(newParentConfig);
+        }
+        if (activityType != ACTIVITY_TYPE_UNDEFINED
+                && activityType != getActivityType()) {
+            Slog.w(TAG, "Can't change activity type once set: " + this
+                    + " activityType=" + activityTypeToString(getActivityType()));
         }
 
         // Configuration's equality doesn't consider seq so if only seq number changes in resolved
