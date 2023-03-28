@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/*
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 package com.android.systemui.statusbar.pipeline.mobile.data.repository.prod
 
 import androidx.annotation.VisibleForTesting
@@ -281,6 +287,47 @@ class FullMobileConnectionRepository(
                 initialValue = activeRepo.value.networkName.value,
             )
             .stateIn(scope, SharingStarted.WhileSubscribed(), activeRepo.value.networkName.value)
+
+    override val lteRsrpLevel =
+        activeRepo
+            .flatMapLatest { it.lteRsrpLevel }
+            .logDiffsForTable(
+                tableLogBuffer,
+                columnPrefix = "",
+                columnName = "lteRsrpLevel",
+                initialValue = activeRepo.value.lteRsrpLevel.value,
+            )
+            .stateIn(scope, SharingStarted.WhileSubscribed(), activeRepo.value.lteRsrpLevel.value)
+
+    override val voiceNetworkType =
+        activeRepo
+            .flatMapLatest { it.voiceNetworkType }
+            .logDiffsForTable(
+                tableLogBuffer,
+                columnPrefix = "",
+                columnName = "voiceNetworkType",
+                initialValue = activeRepo.value.voiceNetworkType.value,
+            )
+            .stateIn(
+                scope,
+                SharingStarted.WhileSubscribed(),
+                activeRepo.value.voiceNetworkType.value
+            )
+
+    override val dataNetworkType =
+        activeRepo
+            .flatMapLatest { it.dataNetworkType }
+            .logDiffsForTable(
+                tableLogBuffer,
+                columnPrefix = "",
+                columnName = "dataNetworkType",
+                initialValue = activeRepo.value.dataNetworkType.value,
+            )
+            .stateIn(
+                scope,
+                SharingStarted.WhileSubscribed(),
+                activeRepo.value.dataNetworkType.value
+            )
 
     class Factory
     @Inject

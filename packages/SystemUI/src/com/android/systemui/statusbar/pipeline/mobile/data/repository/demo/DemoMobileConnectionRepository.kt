@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/*
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 package com.android.systemui.statusbar.pipeline.mobile.data.repository.demo
 
 import android.telephony.CellSignalStrength
@@ -172,6 +178,10 @@ class DemoMobileConnectionRepository(
     override val cdmaRoaming = MutableStateFlow(false)
 
     override val networkName = MutableStateFlow(NetworkNameModel.IntentDerived("demo network"))
+
+    override val lteRsrpLevel = MutableStateFlow(CellSignalStrength.SIGNAL_STRENGTH_NONE_OR_UNKNOWN)
+    override val voiceNetworkType = MutableStateFlow(TelephonyManager.NETWORK_TYPE_UNKNOWN)
+    override val dataNetworkType = MutableStateFlow(TelephonyManager.NETWORK_TYPE_UNKNOWN)
 
     /**
      * Process a new demo mobile event. Note that [resolvedNetworkType] must be passed in separately

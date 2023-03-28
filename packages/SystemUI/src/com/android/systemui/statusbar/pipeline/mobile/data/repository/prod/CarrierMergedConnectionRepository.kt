@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/*
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 package com.android.systemui.statusbar.pipeline.mobile.data.repository.prod
 
 import android.telephony.CellSignalStrength.SIGNAL_STRENGTH_NONE_OR_UNKNOWN
@@ -164,6 +170,10 @@ class CarrierMergedConnectionRepository(
     override val carrierNetworkChangeActive = MutableStateFlow(false).asStateFlow()
 
     override val dataEnabled: StateFlow<Boolean> = wifiRepository.isWifiEnabled
+
+    override val lteRsrpLevel = MutableStateFlow(SIGNAL_STRENGTH_NONE_OR_UNKNOWN)
+    override val voiceNetworkType = MutableStateFlow(TelephonyManager.NETWORK_TYPE_UNKNOWN)
+    override val dataNetworkType = MutableStateFlow(TelephonyManager.NETWORK_TYPE_UNKNOWN)
 
     companion object {
         // Carrier merged is never roaming
