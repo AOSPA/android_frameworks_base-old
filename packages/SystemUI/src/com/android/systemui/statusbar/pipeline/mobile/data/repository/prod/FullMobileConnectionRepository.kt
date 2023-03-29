@@ -329,6 +329,20 @@ class FullMobileConnectionRepository(
                 activeRepo.value.dataNetworkType.value
             )
 
+    override val nrIconType =
+        activeRepo.flatMapLatest { it.nrIconType }
+            .logDiffsForTable(
+                tableLogBuffer,
+                columnPrefix = "",
+                columnName = "nrIconType",
+                initialValue = activeRepo.value.nrIconType.value,
+            )
+            .stateIn(
+                scope,
+                SharingStarted.WhileSubscribed(),
+                activeRepo.value.nrIconType.value
+            )
+
     class Factory
     @Inject
     constructor(

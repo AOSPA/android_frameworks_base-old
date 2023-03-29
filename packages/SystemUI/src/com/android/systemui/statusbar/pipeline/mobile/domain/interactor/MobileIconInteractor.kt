@@ -39,6 +39,7 @@ import com.android.systemui.statusbar.pipeline.mobile.data.model.ResolvedNetwork
 import com.android.systemui.statusbar.pipeline.mobile.data.model.ResolvedNetworkType.OverrideNetworkType
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionRepository
 import com.android.systemui.statusbar.pipeline.shared.data.model.DataActivityModel
+import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -205,6 +206,19 @@ class MobileIconInteractorImpl(
         }
         .stateIn(scope, SharingStarted.WhileSubscribed(), MobileIconCustomizationMode())
 
+    private val mobileIconCustomization: StateFlow<MobileIconCustomizationMode> =
+        combine(
+            signalStrengthCustomization,
+            connectionRepository.nrIconType
+        ) { signalStrengthCustomization, nrIconType ->
+            MobileIconCustomizationMode(
+                dataNetworkType = signalStrengthCustomization.dataNetworkType,
+                voiceNetworkType = signalStrengthCustomization.voiceNetworkType,
+                fiveGServiceState = FiveGServiceState(nrIconType)
+            )
+        }
+        .stateIn(scope, SharingStarted.WhileSubscribed(), MobileIconCustomizationMode())
+
     /** Observable for the current RAT indicator icon ([MobileIconGroup]) */
     override val networkTypeIconGroup: StateFlow<MobileIconGroup> =
         combine(
@@ -212,7 +226,8 @@ class MobileIconInteractorImpl(
                 defaultMobileIconMapping,
                 defaultMobileIconGroup,
                 isDefault,
-            ) { resolvedNetworkType, mapping, defaultGroup, isDefault ->
+                mobileIconCustomization,
+            ) { resolvedNetworkType, mapping, defaultGroup, isDefault, mobileIconCustomization ->
                 if (!isDefault) {
                     return@combine NOT_DEFAULT_DATA
                 }
@@ -220,7 +235,9 @@ class MobileIconInteractorImpl(
                 when (resolvedNetworkType) {
                     is ResolvedNetworkType.CarrierMergedNetworkType ->
                         resolvedNetworkType.iconGroupOverride
-                    else -> mapping[resolvedNetworkType.lookupKey] ?: defaultGroup
+                    else ->
+                        getMobileIconGroup(resolvedNetworkType, mobileIconCustomization, mapping)
+                            ?: defaultGroup
                 }
             }
             .distinctUntilChanged()
@@ -297,5 +314,40 @@ class MobileIconInteractorImpl(
                 || mobileIconCustmization.dataNetworkType == TelephonyManager.NETWORK_TYPE_LTE_CA
                 || mobileIconCustmization.voiceNetworkType == TelephonyManager.NETWORK_TYPE_LTE
                 || mobileIconCustmization.voiceNetworkType == TelephonyManager.NETWORK_TYPE_LTE_CA)
+    }
+
+    private fun getMobileIconGroup(resolvedNetworkType: ResolvedNetworkType,
+                                   customizationInfo: MobileIconCustomizationMode,
+                                   mapping: Map<String, MobileIconGroup>): MobileIconGroup ?{
+        return if (customizationInfo.fiveGServiceState.isNrIconTypeValid) {
+            customizationInfo.fiveGServiceState.iconGroup
+        } else {
+            when (resolvedNetworkType) {
+                is DefaultNetworkType ->
+                    mapping[resolvedNetworkType.lookupKey]
+                is OverrideNetworkType ->
+                    mapping[getLookupKey(resolvedNetworkType, customizationInfo)]
+                else ->
+                    mapping[MobileMappings.toIconKey(customizationInfo.voiceNetworkType)]
+            }
+        }
+    }
+
+    private fun getLookupKey(resolvedNetworkType: ResolvedNetworkType,
+                             customizationInfo: MobileIconCustomizationMode): String {
+        return if (isNsa(resolvedNetworkType.networkType)) {
+            if (customizationInfo.dataNetworkType == TelephonyManager.NETWORK_TYPE_UNKNOWN) {
+                MobileMappings.toIconKey(customizationInfo.voiceNetworkType)
+            }else {
+                MobileMappings.toIconKey(customizationInfo.dataNetworkType)
+            }
+        }else {
+            resolvedNetworkType.lookupKey
+        }
+    }
+
+    private fun isNsa(networkType: Int): Boolean {
+        return networkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA_MMWAVE
+                || networkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA
     }
 }

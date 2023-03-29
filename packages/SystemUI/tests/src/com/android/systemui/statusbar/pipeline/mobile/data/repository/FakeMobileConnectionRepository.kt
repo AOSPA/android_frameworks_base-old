@@ -28,6 +28,7 @@ import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameMode
 import com.android.systemui.statusbar.pipeline.mobile.data.model.ResolvedNetworkType
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionRepository.Companion.DEFAULT_NUM_LEVELS
 import com.android.systemui.statusbar.pipeline.shared.data.model.DataActivityModel
+import com.qti.extphone.NrIconType
 import kotlinx.coroutines.flow.MutableStateFlow
 
 // TODO(b/261632894): remove this in favor of the real impl or DemoMobileConnectionRepository
@@ -62,6 +63,7 @@ class FakeMobileConnectionRepository(
     override val lteRsrpLevel = MutableStateFlow(0)
     override val voiceNetworkType = MutableStateFlow(0)
     override val dataNetworkType = MutableStateFlow(0)
+    override val nrIconType = MutableStateFlow(NrIconType.TYPE_NONE)
 
     fun setDataEnabled(enabled: Boolean) {
         _dataEnabled.value = enabled
