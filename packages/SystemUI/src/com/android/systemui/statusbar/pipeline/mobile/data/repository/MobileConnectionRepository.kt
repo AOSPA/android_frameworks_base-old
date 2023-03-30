@@ -125,6 +125,7 @@ interface MobileConnectionRepository {
     val voiceNetworkType: StateFlow<Int>
     val dataNetworkType: StateFlow<Int>
     val nrIconType: StateFlow<Int>
+    val dataRoamingEnabled: StateFlow<Boolean>
 
     companion object {
         /** The default number of levels to use for [numberOfLevels]. */

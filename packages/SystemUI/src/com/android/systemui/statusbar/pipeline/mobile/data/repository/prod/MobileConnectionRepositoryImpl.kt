@@ -25,6 +25,8 @@ package com.android.systemui.statusbar.pipeline.mobile.data.repository.prod
 
 import android.content.Context
 import android.content.IntentFilter
+import android.database.ContentObserver
+import android.provider.Settings.Global
 import android.telephony.CellSignalStrength.SIGNAL_STRENGTH_GREAT
 import android.telephony.CellSignalStrength.SIGNAL_STRENGTH_GOOD
 import android.telephony.CellSignalStrength.SIGNAL_STRENGTH_MODERATE
@@ -47,9 +49,11 @@ import android.telephony.TelephonyManager.EXTRA_SUBSCRIPTION_ID
 import android.telephony.TelephonyManager.NETWORK_TYPE_UNKNOWN
 import com.android.settingslib.Utils
 import com.android.systemui.broadcast.BroadcastDispatcher
+import com.android.systemui.common.coroutine.ConflatedCallbackFlow.conflatedCallbackFlow
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.log.table.TableLogBuffer
+import com.android.systemui.log.table.logDiffsForTable
 import com.android.systemui.statusbar.pipeline.mobile.data.MobileInputLogger
 import com.android.systemui.statusbar.pipeline.mobile.data.model.DataConnectionState.Disconnected
 import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameModel
@@ -79,6 +83,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
@@ -379,6 +384,36 @@ class MobileConnectionRepositoryImpl(
             .mapNotNull {it.onNrIconTypeChanged }
             .map { it.nrIconType}
             .stateIn(scope, SharingStarted.WhileSubscribed(), NrIconType.TYPE_NONE)
+
+    private val dataRoamingSettingChangedEvent: Flow<Unit> = conflatedCallbackFlow {
+        val observer =
+            object : ContentObserver(null) {
+                override fun onChange(selfChange: Boolean) {
+                    trySend(Unit)
+                }
+            }
+
+        context.contentResolver.registerContentObserver(
+            Global.getUriFor("${Global.DATA_ROAMING}$subId"),
+            true,
+            observer)
+
+        awaitClose { context.contentResolver.unregisterContentObserver(observer) }
+    }
+
+    override val dataRoamingEnabled: StateFlow<Boolean> = run {
+        val initial = telephonyManager.isDataRoamingEnabled
+        dataRoamingSettingChangedEvent
+            .mapLatest { telephonyManager.isDataRoamingEnabled }
+            .distinctUntilChanged()
+            .logDiffsForTable(
+                    tableLogBuffer,
+                    columnPrefix = "",
+                    columnName = "dataRoamingEnabled",
+                    initialValue = initial,
+            )
+            .stateIn(scope, SharingStarted.WhileSubscribed(), initial)
+    }
 
     private fun getSlotIndex(subId: Int): Int {
         var subscriptionManager: SubscriptionManager =

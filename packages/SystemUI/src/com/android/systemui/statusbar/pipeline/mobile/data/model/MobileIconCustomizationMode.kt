@@ -14,5 +14,13 @@ data class MobileIconCustomizationMode(
     val lteRsrpLevel: Int = SIGNAL_STRENGTH_NONE_OR_UNKNOWN,
     val dataNetworkType: Int = NETWORK_TYPE_UNKNOWN,
     val voiceNetworkType: Int = NETWORK_TYPE_UNKNOWN,
-    val fiveGServiceState: FiveGServiceState = FiveGServiceState()
+    val fiveGServiceState: FiveGServiceState = FiveGServiceState(),
+    val isRatCustomization: Boolean = false,
+    val alwaysShowNetworkTypeIcon: Boolean = false,
+    val ddsRatIconEnhancementEnabled: Boolean = false,
+    val nonDdsRatIconEnhancementEnabled: Boolean = false,
+    val mobileDataEnabled: Boolean = false,
+    val dataRoamingEnabled: Boolean = false,
+    val isDefaultDataSub: Boolean = false,
+    val isRoaming: Boolean = false,
 )

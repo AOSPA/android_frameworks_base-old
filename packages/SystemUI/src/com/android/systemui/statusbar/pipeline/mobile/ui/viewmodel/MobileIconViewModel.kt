@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/*
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 package com.android.systemui.statusbar.pipeline.mobile.ui.viewmodel
 
 import com.android.settingslib.AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH
@@ -23,6 +29,7 @@ import com.android.systemui.common.shared.model.ContentDescription
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.log.table.logDiffsForTable
 import com.android.systemui.statusbar.pipeline.airplane.domain.interactor.AirplaneModeInteractor
+import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileIconCustomizationMode
 import com.android.systemui.statusbar.pipeline.mobile.domain.interactor.MobileIconInteractor
 import com.android.systemui.statusbar.pipeline.mobile.domain.interactor.MobileIconsInteractor
 import com.android.systemui.statusbar.pipeline.mobile.ui.model.SignalIconModel
@@ -170,13 +177,21 @@ constructor(
         combine(
                 iconInteractor.networkTypeIconGroup,
                 showNetworkTypeIcon,
-            ) { networkTypeIconGroup, shouldShow ->
+                iconInteractor.networkTypeIconCustomization,
+            ) { networkTypeIconGroup, shouldShow, networkTypeIconCustomization ->
                 val desc =
                     if (networkTypeIconGroup.dataContentDescription != 0)
                         ContentDescription.Resource(networkTypeIconGroup.dataContentDescription)
                     else null
                 val icon = Icon.Resource(networkTypeIconGroup.dataType, desc)
                 return@combine when {
+                    networkTypeIconCustomization.isRatCustomization -> {
+                        if (shouldShowNetworkTypeIcon(networkTypeIconCustomization)) {
+                            icon
+                        } else {
+                            null
+                        }
+                    }
                     !shouldShow -> null
                     else -> icon
                 }
@@ -236,4 +251,11 @@ constructor(
                 initialValue = false,
             )
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
+
+    private fun shouldShowNetworkTypeIcon(mode: MobileIconCustomizationMode): Boolean {
+        return (mode.alwaysShowNetworkTypeIcon
+            || mode.ddsRatIconEnhancementEnabled && mode.isDefaultDataSub
+            || mode.nonDdsRatIconEnhancementEnabled
+                && mode.mobileDataEnabled && (mode.dataRoamingEnabled || !mode.isRoaming))
+    }
 }
