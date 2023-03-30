@@ -130,6 +130,7 @@ interface MobileConnectionRepository {
     val voiceCapable: StateFlow<Boolean>
     val videoCapable: StateFlow<Boolean>
     val imsRegistered: StateFlow<Boolean>
+    val imsRegistrationTech: StateFlow<Int>
 
     companion object {
         /** The default number of levels to use for [numberOfLevels]. */

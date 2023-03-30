@@ -77,6 +77,7 @@ class MobileIconInteractorTest : SysuiTestCase() {
                 mobileIconsInteractor.hideNoInternetState,
                 mobileIconsInteractor.networkTypeIconCustomization,
                 mobileIconsInteractor.showVolteIcon,
+                mobileIconsInteractor.showVowifiIcon,
             )
     }
 

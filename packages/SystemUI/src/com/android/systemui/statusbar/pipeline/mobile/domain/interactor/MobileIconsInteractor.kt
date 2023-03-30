@@ -117,6 +117,8 @@ interface MobileIconsInteractor {
     val networkTypeIconCustomization: StateFlow<MobileIconCustomizationMode>
 
     val showVolteIcon: StateFlow<Boolean>
+
+    val showVowifiIcon: StateFlow<Boolean>
 }
 
 @Suppress("EXPERIMENTAL_IS_NOT_ENABLED")
@@ -342,6 +344,11 @@ constructor(
             .mapLatest { it.showVolteIcon }
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
+    override val showVowifiIcon: StateFlow<Boolean> =
+        mobileConnectionsRepo.defaultDataSubRatConfig
+            .mapLatest { it.showVowifiIcon }
+            .stateIn(scope, SharingStarted.WhileSubscribed(), false)
+
     /** Vends out new [MobileIconInteractor] for a particular subId */
     override fun createMobileConnectionInteractorForSubId(subId: Int): MobileIconInteractor =
         MobileIconInteractorImpl(
@@ -360,6 +367,7 @@ constructor(
             hideNoInternetState,
             networkTypeIconCustomization,
             showVolteIcon,
+            showVowifiIcon,
         )
 
     companion object {

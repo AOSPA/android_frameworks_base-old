@@ -408,6 +408,20 @@ class FullMobileConnectionRepository(
                 activeRepo.value.imsRegistered.value
             )
 
+    override val imsRegistrationTech =
+        activeRepo.flatMapLatest { it.imsRegistrationTech }
+            .logDiffsForTable(
+                tableLogBuffer,
+                columnPrefix = "",
+                columnName = "imsRegistrationTech",
+                initialValue = activeRepo.value.imsRegistrationTech.value,
+            )
+            .stateIn(
+                scope,
+                SharingStarted.WhileSubscribed(),
+                activeRepo.value.imsRegistrationTech.value
+            )
+
     class Factory
     @Inject
     constructor(

@@ -93,6 +93,9 @@ class FakeMobileIconsInteractor(
 
     private val _showVolteIcon = MutableStateFlow(false)
     override val showVolteIcon = _showVolteIcon
+
+    private val _showVowifiIcon = MutableStateFlow(false)
+    override val showVowifiIcon = _showVowifiIcon
     /** Always returns a new fake interactor */
     override fun createMobileConnectionInteractorForSubId(subId: Int): MobileIconInteractor {
         return FakeMobileIconInteractor(tableLogBuffer)

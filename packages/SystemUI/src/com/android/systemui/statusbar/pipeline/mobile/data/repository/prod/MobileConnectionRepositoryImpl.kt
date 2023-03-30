@@ -41,6 +41,7 @@ import android.telephony.ims.ImsRegistrationAttributes
 import android.telephony.ims.ImsStateCallback
 import android.telephony.ims.feature.MmTelFeature.MmTelCapabilities
 import android.telephony.ims.RegistrationManager
+import android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_NONE
 import android.telephony.ServiceState
 import android.telephony.SignalStrength
 import android.telephony.SubscriptionInfo
@@ -486,14 +487,19 @@ class MobileConnectionRepositoryImpl(
     override val imsRegistered: MutableStateFlow<Boolean> =
         MutableStateFlow<Boolean>(false)
 
+    override val imsRegistrationTech: MutableStateFlow<Int> =
+        MutableStateFlow<Int>(REGISTRATION_TECH_NONE)
+
     private val registrationCallback =
         object : RegistrationManager.RegistrationCallback() {
             override fun onRegistered(attributes: ImsRegistrationAttributes) {
                 imsRegistered.value = true
+                imsRegistrationTech.value = attributes.getRegistrationTechnology()
             }
 
             override fun onUnregistered(info: ImsReasonInfo) {
                 imsRegistered.value = false
+                imsRegistrationTech.value = REGISTRATION_TECH_NONE
             }
         }
 
