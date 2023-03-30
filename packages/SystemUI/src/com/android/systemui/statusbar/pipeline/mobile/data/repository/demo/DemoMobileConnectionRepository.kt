@@ -185,6 +185,10 @@ class DemoMobileConnectionRepository(
     override val dataNetworkType = MutableStateFlow(TelephonyManager.NETWORK_TYPE_UNKNOWN)
     override val nrIconType = MutableStateFlow(NrIconType.TYPE_NONE)
     override val dataRoamingEnabled = MutableStateFlow(true)
+    override val originNetworkType = MutableStateFlow(TelephonyManager.NETWORK_TYPE_UNKNOWN)
+    override val voiceCapable = MutableStateFlow(false)
+    override val videoCapable = MutableStateFlow(false)
+    override val imsRegistered = MutableStateFlow(false)
 
     /**
      * Process a new demo mobile event. Note that [resolvedNetworkType] must be passed in separately

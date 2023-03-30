@@ -89,6 +89,12 @@ class FakeMobileIconInteractor(
     private val _networkTypeIconCustomization = MutableStateFlow(MobileIconCustomizationMode())
     override val networkTypeIconCustomization = _networkTypeIconCustomization
 
+    private val _showVolteIcon = MutableStateFlow(false)
+    override val showVolteIcon = _showVolteIcon
+
+    private val _imsInfo = MutableStateFlow(MobileIconCustomizationMode())
+    override val imsInfo = _imsInfo
+
     fun setIconGroup(group: SignalIcon.MobileIconGroup) {
         _iconGroup.value = group
     }

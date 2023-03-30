@@ -177,6 +177,10 @@ class CarrierMergedConnectionRepository(
     override val dataNetworkType = MutableStateFlow(TelephonyManager.NETWORK_TYPE_UNKNOWN)
     override val nrIconType = MutableStateFlow(NrIconType.TYPE_NONE)
     override val dataRoamingEnabled = MutableStateFlow(true).asStateFlow()
+    override val originNetworkType = MutableStateFlow(TelephonyManager.NETWORK_TYPE_UNKNOWN)
+    override val voiceCapable = MutableStateFlow(false)
+    override val videoCapable = MutableStateFlow(false)
+    override val imsRegistered = MutableStateFlow(false)
 
     companion object {
         // Carrier merged is never roaming

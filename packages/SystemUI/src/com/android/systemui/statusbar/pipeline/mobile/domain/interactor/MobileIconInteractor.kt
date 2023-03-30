@@ -137,6 +137,10 @@ interface MobileIconInteractor {
     val hideNoInternetState: StateFlow<Boolean>
 
     val networkTypeIconCustomization: StateFlow<MobileIconCustomizationMode>
+
+    val imsInfo: StateFlow<MobileIconCustomizationMode>
+
+    val showVolteIcon: StateFlow<Boolean>
 }
 
 /** Interactor for a single mobile connection. This connection _should_ have one subscription ID */
@@ -157,6 +161,7 @@ class MobileIconInteractorImpl(
     override val alwaysUseRsrpLevelForLte: StateFlow<Boolean>,
     override val hideNoInternetState: StateFlow<Boolean>,
     networkTypeIconCustomizationFlow: StateFlow<MobileIconCustomizationMode>,
+    override val showVolteIcon: StateFlow<Boolean>,
 ) : MobileIconInteractor {
     override val tableLogBuffer: TableLogBuffer = connectionRepository.tableLogBuffer
 
@@ -267,6 +272,24 @@ class MobileIconInteractorImpl(
                 dataRoamingEnabled = networkTypeIconCustomization.dataRoamingEnabled,
                 isDefaultDataSub = networkTypeIconCustomization.isDefaultDataSub,
                 isRoaming = networkTypeIconCustomization.isRoaming
+            )
+        }
+        .stateIn(scope, SharingStarted.WhileSubscribed(), MobileIconCustomizationMode())
+
+    override val imsInfo: StateFlow<MobileIconCustomizationMode> =
+        combine(
+            connectionRepository.voiceNetworkType,
+            connectionRepository.originNetworkType,
+            connectionRepository.voiceCapable,
+            connectionRepository.videoCapable,
+            connectionRepository.imsRegistered,
+        ) { voiceNetworkType, originNetworkType, voiceCapable, videoCapable, imsRegistered->
+            MobileIconCustomizationMode(
+                voiceNetworkType = voiceNetworkType,
+                originNetworkType = originNetworkType,
+                voiceCapable = voiceCapable,
+                videoCapable = videoCapable,
+                imsRegistered = imsRegistered,
             )
         }
         .stateIn(scope, SharingStarted.WhileSubscribed(), MobileIconCustomizationMode())

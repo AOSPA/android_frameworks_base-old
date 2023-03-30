@@ -352,6 +352,62 @@ class FullMobileConnectionRepository(
                 activeRepo.value.dataRoamingEnabled.value
             )
 
+    override val originNetworkType =
+        activeRepo.flatMapLatest { it.originNetworkType }
+            .logDiffsForTable(
+                tableLogBuffer,
+                columnPrefix = "",
+                columnName = "originNetworkType",
+                initialValue = activeRepo.value.originNetworkType.value,
+            )
+            .stateIn(
+                scope,
+                SharingStarted.WhileSubscribed(),
+                activeRepo.value.originNetworkType.value
+            )
+
+    override val voiceCapable =
+        activeRepo.flatMapLatest { it.voiceCapable }
+            .logDiffsForTable(
+                tableLogBuffer,
+                columnPrefix = "",
+                columnName = "voiceCapable",
+                initialValue = activeRepo.value.voiceCapable.value,
+            )
+            .stateIn(
+                scope,
+                SharingStarted.WhileSubscribed(),
+                activeRepo.value.voiceCapable.value
+            )
+
+    override val videoCapable =
+        activeRepo.flatMapLatest { it.videoCapable }
+            .logDiffsForTable(
+                tableLogBuffer,
+                columnPrefix = "",
+                columnName = "videoCapable",
+                initialValue = activeRepo.value.videoCapable.value,
+            )
+            .stateIn(
+                scope,
+                SharingStarted.WhileSubscribed(),
+                activeRepo.value.videoCapable.value
+            )
+
+    override val imsRegistered =
+        activeRepo.flatMapLatest { it.imsRegistered }
+            .logDiffsForTable(
+                tableLogBuffer,
+                columnPrefix = "",
+                columnName = "imsRegistered",
+                initialValue = activeRepo.value.imsRegistered.value,
+            )
+            .stateIn(
+                scope,
+                SharingStarted.WhileSubscribed(),
+                activeRepo.value.imsRegistered.value
+            )
+
     class Factory
     @Inject
     constructor(
