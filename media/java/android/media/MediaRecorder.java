@@ -678,6 +678,8 @@ public class MediaRecorder implements AudioRouting,
         public static final int VORBIS = 6;
         /** Opus audio codec */
         public static final int OPUS = 7;
+        /** High Efficiency AAC with Parametric Stereo coding (HE-AAC v2, object type PS) */
+        public static final int HE_AAC_PS = 8;
         /** @hide EVRC audio codec */
         public static final int EVRC = 10;
         /** @hide QCELP audio codec */
@@ -688,6 +690,7 @@ public class MediaRecorder implements AudioRouting,
         public static final int MPEGH = 13;
         /** @hide High Efficiency AAC V2 (HE-AAC V2) audio codec */
         public static final int HE_AAC_V2 = 14;
+
     }
 
     /**
@@ -699,6 +702,7 @@ public class MediaRecorder implements AudioRouting,
         AudioEncoder.AMR_WB,
         AudioEncoder.AAC,
         AudioEncoder.HE_AAC,
+        AudioEncoder.HE_AAC_PS,
         AudioEncoder.AAC_ELD,
         AudioEncoder.VORBIS,
         AudioEncoder.OPUS,
