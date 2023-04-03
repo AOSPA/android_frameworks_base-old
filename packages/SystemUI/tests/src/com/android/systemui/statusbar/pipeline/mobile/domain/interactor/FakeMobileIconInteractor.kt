@@ -14,12 +14,19 @@
  * limitations under the License.
  */
 
+/*
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 package com.android.systemui.statusbar.pipeline.mobile.domain.interactor
 
 import android.telephony.CellSignalStrength
 import com.android.settingslib.SignalIcon
 import com.android.settingslib.mobile.TelephonyIcons
 import com.android.systemui.log.table.TableLogBuffer
+import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileIconCustomizationMode
 import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameModel
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionRepository.Companion.DEFAULT_NUM_LEVELS
 import com.android.systemui.statusbar.pipeline.shared.data.model.DataActivityModel
@@ -78,6 +85,21 @@ class FakeMobileIconInteractor(
 
     private val _hideNoInternetState = MutableStateFlow(false)
     override val hideNoInternetState = _hideNoInternetState
+
+    private val _networkTypeIconCustomization = MutableStateFlow(MobileIconCustomizationMode())
+    override val networkTypeIconCustomization = _networkTypeIconCustomization
+
+    private val _showVolteIcon = MutableStateFlow(false)
+    override val showVolteIcon = _showVolteIcon
+
+    private val _imsInfo = MutableStateFlow(MobileIconCustomizationMode())
+    override val imsInfo = _imsInfo
+
+    private val _showVowifiIcon = MutableStateFlow(false)
+    override val showVowifiIcon = _showVowifiIcon
+
+    private val _voWifiAvailable = MutableStateFlow(false)
+    override val voWifiAvailable = _voWifiAvailable
 
     fun setIconGroup(group: SignalIcon.MobileIconGroup) {
         _iconGroup.value = group

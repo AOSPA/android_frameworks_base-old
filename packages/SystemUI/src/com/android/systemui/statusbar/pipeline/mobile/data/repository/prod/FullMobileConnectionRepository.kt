@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/*
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 package com.android.systemui.statusbar.pipeline.mobile.data.repository.prod
 
 import androidx.annotation.VisibleForTesting
@@ -281,6 +287,140 @@ class FullMobileConnectionRepository(
                 initialValue = activeRepo.value.networkName.value,
             )
             .stateIn(scope, SharingStarted.WhileSubscribed(), activeRepo.value.networkName.value)
+
+    override val lteRsrpLevel =
+        activeRepo
+            .flatMapLatest { it.lteRsrpLevel }
+            .logDiffsForTable(
+                tableLogBuffer,
+                columnPrefix = "",
+                columnName = "lteRsrpLevel",
+                initialValue = activeRepo.value.lteRsrpLevel.value,
+            )
+            .stateIn(scope, SharingStarted.WhileSubscribed(), activeRepo.value.lteRsrpLevel.value)
+
+    override val voiceNetworkType =
+        activeRepo
+            .flatMapLatest { it.voiceNetworkType }
+            .logDiffsForTable(
+                tableLogBuffer,
+                columnPrefix = "",
+                columnName = "voiceNetworkType",
+                initialValue = activeRepo.value.voiceNetworkType.value,
+            )
+            .stateIn(
+                scope,
+                SharingStarted.WhileSubscribed(),
+                activeRepo.value.voiceNetworkType.value
+            )
+
+    override val dataNetworkType =
+        activeRepo
+            .flatMapLatest { it.dataNetworkType }
+            .logDiffsForTable(
+                tableLogBuffer,
+                columnPrefix = "",
+                columnName = "dataNetworkType",
+                initialValue = activeRepo.value.dataNetworkType.value,
+            )
+            .stateIn(
+                scope,
+                SharingStarted.WhileSubscribed(),
+                activeRepo.value.dataNetworkType.value
+            )
+
+    override val nrIconType =
+        activeRepo.flatMapLatest { it.nrIconType }
+            .logDiffsForTable(
+                tableLogBuffer,
+                columnPrefix = "",
+                columnName = "nrIconType",
+                initialValue = activeRepo.value.nrIconType.value,
+            )
+            .stateIn(
+                scope,
+                SharingStarted.WhileSubscribed(),
+                activeRepo.value.nrIconType.value
+            )
+
+    override val dataRoamingEnabled =
+        activeRepo
+            .flatMapLatest { it.dataRoamingEnabled }
+            .stateIn(
+                scope,
+                SharingStarted.WhileSubscribed(),
+                activeRepo.value.dataRoamingEnabled.value
+            )
+
+    override val originNetworkType =
+        activeRepo.flatMapLatest { it.originNetworkType }
+            .logDiffsForTable(
+                tableLogBuffer,
+                columnPrefix = "",
+                columnName = "originNetworkType",
+                initialValue = activeRepo.value.originNetworkType.value,
+            )
+            .stateIn(
+                scope,
+                SharingStarted.WhileSubscribed(),
+                activeRepo.value.originNetworkType.value
+            )
+
+    override val voiceCapable =
+        activeRepo.flatMapLatest { it.voiceCapable }
+            .logDiffsForTable(
+                tableLogBuffer,
+                columnPrefix = "",
+                columnName = "voiceCapable",
+                initialValue = activeRepo.value.voiceCapable.value,
+            )
+            .stateIn(
+                scope,
+                SharingStarted.WhileSubscribed(),
+                activeRepo.value.voiceCapable.value
+            )
+
+    override val videoCapable =
+        activeRepo.flatMapLatest { it.videoCapable }
+            .logDiffsForTable(
+                tableLogBuffer,
+                columnPrefix = "",
+                columnName = "videoCapable",
+                initialValue = activeRepo.value.videoCapable.value,
+            )
+            .stateIn(
+                scope,
+                SharingStarted.WhileSubscribed(),
+                activeRepo.value.videoCapable.value
+            )
+
+    override val imsRegistered =
+        activeRepo.flatMapLatest { it.imsRegistered }
+            .logDiffsForTable(
+                tableLogBuffer,
+                columnPrefix = "",
+                columnName = "imsRegistered",
+                initialValue = activeRepo.value.imsRegistered.value,
+            )
+            .stateIn(
+                scope,
+                SharingStarted.WhileSubscribed(),
+                activeRepo.value.imsRegistered.value
+            )
+
+    override val imsRegistrationTech =
+        activeRepo.flatMapLatest { it.imsRegistrationTech }
+            .logDiffsForTable(
+                tableLogBuffer,
+                columnPrefix = "",
+                columnName = "imsRegistrationTech",
+                initialValue = activeRepo.value.imsRegistrationTech.value,
+            )
+            .stateIn(
+                scope,
+                SharingStarted.WhileSubscribed(),
+                activeRepo.value.imsRegistrationTech.value
+            )
 
     class Factory
     @Inject

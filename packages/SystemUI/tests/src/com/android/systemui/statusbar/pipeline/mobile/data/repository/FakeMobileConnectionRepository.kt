@@ -14,14 +14,22 @@
  * limitations under the License.
  */
 
+/*
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 package com.android.systemui.statusbar.pipeline.mobile.data.repository
 
+import android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_NONE
 import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.statusbar.pipeline.mobile.data.model.DataConnectionState
 import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.ResolvedNetworkType
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionRepository.Companion.DEFAULT_NUM_LEVELS
 import com.android.systemui.statusbar.pipeline.shared.data.model.DataActivityModel
+import com.qti.extphone.NrIconType
 import kotlinx.coroutines.flow.MutableStateFlow
 
 // TODO(b/261632894): remove this in favor of the real impl or DemoMobileConnectionRepository
@@ -52,6 +60,17 @@ class FakeMobileConnectionRepository(
 
     override val networkName =
         MutableStateFlow<NetworkNameModel>(NetworkNameModel.Default("default"))
+
+    override val lteRsrpLevel = MutableStateFlow(0)
+    override val voiceNetworkType = MutableStateFlow(0)
+    override val dataNetworkType = MutableStateFlow(0)
+    override val nrIconType = MutableStateFlow(NrIconType.TYPE_NONE)
+    override val dataRoamingEnabled = MutableStateFlow(true)
+    override val originNetworkType = MutableStateFlow(0)
+    override val voiceCapable = MutableStateFlow(false)
+    override val videoCapable = MutableStateFlow(false)
+    override val imsRegistered = MutableStateFlow(false)
+    override val imsRegistrationTech = MutableStateFlow(REGISTRATION_TECH_NONE)
 
     fun setDataEnabled(enabled: Boolean) {
         _dataEnabled.value = enabled
