@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/*
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 package com.android.systemui.statusbar.pipeline.mobile.domain.interactor
 
 import android.telephony.TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_LTE_ADVANCED_PRO
@@ -85,6 +91,11 @@ class FakeMobileIconsInteractor(
     private val _networkTypeIconCustomization = MutableStateFlow(MobileIconCustomizationMode())
     override val networkTypeIconCustomization = _networkTypeIconCustomization
 
+    private val _showVolteIcon = MutableStateFlow(false)
+    override val showVolteIcon = _showVolteIcon
+
+    private val _showVowifiIcon = MutableStateFlow(false)
+    override val showVowifiIcon = _showVowifiIcon
     /** Always returns a new fake interactor */
     override fun createMobileConnectionInteractorForSubId(subId: Int): MobileIconInteractor {
         return FakeMobileIconInteractor(tableLogBuffer)

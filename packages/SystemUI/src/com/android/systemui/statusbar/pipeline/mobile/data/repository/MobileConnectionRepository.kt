@@ -126,6 +126,11 @@ interface MobileConnectionRepository {
     val dataNetworkType: StateFlow<Int>
     val nrIconType: StateFlow<Int>
     val dataRoamingEnabled: StateFlow<Boolean>
+    val originNetworkType: StateFlow<Int>
+    val voiceCapable: StateFlow<Boolean>
+    val videoCapable: StateFlow<Boolean>
+    val imsRegistered: StateFlow<Boolean>
+    val imsRegistrationTech: StateFlow<Int>
 
     companion object {
         /** The default number of levels to use for [numberOfLevels]. */

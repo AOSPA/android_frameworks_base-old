@@ -23,6 +23,7 @@
 package com.android.systemui.statusbar.pipeline.mobile.data.repository.demo
 
 import android.telephony.CellSignalStrength
+import android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_NONE
 import android.telephony.TelephonyManager
 import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.log.table.logDiffsForTable
@@ -185,6 +186,11 @@ class DemoMobileConnectionRepository(
     override val dataNetworkType = MutableStateFlow(TelephonyManager.NETWORK_TYPE_UNKNOWN)
     override val nrIconType = MutableStateFlow(NrIconType.TYPE_NONE)
     override val dataRoamingEnabled = MutableStateFlow(true)
+    override val originNetworkType = MutableStateFlow(TelephonyManager.NETWORK_TYPE_UNKNOWN)
+    override val voiceCapable = MutableStateFlow(false)
+    override val videoCapable = MutableStateFlow(false)
+    override val imsRegistered = MutableStateFlow(false)
+    override val imsRegistrationTech = MutableStateFlow(REGISTRATION_TECH_NONE)
 
     /**
      * Process a new demo mobile event. Note that [resolvedNetworkType] must be passed in separately
