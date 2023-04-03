@@ -33,6 +33,7 @@ import android.view.Surface;
 import android.view.SurfaceControl;
 
 import com.android.server.display.layout.Layout;
+import com.android.server.display.mode.DisplayModeDirector;
 import com.android.server.wm.utils.InsetUtils;
 
 import java.io.PrintWriter;
@@ -188,7 +189,7 @@ final class LogicalDisplay {
         mTempFrameRateOverride = new SparseArray<>();
         mIsEnabled = true;
         mIsInTransition = false;
-        mBrightnessThrottlingDataId = DisplayDeviceConfig.DEFAULT_BRIGHTNESS_THROTTLING_DATA_ID;
+        mBrightnessThrottlingDataId = DisplayDeviceConfig.DEFAULT_ID;
     }
 
     public void setDevicePositionLocked(int position) {
@@ -327,6 +328,34 @@ final class LogicalDisplay {
         if (groupId != mDisplayGroupId) {
             mDisplayGroupId = groupId;
             mBaseDisplayInfo.displayGroupId = groupId;
+            mInfo.set(null);
+        }
+    }
+
+    /**
+     * Updates layoutLimitedRefreshRate
+     *
+     * @param layoutLimitedRefreshRate refresh rate limited by layout or null.
+     */
+    public void updateLayoutLimitedRefreshRateLocked(
+            @Nullable SurfaceControl.RefreshRateRange layoutLimitedRefreshRate) {
+        if (!Objects.equals(layoutLimitedRefreshRate, mBaseDisplayInfo.layoutLimitedRefreshRate)) {
+            mBaseDisplayInfo.layoutLimitedRefreshRate = layoutLimitedRefreshRate;
+            mInfo.set(null);
+        }
+    }
+    /**
+     * Updates refreshRateThermalThrottling
+     *
+     * @param refreshRanges new refreshRateThermalThrottling ranges limited by layout or default
+     */
+    public void updateRefreshRateThermalThrottling(
+            @Nullable SparseArray<SurfaceControl.RefreshRateRange> refreshRanges) {
+        if (refreshRanges == null) {
+            refreshRanges = new SparseArray<>();
+        }
+        if (!mBaseDisplayInfo.refreshRateThermalThrottling.contentEquals(refreshRanges)) {
+            mBaseDisplayInfo.refreshRateThermalThrottling = refreshRanges;
             mInfo.set(null);
         }
     }
@@ -558,7 +587,7 @@ final class LogicalDisplay {
             DisplayDevice device,
             boolean isBlanked) {
         // Set the layer stack.
-        device.setLayerStackLocked(t, isBlanked ? BLANK_LAYER_STACK : mLayerStack);
+        device.setLayerStackLocked(t, isBlanked ? BLANK_LAYER_STACK : mLayerStack, mDisplayId);
         // Also inform whether the device is the same one sent to inputflinger for its layerstack.
         // Prevent displays that are disabled from receiving input.
         // TODO(b/188914255): Remove once input can dispatch against device vs layerstack.

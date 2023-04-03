@@ -59,13 +59,10 @@ object Flags {
         )
 
     // TODO(b/254512517): Tracking Bug
-    val FSI_REQUIRES_KEYGUARD = unreleasedFlag(110, "fsi_requires_keyguard", teamfood = true)
+    val FSI_REQUIRES_KEYGUARD = releasedFlag(110, "fsi_requires_keyguard")
 
     // TODO(b/259130119): Tracking Bug
-    val FSI_ON_DND_UPDATE = unreleasedFlag(259130119, "fsi_on_dnd_update", teamfood = true)
-
-    // TODO(b/265804648): Tracking Bug
-    @JvmField val DISABLE_FSI = unreleasedFlag(265804648, "disable_fsi")
+    val FSI_ON_DND_UPDATE = releasedFlag(259130119, "fsi_on_dnd_update")
 
     // TODO(b/254512538): Tracking Bug
     val INSTANT_VOICE_REPLY = releasedFlag(111, "instant_voice_reply")
@@ -74,8 +71,12 @@ object Flags {
     val NOTIFICATION_MEMORY_MONITOR_ENABLED =
         releasedFlag(112, "notification_memory_monitor_enabled")
 
+    /**
+     * This flag is server-controlled and should stay as [unreleasedFlag] since we never want to
+     * enable it on release builds.
+     */
     val NOTIFICATION_MEMORY_LOGGING_ENABLED =
-        unreleasedFlag(119, "notification_memory_logging_enabled", teamfood = true)
+        unreleasedFlag(119, "notification_memory_logging_enabled")
 
     // TODO(b/254512731): Tracking Bug
     @JvmField val NOTIFICATION_DISMISSAL_FADE = releasedFlag(113, "notification_dismissal_fade")
@@ -87,9 +88,6 @@ object Flags {
     val NOTIFICATION_GROUP_DISMISSAL_ANIMATION =
         releasedFlag(259217907, "notification_group_dismissal_animation")
 
-    // TODO(b/257506350): Tracking Bug
-    @JvmField val FSI_CHROME = unreleasedFlag(117, "fsi_chrome")
-
     @JvmField
     val SIMPLIFIED_APPEAR_FRACTION =
         unreleasedFlag(259395680, "simplified_appear_fraction", teamfood = true)
@@ -100,7 +98,7 @@ object Flags {
     // TODO(b/260335638): Tracking Bug
     @JvmField
     val NOTIFICATION_INLINE_REPLY_ANIMATION =
-        unreleasedFlag(174148361, "notification_inline_reply_animation", teamfood = true)
+        releasedFlag(174148361, "notification_inline_reply_animation")
 
     val FILTER_UNSEEN_NOTIFS_ON_KEYGUARD =
         releasedFlag(254647461, "filter_unseen_notifs_on_keyguard", teamfood = true)
@@ -109,6 +107,13 @@ object Flags {
     @JvmField
     val NOTIFICATION_ANIMATE_BIG_PICTURE =
         releasedFlag(120, "notification_animate_big_picture", teamfood = true)
+
+    @JvmField
+    val ANIMATED_NOTIFICATION_SHADE_INSETS =
+        unreleasedFlag(270682168, "animated_notification_shade_insets", teamfood = true)
+
+    // TODO(b/268005230): Tracking Bug
+    @JvmField val SENSITIVE_REVEAL_ANIM = unreleasedFlag(268005230, "sensitive_reveal_anim")
 
     // 200 - keyguard/lockscreen
     // ** Flag retired **
@@ -155,7 +160,7 @@ object Flags {
     // TODO(b/255618149): Tracking Bug
     @JvmField
     val CUSTOMIZABLE_LOCK_SCREEN_QUICK_AFFORDANCES =
-        unreleasedFlag(216, "customizable_lock_screen_quick_affordances", teamfood = true)
+        releasedFlag(216, "customizable_lock_screen_quick_affordances")
 
     /** Shows chipbar UI whenever the device is unlocked by ActiveUnlock (watch). */
     // TODO(b/256513609): Tracking Bug
@@ -187,11 +192,7 @@ object Flags {
 
     // TODO(b/262780002): Tracking Bug
     @JvmField
-    val REVAMPED_WALLPAPER_UI = unreleasedFlag(222, "revamped_wallpaper_ui", teamfood = false)
-
-    /** A different path for unocclusion transitions back to keyguard */
-    // TODO(b/262859270): Tracking Bug
-    @JvmField val UNOCCLUSION_TRANSITION = releasedFlag(223, "unocclusion_transition")
+    val REVAMPED_WALLPAPER_UI = releasedFlag(222, "revamped_wallpaper_ui")
 
     // flag for controlling auto pin confirmation and material u shapes in bouncer
     @JvmField
@@ -214,9 +215,9 @@ object Flags {
     // TODO(b/266242192): Tracking Bug
     @JvmField
     val LOCK_SCREEN_LONG_PRESS_ENABLED =
-        unreleasedFlag(
+        releasedFlag(
             228,
-            "lock_screen_long_press_enabled",
+            "lock_screen_long_press_enabled"
         )
 
     // 300 - power menu
@@ -234,10 +235,12 @@ object Flags {
     val SMARTSPACE_DATE_WEATHER_DECOUPLED =
         sysPropBooleanFlag(403, "persist.sysui.ss.dw_decoupled", default = true)
 
+    // TODO(b/270223352): Tracking Bug
+    @JvmField
+    val HIDE_SMARTSPACE_ON_DREAM_OVERLAY = unreleasedFlag(404, "hide_smartspace_on_dream_overlay")
+
     // 500 - quick settings
 
-    // TODO(b/254512321): Tracking Bug
-    @JvmField val COMBINED_QS_HEADERS = releasedFlag(501, "combined_qs_headers")
     val PEOPLE_TILE = resourceBooleanFlag(502, R.bool.flag_conversations, "people_tile")
 
     @JvmField
@@ -247,6 +250,9 @@ object Flags {
             R.bool.flag_lockscreen_qs_user_detail_shortcut,
             "qs_user_detail_shortcut"
         )
+
+    @JvmField
+    val QS_PIPELINE_NEW_HOST = unreleasedFlag(504, "qs_pipeline_new_host", teamfood = false)
 
     // TODO(b/254512383): Tracking Bug
     @JvmField
@@ -259,6 +265,17 @@ object Flags {
 
     // TODO(b/244064524): Tracking Bug
     @JvmField val QS_SECONDARY_DATA_SUB_INFO = releasedFlag(508, "qs_secondary_data_sub_info")
+
+    /** Enables Font Scaling Quick Settings tile */
+    // TODO(b/269341316): Tracking Bug
+    @JvmField
+    val ENABLE_FONT_SCALING_TILE = unreleasedFlag(509, "enable_font_scaling_tile", teamfood = false)
+
+    /** Enables new QS Edit Mode visual refresh */
+    // TODO(b/269787742): Tracking Bug
+    @JvmField
+    val ENABLE_NEW_QS_EDIT_MODE =
+        unreleasedFlag(510, "enable_new_qs_edit_mode", teamfood = false)
 
     // 600- status bar
 
@@ -284,6 +301,9 @@ object Flags {
     // TODO(b/260881289): Tracking Bug
     val NEW_STATUS_BAR_ICONS_DEBUG_COLORING =
         unreleasedFlag(611, "new_status_bar_icons_debug_coloring")
+
+    // TODO(b/265892345): Tracking Bug
+    val PLUG_IN_STATUS_BAR_CHIP = unreleasedFlag(265892345, "plug_in_status_bar_chip")
 
     // 700 - dialer/calls
     // TODO(b/254512734): Tracking Bug
@@ -358,14 +378,26 @@ object Flags {
     // TODO(b/267166152) : Tracking Bug
     val MEDIA_RETAIN_RECOMMENDATIONS = releasedFlag(916, "media_retain_recommendations")
 
+    // TODO(b/270437894): Tracking Bug
+    val MEDIA_REMOTE_RESUME = unreleasedFlag(917, "media_remote_resume")
+
     // 1000 - dock
     val SIMULATE_DOCK_THROUGH_CHARGING = releasedFlag(1000, "simulate_dock_through_charging")
 
     // TODO(b/254512758): Tracking Bug
     @JvmField val ROUNDED_BOX_RIPPLE = releasedFlag(1002, "rounded_box_ripple")
 
+    // TODO(b/270882464): Tracking Bug
+    val ENABLE_DOCK_SETUP_V2 = unreleasedFlag(1005, "enable_dock_setup_v2", teamfood = true)
+
     // TODO(b/265045965): Tracking Bug
     val SHOW_LOWLIGHT_ON_DIRECT_BOOT = releasedFlag(1003, "show_lowlight_on_direct_boot")
+
+    @JvmField
+    // TODO(b/271428141): Tracking Bug
+    val ENABLE_LOW_LIGHT_CLOCK_UNDOCKED = unreleasedFlag(
+        1004,
+        "enable_low_light_clock_undocked", teamfood = true)
 
     // 1100 - windowing
     @Keep
@@ -420,7 +452,9 @@ object Flags {
         )
 
     // TODO(b/256873975): Tracking Bug
-    @JvmField @Keep val WM_BUBBLE_BAR = unreleasedFlag(1111, "wm_bubble_bar")
+    @JvmField
+    @Keep
+    val WM_BUBBLE_BAR = sysPropBooleanFlag(1111, "persist.wm.debug.bubble_bar", default = false)
 
     // TODO(b/260271148): Tracking bug
     @Keep
@@ -443,13 +477,13 @@ object Flags {
     @Keep
     @JvmField
     val ENABLE_PIP_SIZE_LARGE_SCREEN =
-        sysPropBooleanFlag(1114, "persist.wm.debug.enable_pip_size_large_screen", default = false)
+        sysPropBooleanFlag(1114, "persist.wm.debug.enable_pip_size_large_screen", default = true)
 
     // TODO(b/265998256): Tracking bug
     @Keep
     @JvmField
     val ENABLE_PIP_APP_ICON_OVERLAY =
-        sysPropBooleanFlag(1115, "persist.wm.debug.enable_pip_app_icon_overlay", default = false)
+        sysPropBooleanFlag(1115, "persist.wm.debug.enable_pip_app_icon_overlay", default = true)
 
     // 1200 - predictive back
     @Keep
@@ -475,9 +509,9 @@ object Flags {
     val WM_ENABLE_PREDICTIVE_BACK_SYSUI =
         unreleasedFlag(1204, "persist.wm.debug.predictive_back_sysui_enable", teamfood = true)
 
-    // TODO(b/255697805): Tracking Bug
+    // TODO(b/270987164): Tracking Bug
     @JvmField
-    val TRACKPAD_GESTURE_BACK = unreleasedFlag(1205, "trackpad_gesture_back", teamfood = false)
+    val TRACKPAD_GESTURE_BACK = unreleasedFlag(1205, "trackpad_gesture_back", teamfood = true)
 
     // TODO(b/263826204): Tracking Bug
     @JvmField
@@ -544,13 +578,14 @@ object Flags {
     // 1700 - clipboard
     @JvmField val CLIPBOARD_REMOTE_BEHAVIOR = releasedFlag(1701, "clipboard_remote_behavior")
     // TODO(b/267162944): Tracking bug
-    @JvmField val CLIPBOARD_MINIMIZED_LAYOUT = unreleasedFlag(1702, "clipboard_data_model")
+    @JvmField
+    val CLIPBOARD_MINIMIZED_LAYOUT = unreleasedFlag(1702, "clipboard_data_model", teamfood = true)
 
     // 1800 - shade container
     @JvmField
     val LEAVE_SHADE_OPEN_FOR_BUGREPORT = releasedFlag(1800, "leave_shade_open_for_bugreport")
     // TODO(b/265944639): Tracking Bug
-    @JvmField val DUAL_SHADE = releasedFlag(1801, "dual_shade")
+    @JvmField val DUAL_SHADE = unreleasedFlag(1801, "dual_shade")
 
     // 1900
     @JvmField val NOTE_TASKS = releasedFlag(1900, "keycode_flag")
@@ -606,11 +641,6 @@ object Flags {
     @JvmField
     val OUTPUT_SWITCHER_DEVICE_STATUS = releasedFlag(2502, "output_switcher_device_status")
 
-    // TODO(b/20911786): Tracking Bug
-    @JvmField
-    val OUTPUT_SWITCHER_SHOW_API_ENABLED =
-        unreleasedFlag(2503, "output_switcher_show_api_enabled", teamfood = true)
-
     // 2700 - unfold transitions
     // TODO(b/265764985): Tracking Bug
     @Keep
@@ -623,9 +653,15 @@ object Flags {
 
     // 2600 - keyboard
     // TODO(b/259352579): Tracking Bug
-    @JvmField val SHORTCUT_LIST_SEARCH_LAYOUT = unreleasedFlag(2600, "shortcut_list_search_layout")
+    @JvmField val SHORTCUT_LIST_SEARCH_LAYOUT =
+            unreleasedFlag(2600, "shortcut_list_search_layout", teamfood = true)
 
     // TODO(b/259428678): Tracking Bug
     @JvmField
     val KEYBOARD_BACKLIGHT_INDICATOR = unreleasedFlag(2601, "keyboard_backlight_indicator")
+
+    // TODO(b/272036292): Tracking Bug
+    @JvmField
+    val LARGE_SHADE_GRANULAR_ALPHA_INTERPOLATION =
+            unreleasedFlag(2602, "large_shade_granular_alpha_interpolation")
 }

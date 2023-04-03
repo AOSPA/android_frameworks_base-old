@@ -23,6 +23,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.credentials.CredentialOption;
+import android.credentials.CredentialProviderInfo;
 import android.credentials.GetCredentialException;
 import android.credentials.GetCredentialResponse;
 import android.credentials.ui.AuthenticationEntry;
@@ -35,9 +36,9 @@ import android.service.credentials.BeginGetCredentialRequest;
 import android.service.credentials.BeginGetCredentialResponse;
 import android.service.credentials.CallingAppInfo;
 import android.service.credentials.CredentialEntry;
-import android.service.credentials.CredentialProviderInfo;
 import android.service.credentials.CredentialProviderService;
 import android.service.credentials.GetCredentialRequest;
+import android.service.credentials.RemoteEntry;
 import android.util.Log;
 import android.util.Pair;
 import android.util.Slog;
@@ -180,7 +181,6 @@ public final class ProviderGetSession extends ProviderSession<BeginGetCredential
     /** Called when the provider response has been updated by an external source. */
     @Override // Callback from the remote provider
     public void onProviderResponseSuccess(@Nullable BeginGetCredentialResponse response) {
-        Log.i(TAG, "in onProviderResponseSuccess");
         onSetInitialRemoteResponse(response);
     }
 
@@ -241,13 +241,14 @@ public final class ProviderGetSession extends ProviderSession<BeginGetCredential
                 if (additionalContentReceived) {
                     Log.i(TAG, "Additional content received - removing authentication entry");
                     mProviderResponseDataHandler.removeAuthenticationAction(entryKey);
+                    if (!mProviderResponseDataHandler.isEmptyResponse()) {
+                        updateStatusAndInvokeCallback(Status.CREDENTIALS_RECEIVED);
+                    }
                 } else {
                     Log.i(TAG, "Additional content not received");
                     mProviderResponseDataHandler
                             .updateAuthEntryWithNoCredentialsReceived(entryKey);
-                }
-                if (!mProviderResponseDataHandler.isEmptyResponse()) {
-                    updateStatusAndInvokeCallback(Status.CREDENTIALS_RECEIVED);
+                    updateStatusAndInvokeCallback(Status.NO_CREDENTIALS_FROM_AUTH_ENTRY);
                 }
                 break;
             case REMOTE_ENTRY_KEY:
@@ -267,8 +268,8 @@ public final class ProviderGetSession extends ProviderSession<BeginGetCredential
     @Override
     protected void invokeSession() {
         if (mRemoteCredentialService != null) {
+            mCandidateProviderMetric.setStartQueryTimeNanoseconds(System.nanoTime());
             mRemoteCredentialService.onBeginGetCredential(mProviderRequest, this);
-            mCandidateProviderMetric.setStartTimeNanoseconds(System.nanoTime());
         }
     }
 
@@ -298,7 +299,7 @@ public final class ProviderGetSession extends ProviderSession<BeginGetCredential
         }
         return new Intent().putExtra(CredentialProviderService.EXTRA_GET_CREDENTIAL_REQUEST,
                 new GetCredentialRequest(
-                        mCallingAppInfo, mBeginGetOptionToCredentialOptionMap.get(id)));
+                        mCallingAppInfo, List.of(mBeginGetOptionToCredentialOptionMap.get(id))));
     }
 
     private Intent setUpFillInIntentWithQueryRequest() {
@@ -391,7 +392,7 @@ public final class ProviderGetSession extends ProviderSession<BeginGetCredential
                 .extractResponseContent(providerPendingIntentResponse
                         .getResultData());
         if (response != null && !mProviderResponseDataHandler.isEmptyResponse(response)) {
-            addToInitialRemoteResponse(response);
+            addToInitialRemoteResponse(response, /*isInitialResponse=*/ false);
             // Additional content received is in the form of new response content.
             return true;
         }
@@ -399,7 +400,8 @@ public final class ProviderGetSession extends ProviderSession<BeginGetCredential
         return false;
     }
 
-    private void addToInitialRemoteResponse(BeginGetCredentialResponse content) {
+    private void addToInitialRemoteResponse(BeginGetCredentialResponse content,
+            boolean isInitialResponse) {
         if (content == null) {
             return;
         }
@@ -407,39 +409,23 @@ public final class ProviderGetSession extends ProviderSession<BeginGetCredential
                 content.getCredentialEntries(),
                 content.getActions(),
                 content.getAuthenticationActions(),
-                content.getRemoteCredentialEntry()
+                content.getRemoteCredentialEntry(),
+                isInitialResponse
         );
     }
 
     /** Returns true if either an exception or a response is found. */
     private void onActionEntrySelected(ProviderPendingIntentResponse
             providerPendingIntentResponse) {
-        // Action entry is expected to either contain the final GetCredentialResponse, or it is
-        // also acceptable if it does not contain anything. In the second case, we re-show this
-        // action on the UI.
-        if (providerPendingIntentResponse == null) {
-            Log.i(TAG, "providerPendingIntentResponse is null");
-            return;
-        }
-
-        GetCredentialException exception = maybeGetPendingIntentException(
-                providerPendingIntentResponse);
-        if (exception != null) {
-            invokeCallbackWithError(exception.getType(), exception.getMessage());
-        }
-        GetCredentialResponse response = PendingIntentResultHandler
-                .extractGetCredentialResponse(
-                        providerPendingIntentResponse.getResultData());
-        if (response != null) {
-            mCallbacks.onFinalResponseReceived(mComponentName, response);
-        }
+        Log.i(TAG, "onActionEntrySelected");
+        onCredentialEntrySelected(providerPendingIntentResponse);
     }
 
 
     /** Updates the response being maintained in state by this provider session. */
     private void onSetInitialRemoteResponse(BeginGetCredentialResponse response) {
         mProviderResponse = response;
-        addToInitialRemoteResponse(response);
+        addToInitialRemoteResponse(response, /*isInitialResponse=*/true);
         if (mProviderResponseDataHandler.isEmptyResponse(response)) {
             updateStatusAndInvokeCallback(Status.EMPTY_RESPONSE);
             return;
@@ -449,15 +435,36 @@ public final class ProviderGetSession extends ProviderSession<BeginGetCredential
 
     /**
      * When an invalid state occurs, e.g. entry mismatch or no response from provider,
-     * we send back a TYPE_UNKNOWN error as to the developer.
+     * we send back a TYPE_NO_CREDENTIAL error as to the developer.
      */
     private void invokeCallbackOnInternalInvalidState() {
         mCallbacks.onFinalErrorReceived(mComponentName,
-                GetCredentialException.TYPE_UNKNOWN, null);
+                GetCredentialException.TYPE_NO_CREDENTIAL, null);
+    }
+
+    /** Update auth entries status based on an auth entry selected from a different session. */
+    public void updateAuthEntriesStatusFromAnotherSession() {
+        // Pass null for entryKey if the auth entry selected belongs to a different session
+        mProviderResponseDataHandler.updateAuthEntryWithNoCredentialsReceived(/*entryKey=*/null);
+    }
+
+    /** Returns true if the provider response contains empty auth entries only, false otherwise. **/
+    public boolean containsEmptyAuthEntriesOnly() {
+        // We do not consider action entries here because if actions are the only entries,
+        // we don't show the UI
+        return mProviderResponseDataHandler.mUiCredentialEntries.isEmpty()
+                && mProviderResponseDataHandler.mUiRemoteEntry == null
+                && mProviderResponseDataHandler.mUiAuthenticationEntries
+                .values().stream().allMatch(
+                        e -> e.second.getStatus() == AuthenticationEntry
+                                .STATUS_UNLOCKED_BUT_EMPTY_LESS_RECENT
+                                || e.second.getStatus()
+                                == AuthenticationEntry.STATUS_UNLOCKED_BUT_EMPTY_MOST_RECENT
+        );
     }
 
     private class ProviderResponseDataHandler {
-        private final ComponentName mExpectedRemoteEntryProviderService;
+        @Nullable private final ComponentName mExpectedRemoteEntryProviderService;
         @NonNull
         private final Map<String, Pair<CredentialEntry, Entry>> mUiCredentialEntries =
                 new HashMap<>();
@@ -467,28 +474,35 @@ public final class ProviderGetSession extends ProviderSession<BeginGetCredential
         private final Map<String, Pair<Action, AuthenticationEntry>> mUiAuthenticationEntries =
                 new HashMap<>();
 
-        @Nullable private Pair<String, Pair<CredentialEntry, Entry>> mUiRemoteEntry = null;
+        @Nullable private Pair<String, Pair<RemoteEntry, Entry>> mUiRemoteEntry = null;
 
-        ProviderResponseDataHandler(ComponentName expectedRemoteEntryProviderService) {
+        ProviderResponseDataHandler(@Nullable ComponentName expectedRemoteEntryProviderService) {
             mExpectedRemoteEntryProviderService = expectedRemoteEntryProviderService;
         }
 
         public void addResponseContent(List<CredentialEntry> credentialEntries,
                 List<Action> actions, List<Action> authenticationActions,
-                CredentialEntry remoteEntry) {
+                RemoteEntry remoteEntry, boolean isInitialResponse) {
             credentialEntries.forEach(this::addCredentialEntry);
             actions.forEach(this::addAction);
             authenticationActions.forEach(
                     authenticationAction -> addAuthenticationAction(authenticationAction,
                             AuthenticationEntry.STATUS_LOCKED));
-            setRemoteEntry(remoteEntry);
+            // In the query phase, it is likely most providers will return a null remote entry
+            // so no need to invoke the setter since it adds the overhead of checking for the
+            // hybrid permission, and then sets an already null value to null.
+            // If this is not the query phase, e.g. response after a locked entry is unlocked
+            // then it is valid for the provider to remove the remote entry, and so we allow
+            // them to set it to null.
+            if (remoteEntry != null || !isInitialResponse) {
+                setRemoteEntry(remoteEntry);
+            }
         }
         public void addCredentialEntry(CredentialEntry credentialEntry) {
             String id = generateUniqueId();
             Entry entry = new Entry(CREDENTIAL_ENTRY_KEY,
                     id, credentialEntry.getSlice(),
-                    setUpFillInIntent(credentialEntry
-                            .getBeginGetCredentialOption().getId()));
+                    setUpFillInIntent(credentialEntry.getBeginGetCredentialOptionId()));
             mUiCredentialEntries.put(id, new Pair<>(credentialEntry, entry));
         }
 
@@ -517,21 +531,23 @@ public final class ProviderGetSession extends ProviderSession<BeginGetCredential
             mUiAuthenticationEntries.remove(id);
         }
 
-        public void setRemoteEntry(@Nullable CredentialEntry remoteEntry) {
-            if (remoteEntry == null) {
+        public void setRemoteEntry(@Nullable RemoteEntry remoteEntry) {
+            if (!enforceRemoteEntryRestrictions(mExpectedRemoteEntryProviderService)) {
+                Log.i(TAG, "Remote entry being dropped as it does not meet the restriction"
+                        + " checks.");
                 return;
             }
-            if (!mComponentName.equals(mExpectedRemoteEntryProviderService)) {
-                Log.i(TAG, "Remote entry being dropped as it is not from the service "
-                        + "configured by the OEM.");
+            if (remoteEntry == null) {
+                mUiRemoteEntry = null;
                 return;
             }
             String id = generateUniqueId();
             Entry entry = new Entry(REMOTE_ENTRY_KEY,
-                    id, remoteEntry.getSlice(), setUpFillInIntent(
-                            remoteEntry.getBeginGetCredentialOption().getId()));
+                    id, remoteEntry.getSlice(), setUpFillInIntentForRemoteEntry());
             mUiRemoteEntry = new Pair<>(generateUniqueId(), new Pair<>(remoteEntry, entry));
         }
+
+
 
         public GetCredentialProviderData toGetCredentialProviderData() {
             return new GetCredentialProviderData.Builder(
@@ -566,7 +582,6 @@ public final class ProviderGetSession extends ProviderSession<BeginGetCredential
             return credEntries;
         }
 
-
         private Entry prepareRemoteEntry() {
             if (mUiRemoteEntry == null || mUiRemoteEntry.first == null
                     || mUiRemoteEntry.second == null) {
@@ -599,7 +614,7 @@ public final class ProviderGetSession extends ProviderSession<BeginGetCredential
         }
 
         @Nullable
-        public CredentialEntry getRemoteEntry(String entryKey) {
+        public RemoteEntry getRemoteEntry(String entryKey) {
             return mUiRemoteEntry.first.equals(entryKey) && mUiRemoteEntry.second != null
                     ? mUiRemoteEntry.second.first : null;
         }
@@ -610,7 +625,12 @@ public final class ProviderGetSession extends ProviderSession<BeginGetCredential
                     ? null : mUiCredentialEntries.get(entryKey).first;
         }
 
-        public void updateAuthEntryWithNoCredentialsReceived(String entryKey) {
+        public void updateAuthEntryWithNoCredentialsReceived(@Nullable String entryKey) {
+            if (entryKey == null) {
+                // Auth entry from a different provider was selected by the user.
+                updatePreviousMostRecentAuthEntry();
+                return;
+            }
             updatePreviousMostRecentAuthEntry();
             updateMostRecentAuthEntry(entryKey);
         }
@@ -651,5 +671,11 @@ public final class ProviderGetSession extends ProviderSession<BeginGetCredential
                     from.getSlice(), toStatus,
                     from.getFrameworkExtrasIntent());
         }
+    }
+
+    private Intent setUpFillInIntentForRemoteEntry() {
+        return new Intent().putExtra(CredentialProviderService.EXTRA_GET_CREDENTIAL_REQUEST,
+                new GetCredentialRequest(
+                        mCallingAppInfo, mCompleteRequest.getCredentialOptions()));
     }
 }

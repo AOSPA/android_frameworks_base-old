@@ -181,8 +181,8 @@
     <!-- Doze mode temp whitelisting for notification dispatching. -->
     <uses-permission android:name="android.permission.CHANGE_DEVICE_IDLE_TEMP_WHITELIST" />
 
-    <!-- Tag user-initiated PendingIntent invocations as "interactive" when appropriate -->
-    <uses-permission android:name="android.permission.COMPONENT_OPTION_INTERACTIVE" />
+    <!-- Adjust delivery policies for broadcast intents -->
+    <uses-permission android:name="android.permission.BROADCAST_OPTION_INTERACTIVE" />
 
     <!-- Listen for keyboard attachment / detachment -->
     <uses-permission android:name="android.permission.TABLET_MODE" />
@@ -343,6 +343,8 @@
     <uses-permission android:name="android.permission.READ_SAFETY_CENTER_STATUS" />
 
     <uses-permission android:name="android.permission.SET_UNRESTRICTED_KEEP_CLEAR_AREAS" />
+
+    <uses-permission android:name="android.permission.MONITOR_KEYBOARD_BACKLIGHT" />
 
     <protected-broadcast android:name="com.android.settingslib.action.REGISTER_SLICE_RECEIVER" />
     <protected-broadcast android:name="com.android.settingslib.action.UNREGISTER_SLICE_RECEIVER" />

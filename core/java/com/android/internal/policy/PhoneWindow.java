@@ -295,6 +295,7 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
     private boolean mClosingActionMenu;
 
     private int mVolumeControlStreamType = AudioManager.USE_DEFAULT_STREAM_TYPE;
+    private int mAudioMode = AudioManager.MODE_NORMAL;
     private MediaController mMediaController;
 
     private AudioManager mAudioManager;
@@ -316,6 +317,8 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
             mInvalidatePanelMenuFeatures = 0;
         }
     };
+
+    private AudioManager.OnModeChangedListener mOnModeChangedListener;
 
     private Transition mEnterTransition = null;
     private Transition mReturnTransition = USE_DEFAULT_TRANSITION;
@@ -1944,7 +1947,7 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
             case KeyEvent.KEYCODE_VOLUME_MUTE: {
                 // If we have a session and no active phone call send it the volume command,
                 // otherwise use the suggested stream.
-                if (mMediaController != null && !isActivePhoneCallKnown()) {
+                if (mMediaController != null && !isActivePhoneCallOngoing()) {
                     getMediaSessionManager().dispatchVolumeKeyEventToSessionAsSystemService(event,
                             mMediaController.getSessionToken());
                 } else {
@@ -1995,16 +1998,9 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
         return false;
     }
 
-    private boolean isActivePhoneCallKnown() {
-        boolean isActivePhoneCallKnown = false;
-        AudioManager audioManager =
-                (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
-        int audioManagerMode = audioManager.getMode();
-        if (audioManagerMode == AudioManager.MODE_IN_CALL
-                || audioManagerMode == AudioManager.MODE_IN_COMMUNICATION) {
-            isActivePhoneCallKnown = true;
-        }
-        return isActivePhoneCallKnown;
+    private boolean isActivePhoneCallOngoing() {
+        return mAudioMode == AudioManager.MODE_IN_CALL
+                || mAudioMode == AudioManager.MODE_IN_COMMUNICATION;
     }
 
     private KeyguardManager getKeyguardManager() {
@@ -2331,6 +2327,14 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
         }
     }
 
+    @Override
+    protected void onDestroy() {
+        if (mOnModeChangedListener != null) {
+            getAudioManager().removeOnModeChangedListener(mOnModeChangedListener);
+            mOnModeChangedListener = null;
+        }
+    }
+
     private class PanelMenuPresenterCallback implements MenuPresenter.Callback {
         @Override
         public void onCloseMenu(MenuBuilder menu, boolean allMenusAreClosing) {
@@ -2507,12 +2511,23 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
         final boolean targetPreQ = targetSdk < Build.VERSION_CODES.Q;
 
         if (!mForcedStatusBarColor) {
-            mStatusBarColor = a.getColor(R.styleable.Window_statusBarColor, 0xFF000000);
+            mStatusBarColor = a.getColor(R.styleable.Window_statusBarColor, Color.BLACK);
         }
         if (!mForcedNavigationBarColor) {
-            mNavigationBarColor = a.getColor(R.styleable.Window_navigationBarColor, 0xFF000000);
+            final int navBarCompatibleColor = context.getColor(R.color.navigation_bar_compatible);
+            final int navBarDefaultColor = context.getColor(R.color.navigation_bar_default);
+            final int navBarColor = a.getColor(R.styleable.Window_navigationBarColor,
+                    navBarDefaultColor);
+
+            mNavigationBarColor =
+                    navBarColor == navBarDefaultColor
+                            && !context.getResources().getBoolean(
+                                    R.bool.config_navBarDefaultTransparent)
+                    ? navBarCompatibleColor
+                    : navBarColor;
+
             mNavigationBarDividerColor = a.getColor(R.styleable.Window_navigationBarDividerColor,
-                    0x00000000);
+                    Color.TRANSPARENT);
         }
         if (!targetPreQ) {
             mEnsureStatusBarContrastWhenTransparent = a.getBoolean(
@@ -2535,6 +2550,11 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
             if (mDecor.mForceWindowDrawsBarBackgrounds) {
                 params.privateFlags |= PRIVATE_FLAG_FORCE_DRAW_BAR_BACKGROUNDS;
             }
+            params.privateFlags |= PRIVATE_FLAG_NO_MOVE_ANIMATION;
+        }
+        if (a.getBoolean(
+                R.styleable.Window_windowNoMoveAnimation,
+                false)) {
             params.privateFlags |= PRIVATE_FLAG_NO_MOVE_ANIMATION;
         }
         final int sysUiVis = decor.getSystemUiVisibility();
@@ -3213,6 +3233,15 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
     @Override
     public void setMediaController(MediaController controller) {
         mMediaController = controller;
+        if (controller != null && mOnModeChangedListener == null) {
+            mAudioMode = getAudioManager().getMode();
+            mOnModeChangedListener = mode -> mAudioMode = mode;
+            getAudioManager().addOnModeChangedListener(getContext().getMainExecutor(),
+                    mOnModeChangedListener);
+        } else if (mOnModeChangedListener != null) {
+            getAudioManager().removeOnModeChangedListener(mOnModeChangedListener);
+            mOnModeChangedListener = null;
+        }
     }
 
     @Override

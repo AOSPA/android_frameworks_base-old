@@ -50,7 +50,9 @@ import com.android.credentialmanager.getflow.RemoteEntryInfo
 import androidx.credentials.CreateCredentialRequest
 import androidx.credentials.CreateCustomCredentialRequest
 import androidx.credentials.CreatePasswordRequest
+import androidx.credentials.CredentialOption
 import androidx.credentials.CreatePublicKeyCredentialRequest
+import androidx.credentials.GetPublicKeyCredentialOption
 import androidx.credentials.PublicKeyCredential.Companion.TYPE_PUBLIC_KEY_CREDENTIAL
 import androidx.credentials.provider.Action
 import androidx.credentials.provider.AuthenticationAction
@@ -58,8 +60,7 @@ import androidx.credentials.provider.CreateEntry
 import androidx.credentials.provider.CustomCredentialEntry
 import androidx.credentials.provider.PasswordCredentialEntry
 import androidx.credentials.provider.PublicKeyCredentialEntry
-import androidx.credentials.provider.RemoteCreateEntry
-import androidx.credentials.provider.RemoteCredentialEntry
+import androidx.credentials.provider.RemoteEntry
 import org.json.JSONObject
 
 // TODO: remove all !! checks
@@ -147,7 +148,10 @@ class GetFlowUtils {
                         icon = providerIcon,
                         displayName = providerLabel,
                         credentialEntryList = getCredentialOptionInfoList(
-                            it.providerFlattenedComponentName, it.credentialEntries, context
+                            providerId = it.providerFlattenedComponentName,
+                            providerLabel = providerLabel,
+                            credentialEntries = it.credentialEntries,
+                            context = context
                         ),
                         authenticationEntryList = getAuthenticationEntryList(
                             it.providerFlattenedComponentName,
@@ -170,10 +174,27 @@ class GetFlowUtils {
         fun toRequestDisplayInfo(
             requestInfo: RequestInfo,
             context: Context,
+            originName: String?,
         ): com.android.credentialmanager.getflow.RequestDisplayInfo? {
+            val getCredentialRequest = requestInfo.getCredentialRequest ?: return null
+            val preferImmediatelyAvailableCredentials = getCredentialRequest.credentialOptions.any {
+                val credentialOptionJetpack = CredentialOption.createFrom(
+                    it.type,
+                    it.credentialRetrievalData,
+                    it.credentialRetrievalData,
+                    it.isSystemProviderRequired
+                )
+                if (credentialOptionJetpack is GetPublicKeyCredentialOption) {
+                    credentialOptionJetpack.preferImmediatelyAvailableCredentials
+                } else {
+                    false
+                }
+            }
             return com.android.credentialmanager.getflow.RequestDisplayInfo(
-                appName = getAppLabel(context.packageManager, requestInfo.appPackageName)
-                    ?: return null
+                appName = originName
+                    ?: getAppLabel(context.packageManager, requestInfo.appPackageName)
+                    ?: return null,
+                preferImmediatelyAvailableCredentials = preferImmediatelyAvailableCredentials
             )
         }
 
@@ -183,6 +204,7 @@ class GetFlowUtils {
          */
         private fun getCredentialOptionInfoList(
             providerId: String,
+            providerLabel: String,
             credentialEntries: List<Entry>,
             context: Context,
         ): List<CredentialEntryInfo> {
@@ -193,6 +215,7 @@ class GetFlowUtils {
                     is PasswordCredentialEntry -> {
                         result.add(CredentialEntryInfo(
                             providerId = providerId,
+                            providerDisplayName = providerLabel,
                             entryKey = it.key,
                             entrySubkey = it.subkey,
                             pendingIntent = credentialEntry.pendingIntent,
@@ -201,13 +224,17 @@ class GetFlowUtils {
                             credentialTypeDisplayName = credentialEntry.typeDisplayName.toString(),
                             userName = credentialEntry.username.toString(),
                             displayName = credentialEntry.displayName?.toString(),
-                            icon = credentialEntry.icon?.loadDrawable(context),
+                            icon = credentialEntry.icon.loadDrawable(context),
+                            shouldTintIcon = credentialEntry.isDefaultIcon ?: false,
                             lastUsedTimeMillis = credentialEntry.lastUsedTime,
+                            isAutoSelectable = credentialEntry.isAutoSelectAllowed &&
+                                credentialEntry.autoSelectAllowedFromOption,
                         ))
                     }
                     is PublicKeyCredentialEntry -> {
                         result.add(CredentialEntryInfo(
                             providerId = providerId,
+                            providerDisplayName = providerLabel,
                             entryKey = it.key,
                             entrySubkey = it.subkey,
                             pendingIntent = credentialEntry.pendingIntent,
@@ -216,13 +243,17 @@ class GetFlowUtils {
                             credentialTypeDisplayName = credentialEntry.typeDisplayName.toString(),
                             userName = credentialEntry.username.toString(),
                             displayName = credentialEntry.displayName?.toString(),
-                            icon = credentialEntry.icon?.loadDrawable(context),
+                            icon = credentialEntry.icon.loadDrawable(context),
+                            shouldTintIcon = credentialEntry.isDefaultIcon,
                             lastUsedTimeMillis = credentialEntry.lastUsedTime,
+                            isAutoSelectable = credentialEntry.isAutoSelectAllowed &&
+                                credentialEntry.autoSelectAllowedFromOption,
                         ))
                     }
                     is CustomCredentialEntry -> {
                         result.add(CredentialEntryInfo(
                             providerId = providerId,
+                            providerDisplayName = providerLabel,
                             entryKey = it.key,
                             entrySubkey = it.subkey,
                             pendingIntent = credentialEntry.pendingIntent,
@@ -231,8 +262,11 @@ class GetFlowUtils {
                             credentialTypeDisplayName = credentialEntry.typeDisplayName.toString(),
                             userName = credentialEntry.title.toString(),
                             displayName = credentialEntry.subtitle?.toString(),
-                            icon = credentialEntry.icon?.loadDrawable(context),
+                            icon = credentialEntry.icon.loadDrawable(context),
+                            shouldTintIcon = credentialEntry.isDefaultIcon,
                             lastUsedTimeMillis = credentialEntry.lastUsedTime,
+                            isAutoSelectable = credentialEntry.isAutoSelectAllowed &&
+                                credentialEntry.autoSelectAllowedFromOption,
                         ))
                     }
                     else -> Log.d(
@@ -287,6 +321,7 @@ class GetFlowUtils {
                     pendingIntent = structuredAuthEntry.pendingIntent,
                     fillInIntent = entry.frameworkExtrasIntent,
                     title = title,
+                    providerDisplayName = providerDisplayName,
                     icon = providerIcon,
                     isUnlockedAndEmpty = entry.status != AuthenticationEntry.STATUS_LOCKED,
                     isLastUnlocked =
@@ -300,7 +335,7 @@ class GetFlowUtils {
             if (remoteEntry == null) {
                 return null
             }
-            val structuredRemoteEntry = RemoteCredentialEntry.fromSlice(remoteEntry.slice)
+            val structuredRemoteEntry = RemoteEntry.fromSlice(remoteEntry.slice)
                 ?: return null
             return RemoteEntryInfo(
                 providerId = providerId,
@@ -394,8 +429,10 @@ class CreateFlowUtils {
         fun toRequestDisplayInfo(
             requestInfo: RequestInfo,
             context: Context,
+            originName: String?,
         ): RequestDisplayInfo? {
-            val appLabel = getAppLabel(context.packageManager, requestInfo.appPackageName)
+            val appLabel = originName
+                ?: getAppLabel(context.packageManager, requestInfo.appPackageName)
                 ?: return null
             val createCredentialRequest = requestInfo.createCredentialRequest ?: return null
             val createCredentialRequestJetpack = CreateCredentialRequest.createFrom(
@@ -410,24 +447,16 @@ class CreateFlowUtils {
                     createCredentialRequestJetpack.password,
                     CredentialType.PASSWORD,
                     appLabel,
-                    context.getDrawable(R.drawable.ic_password)!!
+                    context.getDrawable(R.drawable.ic_password_24) ?: return null,
+                    preferImmediatelyAvailableCredentials = false,
                 )
                 is CreatePublicKeyCredentialRequest -> {
-                    val requestJson = createCredentialRequestJetpack.requestJson
-                    val json = JSONObject(requestJson)
-                    var name = ""
-                    var displayName = ""
-                    if (json.has("user")) {
-                        val user: JSONObject = json.getJSONObject("user")
-                        name = user.getString("name")
-                        displayName = user.getString("displayName")
-                    }
-                    RequestDisplayInfo(
-                        name,
-                        displayName,
-                        CredentialType.PASSKEY,
-                        appLabel,
-                        context.getDrawable(R.drawable.ic_passkey)!!
+                    newRequestDisplayInfoFromPasskeyJson(
+                        requestJson = createCredentialRequestJetpack.requestJson,
+                        appLabel = appLabel,
+                        context = context,
+                        preferImmediatelyAvailableCredentials =
+                        createCredentialRequestJetpack.preferImmediatelyAvailableCredentials,
                     )
                 }
                 is CreateCustomCredentialRequest -> {
@@ -436,12 +465,13 @@ class CreateFlowUtils {
                         .parseFromCredentialDataBundle(createCredentialRequest.credentialData)
                         ?: return null
                     RequestDisplayInfo(
-                        title = displayInfo.userId,
-                        subtitle = displayInfo.userDisplayName,
+                        title = displayInfo.userId.toString(),
+                        subtitle = displayInfo.userDisplayName?.toString(),
                         type = CredentialType.UNKNOWN,
                         appName = appLabel,
                         typeIcon = displayInfo.credentialTypeIcon?.loadDrawable(context)
-                            ?: context.getDrawable(R.drawable.ic_other_sign_in)!!
+                            ?: context.getDrawable(R.drawable.ic_other_sign_in_24) ?: return null,
+                        preferImmediatelyAvailableCredentials = false,
                     )
                 }
                 else -> null
@@ -597,7 +627,7 @@ class CreateFlowUtils {
             remoteEntry: Entry?,
         ): RemoteInfo? {
             return if (remoteEntry != null) {
-                val structuredRemoteEntry = RemoteCreateEntry.fromSlice(remoteEntry.slice)
+                val structuredRemoteEntry = RemoteEntry.fromSlice(remoteEntry.slice)
                     ?: return null
                 RemoteInfo(
                     providerId = providerId,
@@ -607,6 +637,30 @@ class CreateFlowUtils {
                     fillInIntent = remoteEntry.frameworkExtrasIntent,
                 )
             } else null
+        }
+
+        private fun newRequestDisplayInfoFromPasskeyJson(
+            requestJson: String,
+            appLabel: String,
+            context: Context,
+            preferImmediatelyAvailableCredentials: Boolean,
+        ): RequestDisplayInfo? {
+            val json = JSONObject(requestJson)
+            var name = ""
+            var displayName = ""
+            if (json.has("user")) {
+                val user: JSONObject = json.getJSONObject("user")
+                name = user.getString("name")
+                displayName = user.getString("displayName")
+            }
+            return RequestDisplayInfo(
+                name,
+                displayName,
+                CredentialType.PASSKEY,
+                appLabel,
+                context.getDrawable(R.drawable.ic_passkey_24) ?: return null,
+                preferImmediatelyAvailableCredentials,
+            )
         }
     }
 }

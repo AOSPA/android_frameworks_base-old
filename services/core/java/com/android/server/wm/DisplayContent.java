@@ -38,6 +38,9 @@ import static android.os.Process.SYSTEM_UID;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.util.DisplayMetrics.DENSITY_DEFAULT;
 import static android.util.RotationUtils.deltaRotation;
+import static android.util.TypedValue.COMPLEX_UNIT_DIP;
+import static android.util.TypedValue.COMPLEX_UNIT_MASK;
+import static android.util.TypedValue.COMPLEX_UNIT_SHIFT;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD;
 import static android.view.Display.FLAG_PRIVATE;
@@ -170,6 +173,7 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ActivityInfo.ScreenOrientation;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.ColorSpace;
 import android.graphics.Insets;
@@ -206,6 +210,7 @@ import android.util.Size;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
+import android.util.TypedValue;
 import android.util.proto.ProtoOutputStream;
 import android.view.ContentRecordingSession;
 import android.view.Display;
@@ -1684,14 +1689,16 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     private int getMinimalTaskSizeDp() {
         final Context displayConfigurationContext =
                 mAtmService.mContext.createConfigurationContext(getConfiguration());
-        final float minimalSize =
-                displayConfigurationContext.getResources().getDimension(
-                        R.dimen.default_minimal_size_resizable_task);
-        if (Double.compare(mDisplayMetrics.density, 0.0) == 0) {
-            throw new IllegalArgumentException("Display with ID=" + getDisplayId() + "has invalid "
-                + "DisplayMetrics.density= 0.0");
+        final Resources res = displayConfigurationContext.getResources();
+        final TypedValue value = new TypedValue();
+        res.getValue(R.dimen.default_minimal_size_resizable_task, value, true /* resolveRefs */);
+        final int valueUnit = ((value.data >> COMPLEX_UNIT_SHIFT) & COMPLEX_UNIT_MASK);
+        if (value.type != TypedValue.TYPE_DIMENSION || valueUnit != COMPLEX_UNIT_DIP) {
+            throw new IllegalArgumentException(
+                "Resource ID #0x" + Integer.toHexString(R.dimen.default_minimal_size_resizable_task)
+                    + " is not in valid type or unit");
         }
-        return (int) (minimalSize / mDisplayMetrics.density);
+        return (int) TypedValue.complexToFloat(value.data);
     }
 
     private boolean updateOrientation(boolean forceUpdate) {
@@ -2155,17 +2162,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         mWmService.mDisplayManagerInternal.performTraversal(transaction);
         scheduleAnimation();
 
-        for (int i = mWmService.mRotationWatchers.size() - 1; i >= 0; i--) {
-            final WindowManagerService.RotationWatcher rotationWatcher
-                    = mWmService.mRotationWatchers.get(i);
-            if (rotationWatcher.mDisplayId == mDisplayId) {
-                try {
-                    rotationWatcher.mWatcher.onRotationChanged(rotation);
-                } catch (RemoteException e) {
-                    // Ignore
-                }
-            }
-        }
+        mWmService.mRotationWatcherController.dispatchDisplayRotationChange(mDisplayId, rotation);
     }
 
     void configureDisplayPolicy() {
@@ -3819,6 +3816,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
 
         getDisplayPolicy().focusChangedLw(oldFocus, newFocus);
+        mAtmService.mBackNavigationController.onFocusChanged(newFocus);
 
         if (imWindowChanged && oldFocus != mInputMethodWindow) {
             // Focus of the input method window changed. Perform layout if needed.
@@ -4160,13 +4158,13 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     /** @see WindowManagerInternal#onToggleImeRequested */
     void onShowImeRequested() {
-        if (mImeLayeringTarget == null || mInputMethodWindow == null) {
+        if (mInputMethodWindow == null) {
             return;
         }
         // If IME window will be shown on the rotated activity, share the transformed state to
         // IME window so it can compute rotated frame with rotated configuration.
-        if (mImeLayeringTarget.mToken.isFixedRotationTransforming()) {
-            mInputMethodWindow.mToken.linkFixedRotationTransform(mImeLayeringTarget.mToken);
+        if (mFixedRotationLaunchingApp != null) {
+            mInputMethodWindow.mToken.linkFixedRotationTransform(mFixedRotationLaunchingApp);
             // Hide the window until the rotation is done to avoid intermediate artifacts if the
             // parent surface of IME container is changed.
             if (mAsyncRotationController != null) {
@@ -4596,8 +4594,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      */
     @VisibleForTesting
     SurfaceControl computeImeParent() {
-        if (!ImeTargetVisibilityPolicy.isReadyToComputeImeParent(mImeLayeringTarget,
-                mImeInputTarget)) {
+        if (!ImeTargetVisibilityPolicy.canComputeImeParent(mImeLayeringTarget, mImeInputTarget)) {
             return null;
         }
         // Attach it to app if the target is part of an app and such app is covering the entire
@@ -4768,6 +4765,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     void updateWindowsForAnimator() {
         forAllWindows(mUpdateWindowsForAnimator, true /* traverseTopToBottom */);
+        if (mAsyncRotationController != null) {
+            mAsyncRotationController.updateTargetWindows();
+        }
     }
 
     boolean isInputMethodClientFocus(int uid, int pid) {
@@ -5665,8 +5665,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         final Rect df = state.getDisplayFrame();
         final Insets gestureInsets = state.calculateInsets(df, systemGestures(),
                 false /* ignoreVisibility */);
-        mSystemGestureFrameLeft.set(df.left, df.top, gestureInsets.left, df.bottom);
-        mSystemGestureFrameRight.set(gestureInsets.right, df.top, df.right, df.bottom);
+        mSystemGestureFrameLeft.set(df.left, df.top, df.left + gestureInsets.left, df.bottom);
+        mSystemGestureFrameRight.set(df.right - gestureInsets.right, df.top, df.right, df.bottom);
 
         final Region touchableRegion = Region.obtain();
         final Region local = Region.obtain();

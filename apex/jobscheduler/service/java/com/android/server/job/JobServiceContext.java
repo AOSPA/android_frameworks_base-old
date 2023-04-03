@@ -107,6 +107,8 @@ public final class JobServiceContext implements ServiceConnection {
     private static final long OP_BIND_TIMEOUT_MILLIS = 18 * 1000 * Build.HW_TIMEOUT_MULTIPLIER;
     /** Amount of time the JobScheduler will wait for a response from an app for a message. */
     private static final long OP_TIMEOUT_MILLIS = 8 * 1000 * Build.HW_TIMEOUT_MULTIPLIER;
+    /** Amount of time the JobScheduler will wait for a job to provide a required notification. */
+    private static final long NOTIFICATION_TIMEOUT_MILLIS = 10_000L * Build.HW_TIMEOUT_MULTIPLIER;
 
     private static final String[] VERB_STRINGS = {
             "VERB_BINDING", "VERB_STARTING", "VERB_EXECUTING", "VERB_STOPPING", "VERB_FINISHED"
@@ -190,6 +192,8 @@ public final class JobServiceContext implements ServiceConnection {
     private long mMinExecutionGuaranteeMillis;
     /** The absolute maximum amount of time the job can run */
     private long mMaxExecutionTimeMillis;
+    /** Whether this job is required to provide a notification and we're still waiting for it. */
+    private boolean mAwaitingNotification;
 
     private long mEstimatedDownloadBytes;
     private long mEstimatedUploadBytes;
@@ -348,6 +352,7 @@ public final class JobServiceContext implements ServiceConnection {
             mEstimatedDownloadBytes = job.getEstimatedNetworkDownloadBytes();
             mEstimatedUploadBytes = job.getEstimatedNetworkUploadBytes();
             mTransferredDownloadBytes = mTransferredUploadBytes = 0;
+            mAwaitingNotification = job.isUserVisibleJob();
 
             final long whenDeferred = job.getWhenStandbyDeferred();
             if (whenDeferred > 0) {
@@ -456,7 +461,8 @@ public final class JobServiceContext implements ServiceConnection {
                     job.isConstraintSatisfied(JobStatus.CONSTRAINT_TIMING_DELAY),
                     job.isConstraintSatisfied(JobInfo.CONSTRAINT_FLAG_DEVICE_IDLE),
                     job.isConstraintSatisfied(JobStatus.CONSTRAINT_CONNECTIVITY),
-                    job.isConstraintSatisfied(JobStatus.CONSTRAINT_CONTENT_TRIGGER));
+                    job.isConstraintSatisfied(JobStatus.CONSTRAINT_CONTENT_TRIGGER),
+                    mExecutionStartTimeElapsed - job.enqueueTime);
             if (Trace.isTagEnabled(Trace.TRACE_TAG_SYSTEM_SERVER)) {
                 // Use the context's ID to distinguish traces since there'll only be one job
                 // running per context.
@@ -721,8 +727,11 @@ public final class JobServiceContext implements ServiceConnection {
                     // Exception-throwing-can down the road to JobParameters.completeWork >:(
                     return true;
                 }
-                mService.mJobs.touchJob(mRunningJob);
-                return mRunningJob.completeWorkLocked(workId);
+                if (mRunningJob.completeWorkLocked(workId)) {
+                    mService.mJobs.touchJob(mRunningJob);
+                    return true;
+                }
+                return false;
             }
         } finally {
             Binder.restoreCallingIdentity(ident);
@@ -771,6 +780,12 @@ public final class JobServiceContext implements ServiceConnection {
                 mNotificationCoordinator.enqueueNotification(this, callingPkgName,
                         callingPid, callingUid, notificationId,
                         notification, jobEndNotificationPolicy);
+                if (mAwaitingNotification) {
+                    mAwaitingNotification = false;
+                    if (mVerb == VERB_EXECUTING) {
+                        scheduleOpTimeOutLocked();
+                    }
+                }
             }
         } finally {
             Binder.restoreCallingIdentity(ident);
@@ -1183,6 +1198,8 @@ public final class JobServiceContext implements ServiceConnection {
                 }
                 final long latestStopTimeElapsed =
                         mExecutionStartTimeElapsed + mMaxExecutionTimeMillis;
+                final long earliestStopTimeElapsed =
+                        mExecutionStartTimeElapsed + mMinExecutionGuaranteeMillis;
                 final long nowElapsed = sElapsedRealtimeClock.millis();
                 if (nowElapsed >= latestStopTimeElapsed) {
                     // Not an error - client ran out of time.
@@ -1191,7 +1208,7 @@ public final class JobServiceContext implements ServiceConnection {
                     mParams.setStopReason(JobParameters.STOP_REASON_TIMEOUT,
                             JobParameters.INTERNAL_STOP_REASON_TIMEOUT, "client timed out");
                     sendStopMessageLocked("timeout while executing");
-                } else {
+                } else if (nowElapsed >= earliestStopTimeElapsed) {
                     // We've given the app the minimum execution time. See if we should stop it or
                     // let it continue running
                     final String reason = mJobConcurrencyManager.shouldStopRunningJobLocked(this);
@@ -1209,6 +1226,14 @@ public final class JobServiceContext implements ServiceConnection {
                                 + " continue to run past min execution time");
                         scheduleOpTimeOutLocked();
                     }
+                } else if (mAwaitingNotification) {
+                    onSlowAppResponseLocked(/* reschedule */ true, /* updateStopReasons */ true,
+                            /* debugReason */ "timed out while stopping",
+                            /* anrMessage */ "required notification not provided",
+                            /* triggerAnr */ true);
+                } else {
+                    Slog.e(TAG, "Unexpected op timeout while EXECUTING");
+                    scheduleOpTimeOutLocked();
                 }
                 break;
             default:
@@ -1335,7 +1360,8 @@ public final class JobServiceContext implements ServiceConnection {
                 completedJob.isConstraintSatisfied(JobStatus.CONSTRAINT_TIMING_DELAY),
                 completedJob.isConstraintSatisfied(JobInfo.CONSTRAINT_FLAG_DEVICE_IDLE),
                 completedJob.isConstraintSatisfied(JobStatus.CONSTRAINT_CONNECTIVITY),
-                completedJob.isConstraintSatisfied(JobStatus.CONSTRAINT_CONTENT_TRIGGER));
+                completedJob.isConstraintSatisfied(JobStatus.CONSTRAINT_CONTENT_TRIGGER),
+                0);
         if (Trace.isTagEnabled(Trace.TRACE_TAG_SYSTEM_SERVER)) {
             Trace.asyncTraceForTrackEnd(Trace.TRACE_TAG_SYSTEM_SERVER, "JobScheduler",
                     getId());
@@ -1352,7 +1378,7 @@ public final class JobServiceContext implements ServiceConnection {
                     JobSchedulerEconomicPolicy.ACTION_JOB_TIMEOUT,
                     String.valueOf(mRunningJob.getJobId()));
         }
-        mNotificationCoordinator.removeNotificationAssociation(this);
+        mNotificationCoordinator.removeNotificationAssociation(this, reschedulingStopReason);
         if (mWakeLock != null) {
             mWakeLock.release();
         }
@@ -1402,20 +1428,24 @@ public final class JobServiceContext implements ServiceConnection {
     private void scheduleOpTimeOutLocked() {
         removeOpTimeOutLocked();
 
-        // TODO(260848384): enforce setNotification timeout for user-initiated jobs
         final long timeoutMillis;
         switch (mVerb) {
             case VERB_EXECUTING:
+                long minTimeout;
                 final long earliestStopTimeElapsed =
                         mExecutionStartTimeElapsed + mMinExecutionGuaranteeMillis;
                 final long latestStopTimeElapsed =
                         mExecutionStartTimeElapsed + mMaxExecutionTimeMillis;
                 final long nowElapsed = sElapsedRealtimeClock.millis();
                 if (nowElapsed < earliestStopTimeElapsed) {
-                    timeoutMillis = earliestStopTimeElapsed - nowElapsed;
+                    minTimeout = earliestStopTimeElapsed - nowElapsed;
                 } else {
-                    timeoutMillis = latestStopTimeElapsed - nowElapsed;
+                    minTimeout = latestStopTimeElapsed - nowElapsed;
                 }
+                if (mAwaitingNotification) {
+                    minTimeout = Math.min(minTimeout, NOTIFICATION_TIMEOUT_MILLIS);
+                }
+                timeoutMillis = minTimeout;
                 break;
 
             case VERB_BINDING:

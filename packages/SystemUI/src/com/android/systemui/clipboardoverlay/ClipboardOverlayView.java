@@ -21,6 +21,7 @@ import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
+import android.animation.ObjectAnimator;
 import android.animation.TimeInterpolator;
 import android.animation.ValueAnimator;
 import android.annotation.Nullable;
@@ -70,8 +71,6 @@ public class ClipboardOverlayView extends DraggableConstraintLayout {
 
         void onRemoteCopyButtonTapped();
 
-        void onEditButtonTapped();
-
         void onShareButtonTapped();
 
         void onPreviewTapped();
@@ -94,7 +93,6 @@ public class ClipboardOverlayView extends DraggableConstraintLayout {
     private TextView mHiddenPreview;
     private LinearLayout mMinimizedPreview;
     private View mPreviewBorder;
-    private OverlayActionChip mEditChip;
     private OverlayActionChip mShareChip;
     private OverlayActionChip mRemoteCopyChip;
     private View mActionContainerBackground;
@@ -126,18 +124,14 @@ public class ClipboardOverlayView extends DraggableConstraintLayout {
         mTextPreview = requireViewById(R.id.text_preview);
         mHiddenPreview = requireViewById(R.id.hidden_preview);
         mMinimizedPreview = requireViewById(R.id.minimized_preview);
-        mEditChip = requireViewById(R.id.edit_chip);
         mShareChip = requireViewById(R.id.share_chip);
         mRemoteCopyChip = requireViewById(R.id.remote_copy_chip);
         mDismissButton = requireViewById(R.id.dismiss_button);
 
-        mEditChip.setAlpha(1);
         mShareChip.setAlpha(1);
         mRemoteCopyChip.setAlpha(1);
         mShareChip.setContentDescription(mContext.getString(com.android.internal.R.string.share));
 
-        mEditChip.setIcon(
-                Icon.createWithResource(mContext, R.drawable.ic_screenshot_edit), true);
         mRemoteCopyChip.setIcon(
                 Icon.createWithResource(mContext, R.drawable.ic_baseline_devices_24), true);
         mShareChip.setIcon(
@@ -159,7 +153,6 @@ public class ClipboardOverlayView extends DraggableConstraintLayout {
     public void setCallbacks(SwipeDismissCallbacks callbacks) {
         super.setCallbacks(callbacks);
         ClipboardOverlayCallbacks clipboardCallbacks = (ClipboardOverlayCallbacks) callbacks;
-        mEditChip.setOnClickListener(v -> clipboardCallbacks.onEditButtonTapped());
         mShareChip.setOnClickListener(v -> clipboardCallbacks.onShareButtonTapped());
         mDismissButton.setOnClickListener(v -> clipboardCallbacks.onDismissButtonTapped());
         mRemoteCopyChip.setOnClickListener(v -> clipboardCallbacks.onRemoteCopyButtonTapped());
@@ -259,7 +252,6 @@ public class ClipboardOverlayView extends DraggableConstraintLayout {
                         updateTextSize(text, textView);
                     }
                 });
-        mEditChip.setVisibility(View.GONE);
     }
 
     void showImagePreview(@Nullable Bitmap thumbnail) {
@@ -270,12 +262,6 @@ public class ClipboardOverlayView extends DraggableConstraintLayout {
             mImagePreview.setImageBitmap(thumbnail);
             showSinglePreview(mImagePreview);
         }
-    }
-
-    void showEditChip(String contentDescription) {
-        mEditChip.setVisibility(View.VISIBLE);
-        mActionContainerBackground.setVisibility(View.VISIBLE);
-        mEditChip.setContentDescription(contentDescription);
     }
 
     void showShareChip() {
@@ -289,7 +275,6 @@ public class ClipboardOverlayView extends DraggableConstraintLayout {
         mActionContainerBackground.setVisibility(View.GONE);
         mDismissButton.setVisibility(View.GONE);
         mShareChip.setVisibility(View.GONE);
-        mEditChip.setVisibility(View.GONE);
         mRemoteCopyChip.setVisibility(View.GONE);
         setEditAccessibilityAction(false);
         resetActionChips();
@@ -300,6 +285,20 @@ public class ClipboardOverlayView extends DraggableConstraintLayout {
             mActionContainer.removeView(chip);
         }
         mActionChips.clear();
+    }
+
+    Animator getMinimizedFadeoutAnimation() {
+        ObjectAnimator anim = ObjectAnimator.ofFloat(mMinimizedPreview, "alpha", 1, 0);
+        anim.setDuration(66);
+        anim.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                super.onAnimationEnd(animation);
+                mMinimizedPreview.setVisibility(View.GONE);
+                mMinimizedPreview.setAlpha(1);
+            }
+        });
+        return anim;
     }
 
     Animator getEnterAnimation() {

@@ -350,7 +350,14 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
      * @see android.R.attr#colorMode
      */
     public static final int COLOR_MODE_HDR = 2;
-    // 3 Corresponds to android::uirenderer::ColorMode::Hdr10.
+
+    /**
+     * Comparison point against COLOR_MODE_HDR that uses 1010102
+     * Only for internal test usages
+     * @hide
+     */
+    public static final int COLOR_MODE_HDR10 = 3;
+
     /**
      * Value of {@link #colorMode} indicating that the activity should use an
      * 8 bit alpha buffer if the presentation display supports it.
@@ -1147,6 +1154,34 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
     @Disabled
     public static final long OVERRIDE_CAMERA_COMPAT_ENABLE_REFRESH_VIA_PAUSE =
             264301586L; // buganizer id
+
+    /**
+     * This change id forces the packages it is applied to sandbox {@link android.view.View} API to
+     * an activity bounds for:
+     *
+     * <p>{@link android.view.View#getLocationOnScreen},
+     * {@link android.view.View#getWindowVisibleDisplayFrame},
+     * {@link android.view.View}#getWindowDisplayFrame,
+     * {@link android.view.View}#getBoundsOnScreen.
+     *
+     * <p>For {@link android.view.View#getWindowVisibleDisplayFrame} and
+     * {@link android.view.View}#getWindowDisplayFrame this sandboxing is happening indirectly
+     * through
+     * {@link android.view.ViewRootImpl}#getWindowVisibleDisplayFrame,
+     * {@link android.view.ViewRootImpl}#getDisplayFrame respectively.
+     *
+     * <p>Some applications assume that they occupy the whole screen and therefore use the display
+     * coordinates in their calculations as if an activity is  positioned in the top-left corner of
+     * the screen, with left coordinate equal to 0. This may not be the case of applications in
+     * multi-window and in letterbox modes. This can lead to shifted or out of bounds UI elements in
+     * case the activity is Letterboxed or is in multi-window mode.
+     * @hide
+     */
+    @ChangeId
+    @Overridable
+    @Disabled
+    @TestApi
+    public static final long OVERRIDE_SANDBOX_VIEW_BOUNDS_APIS = 237531167L; // buganizer id
 
     /**
      * This change id is the gatekeeper for all treatments that force a given min aspect ratio.

@@ -16,6 +16,7 @@
 
 package android.view;
 
+import static android.content.pm.ActivityInfo.OVERRIDE_SANDBOX_VIEW_BOUNDS_APIS;
 import static android.graphics.HardwareRenderer.SYNC_CONTEXT_IS_STOPPED;
 import static android.graphics.HardwareRenderer.SYNC_LOST_SURFACE_REWARD_IF_FOUND;
 import static android.os.IInputConstants.INVALID_INPUT_EVENT_ID;
@@ -79,6 +80,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR_ADDITIONAL
 import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_ALERT;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 import static android.view.WindowManager.LayoutParams.TYPE_VOLUME_OVERLAY;
+import static android.view.WindowManager.PROPERTY_COMPAT_ALLOW_SANDBOXING_VIEW_BOUNDS_APIS;
 import static android.view.WindowManagerGlobal.RELAYOUT_RES_CANCEL_AND_REDRAW;
 import static android.view.WindowManagerGlobal.RELAYOUT_RES_CONSUME_ALWAYS_SYSTEM_BARS;
 import static android.view.WindowManagerGlobal.RELAYOUT_RES_SURFACE_CHANGED;
@@ -92,12 +94,14 @@ import android.animation.LayoutTransition;
 import android.annotation.AnyThread;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.Size;
 import android.annotation.UiContext;
 import android.app.ActivityManager;
 import android.app.ActivityThread;
 import android.app.ICompatCameraControlCallback;
 import android.app.ResourcesManager;
 import android.app.WindowConfiguration;
+import android.app.compat.CompatChanges;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ClipData;
 import android.content.ClipDescription;
@@ -684,9 +688,10 @@ public final class ViewRootImpl implements ViewParent,
 
     private BLASTBufferQueue mBlastBufferQueue;
 
-    private boolean mUpdateSdrHdrRatioInfo = false;
-    private float mDesiredSdrHdrRatio = 1f;
-    private float mRenderSdrHdrRatio = 1f;
+    private boolean mUpdateHdrSdrRatioInfo = false;
+    private float mDesiredHdrSdrRatio = 1f;
+    private float mRenderHdrSdrRatio = 1f;
+    private Consumer<Display> mHdrSdrRatioChangedListener = null;
 
     /**
      * Child container layer of {@code mSurface} with the same bounds as its parent, and cropped to
@@ -895,6 +900,15 @@ public final class ViewRootImpl implements ViewParent,
 
     private boolean mRelayoutRequested;
 
+    /**
+     * Whether sandboxing of {@link android.view.View#getBoundsOnScreen},
+     * {@link android.view.View#getLocationOnScreen(int[])},
+     * {@link android.view.View#getWindowDisplayFrame} and
+     * {@link android.view.View#getWindowVisibleDisplayFrame}
+     * within Activity bounds is enabled for the current application.
+     */
+    private final boolean mViewBoundsSandboxingEnabled;
+
     private int mLastTransformHint = Integer.MIN_VALUE;
 
     private AccessibilityWindowAttributes mAccessibilityWindowAttributes;
@@ -986,6 +1000,8 @@ public final class ViewRootImpl implements ViewParent,
         mHandwritingInitiator = new HandwritingInitiator(
                 mViewConfiguration,
                 mContext.getSystemService(InputMethodManager.class));
+
+        mViewBoundsSandboxingEnabled = getViewBoundsSandboxingEnabled();
 
         String processorOverrideName = context.getResources().getString(
                                     R.string.config_inputEventCompatProcessorOverrideClassName);
@@ -1136,6 +1152,10 @@ public final class ViewRootImpl implements ViewParent,
         updateLastConfigurationFromResources(getConfiguration());
         // Make sure to report the completion of draw for relaunch with preserved window.
         reportNextDraw("rebuilt");
+        // Make sure to resume this root view when relaunching its host activity which was stopped.
+        if (mStopped) {
+            setWindowStopped(false);
+        }
     }
 
     private Configuration getConfiguration() {
@@ -1647,6 +1667,7 @@ public final class ViewRootImpl implements ViewParent,
                 mAttachInfo.mThreadedRenderer = renderer;
                 renderer.setSurfaceControl(mSurfaceControl, mBlastBufferQueue);
                 updateColorModeIfNeeded(attrs.getColorMode());
+                updateRenderHdrSdrRatio();
                 updateForceDarkMode();
                 mAttachInfo.mHardwareAccelerated = true;
                 mAttachInfo.mHardwareAccelerationRequested = true;
@@ -1949,6 +1970,9 @@ public final class ViewRootImpl implements ViewParent,
     private void updateInternalDisplay(int displayId, Resources resources) {
         final Display preferredDisplay =
                 ResourcesManager.getInstance().getAdjustedDisplay(displayId, resources);
+        if (mHdrSdrRatioChangedListener != null && mDisplay != null) {
+            mDisplay.unregisterHdrSdrRatioChangedListener(mHdrSdrRatioChangedListener);
+        }
         if (preferredDisplay == null) {
             // Fallback to use default display.
             Slog.w(TAG, "Cannot get desired display with Id: " + displayId);
@@ -1956,6 +1980,9 @@ public final class ViewRootImpl implements ViewParent,
                     .getAdjustedDisplay(DEFAULT_DISPLAY, resources);
         } else {
             mDisplay = preferredDisplay;
+        }
+        if (mHdrSdrRatioChangedListener != null && mDisplay != null) {
+            mDisplay.registerHdrSdrRatioChangedListener(mExecutor, mHdrSdrRatioChangedListener);
         }
         mContext.updateDisplay(mDisplay.getDisplayId());
     }
@@ -4841,11 +4868,11 @@ public final class ViewRootImpl implements ViewParent,
 
                 useAsyncReport = true;
 
-                if (mUpdateSdrHdrRatioInfo) {
-                    mUpdateSdrHdrRatioInfo = false;
+                if (mUpdateHdrSdrRatioInfo) {
+                    mUpdateHdrSdrRatioInfo = false;
                     applyTransactionOnDraw(mTransaction.setExtendedRangeBrightness(
-                            getSurfaceControl(), mRenderSdrHdrRatio, mDesiredSdrHdrRatio));
-                    mAttachInfo.mThreadedRenderer.setTargetSdrHdrRatio(mRenderSdrHdrRatio);
+                            getSurfaceControl(), mRenderHdrSdrRatio, mDesiredHdrSdrRatio));
+                    mAttachInfo.mThreadedRenderer.setTargetHdrSdrRatio(mRenderHdrSdrRatio);
                 }
 
                 if (forceDraw) {
@@ -5371,9 +5398,18 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
+    private void updateRenderHdrSdrRatio() {
+        mRenderHdrSdrRatio = mDisplay.getHdrSdrRatio();
+        mUpdateHdrSdrRatioInfo = true;
+    }
+
     private void updateColorModeIfNeeded(@ActivityInfo.ColorMode int colorMode) {
         if (mAttachInfo.mThreadedRenderer == null) {
             return;
+        }
+        if ((colorMode == ActivityInfo.COLOR_MODE_HDR || colorMode == ActivityInfo.COLOR_MODE_HDR10)
+                && !mDisplay.isHdrSdrRatioAvailable()) {
+            colorMode = ActivityInfo.COLOR_MODE_WIDE_COLOR_GAMUT;
         }
         // TODO: Centralize this sanitization? Why do we let setting bad modes?
         // Alternatively, can we just let HWUI figure it out? Do we need to care here?
@@ -5382,17 +5418,27 @@ public final class ViewRootImpl implements ViewParent,
             colorMode = ActivityInfo.COLOR_MODE_DEFAULT;
         }
         float desiredRatio = mAttachInfo.mThreadedRenderer.setColorMode(colorMode);
-        if (desiredRatio != mDesiredSdrHdrRatio) {
-            mDesiredSdrHdrRatio = desiredRatio;
-            mUpdateSdrHdrRatioInfo = true;
+        if (desiredRatio != mDesiredHdrSdrRatio) {
+            mDesiredHdrSdrRatio = desiredRatio;
+            updateRenderHdrSdrRatio();
+
+            if (mDesiredHdrSdrRatio < 1.01f) {
+                mDisplay.unregisterHdrSdrRatioChangedListener(mHdrSdrRatioChangedListener);
+                mHdrSdrRatioChangedListener = null;
+            } else {
+                mHdrSdrRatioChangedListener = display -> {
+                    setTargetHdrSdrRatio(display.getHdrSdrRatio());
+                };
+                mDisplay.registerHdrSdrRatioChangedListener(mExecutor, mHdrSdrRatioChangedListener);
+            }
         }
     }
 
     /** happylint */
-    public void setTargetSdrHdrRatio(float ratio) {
-        if (mRenderSdrHdrRatio != ratio) {
-            mRenderSdrHdrRatio = ratio;
-            mUpdateSdrHdrRatioInfo = true;
+    public void setTargetHdrSdrRatio(float ratio) {
+        if (mRenderHdrSdrRatio != ratio) {
+            mRenderHdrSdrRatio = ratio;
+            mUpdateHdrSdrRatioInfo = true;
             invalidate();
         }
     }
@@ -5968,6 +6014,9 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     final ViewRootHandler mHandler = new ViewRootHandler();
+    private final Executor mExecutor = (Runnable r) -> {
+        mHandler.post(r);
+    };
 
     /**
      * Something in the current window tells us we need to change the touch mode.  For
@@ -8474,6 +8523,7 @@ public final class ViewRootImpl implements ViewParent,
             if (mAttachInfo.mThreadedRenderer != null) {
                 mAttachInfo.mThreadedRenderer.setSurfaceControl(mSurfaceControl, mBlastBufferQueue);
             }
+            updateRenderHdrSdrRatio();
             if (mPreviousTransformHint != transformHint) {
                 mPreviousTransformHint = transformHint;
                 dispatchTransformHintChanged(transformHint);
@@ -8570,6 +8620,9 @@ public final class ViewRootImpl implements ViewParent,
      */
     void getDisplayFrame(Rect outFrame) {
         outFrame.set(mTmpFrames.displayFrame);
+        // Apply sandboxing here (in getter) due to possible layout updates on the client after
+        // mTmpFrames.displayFrame is received from the server.
+        applyViewBoundsSandboxingIfNeeded(outFrame);
     }
 
     /**
@@ -8586,6 +8639,69 @@ public final class ViewRootImpl implements ViewParent,
         outFrame.top += insets.top;
         outFrame.right -= insets.right;
         outFrame.bottom -= insets.bottom;
+        // Apply sandboxing here (in getter) due to possible layout updates on the client after
+        // mTmpFrames.displayFrame is received from the server.
+        applyViewBoundsSandboxingIfNeeded(outFrame);
+    }
+
+    /**
+     * Offset outRect to make it sandboxed within Window's bounds.
+     *
+     * <p>This is used by {@link android.view.View#getBoundsOnScreen},
+     * {@link android.view.ViewRootImpl#getDisplayFrame} and
+     * {@link android.view.ViewRootImpl#getWindowVisibleDisplayFrame}, which are invoked by
+     * {@link android.view.View#getWindowDisplayFrame} and
+     * {@link android.view.View#getWindowVisibleDisplayFrame}, as well as
+     * {@link android.view.ViewDebug#captureLayers} for debugging.
+     */
+    void applyViewBoundsSandboxingIfNeeded(final Rect inOutRect) {
+        if (mViewBoundsSandboxingEnabled) {
+            final Rect bounds = getConfiguration().windowConfiguration.getBounds();
+            inOutRect.offset(-bounds.left, -bounds.top);
+        }
+    }
+
+    /**
+     * Offset outLocation to make it sandboxed within Window's bounds.
+     *
+     * <p>This is used by {@link android.view.View#getLocationOnScreen(int[])}
+     */
+    public void applyViewLocationSandboxingIfNeeded(@Size(2) int[] outLocation) {
+        if (mViewBoundsSandboxingEnabled) {
+            final Rect bounds = getConfiguration().windowConfiguration.getBounds();
+            outLocation[0] -= bounds.left;
+            outLocation[1] -= bounds.top;
+        }
+    }
+
+    private boolean getViewBoundsSandboxingEnabled() {
+        // System dialogs (e.g. ANR) can be created within System process, so handleBindApplication
+        // may be never called. This results into all app compat changes being enabled
+        // (see b/268007823) because AppCompatCallbacks.install() is never called with non-empty
+        // array.
+        // With ActivityThread.isSystem we verify that it is not the system process,
+        // then this CompatChange can take effect.
+        if (ActivityThread.isSystem()
+                || !CompatChanges.isChangeEnabled(OVERRIDE_SANDBOX_VIEW_BOUNDS_APIS)) {
+            // It is a system process or OVERRIDE_SANDBOX_VIEW_BOUNDS_APIS change-id is disabled.
+            return false;
+        }
+
+        // OVERRIDE_SANDBOX_VIEW_BOUNDS_APIS is enabled by the device manufacturer.
+        try {
+            final List<PackageManager.Property> properties = mContext.getPackageManager()
+                    .queryApplicationProperty(PROPERTY_COMPAT_ALLOW_SANDBOXING_VIEW_BOUNDS_APIS);
+
+            final boolean isOptedOut = !properties.isEmpty() && !properties.get(0).getBoolean();
+            if (isOptedOut) {
+                // PROPERTY_COMPAT_ALLOW_SANDBOXING_VIEW_BOUNDS_APIS is disabled by the app devs.
+                return false;
+            }
+        } catch (RuntimeException e) {
+            // remote exception.
+        }
+
+        return true;
     }
 
     /**
@@ -8956,6 +9072,10 @@ public final class ViewRootImpl implements ViewParent,
 
     private void destroyHardwareRenderer() {
         ThreadedRenderer hardwareRenderer = mAttachInfo.mThreadedRenderer;
+
+        if (mHdrSdrRatioChangedListener != null) {
+            mDisplay.unregisterHdrSdrRatioChangedListener(mHdrSdrRatioChangedListener);
+        }
 
         if (hardwareRenderer != null) {
             if (mHardwareRendererObserver != null) {
@@ -10057,9 +10177,12 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     void checkThread() {
-        if (mThread != Thread.currentThread()) {
+        Thread current = Thread.currentThread();
+        if (mThread != current) {
             throw new CalledFromWrongThreadException(
-                    "Only the original thread that created a view hierarchy can touch its views.");
+                    "Only the original thread that created a view hierarchy can touch its views."
+                            + " Expected: " + mThread.getName()
+                            + " Calling: " + current.getName());
         }
     }
 
@@ -11361,6 +11484,10 @@ public final class ViewRootImpl implements ViewParent,
             sendBackKeyEvent(KeyEvent.ACTION_DOWN);
             sendBackKeyEvent(KeyEvent.ACTION_UP);
         };
+        if (mOnBackInvokedDispatcher.hasImeOnBackInvokedDispatcher()) {
+            Log.d(TAG, "Skip registering CompatOnBackInvokedCallback on IME dispatcher");
+            return;
+        }
         mOnBackInvokedDispatcher.registerOnBackInvokedCallback(
                 OnBackInvokedDispatcher.PRIORITY_DEFAULT, mCompatOnBackInvokedCallback);
     }

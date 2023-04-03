@@ -49,27 +49,41 @@ import java.util.Objects;
  * Context.sendBroadcast(Intent)} and related methods.
  */
 public class BroadcastOptions extends ComponentOptions {
+    private @Flags int mFlags;
     private long mTemporaryAppAllowlistDuration;
     private @TempAllowListType int mTemporaryAppAllowlistType;
     private @ReasonCode int mTemporaryAppAllowlistReasonCode;
     private @Nullable String mTemporaryAppAllowlistReason;
     private int mMinManifestReceiverApiLevel = 0;
     private int mMaxManifestReceiverApiLevel = Build.VERSION_CODES.CUR_DEVELOPMENT;
-    private boolean mDontSendToRestrictedApps = false;
-    private boolean mAllowBackgroundActivityStarts;
     private String[] mRequireAllOfPermissions;
     private String[] mRequireNoneOfPermissions;
     private long mRequireCompatChangeId = CHANGE_INVALID;
-    private boolean mRequireCompatChangeEnabled = true;
-    private boolean mIsAlarmBroadcast = false;
-    private boolean mIsDeferUntilActive = false;
-    private boolean mShareIdentity = false;
     private long mIdForResponseEvent;
-    private @Nullable IntentFilter mRemoveMatchingFilter;
     private @DeliveryGroupPolicy int mDeliveryGroupPolicy;
     private @Nullable String mDeliveryGroupMatchingKey;
     private @Nullable BundleMerger mDeliveryGroupExtrasMerger;
     private @Nullable IntentFilter mDeliveryGroupMatchingFilter;
+    private @DeferralPolicy int mDeferralPolicy;
+
+    /** @hide */
+    @IntDef(flag = true, prefix = { "FLAG_" }, value = {
+            FLAG_DONT_SEND_TO_RESTRICTED_APPS,
+            FLAG_ALLOW_BACKGROUND_ACTIVITY_STARTS,
+            FLAG_REQUIRE_COMPAT_CHANGE_ENABLED,
+            FLAG_IS_ALARM_BROADCAST,
+            FLAG_SHARE_IDENTITY,
+            FLAG_INTERACTIVE,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface Flags {}
+
+    private static final int FLAG_DONT_SEND_TO_RESTRICTED_APPS = 1 << 0;
+    private static final int FLAG_ALLOW_BACKGROUND_ACTIVITY_STARTS = 1 << 1;
+    private static final int FLAG_REQUIRE_COMPAT_CHANGE_ENABLED = 1 << 2;
+    private static final int FLAG_IS_ALARM_BROADCAST = 1 << 3;
+    private static final int FLAG_SHARE_IDENTITY = 1 << 4;
+    private static final int FLAG_INTERACTIVE = 1 << 5;
 
     /**
      * Change ID which is invalid.
@@ -97,6 +111,11 @@ public class BroadcastOptions extends ComponentOptions {
     @ChangeId
     @Disabled
     public static final long CHANGE_ALWAYS_DISABLED = 210856463L;
+
+    /**
+     * Corresponds to {@link #mFlags}.
+     */
+    private static final String KEY_FLAGS = "android:broadcast.flags";
 
     /**
      * How long to temporarily put an app on the power allowlist when executing this broadcast
@@ -127,18 +146,6 @@ public class BroadcastOptions extends ComponentOptions {
             = "android:broadcast.maxManifestReceiverApiLevel";
 
     /**
-     * Corresponds to {@link #setDontSendToRestrictedApps}.
-     */
-    private static final String KEY_DONT_SEND_TO_RESTRICTED_APPS =
-            "android:broadcast.dontSendToRestrictedApps";
-
-    /**
-     * Corresponds to {@link #setBackgroundActivityStartsAllowed}.
-     */
-    private static final String KEY_ALLOW_BACKGROUND_ACTIVITY_STARTS =
-            "android:broadcast.allowBackgroundActivityStarts";
-
-    /**
      * Corresponds to {@link #setRequireAllOfPermissions}
      * @hide
      */
@@ -157,25 +164,6 @@ public class BroadcastOptions extends ComponentOptions {
      */
     private static final String KEY_REQUIRE_COMPAT_CHANGE_ID =
             "android:broadcast.requireCompatChangeId";
-
-    /**
-     * Corresponds to {@link #setRequireCompatChange(long, boolean)}
-     */
-    private static final String KEY_REQUIRE_COMPAT_CHANGE_ENABLED =
-            "android:broadcast.requireCompatChangeEnabled";
-
-    /**
-     * Corresponds to {@link #setAlarmBroadcast(boolean)}
-     * @hide
-     */
-    public static final String KEY_ALARM_BROADCAST =
-            "android:broadcast.is_alarm";
-
-    /**
-     * Whether the broadcasting app's identity should be available to the receiver.
-     * @see #setShareIdentityEnabled(boolean)
-     */
-    private static final String KEY_SHARE_IDENTITY = "android:broadcast.share_identity";
 
     /**
      * @hide
@@ -202,18 +190,6 @@ public class BroadcastOptions extends ComponentOptions {
             "android:broadcast.idForResponseEvent";
 
     /**
-     * Corresponds to {@link #setRemoveMatchingFilter}.
-     */
-    private static final String KEY_REMOVE_MATCHING_FILTER =
-            "android:broadcast.removeMatchingFilter";
-
-    /**
-     * Corresponds to {@link #setDeferUntilActive(boolean)}.
-     */
-    private static final String KEY_DEFER_UNTIL_ACTIVE =
-            "android:broadcast.deferuntilactive";
-
-    /**
      * Corresponds to {@link #setDeliveryGroupPolicy(int)}.
      */
     private static final String KEY_DELIVERY_GROUP_POLICY =
@@ -238,11 +214,17 @@ public class BroadcastOptions extends ComponentOptions {
             "android:broadcast.deliveryGroupMatchingFilter";
 
     /**
+     * Corresponds to {@link #setDeferralPolicy(int)}
+     */
+    private static final String KEY_DEFERRAL_POLICY =
+            "android:broadcast.deferralPolicy";
+
+    /**
      * The list of delivery group policies which specify how multiple broadcasts belonging to
      * the same delivery group has to be handled.
      * @hide
      */
-    @IntDef(flag = true, prefix = { "DELIVERY_GROUP_POLICY_" }, value = {
+    @IntDef(prefix = { "DELIVERY_GROUP_POLICY_" }, value = {
             DELIVERY_GROUP_POLICY_ALL,
             DELIVERY_GROUP_POLICY_MOST_RECENT,
             DELIVERY_GROUP_POLICY_MERGED,
@@ -253,19 +235,13 @@ public class BroadcastOptions extends ComponentOptions {
     /**
      * Delivery group policy that indicates that all the broadcasts in the delivery group
      * need to be delivered as is.
-     *
-     * @hide
      */
-    @SystemApi
     public static final int DELIVERY_GROUP_POLICY_ALL = 0;
 
     /**
      * Delivery group policy that indicates that only the most recent broadcast in the delivery
      * group need to be delivered and the rest can be dropped.
-     *
-     * @hide
      */
-    @SystemApi
     public static final int DELIVERY_GROUP_POLICY_MOST_RECENT = 1;
 
     /**
@@ -275,6 +251,50 @@ public class BroadcastOptions extends ComponentOptions {
      * @hide
      */
     public static final int DELIVERY_GROUP_POLICY_MERGED = 2;
+
+    /** {@hide} */
+    @IntDef(prefix = { "DEFERRAL_POLICY_" }, value = {
+            DEFERRAL_POLICY_DEFAULT,
+            DEFERRAL_POLICY_NONE,
+            DEFERRAL_POLICY_UNTIL_ACTIVE,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface DeferralPolicy {}
+
+    /**
+     * Deferral policy that indicates no desire has been expressed, and that the
+     * system should use a reasonable default behavior.
+     */
+    public static final int DEFERRAL_POLICY_DEFAULT = 0;
+
+    /**
+     * Deferral policy that indicates a strong desire that no receiver of this
+     * broadcast should be deferred.
+     */
+    public static final int DEFERRAL_POLICY_NONE = 1;
+
+    /**
+     * Deferral policy that indicates a strong desire that each receiver of this
+     * broadcast should be deferred until that receiver's process is in an
+     * active (non-cached) state. Whether an app's process state is considered
+     * active is independent of its standby bucket.
+     * <p>
+     * This policy only applies to runtime registered receivers of a broadcast,
+     * and does not apply to ordered broadcasts, alarm broadcasts, interactive
+     * broadcasts, or manifest broadcasts.
+     * <p>
+     * This policy means that a runtime registered receiver will not typically
+     * execute until that receiver's process is brought to an active state by
+     * some other action, such as a job, alarm, or service binding. As a result,
+     * the receiver may be delayed indefinitely.
+     * <p>
+     * When this policy is set on an unordered broadcast with a completion
+     * callback, the completion callback will run once all eligible processes
+     * have finished receiving the broadcast. Processes in inactive process
+     * state are not considered eligible and may not receive the broadcast prior
+     * to the completion callback.
+     */
+    public static final int DEFERRAL_POLICY_UNTIL_ACTIVE = 2;
 
     /**
      * Creates a basic {@link BroadcastOptions} with no options initially set.
@@ -286,19 +306,9 @@ public class BroadcastOptions extends ComponentOptions {
         return opts;
     }
 
-    /**
-     * {@hide}
-     * @deprecated use {@link #setDeliveryGroupMatchingFilter(IntentFilter)} instead.
-     */
-    @Deprecated
-    public static @NonNull BroadcastOptions makeRemovingMatchingFilter(
-            @NonNull IntentFilter removeMatchingFilter) {
-        BroadcastOptions opts = new BroadcastOptions();
-        opts.setRemoveMatchingFilter(removeMatchingFilter);
-        return opts;
-    }
-
-    private BroadcastOptions() {
+    /** @hide */
+    @TestApi
+    public BroadcastOptions() {
         super();
         resetTemporaryAppAllowlist();
     }
@@ -308,6 +318,7 @@ public class BroadcastOptions extends ComponentOptions {
     public BroadcastOptions(@NonNull Bundle opts) {
         super(opts);
         // Match the logic in toBundle().
+        mFlags = opts.getInt(KEY_FLAGS, 0);
         if (opts.containsKey(KEY_TEMPORARY_APP_ALLOWLIST_DURATION)) {
             mTemporaryAppAllowlistDuration = opts.getLong(KEY_TEMPORARY_APP_ALLOWLIST_DURATION);
             mTemporaryAppAllowlistType = opts.getInt(KEY_TEMPORARY_APP_ALLOWLIST_TYPE);
@@ -320,18 +331,10 @@ public class BroadcastOptions extends ComponentOptions {
         mMinManifestReceiverApiLevel = opts.getInt(KEY_MIN_MANIFEST_RECEIVER_API_LEVEL, 0);
         mMaxManifestReceiverApiLevel = opts.getInt(KEY_MAX_MANIFEST_RECEIVER_API_LEVEL,
                 Build.VERSION_CODES.CUR_DEVELOPMENT);
-        mDontSendToRestrictedApps = opts.getBoolean(KEY_DONT_SEND_TO_RESTRICTED_APPS, false);
-        mAllowBackgroundActivityStarts = opts.getBoolean(KEY_ALLOW_BACKGROUND_ACTIVITY_STARTS,
-                false);
         mRequireAllOfPermissions = opts.getStringArray(KEY_REQUIRE_ALL_OF_PERMISSIONS);
         mRequireNoneOfPermissions = opts.getStringArray(KEY_REQUIRE_NONE_OF_PERMISSIONS);
         mRequireCompatChangeId = opts.getLong(KEY_REQUIRE_COMPAT_CHANGE_ID, CHANGE_INVALID);
-        mRequireCompatChangeEnabled = opts.getBoolean(KEY_REQUIRE_COMPAT_CHANGE_ENABLED, true);
         mIdForResponseEvent = opts.getLong(KEY_ID_FOR_RESPONSE_EVENT);
-        mIsAlarmBroadcast = opts.getBoolean(KEY_ALARM_BROADCAST, false);
-        mShareIdentity = opts.getBoolean(KEY_SHARE_IDENTITY, false);
-        mRemoveMatchingFilter = opts.getParcelable(KEY_REMOVE_MATCHING_FILTER,
-                IntentFilter.class);
         mDeliveryGroupPolicy = opts.getInt(KEY_DELIVERY_GROUP_POLICY,
                 DELIVERY_GROUP_POLICY_ALL);
         mDeliveryGroupMatchingKey = opts.getString(KEY_DELIVERY_GROUP_KEY);
@@ -339,7 +342,7 @@ public class BroadcastOptions extends ComponentOptions {
                 BundleMerger.class);
         mDeliveryGroupMatchingFilter = opts.getParcelable(KEY_DELIVERY_GROUP_MATCHING_FILTER,
                 IntentFilter.class);
-        mIsDeferUntilActive = opts.getBoolean(KEY_DEFER_UNTIL_ACTIVE, false);
+        mDeferralPolicy = opts.getInt(KEY_DEFERRAL_POLICY, DEFERRAL_POLICY_DEFAULT);
     }
 
     /**
@@ -521,7 +524,11 @@ public class BroadcastOptions extends ComponentOptions {
      */
     @SystemApi
     public void setDontSendToRestrictedApps(boolean dontSendToRestrictedApps) {
-        mDontSendToRestrictedApps = dontSendToRestrictedApps;
+        if (dontSendToRestrictedApps) {
+            mFlags |= FLAG_DONT_SEND_TO_RESTRICTED_APPS;
+        } else {
+            mFlags &= ~FLAG_DONT_SEND_TO_RESTRICTED_APPS;
+        }
     }
 
     /**
@@ -529,7 +536,7 @@ public class BroadcastOptions extends ComponentOptions {
      * @return #setDontSendToRestrictedApps
      */
     public boolean isDontSendToRestrictedApps() {
-        return mDontSendToRestrictedApps;
+        return (mFlags & FLAG_DONT_SEND_TO_RESTRICTED_APPS) != 0;
     }
 
     /**
@@ -540,15 +547,20 @@ public class BroadcastOptions extends ComponentOptions {
     @SystemApi
     @RequiresPermission(android.Manifest.permission.START_ACTIVITIES_FROM_BACKGROUND)
     public void setBackgroundActivityStartsAllowed(boolean allowBackgroundActivityStarts) {
-        mAllowBackgroundActivityStarts = allowBackgroundActivityStarts;
+        if (allowBackgroundActivityStarts) {
+            mFlags |= FLAG_ALLOW_BACKGROUND_ACTIVITY_STARTS;
+        } else {
+            mFlags &= ~FLAG_ALLOW_BACKGROUND_ACTIVITY_STARTS;
+        }
     }
 
     /**
      * @hide
      * @return #setAllowBackgroundActivityStarts
      */
+    @Deprecated
     public boolean allowsBackgroundActivityStarts() {
-        return mAllowBackgroundActivityStarts;
+        return (mFlags & FLAG_ALLOW_BACKGROUND_ACTIVITY_STARTS) != 0;
     }
 
     /**
@@ -610,7 +622,11 @@ public class BroadcastOptions extends ComponentOptions {
     @SystemApi
     public void setRequireCompatChange(long changeId, boolean enabled) {
         mRequireCompatChangeId = changeId;
-        mRequireCompatChangeEnabled = enabled;
+        if (enabled) {
+            mFlags |= FLAG_REQUIRE_COMPAT_CHANGE_ENABLED;
+        } else {
+            mFlags &= ~FLAG_REQUIRE_COMPAT_CHANGE_ENABLED;
+        }
     }
 
     /**
@@ -620,8 +636,7 @@ public class BroadcastOptions extends ComponentOptions {
      */
     @SystemApi
     public void clearRequireCompatChange() {
-        mRequireCompatChangeId = CHANGE_INVALID;
-        mRequireCompatChangeEnabled = true;
+        setRequireCompatChange(CHANGE_INVALID, true);
     }
 
     /**
@@ -633,7 +648,11 @@ public class BroadcastOptions extends ComponentOptions {
      * @param senderIsAlarm Whether the broadcast is alarm-triggered.
      */
     public void setAlarmBroadcast(boolean senderIsAlarm) {
-        mIsAlarmBroadcast = senderIsAlarm;
+        if (senderIsAlarm) {
+            mFlags |= FLAG_IS_ALARM_BROADCAST;
+        } else {
+            mFlags &= ~FLAG_IS_ALARM_BROADCAST;
+        }
     }
 
     /**
@@ -642,7 +661,7 @@ public class BroadcastOptions extends ComponentOptions {
      * @hide
      */
     public boolean isAlarmBroadcast() {
-        return mIsAlarmBroadcast;
+        return (mFlags & FLAG_IS_ALARM_BROADCAST) != 0;
     }
 
     /**
@@ -662,7 +681,11 @@ public class BroadcastOptions extends ComponentOptions {
      * @see BroadcastReceiver#getSentFromPackage()
      */
     public @NonNull BroadcastOptions setShareIdentityEnabled(boolean shareIdentityEnabled) {
-        mShareIdentity = shareIdentityEnabled;
+        if (shareIdentityEnabled) {
+            mFlags |= FLAG_SHARE_IDENTITY;
+        } else {
+            mFlags &= ~FLAG_SHARE_IDENTITY;
+        }
         return this;
     }
 
@@ -675,7 +698,7 @@ public class BroadcastOptions extends ComponentOptions {
      * @see BroadcastReceiver#getSentFromPackage()
      */
     public boolean isShareIdentityEnabled() {
-        return mShareIdentity;
+        return (mFlags & FLAG_SHARE_IDENTITY) != 0;
     }
 
     /**
@@ -714,8 +737,8 @@ public class BroadcastOptions extends ComponentOptions {
     @TestApi
     public boolean testRequireCompatChange(int uid) {
         if (mRequireCompatChangeId != CHANGE_INVALID) {
-            return CompatChanges.isChangeEnabled(mRequireCompatChangeId,
-                    uid) == mRequireCompatChangeEnabled;
+            final boolean requireEnabled = (mFlags & FLAG_REQUIRE_COMPAT_CHANGE_ENABLED) != 0;
+            return CompatChanges.isChangeEnabled(mRequireCompatChangeId, uid) == requireEnabled;
         } else {
             return true;
         }
@@ -745,81 +768,56 @@ public class BroadcastOptions extends ComponentOptions {
         return mIdForResponseEvent;
     }
 
-    /**
-     * Sets whether the broadcast should not run until the process is in an active process state
-     * (ie, a process exists for the app and the app is not in a cached process state).
-     *
-     * Whether an app's process state is considered active is independent of its standby bucket.
-     *
-     * A broadcast that is deferred until the process is active will not execute until the process
-     * is brought to an active state by some other action, like a job, alarm, or service binding. As
-     * a result, the broadcast may be delayed indefinitely. This deferral only applies to runtime
-     * registered receivers of a broadcast. Any manifest receivers will run immediately, similar to
-     * how a manifest receiver would start a new process in order to run a broadcast receiver.
-     *
-     * Ordered broadcasts, alarm broadcasts, interactive broadcasts, and manifest broadcasts are
-     * never deferred.
-     *
-     * Unordered broadcasts and unordered broadcasts with completion callbacks may be
-     * deferred. Completion callbacks for broadcasts deferred until active are
-     * best-effort. Completion callbacks will run when all eligible processes have finished
-     * executing the broadcast. Processes in inactive process states that defer the broadcast are
-     * not considered eligible and may not execute the broadcast prior to the completion callback.
-     *
-     * @hide
-     */
+    /** {@hide} */
     @SystemApi
+    @Deprecated
+    // STOPSHIP: remove entirely after this API change lands in AOSP
     public @NonNull BroadcastOptions setDeferUntilActive(boolean shouldDefer) {
-        mIsDeferUntilActive = shouldDefer;
+        if (shouldDefer) {
+            setDeferralPolicy(DEFERRAL_POLICY_UNTIL_ACTIVE);
+        } else {
+            setDeferralPolicy(DEFERRAL_POLICY_NONE);
+        }
+        return this;
+    }
+
+    /** {@hide} */
+    @SystemApi
+    @Deprecated
+    // STOPSHIP: remove entirely after this API change lands in AOSP
+    public boolean isDeferUntilActive() {
+        return (mDeferralPolicy == DEFERRAL_POLICY_UNTIL_ACTIVE);
+    }
+
+    /**
+     * Sets deferral policy for this broadcast that specifies how this broadcast
+     * can be deferred for delivery at some future point.
+     */
+    public @NonNull BroadcastOptions setDeferralPolicy(@DeferralPolicy int deferralPolicy) {
+        mDeferralPolicy = deferralPolicy;
         return this;
     }
 
     /**
-     * Returns if this broadcast should not run until the process is in an active process state.
-     *
-     * @return {@code true} if this broadcast should not run until the process is in an active
-     *                      process state. Otherwise, {@code false}.
-     * @see #setDeferUntilActive(boolean)
-     *
-     * @hide
+     * Gets deferral policy for this broadcast that specifies how this broadcast
+     * can be deferred for delivery at some future point.
      */
-    @SystemApi
-    public boolean isDeferUntilActive() {
-        return mIsDeferUntilActive;
+    public @DeferralPolicy int getDeferralPolicy() {
+        return mDeferralPolicy;
     }
 
     /**
-     * When enqueuing this broadcast, remove all pending broadcasts previously
-     * sent by this app which match the given filter.
-     * <p>
-     * For example, sending {@link Intent#ACTION_SCREEN_ON} would typically want
-     * to remove any pending {@link Intent#ACTION_SCREEN_OFF} broadcasts.
-     *
-     * @hide
-     * @deprecated use {@link #setDeliveryGroupMatchingFilter(IntentFilter)} instead.
+     * Clears any deferral policy for this broadcast that specifies how this
+     * broadcast can be deferred for delivery at some future point.
      */
-    @Deprecated
-    public void setRemoveMatchingFilter(@NonNull IntentFilter removeMatchingFilter) {
-        mRemoveMatchingFilter = Objects.requireNonNull(removeMatchingFilter);
-    }
-
-    /** @hide */
-    public void clearRemoveMatchingFilter() {
-        mRemoveMatchingFilter = null;
-    }
-
-    /** @hide */
-    public @Nullable IntentFilter getRemoveMatchingFilter() {
-        return mRemoveMatchingFilter;
+    public void clearDeferralPolicy() {
+        mDeferralPolicy = DEFERRAL_POLICY_DEFAULT;
     }
 
     /**
      * Set delivery group policy for this broadcast to specify how multiple broadcasts belonging to
      * the same delivery group has to be handled.
-     *
-     * @hide
      */
-    @SystemApi
     @NonNull
     public BroadcastOptions setDeliveryGroupPolicy(@DeliveryGroupPolicy int policy) {
         mDeliveryGroupPolicy = policy;
@@ -829,10 +827,7 @@ public class BroadcastOptions extends ComponentOptions {
     /**
      * Get the delivery group policy for this broadcast that specifies how multiple broadcasts
      * belonging to the same delivery group has to be handled.
-     *
-     * @hide
      */
-    @SystemApi
     public @DeliveryGroupPolicy int getDeliveryGroupPolicy() {
         return mDeliveryGroupPolicy;
     }
@@ -841,10 +836,7 @@ public class BroadcastOptions extends ComponentOptions {
      * Clears any previously set delivery group policies using
      * {@link #setDeliveryGroupMatchingKey(String, String)} and resets the delivery group policy to
      * the default value ({@link #DELIVERY_GROUP_POLICY_ALL}).
-     *
-     * @hide
      */
-    @SystemApi
     public void clearDeliveryGroupPolicy() {
         mDeliveryGroupPolicy = DELIVERY_GROUP_POLICY_ALL;
     }
@@ -859,10 +851,7 @@ public class BroadcastOptions extends ComponentOptions {
      * <p> If neither matching key using this API nor matching filter using
      * {@link #setDeliveryGroupMatchingFilter(IntentFilter)} is specified, then by default
      * {@link Intent#filterEquals(Intent)} will be used to identify the delivery group.
-     *
-     * @hide
      */
-    @SystemApi
     @NonNull
     public BroadcastOptions setDeliveryGroupMatchingKey(@NonNull String namespace,
             @NonNull String key) {
@@ -880,9 +869,7 @@ public class BroadcastOptions extends ComponentOptions {
      *
      * @return the delivery group namespace and key that was previously set using
      *         {@link #setDeliveryGroupMatchingKey(String, String)}, concatenated with a {@code :}.
-     * @hide
      */
-    @SystemApi
     @Nullable
     public String getDeliveryGroupMatchingKey() {
         return mDeliveryGroupMatchingKey;
@@ -891,10 +878,7 @@ public class BroadcastOptions extends ComponentOptions {
     /**
      * Clears the namespace and key that was previously set using
      * {@link #setDeliveryGroupMatchingKey(String, String)}.
-     *
-     * @hide
      */
-    @SystemApi
     public void clearDeliveryGroupMatchingKey() {
         mDeliveryGroupMatchingKey = null;
     }
@@ -909,10 +893,7 @@ public class BroadcastOptions extends ComponentOptions {
      * <p> If neither matching key using {@link #setDeliveryGroupMatchingKey(String, String)} nor
      * matching filter using this API is specified, then by default
      * {@link Intent#filterEquals(Intent)} will be used to identify the delivery group.
-     *
-     * @hide
      */
-    @SystemApi
     @NonNull
     public BroadcastOptions setDeliveryGroupMatchingFilter(@NonNull IntentFilter matchingFilter) {
         mDeliveryGroupMatchingFilter = Objects.requireNonNull(matchingFilter);
@@ -925,9 +906,7 @@ public class BroadcastOptions extends ComponentOptions {
      *
      * @return the {@link IntentFilter} object that was previously set using
      *         {@link #setDeliveryGroupMatchingFilter(IntentFilter)}.
-     * @hide
      */
-    @SystemApi
     @Nullable
     public IntentFilter getDeliveryGroupMatchingFilter() {
         return mDeliveryGroupMatchingFilter;
@@ -936,10 +915,7 @@ public class BroadcastOptions extends ComponentOptions {
     /**
      * Clears the {@link IntentFilter} object that was previously set using
      * {@link #setDeliveryGroupMatchingFilter(IntentFilter)}.
-     *
-     * @hide
      */
-    @SystemApi
     public void clearDeliveryGroupMatchingFilter() {
         mDeliveryGroupMatchingFilter = null;
     }
@@ -979,6 +955,36 @@ public class BroadcastOptions extends ComponentOptions {
      */
     public void clearDeliveryGroupExtrasMerger() {
         mDeliveryGroupExtrasMerger = null;
+    }
+
+    /**
+     * Sets whether the broadcast should be considered as having originated from
+     * some direct interaction by the user such as a notification tap or button
+     * press. This signal is used internally to ensure the broadcast is
+     * delivered quickly with low latency.
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.BROADCAST_OPTION_INTERACTIVE)
+    public @NonNull BroadcastOptions setInteractive(boolean interactive) {
+        if (interactive) {
+            mFlags |= FLAG_INTERACTIVE;
+        } else {
+            mFlags &= ~FLAG_INTERACTIVE;
+        }
+        return this;
+    }
+
+    /**
+     * Returns whether the broadcast should be considered as having originated
+     * from some direct interaction by the user such as a notification tap or
+     * button press.
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.BROADCAST_OPTION_INTERACTIVE)
+    public boolean isInteractive() {
+        return (mFlags & FLAG_INTERACTIVE) != 0;
     }
 
     /**
@@ -1057,29 +1063,20 @@ public class BroadcastOptions extends ComponentOptions {
     @Override
     public @NonNull Bundle toBundle() {
         Bundle b = super.toBundle();
+        if (mFlags != 0) {
+            b.putInt(KEY_FLAGS, mFlags);
+        }
         if (isTemporaryAppAllowlistSet()) {
             b.putLong(KEY_TEMPORARY_APP_ALLOWLIST_DURATION, mTemporaryAppAllowlistDuration);
             b.putInt(KEY_TEMPORARY_APP_ALLOWLIST_TYPE, mTemporaryAppAllowlistType);
             b.putInt(KEY_TEMPORARY_APP_ALLOWLIST_REASON_CODE, mTemporaryAppAllowlistReasonCode);
             b.putString(KEY_TEMPORARY_APP_ALLOWLIST_REASON, mTemporaryAppAllowlistReason);
         }
-        if (mIsAlarmBroadcast) {
-            b.putBoolean(KEY_ALARM_BROADCAST, true);
-        }
-        if (mShareIdentity) {
-            b.putBoolean(KEY_SHARE_IDENTITY, true);
-        }
         if (mMinManifestReceiverApiLevel != 0) {
             b.putInt(KEY_MIN_MANIFEST_RECEIVER_API_LEVEL, mMinManifestReceiverApiLevel);
         }
         if (mMaxManifestReceiverApiLevel != Build.VERSION_CODES.CUR_DEVELOPMENT) {
             b.putInt(KEY_MAX_MANIFEST_RECEIVER_API_LEVEL, mMaxManifestReceiverApiLevel);
-        }
-        if (mDontSendToRestrictedApps) {
-            b.putBoolean(KEY_DONT_SEND_TO_RESTRICTED_APPS, true);
-        }
-        if (mAllowBackgroundActivityStarts) {
-            b.putBoolean(KEY_ALLOW_BACKGROUND_ACTIVITY_STARTS, true);
         }
         if (mRequireAllOfPermissions != null) {
             b.putStringArray(KEY_REQUIRE_ALL_OF_PERMISSIONS, mRequireAllOfPermissions);
@@ -1089,13 +1086,9 @@ public class BroadcastOptions extends ComponentOptions {
         }
         if (mRequireCompatChangeId != CHANGE_INVALID) {
             b.putLong(KEY_REQUIRE_COMPAT_CHANGE_ID, mRequireCompatChangeId);
-            b.putBoolean(KEY_REQUIRE_COMPAT_CHANGE_ENABLED, mRequireCompatChangeEnabled);
         }
         if (mIdForResponseEvent != 0) {
             b.putLong(KEY_ID_FOR_RESPONSE_EVENT, mIdForResponseEvent);
-        }
-        if (mRemoveMatchingFilter != null) {
-            b.putParcelable(KEY_REMOVE_MATCHING_FILTER, mRemoveMatchingFilter);
         }
         if (mDeliveryGroupPolicy != DELIVERY_GROUP_POLICY_ALL) {
             b.putInt(KEY_DELIVERY_GROUP_POLICY, mDeliveryGroupPolicy);
@@ -1115,9 +1108,22 @@ public class BroadcastOptions extends ComponentOptions {
         if (mDeliveryGroupMatchingFilter != null) {
             b.putParcelable(KEY_DELIVERY_GROUP_MATCHING_FILTER, mDeliveryGroupMatchingFilter);
         }
-        if (mIsDeferUntilActive) {
-            b.putBoolean(KEY_DEFER_UNTIL_ACTIVE, mIsDeferUntilActive);
+        if (mDeferralPolicy != DEFERRAL_POLICY_DEFAULT) {
+            b.putInt(KEY_DEFERRAL_POLICY, mDeferralPolicy);
         }
-        return b.isEmpty() ? null : b;
+        return b;
+    }
+
+    /**
+     * Returns a {@link BroadcastOptions} parsed from the given {@link Bundle},
+     * typically generated from {@link #toBundle()}.
+     */
+    public static @NonNull BroadcastOptions fromBundle(@NonNull Bundle options) {
+        return new BroadcastOptions(options);
+    }
+
+    /** {@hide} */
+    public static @Nullable BroadcastOptions fromBundleNullable(@Nullable Bundle options) {
+        return (options != null) ? new BroadcastOptions(options) : null;
     }
 }

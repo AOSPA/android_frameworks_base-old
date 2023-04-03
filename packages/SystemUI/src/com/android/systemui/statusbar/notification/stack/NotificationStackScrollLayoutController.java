@@ -70,7 +70,6 @@ import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin.OnMenuEv
 import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.shade.ShadeController;
-import com.android.systemui.shade.transition.ShadeTransitionController;
 import com.android.systemui.statusbar.LockscreenShadeTransitionController;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager.UserChangedListener;
@@ -172,7 +171,6 @@ public class NotificationStackScrollLayoutController {
     private final CentralSurfaces mCentralSurfaces;
     private final SectionHeaderController mSilentHeaderController;
     private final LockscreenShadeTransitionController mLockscreenShadeTransitionController;
-    private final ShadeTransitionController mShadeTransitionController;
     private final InteractionJankMonitor mJankMonitor;
     private final NotificationStackSizeCalculator mNotificationStackSizeCalculator;
     private final StackStateLogger mStackStateLogger;
@@ -211,7 +209,11 @@ public class NotificationStackScrollLayoutController {
                 public void onViewAttachedToWindow(View v) {
                     mConfigurationController.addCallback(mConfigurationListener);
                     mZenModeController.addCallback(mZenModeControllerCallback);
-                    mBarState = mStatusBarStateController.getState();
+                    final int newBarState = mStatusBarStateController.getState();
+                    if (newBarState != mBarState) {
+                        mStateListener.onStateChanged(newBarState);
+                        mStateListener.onStatePostChange();
+                    }
                     mStatusBarStateController.addCallback(
                             mStateListener, SysuiStatusBarStateController.RANK_STACK_SCROLLER);
                 }
@@ -660,7 +662,6 @@ public class NotificationStackScrollLayoutController {
             NotifPipelineFlags notifPipelineFlags,
             NotifCollection notifCollection,
             LockscreenShadeTransitionController lockscreenShadeTransitionController,
-            ShadeTransitionController shadeTransitionController,
             UiEventLogger uiEventLogger,
             NotificationRemoteInputManager remoteInputManager,
             VisibilityLocationProviderDelegator visibilityLocationProviderDelegator,
@@ -693,7 +694,6 @@ public class NotificationStackScrollLayoutController {
         mMetricsLogger = metricsLogger;
         mDumpManager = dumpManager;
         mLockscreenShadeTransitionController = lockscreenShadeTransitionController;
-        mShadeTransitionController = shadeTransitionController;
         mFalsingCollector = falsingCollector;
         mFalsingManager = falsingManager;
         mResources = resources;
@@ -777,7 +777,6 @@ public class NotificationStackScrollLayoutController {
         mScrimController.setScrimBehindChangeRunnable(mView::updateBackgroundDimming);
 
         mLockscreenShadeTransitionController.setStackScroller(this);
-        mShadeTransitionController.setNotificationStackScrollLayoutController(this);
 
         mLockscreenUserManager.addUserChangedListener(mLockscreenUserChangeListener);
 

@@ -122,7 +122,6 @@ public interface CentralSurfaces extends Dumpable, ActivityStarter, LifecycleOwn
         options.setLaunchDisplayId(displayId);
         options.setCallerDisplayId(displayId);
         options.setPendingIntentBackgroundActivityLaunchAllowed(true);
-        options.setInteractive(true);
         return options.toBundle();
     }
 
@@ -374,8 +373,6 @@ public interface CentralSurfaces extends Dumpable, ActivityStarter, LifecycleOwn
 
     void fadeKeyguardAfterLaunchTransition(Runnable beforeFading,
             Runnable endRunnable, Runnable cancelRunnable);
-
-    void animateKeyguardUnoccluding();
 
     void startLaunchTransitionTimeout();
 

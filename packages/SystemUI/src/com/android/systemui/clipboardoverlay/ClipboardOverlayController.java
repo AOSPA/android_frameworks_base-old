@@ -19,7 +19,6 @@ package com.android.systemui.clipboardoverlay;
 import static android.content.Intent.ACTION_CLOSE_SYSTEM_DIALOGS;
 
 import static com.android.internal.config.sysui.SystemUiDeviceConfigFlags.CLIPBOARD_OVERLAY_SHOW_ACTIONS;
-import static com.android.internal.config.sysui.SystemUiDeviceConfigFlags.CLIPBOARD_OVERLAY_SHOW_EDIT_BUTTON;
 import static com.android.systemui.clipboardoverlay.ClipboardOverlayEvent.CLIPBOARD_OVERLAY_ACTION_SHOWN;
 import static com.android.systemui.clipboardoverlay.ClipboardOverlayEvent.CLIPBOARD_OVERLAY_ACTION_TAPPED;
 import static com.android.systemui.clipboardoverlay.ClipboardOverlayEvent.CLIPBOARD_OVERLAY_DISMISSED_OTHER;
@@ -103,7 +102,6 @@ public class ClipboardOverlayController implements ClipboardListener.ClipboardOv
     private Runnable mOnSessionCompleteListener;
     private Runnable mOnRemoteCopyTapped;
     private Runnable mOnShareTapped;
-    private Runnable mOnEditTapped;
     private Runnable mOnPreviewTapped;
 
     private InputMonitor mInputMonitor;
@@ -151,13 +149,6 @@ public class ClipboardOverlayController implements ClipboardListener.ClipboardOv
                 public void onShareButtonTapped() {
                     if (mOnShareTapped != null) {
                         mOnShareTapped.run();
-                    }
-                }
-
-                @Override
-                public void onEditButtonTapped() {
-                    if (mOnEditTapped != null) {
-                        mOnEditTapped.run();
                     }
                 }
 
@@ -272,10 +263,11 @@ public class ClipboardOverlayController implements ClipboardListener.ClipboardOv
     @Override // ClipboardListener.ClipboardOverlay
     public void setClipData(ClipData data, String source) {
         ClipboardModel model = ClipboardModel.fromClipData(mContext, mClipboardUtils, data, source);
-        if (mExitAnimator != null && mExitAnimator.isRunning()) {
+        boolean wasExiting = (mExitAnimator != null && mExitAnimator.isRunning());
+        if (wasExiting) {
             mExitAnimator.cancel();
         }
-        boolean shouldAnimate = !model.dataMatches(mClipboardModel);
+        boolean shouldAnimate = !model.dataMatches(mClipboardModel) || wasExiting;
         mClipboardModel = model;
         mClipboardLogger.setClipSource(mClipboardModel.getSource());
         if (shouldAnimate) {
@@ -309,29 +301,34 @@ public class ClipboardOverlayController implements ClipboardListener.ClipboardOv
                 if ((mFeatureFlags.isEnabled(CLIPBOARD_REMOTE_BEHAVIOR) && model.isRemote())
                         || DeviceConfig.getBoolean(
                         DeviceConfig.NAMESPACE_SYSTEMUI, CLIPBOARD_OVERLAY_SHOW_ACTIONS, false)) {
-                    if (model.getItem().getTextLinks() != null) {
+                    if (model.getTextLinks() != null) {
                         classifyText(model);
                     }
                 }
                 if (model.isSensitive()) {
                     mView.showTextPreview(mContext.getString(R.string.clipboard_asterisks), true);
                 } else {
-                    mView.showTextPreview(model.getItem().getText(), false);
+                    mView.showTextPreview(model.getText(), false);
                 }
                 mView.setEditAccessibilityAction(true);
                 mOnPreviewTapped = this::editText;
                 break;
             case IMAGE:
-                if (model.isSensitive() || model.loadThumbnail(mContext) != null) {
-                    mView.showImagePreview(
-                            model.isSensitive() ? null : model.loadThumbnail(mContext));
-                    mView.setEditAccessibilityAction(true);
-                    mOnPreviewTapped = () -> editImage(model.getItem().getUri());
-                } else {
-                    // image loading failed
-                    mView.showDefaultTextPreview();
-                }
+                mBgExecutor.execute(() -> {
+                    if (model.isSensitive() || model.loadThumbnail(mContext) != null) {
+                        mView.post(() -> {
+                            mView.showImagePreview(
+                                    model.isSensitive() ? null : model.loadThumbnail(mContext));
+                            mView.setEditAccessibilityAction(true);
+                        });
+                        mOnPreviewTapped = () -> editImage(model.getUri());
+                    } else {
+                        // image loading failed
+                        mView.post(mView::showDefaultTextPreview);
+                    }
+                });
                 break;
+            case URI:
             case OTHER:
                 mView.showDefaultTextPreview();
                 break;
@@ -354,9 +351,20 @@ public class ClipboardOverlayController implements ClipboardListener.ClipboardOv
     }
 
     private void animateFromMinimized() {
-        mIsMinimized = false;
-        setExpandedView();
-        animateIn();
+        if (mEnterAnimator != null && mEnterAnimator.isRunning()) {
+            mEnterAnimator.cancel();
+        }
+        mEnterAnimator = mView.getMinimizedFadeoutAnimation();
+        mEnterAnimator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                super.onAnimationEnd(animation);
+                mIsMinimized = false;
+                setExpandedView();
+                animateIn();
+            }
+        });
+        mEnterAnimator.start();
     }
 
     private String getAccessibilityAnnouncement(ClipboardModel.Type type) {
@@ -372,14 +380,14 @@ public class ClipboardOverlayController implements ClipboardListener.ClipboardOv
     private void classifyText(ClipboardModel model) {
         mBgExecutor.execute(() -> {
             Optional<RemoteAction> remoteAction =
-                    mClipboardUtils.getAction(model.getItem(), model.getSource());
+                    mClipboardUtils.getAction(model.getTextLinks(), model.getSource());
             if (model.equals(mClipboardModel)) {
                 remoteAction.ifPresent(action -> {
                     mClipboardLogger.logUnguarded(CLIPBOARD_OVERLAY_ACTION_SHOWN);
-                    mView.setActionChip(action, () -> {
+                    mView.post(() -> mView.setActionChip(action, () -> {
                         mClipboardLogger.logSessionComplete(CLIPBOARD_OVERLAY_ACTION_TAPPED);
                         animateOut();
-                    });
+                    }));
                 });
             }
         });
@@ -419,10 +427,10 @@ public class ClipboardOverlayController implements ClipboardListener.ClipboardOv
             accessibilityAnnouncement = mContext.getString(R.string.clipboard_text_copied);
         } else if (clipData.getItemAt(0).getUri() != null) {
             if (tryShowEditableImage(clipData.getItemAt(0).getUri(), isSensitive)) {
-                mOnShareTapped = () -> shareContent(clipData);
-                mView.showShareChip();
                 accessibilityAnnouncement = mContext.getString(R.string.clipboard_image_copied);
             }
+            mOnShareTapped = () -> shareContent(clipData);
+            mView.showShareChip();
         } else {
             mView.showDefaultTextPreview();
         }
@@ -522,11 +530,6 @@ public class ClipboardOverlayController implements ClipboardListener.ClipboardOv
         mView.showTextPreview(text, hidden);
         mView.setEditAccessibilityAction(true);
         mOnPreviewTapped = this::editText;
-        if (DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_SYSTEMUI,
-                CLIPBOARD_OVERLAY_SHOW_EDIT_BUTTON, false)) {
-            mOnEditTapped = this::editText;
-            mView.showEditChip(mContext.getString(R.string.clipboard_edit_text_description));
-        }
     }
 
     private boolean tryShowEditableImage(Uri uri, boolean isSensitive) {
@@ -556,10 +559,6 @@ public class ClipboardOverlayController implements ClipboardListener.ClipboardOv
             }
         } else {
             mView.showDefaultTextPreview();
-        }
-        if (isEditableImage && DeviceConfig.getBoolean(
-                DeviceConfig.NAMESPACE_SYSTEMUI, CLIPBOARD_OVERLAY_SHOW_EDIT_BUTTON, false)) {
-            mView.showEditChip(mContext.getString(R.string.clipboard_edit_image_description));
         }
         return isEditableImage;
     }
@@ -636,7 +635,6 @@ public class ClipboardOverlayController implements ClipboardListener.ClipboardOv
     private void reset() {
         mOnRemoteCopyTapped = null;
         mOnShareTapped = null;
-        mOnEditTapped = null;
         mOnPreviewTapped = null;
         mView.reset();
         mTimeoutHandler.cancelTimeout();

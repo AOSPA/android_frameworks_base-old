@@ -25,12 +25,14 @@ import android.graphics.drawable.BitmapDrawable
 import android.os.UserManager
 import androidx.test.filters.SmallTest
 import com.android.internal.logging.UiEventLogger
+import com.android.keyguard.KeyguardUpdateMonitor
 import com.android.systemui.GuestResetOrExitSessionReceiver
 import com.android.systemui.GuestResumeSessionReceiver
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.common.shared.model.Text
 import com.android.systemui.flags.FakeFeatureFlags
 import com.android.systemui.flags.Flags
+import com.android.systemui.keyguard.data.repository.FakeKeyguardBouncerRepository
 import com.android.systemui.keyguard.data.repository.FakeKeyguardRepository
 import com.android.systemui.keyguard.domain.interactor.KeyguardInteractor
 import com.android.systemui.plugins.ActivityStarter
@@ -79,6 +81,7 @@ class StatusBarUserChipViewModelTest : SysuiTestCase() {
     @Mock private lateinit var resumeSessionReceiver: GuestResumeSessionReceiver
     @Mock private lateinit var resetOrExitSessionReceiver: GuestResetOrExitSessionReceiver
     @Mock private lateinit var commandQueue: CommandQueue
+    @Mock private lateinit var keyguardUpdateMonitor: KeyguardUpdateMonitor
 
     private lateinit var underTest: StatusBarUserChipViewModel
 
@@ -251,6 +254,7 @@ class StatusBarUserChipViewModelTest : SysuiTestCase() {
                             repository = keyguardRepository,
                             commandQueue = commandQueue,
                             featureFlags = featureFlags,
+                            bouncerRepository = FakeKeyguardBouncerRepository(),
                         ),
                     featureFlags = featureFlags,
                     manager = manager,
@@ -261,6 +265,7 @@ class StatusBarUserChipViewModelTest : SysuiTestCase() {
                             repository = FakeTelephonyRepository(),
                         ),
                     broadcastDispatcher = fakeBroadcastDispatcher,
+                    keyguardUpdateMonitor = keyguardUpdateMonitor,
                     backgroundDispatcher = testDispatcher,
                     activityManager = activityManager,
                     refreshUsersScheduler = refreshUsersScheduler,

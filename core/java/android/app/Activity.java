@@ -6621,7 +6621,9 @@ public class Activity extends ContextThemeWrapper
      * the incoming activity.  Use 0 for no animation.
      * @param exitAnim A resource ID of the animation resource to use for
      * the outgoing activity.  Use 0 for no animation.
+     * @deprecated Use {@link #overrideActivityTransition(int, int, int)}} instead.
      */
+    @Deprecated
     public void overridePendingTransition(int enterAnim, int exitAnim) {
         overridePendingTransition(enterAnim, exitAnim, 0);
     }
@@ -6644,7 +6646,9 @@ public class Activity extends ContextThemeWrapper
      * the outgoing activity.  Use 0 for no animation.
      * @param backgroundColor The background color to use for the background during the animation if
      * the animation requires a background. Set to 0 to not override the default color.
+     * @deprecated Use {@link #overrideActivityTransition(int, int, int, int)}} instead.
      */
+    @Deprecated
     public void overridePendingTransition(int enterAnim, int exitAnim, int backgroundColor) {
         ActivityClient.getInstance().overridePendingTransition(mToken, getPackageName(), enterAnim,
                 exitAnim, backgroundColor);
@@ -9190,6 +9194,24 @@ public class Activity extends ContextThemeWrapper
      */
     public void setTurnScreenOn(boolean turnScreenOn) {
         ActivityClient.getInstance().setTurnScreenOn(mToken, turnScreenOn);
+    }
+
+    /**
+     * Specifies whether the activities below this one in the task can also start other activities
+     * or finish the task.
+     * <p>
+     * Starting from Target SDK Level {@link android.os.Build.VERSION_CODES#UPSIDE_DOWN_CAKE}, apps
+     * are blocked from starting new activities or finishing their task unless the top activity of
+     * such task belong to the same UID for security reasons.
+     * <p>
+     * Setting this flag to {@code true} will allow the launching app to ignore the restriction if
+     * this activity is on top. Apps matching the UID of this activity are always exempt.
+     *
+     * @param allowed {@code true} to disable the UID restrictions; {@code false} to revert back to
+     *                            the default behaviour
+     */
+    public void setAllowCrossUidActivitySwitchFromBelow(boolean allowed) {
+        ActivityClient.getInstance().setAllowCrossUidActivitySwitchFromBelow(mToken, allowed);
     }
 
     /**

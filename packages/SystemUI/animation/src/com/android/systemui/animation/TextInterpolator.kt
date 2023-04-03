@@ -161,7 +161,6 @@ class TextInterpolator(layout: Layout) {
      * This API is useful to continue animation from the middle of the state. For example, if you
      * animate weight from 200 to 400, then if you want to move back to 200 at the half of the
      * animation, it will look like
-     *
      * <pre> <code>
      * ```
      *     val interp = TextInterpolator(layout)
@@ -474,6 +473,7 @@ class TextInterpolator(layout: Layout) {
         // TODO(172943390): Add other interpolation or support custom interpolator.
         out.textSize = MathUtils.lerp(from.textSize, to.textSize, progress)
         out.color = ColorUtils.blendARGB(from.color, to.color, progress)
+        out.strokeWidth = MathUtils.lerp(from.strokeWidth, to.strokeWidth, progress)
     }
 
     // Shape the text and stores the result to out argument.
@@ -497,7 +497,9 @@ class TextInterpolator(layout: Layout) {
                 count,
                 layout.textDirectionHeuristic,
                 paint
-            ) { _, _, glyphs, _ -> runs.add(glyphs) }
+            ) { _, _, glyphs, _ ->
+                runs.add(glyphs)
+            }
             out.add(runs)
 
             if (lineNo > 0) {

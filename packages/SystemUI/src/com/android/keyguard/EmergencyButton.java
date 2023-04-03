@@ -25,7 +25,6 @@ import android.view.ViewConfiguration;
 import android.widget.Button;
 
 import com.android.internal.util.EmergencyAffordanceManager;
-import com.android.internal.widget.LockPatternUtils;
 import com.android.systemui.R;
 
 import java.util.List;
@@ -44,8 +43,6 @@ public class EmergencyButton extends Button {
     private int mDownY;
     private boolean mLongPressWasDragged;
 
-    private LockPatternUtils mLockPatternUtils;
-
     private final boolean mEnableEmergencyCallWhileSimLocked;
 
     public EmergencyButton(Context context) {
@@ -62,7 +59,6 @@ public class EmergencyButton extends Button {
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
-        mLockPatternUtils = new LockPatternUtils(mContext);
         if (mEmergencyAffordanceManager.needsEmergencyAffordance()) {
             setOnLongClickListener(v -> {
                 if (!mLongPressWasDragged
@@ -99,8 +95,8 @@ public class EmergencyButton extends Button {
         return super.performLongClick();
     }
 
-    public void updateEmergencyCallButton(boolean isInCall, boolean hasTelephonyRadio,
-                                          boolean simLocked, boolean isEmergencyCapable) {
+    public void updateEmergencyCallButton(boolean isInCall, boolean hasTelephonyRadio, boolean simLocked,
+            boolean isSecure, boolean isEmergencyCapable) {
         boolean visible = false;
         if (hasTelephonyRadio) {
             // Emergency calling requires a telephony radio.
@@ -111,9 +107,8 @@ public class EmergencyButton extends Button {
                     // Some countries can't handle emergency calls while SIM is locked.
                     visible = mEnableEmergencyCallWhileSimLocked;
                 } else {
-                    // Show if there is a secure screen (pin/pattern/SIM pin/SIM puk) or config set
-                    visible = mLockPatternUtils.isSecure(KeyguardUpdateMonitor.getCurrentUser()) ||
-                            mContext.getResources().getBoolean(R.bool.config_showEmergencyButton);
+                    // Only show if there is a secure screen (pin/pattern/SIM pin/SIM puk);
+                    visible = isSecure;
                 }
 
                 if (mContext.getResources().getBoolean(R.bool.kg_hide_emgcy_btn_when_oos)) {

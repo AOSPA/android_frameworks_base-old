@@ -30,7 +30,6 @@ import com.android.systemui.statusbar.pipeline.mobile.data.model.SubscriptionMod
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionRepository
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionsRepository
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.UserSetupRepository
-import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger
 import com.android.systemui.statusbar.pipeline.shared.data.model.ConnectivitySlot
 import com.android.systemui.statusbar.pipeline.shared.data.repository.ConnectivityRepository
 import com.android.systemui.util.CarrierConfigTracker
@@ -107,10 +106,6 @@ interface MobileIconsInteractor {
 
     /** True if the no internet icon should be hidden.  */
     val hideNoInternetState: StateFlow<Boolean>
-
-    val showVolteIcon: StateFlow<Boolean>
-
-    val showVowifiIcon: StateFlow<Boolean>
 }
 
 @Suppress("EXPERIMENTAL_IS_NOT_ENABLED")
@@ -121,7 +116,6 @@ class MobileIconsInteractorImpl
 constructor(
     private val mobileConnectionsRepo: MobileConnectionsRepository,
     private val carrierConfigTracker: CarrierConfigTracker,
-    private val logger: ConnectivityPipelineLogger,
     @MobileSummaryLog private val tableLogger: TableLogBuffer,
     connectivityRepository: ConnectivityRepository,
     userSetupRepo: UserSetupRepository,
@@ -332,19 +326,7 @@ constructor(
             mobileConnectionsRepo.getRepoForSubId(subId),
             alwaysUseRsrpLevelForLte,
             hideNoInternetState,
-            showVolteIcon,
-            showVowifiIcon,
         )
-
-    override val showVolteIcon: StateFlow<Boolean> =
-        mobileConnectionsRepo.defaultDataSubRatConfig
-            .mapLatest { it.showVolteIcon }
-            .stateIn(scope, SharingStarted.WhileSubscribed(), false)
-
-    override val showVowifiIcon: StateFlow<Boolean> =
-        mobileConnectionsRepo.defaultDataSubRatConfig
-            .mapLatest { it.showVowifiIcon }
-            .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
     companion object {
         private const val LOGGING_PREFIX = "Intr"

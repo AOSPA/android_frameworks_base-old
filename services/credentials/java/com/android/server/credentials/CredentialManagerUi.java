@@ -21,6 +21,8 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
+import android.credentials.CredentialManager;
+import android.credentials.CredentialProviderInfo;
 import android.credentials.ui.DisabledProviderData;
 import android.credentials.ui.IntentFactory;
 import android.credentials.ui.ProviderData;
@@ -30,11 +32,12 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.ResultReceiver;
-import android.service.credentials.CredentialProviderInfo;
+import android.service.credentials.CredentialProviderInfoFactory;
 import android.util.Log;
 import android.util.Slog;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -116,13 +119,17 @@ public class CredentialManagerUi {
         Set<String> enabledProviders = providerDataList.stream()
                 .map(ProviderData::getProviderFlattenedComponentName)
                 .collect(Collectors.toUnmodifiableSet());
-        // TODO("Filter out non user configurable providers")
         Set<String> allProviders =
-                CredentialProviderInfo.getAvailableServices(mContext, mUserId).stream()
-                .map(CredentialProviderInfo::getServiceInfo)
-                .map(ServiceInfo::getComponentName)
-                .map(ComponentName::flattenToString)
-                .collect(Collectors.toUnmodifiableSet());
+                CredentialProviderInfoFactory.getCredentialProviderServices(
+                                mContext,
+                                mUserId,
+                                CredentialManager.PROVIDER_FILTER_USER_PROVIDERS_ONLY,
+                                new HashSet<>())
+                        .stream()
+                        .map(CredentialProviderInfo::getServiceInfo)
+                        .map(ServiceInfo::getComponentName)
+                        .map(ComponentName::flattenToString)
+                        .collect(Collectors.toUnmodifiableSet());
 
         for (String provider: allProviders) {
             if (!enabledProviders.contains(provider)) {

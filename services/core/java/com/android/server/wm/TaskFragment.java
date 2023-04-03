@@ -1669,6 +1669,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
         if (prev.attachedToProcess()) {
             if (shouldAutoPip) {
+                prev.mPauseSchedulePendingForPip = true;
                 boolean didAutoPip = mAtmService.enterPictureInPictureMode(
                         prev, prev.pictureInPictureArgs, false /* fromClient */);
                 ProtoLog.d(WM_DEBUG_STATES, "Auto-PIP allowed, entering PIP mode "
@@ -1732,6 +1733,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             boolean pauseImmediately, boolean autoEnteringPip, String reason) {
         ProtoLog.v(WM_DEBUG_STATES, "Enqueueing pending pause: %s", prev);
         try {
+            prev.mPauseSchedulePendingForPip = false;
             EventLogTags.writeWmPauseActivity(prev.mUserId, System.identityHashCode(prev),
                     prev.shortComponentName, "userLeaving=" + userLeaving, reason);
 
@@ -1965,7 +1967,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                         1f);
                 mBackScreenshots.put(r.mActivityComponent.flattenToString(), backBuffer);
             }
-            child.asActivityRecord().inHistory = true;
+            addingActivity.inHistory = true;
             task.onDescendantActivityAdded(taskHadActivity, activityType, addingActivity);
         }
     }
@@ -2606,6 +2608,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
      */
     TaskFragmentInfo getTaskFragmentInfo() {
         List<IBinder> childActivities = new ArrayList<>();
+        List<IBinder> inRequestedTaskFragmentActivities = new ArrayList<>();
         for (int i = 0; i < getChildCount(); i++) {
             final WindowContainer<?> wc = getChildAt(i);
             final ActivityRecord ar = wc.asActivityRecord();
@@ -2614,6 +2617,9 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                     && ar.getUid() == mTaskFragmentOrganizerUid && !ar.finishing) {
                 // Only includes Activities that belong to the organizer process for security.
                 childActivities.add(ar.token);
+                if (ar.mRequestedLaunchingTaskFragmentToken == mFragmentToken) {
+                    inRequestedTaskFragmentActivities.add(ar.token);
+                }
             }
         }
         final Point positionInParent = new Point();
@@ -2625,6 +2631,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 getNonFinishingActivityCount(),
                 shouldBeVisible(null /* starting */),
                 childActivities,
+                inRequestedTaskFragmentActivities,
                 positionInParent,
                 mClearedTaskForReuse,
                 mClearedTaskFragmentForPip,

@@ -97,10 +97,22 @@ class TransitionController {
             new ArrayList<>();
 
     /**
+     * List of runnables to run when there are no ongoing transitions. Use this for state-validation
+     * checks (eg. to recover from incomplete states). Eventually this should be removed.
+     */
+    final ArrayList<Runnable> mStateValidators = new ArrayList<>();
+
+    /**
      * Currently playing transitions (in the order they were started). When finished, records are
      * removed from this list.
      */
     private final ArrayList<Transition> mPlayingTransitions = new ArrayList<>();
+
+    /**
+     * The windows that request to be invisible while it is in transition. After the transition
+     * is finished and the windows are no longer animating, their surfaces will be destroyed.
+     */
+    final ArrayList<WindowState> mAnimatingExitWindows = new ArrayList<>();
 
     final Lock mRunningLock = new Lock();
 
@@ -196,6 +208,12 @@ class TransitionController {
     void moveToCollecting(@NonNull Transition transition, int method) {
         if (mCollectingTransition != null) {
             throw new IllegalStateException("Simultaneous transition collection not supported.");
+        }
+        if (mTransitionPlayer == null) {
+            // If sysui has been killed (by a test) or crashed, we can temporarily have no player
+            // In this case, abort the transition.
+            transition.abort();
+            return;
         }
         mCollectingTransition = transition;
         // Distinguish change type because the response time is usually expected to be not too long.
@@ -499,6 +517,14 @@ class TransitionController {
                     transition.getToken(), null));
             return transition;
         }
+        if (mTransitionPlayer == null || transition.isAborted()) {
+            // Apparently, some tests will kill(and restart) systemui, so there is a chance that
+            // the player might be transiently null.
+            if (transition.isCollecting()) {
+                transition.abort();
+            }
+            return transition;
+        }
         try {
             ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS,
                     "Requesting StartTransition: %s", transition);
@@ -658,7 +684,33 @@ class TransitionController {
         mPlayingTransitions.remove(record);
         updateRunningRemoteAnimation(record, false /* isPlaying */);
         record.finishTransition();
+        for (int i = mAnimatingExitWindows.size() - 1; i >= 0; i--) {
+            final WindowState w = mAnimatingExitWindows.get(i);
+            if (w.mAnimatingExit && w.mHasSurface && !w.inTransition()) {
+                w.onExitAnimationDone();
+            }
+            if (!w.mAnimatingExit || !w.mHasSurface) {
+                mAnimatingExitWindows.remove(i);
+            }
+        }
         mRunningLock.doNotifyLocked();
+        // Run state-validation checks when no transitions are active anymore.
+        if (!inTransition()) {
+            validateStates();
+        }
+    }
+
+    private void validateStates() {
+        for (int i = 0; i < mStateValidators.size(); ++i) {
+            mStateValidators.get(i).run();
+            if (inTransition()) {
+                // the validator may have started a new transition, so wait for that before
+                // checking the rest.
+                mStateValidators.subList(0, i + 1).clear();
+                return;
+            }
+        }
+        mStateValidators.clear();
     }
 
     void moveToPlaying(Transition transition) {

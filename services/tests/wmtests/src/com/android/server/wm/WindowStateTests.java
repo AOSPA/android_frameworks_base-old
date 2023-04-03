@@ -21,8 +21,6 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.view.InsetsSource.ID_IME;
-import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
-import static android.view.InsetsState.ITYPE_STATUS_BAR;
 import static android.view.Surface.ROTATION_0;
 import static android.view.Surface.ROTATION_270;
 import static android.view.Surface.ROTATION_90;
@@ -425,15 +423,16 @@ public class WindowStateTests extends WindowTestsBase {
         final WindowState app = mAppWindow;
         statusBar.mHasSurface = true;
         assertTrue(statusBar.isVisible());
+        final int statusBarId = InsetsSource.createId(null, 0, statusBars());
         mDisplayContent.getInsetsStateController()
-                .getOrCreateSourceProvider(ITYPE_STATUS_BAR, statusBars())
+                .getOrCreateSourceProvider(statusBarId, statusBars())
                 .setWindowContainer(statusBar, null /* frameProvider */,
                         null /* imeFrameProvider */);
         mDisplayContent.getInsetsStateController().onBarControlTargetChanged(
                 app, null /* fakeTopControlling */, app, null /* fakeNavControlling */);
         app.setRequestedVisibleTypes(0, statusBars());
         mDisplayContent.getInsetsStateController()
-                .getOrCreateSourceProvider(ITYPE_STATUS_BAR, statusBars())
+                .getOrCreateSourceProvider(statusBarId, statusBars())
                 .updateClientVisibility(app);
         waitUntilHandlersIdle();
         assertFalse(statusBar.isVisible());
@@ -730,9 +729,8 @@ public class WindowStateTests extends WindowTestsBase {
         invisibleApp.requestDrawIfNeeded(outWaitingForDrawn);
         assertTrue(outWaitingForDrawn.isEmpty());
 
-        // Drawn state should not be changed for insets change when screen is off.
-        spyOn(mWm.mPolicy);
-        doReturn(false).when(mWm.mPolicy).isScreenOn();
+        // Drawn state should not be changed for insets change if the window is not visible.
+        startingApp.mActivityRecord.setVisibleRequested(false);
         makeWindowVisibleAndDrawn(startingApp);
         startingApp.getConfiguration().orientation = 0; // Reset to be the same as last reported.
         startingApp.getWindowFrames().setInsetsChanged(true);
@@ -742,9 +740,7 @@ public class WindowStateTests extends WindowTestsBase {
         assertFalse(startingApp.getOrientationChanging());
 
         // Even if the display is frozen, invisible requested window should not be affected.
-        startingApp.mActivityRecord.setVisibleRequested(false);
         mWm.startFreezingDisplay(0, 0, mDisplayContent);
-        doReturn(true).when(mWm.mPolicy).isScreenOn();
         startingApp.getWindowFrames().setInsetsChanged(true);
         startingApp.updateResizingWindowIfNeeded();
         assertTrue(startingApp.isDrawn());
@@ -830,11 +826,7 @@ public class WindowStateTests extends WindowTestsBase {
         win.reportResized();
         embeddedTf.setBounds(500, 0, 1000, 2000);
 
-        // Clear all drawn when the embedded TaskFragment is in mDisplayContent.mChangingContainers.
-        win.updateResizingWindowIfNeeded();
-        verify(embeddedActivity, never()).clearAllDrawn();
-
-        mDisplayContent.mChangingContainers.add(embeddedTf);
+        // Clear all drawn when the window config of embedded TaskFragment is changed.
         win.updateResizingWindowIfNeeded();
         verify(embeddedActivity).clearAllDrawn();
     }
@@ -921,15 +913,15 @@ public class WindowStateTests extends WindowTestsBase {
 
         final WindowState app = createWindow(null, TYPE_APPLICATION, "app", uid);
         app.mActivityRecord.setVisible(false);
-        app.mActivityRecord.setVisibility(false /* visible */, false /* deferHidingClient */);
+        app.mActivityRecord.setVisibility(false);
         assertFalse(mAtm.hasActiveVisibleWindow(uid));
 
-        app.mActivityRecord.setVisibility(true /* visible */, false /* deferHidingClient */);
+        app.mActivityRecord.setVisibility(true);
         assertTrue(mAtm.hasActiveVisibleWindow(uid));
 
         // Make the activity invisible and add a visible toast. The uid should have no active
         // visible window because toast can be misused by legacy app to bypass background check.
-        app.mActivityRecord.setVisibility(false /* visible */, false /* deferHidingClient */);
+        app.mActivityRecord.setVisibility(false);
         final WindowState overlay = createWindow(null, TYPE_APPLICATION_OVERLAY, "overlay", uid);
         final WindowState toast = createWindow(null, TYPE_TOAST, app.mToken, "toast", uid);
         toast.onSurfaceShownChanged(true);
@@ -1011,21 +1003,18 @@ public class WindowStateTests extends WindowTestsBase {
     @SetupWindows(addWindows = { W_INPUT_METHOD, W_ACTIVITY })
     @Test
     public void testImeAlwaysReceivesVisibleNavigationBarInsets() {
-        final InsetsSource navSource = new InsetsSource(ITYPE_NAVIGATION_BAR, navigationBars());
+        final int navId = InsetsSource.createId(null, 0, navigationBars());
+        final InsetsSource navSource = new InsetsSource(navId, navigationBars());
         mImeWindow.mAboveInsetsState.addSource(navSource);
         mAppWindow.mAboveInsetsState.addSource(navSource);
 
         navSource.setVisible(false);
-        assertTrue(mImeWindow.getInsetsState().isSourceOrDefaultVisible(
-                ITYPE_NAVIGATION_BAR, navigationBars()));
-        assertFalse(mAppWindow.getInsetsState().isSourceOrDefaultVisible(
-                ITYPE_NAVIGATION_BAR, navigationBars()));
+        assertTrue(mImeWindow.getInsetsState().isSourceOrDefaultVisible(navId, navigationBars()));
+        assertFalse(mAppWindow.getInsetsState().isSourceOrDefaultVisible(navId, navigationBars()));
 
         navSource.setVisible(true);
-        assertTrue(mImeWindow.getInsetsState().isSourceOrDefaultVisible(
-                ITYPE_NAVIGATION_BAR, navigationBars()));
-        assertTrue(mAppWindow.getInsetsState().isSourceOrDefaultVisible(
-                ITYPE_NAVIGATION_BAR, navigationBars()));
+        assertTrue(mImeWindow.getInsetsState().isSourceOrDefaultVisible(navId, navigationBars()));
+        assertTrue(mAppWindow.getInsetsState().isSourceOrDefaultVisible(navId, navigationBars()));
     }
 
     @Test
@@ -1164,12 +1153,12 @@ public class WindowStateTests extends WindowTestsBase {
     public void testRequestedVisibility() {
         final WindowState app = createWindow(null, TYPE_APPLICATION, "app");
         app.mActivityRecord.setVisible(false);
-        app.mActivityRecord.setVisibility(false /* visible */, false /* deferHidingClient */);
+        app.mActivityRecord.setVisibility(false);
         assertFalse(app.isVisibleRequested());
 
         // It doesn't have a surface yet, but should still be visible requested.
         app.setHasSurface(false);
-        app.mActivityRecord.setVisibility(true /* visible */, false /* deferHidingClient */);
+        app.mActivityRecord.setVisibility(true);
 
         assertFalse(app.isVisible());
         assertTrue(app.isVisibleRequested());

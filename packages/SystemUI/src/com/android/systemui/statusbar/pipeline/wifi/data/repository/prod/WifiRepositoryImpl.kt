@@ -39,12 +39,11 @@ import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.log.table.logDiffsForTable
 import com.android.systemui.statusbar.pipeline.dagger.WifiTableLog
-import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger
-import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger.Companion.logInputChange
 import com.android.systemui.statusbar.pipeline.shared.data.model.DataActivityModel
 import com.android.systemui.statusbar.pipeline.shared.data.model.toWifiDataActivityModel
 import com.android.systemui.statusbar.pipeline.wifi.data.repository.RealWifiRepository
 import com.android.systemui.statusbar.pipeline.wifi.data.repository.WifiRepository
+import com.android.systemui.statusbar.pipeline.wifi.shared.WifiInputLogger
 import com.android.systemui.statusbar.pipeline.wifi.shared.model.WifiNetworkModel
 import java.util.concurrent.Executor
 import javax.inject.Inject
@@ -58,6 +57,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 
 /** Real implementation of [WifiRepository]. */
@@ -70,7 +70,7 @@ class WifiRepositoryImpl
 constructor(
     broadcastDispatcher: BroadcastDispatcher,
     connectivityManager: ConnectivityManager,
-    logger: ConnectivityPipelineLogger,
+    logger: WifiInputLogger,
     @WifiTableLog wifiTableLogBuffer: TableLogBuffer,
     @Main mainExecutor: Executor,
     @Application scope: CoroutineScope,
@@ -80,7 +80,7 @@ constructor(
     private val wifiStateChangeEvents: Flow<Unit> =
         broadcastDispatcher
             .broadcastFlow(IntentFilter(WifiManager.WIFI_STATE_CHANGED_ACTION))
-            .logInputChange(logger, "WIFI_STATE_CHANGED_ACTION intent")
+            .onEach { logger.logIntent("WIFI_STATE_CHANGED_ACTION") }
 
     private val wifiNetworkChangeEvents: MutableSharedFlow<Unit> =
         MutableSharedFlow(extraBufferCapacity = 1)
@@ -128,6 +128,7 @@ constructor(
                         }
 
                         override fun onLost(network: Network) {
+                            logger.logOnLost(network, isDefaultNetworkCallback = true)
                             // The system no longer has a default network, so wifi is definitely not
                             // default.
                             trySend(false)
@@ -173,18 +174,13 @@ constructor(
                                         networkCapabilities,
                                         wifiManager,
                                     )
-                                logger.logTransformation(
-                                    WIFI_NETWORK_CALLBACK_NAME,
-                                    oldValue = currentWifi,
-                                    newValue = wifiNetworkModel,
-                                )
                                 currentWifi = wifiNetworkModel
                                 trySend(wifiNetworkModel)
                             }
                         }
 
                         override fun onLost(network: Network) {
-                            logger.logOnLost(network)
+                            logger.logOnLost(network, isDefaultNetworkCallback = false)
 
                             wifiNetworkChangeEvents.tryEmit(Unit)
 
@@ -194,11 +190,6 @@ constructor(
                                     wifi.networkId == network.getNetId()
                             ) {
                                 val newNetworkModel = WifiNetworkModel.Inactive
-                                logger.logTransformation(
-                                    WIFI_NETWORK_CALLBACK_NAME,
-                                    oldValue = wifi,
-                                    newValue = newNetworkModel,
-                                )
                                 currentWifi = newNetworkModel
                                 trySend(newNetworkModel)
                             }
@@ -228,7 +219,7 @@ constructor(
     override val wifiActivity: StateFlow<DataActivityModel> =
         conflatedCallbackFlow {
                 val callback = TrafficStateCallback { state ->
-                    logger.logInputChange("onTrafficStateChange", prettyPrintActivity(state))
+                    logger.logActivity(prettyPrintActivity(state))
                     trySend(state.toWifiDataActivityModel())
                 }
                 wifiManager.registerTrafficStateCallback(mainExecutor, callback)
@@ -336,8 +327,6 @@ constructor(
                 .addTransportType(TRANSPORT_CELLULAR)
                 .build()
 
-        private const val WIFI_NETWORK_CALLBACK_NAME = "wifiNetworkModel"
-
         private const val CARRIER_MERGED_INVALID_SUB_ID_REASON =
             "Wifi network was carrier merged but had invalid sub ID"
     }
@@ -348,7 +337,7 @@ constructor(
     constructor(
         private val broadcastDispatcher: BroadcastDispatcher,
         private val connectivityManager: ConnectivityManager,
-        private val logger: ConnectivityPipelineLogger,
+        private val logger: WifiInputLogger,
         @WifiTableLog private val wifiTableLogBuffer: TableLogBuffer,
         @Main private val mainExecutor: Executor,
         @Application private val scope: CoroutineScope,

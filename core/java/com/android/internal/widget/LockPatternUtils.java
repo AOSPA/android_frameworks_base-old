@@ -133,6 +133,21 @@ public class LockPatternUtils {
     })
     public @interface CredentialType {}
 
+    public static String credentialTypeToString(int credentialType) {
+        switch (credentialType) {
+            case CREDENTIAL_TYPE_NONE:
+                return "NONE";
+            case CREDENTIAL_TYPE_PATTERN:
+                return "PATTERN";
+            case CREDENTIAL_TYPE_PIN:
+                return "PIN";
+            case CREDENTIAL_TYPE_PASSWORD:
+                return "PASSWORD";
+            default:
+                return "UNKNOWN_" + credentialType;
+        }
+    }
+
     /**
      * Flag provided to {@link #verifyCredential(LockscreenCredential, int, int)} . If set, the
      * method will return a handle to the Gatekeeper Password in the
@@ -169,6 +184,8 @@ public class LockPatternUtils {
     private static final String LOCK_SCREEN_OWNER_INFO = Settings.Secure.LOCK_SCREEN_OWNER_INFO;
     private static final String LOCK_SCREEN_OWNER_INFO_ENABLED =
             Settings.Secure.LOCK_SCREEN_OWNER_INFO_ENABLED;
+
+    private static final String LOCK_PIN_ENHANCED_PRIVACY = "pin_enhanced_privacy";
 
     private static final String LOCK_SCREEN_DEVICE_OWNER_INFO = "lockscreen.device_owner_info";
 
@@ -1045,6 +1062,27 @@ public class LockPatternUtils {
 
     public boolean isVisiblePatternEverChosen(int userId) {
         return getString(Settings.Secure.LOCK_PATTERN_VISIBLE, userId) != null;
+    }
+
+    /**
+     * @return Whether enhanced pin privacy is enabled.
+     */
+    public boolean isPinEnhancedPrivacyEnabled(int userId) {
+        return getBoolean(LOCK_PIN_ENHANCED_PRIVACY, false, userId);
+    }
+
+    /**
+     * Set whether enhanced pin privacy is enabled.
+     */
+    public void setPinEnhancedPrivacyEnabled(boolean enabled, int userId) {
+        setBoolean(LOCK_PIN_ENHANCED_PRIVACY, enabled, userId);
+    }
+
+    /**
+     * @return Whether enhanced pin privacy was ever chosen.
+     */
+    public boolean isPinEnhancedPrivacyEverChosen(int userId) {
+        return getString(LOCK_PIN_ENHANCED_PRIVACY, userId) != null;
     }
 
     /**

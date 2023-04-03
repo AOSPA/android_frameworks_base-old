@@ -20,14 +20,18 @@ import android.annotation.Nullable;
 import android.content.ComponentName;
 import android.content.Context;
 import android.credentials.ClearCredentialStateRequest;
+import android.credentials.CredentialProviderInfo;
 import android.credentials.IClearCredentialStateCallback;
 import android.credentials.ui.ProviderData;
 import android.credentials.ui.RequestInfo;
 import android.os.CancellationSignal;
 import android.os.RemoteException;
 import android.service.credentials.CallingAppInfo;
-import android.service.credentials.CredentialProviderInfo;
 import android.util.Log;
+
+import com.android.server.credentials.metrics.ApiName;
+import com.android.server.credentials.metrics.ApiStatus;
+import com.android.server.credentials.metrics.ProviderStatusForMetrics;
 
 import java.util.ArrayList;
 
@@ -116,21 +120,23 @@ public final class ClearRequestSession extends RequestSession<ClearCredentialSta
     private void respondToClientWithResponseAndFinish() {
         Log.i(TAG, "respondToClientWithResponseAndFinish");
         if (isSessionCancelled()) {
-            // TODO: Differentiate btw cancelled and false
             mChosenProviderMetric.setChosenProviderStatus(
-                    MetricUtilities.METRICS_PROVIDER_STATUS_FINAL_SUCCESS);
-            logApiCalled(RequestType.CLEAR_CREDENTIALS, /* isSuccessful */ true);
+                    ProviderStatusForMetrics.FINAL_SUCCESS.getMetricCode());
+            logApiCall(ApiName.CLEAR_CREDENTIAL, /* apiStatus */
+                    ApiStatus.CLIENT_CANCELED);
             finishSession(/*propagateCancellation=*/true);
             return;
         }
         try {
             mClientCallback.onSuccess();
-            logApiCalled(RequestType.CLEAR_CREDENTIALS, /* isSuccessful */ true);
+            logApiCall(ApiName.CLEAR_CREDENTIAL, /* apiStatus */
+                    ApiStatus.SUCCESS);
         } catch (RemoteException e) {
             mChosenProviderMetric.setChosenProviderStatus(
-                    MetricUtilities.METRICS_PROVIDER_STATUS_FINAL_FAILURE);
+                    ProviderStatusForMetrics.FINAL_FAILURE.getMetricCode());
             Log.i(TAG, "Issue while propagating the response to the client");
-            logApiCalled(RequestType.CLEAR_CREDENTIALS, /* isSuccessful */ false);
+            logApiCall(ApiName.CLEAR_CREDENTIAL, /* apiStatus */
+                    ApiStatus.FAILURE);
         }
         finishSession(/*propagateCancellation=*/false);
     }
@@ -138,8 +144,8 @@ public final class ClearRequestSession extends RequestSession<ClearCredentialSta
     private void respondToClientWithErrorAndFinish(String errorType, String errorMsg) {
         Log.i(TAG, "respondToClientWithErrorAndFinish");
         if (isSessionCancelled()) {
-            // TODO: Differentiate btw cancelled and false
-            logApiCalled(RequestType.CLEAR_CREDENTIALS, /* isSuccessful */ true);
+            logApiCall(ApiName.CLEAR_CREDENTIAL, /* apiStatus */
+                    ApiStatus.CLIENT_CANCELED);
             finishSession(/*propagateCancellation=*/true);
             return;
         }
@@ -148,7 +154,8 @@ public final class ClearRequestSession extends RequestSession<ClearCredentialSta
         } catch (RemoteException e) {
             e.printStackTrace();
         }
-        logApiCalled(RequestType.CLEAR_CREDENTIALS, /* isSuccessful */ false);
+        logApiCall(ApiName.CLEAR_CREDENTIAL, /* apiStatus */
+                ApiStatus.FAILURE);
         finishSession(/*propagateCancellation=*/false);
     }
 
@@ -163,5 +170,15 @@ public final class ClearRequestSession extends RequestSession<ClearCredentialSta
         }
         // TODO: Replace with properly defined error type
         respondToClientWithErrorAndFinish("UNKNOWN", "All providers failed");
+    }
+
+    @Override
+    public void onUiCancellation(boolean isUserCancellation) {
+        // Not needed since UI is not involved
+    }
+
+    @Override
+    public void onUiSelectorInvocationFailure() {
+        // Not needed since UI is not involved
     }
 }

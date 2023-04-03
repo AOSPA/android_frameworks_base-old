@@ -22,6 +22,8 @@ import android.content.pm.PackageManager
 import android.test.suitebuilder.annotation.SmallTest
 import androidx.test.runner.AndroidJUnit4
 import com.android.systemui.SysuiTestCase
+import com.android.systemui.settings.FakeUserTracker
+import com.android.systemui.settings.UserTracker
 import com.android.systemui.util.mockito.eq
 import com.android.systemui.util.mockito.whenever
 import com.google.common.truth.Truth.assertThat
@@ -44,21 +46,23 @@ internal class NoteTaskInfoResolverTest : SysuiTestCase() {
 
     @Mock lateinit var packageManager: PackageManager
     @Mock lateinit var roleManager: RoleManager
+    private val userTracker: UserTracker = FakeUserTracker()
 
     private lateinit var underTest: NoteTaskInfoResolver
 
     @Before
     fun setUp() {
         MockitoAnnotations.initMocks(this)
-        underTest = NoteTaskInfoResolver(context, roleManager, packageManager)
+        underTest = NoteTaskInfoResolver(roleManager, packageManager, userTracker)
     }
 
     @Test
     fun resolveInfo_shouldReturnInfo() {
         val packageName = "com.android.note.app"
         val uid = 123456
-        whenever(roleManager.getRoleHoldersAsUser(NoteTaskInfoResolver.ROLE_NOTES, context.user))
-            .then { listOf(packageName) }
+        whenever(roleManager.getRoleHoldersAsUser(RoleManager.ROLE_NOTES, context.user)).then {
+            listOf(packageName)
+        }
         whenever(
                 packageManager.getApplicationInfoAsUser(
                     eq(packageName),
@@ -78,8 +82,9 @@ internal class NoteTaskInfoResolverTest : SysuiTestCase() {
     @Test
     fun resolveInfo_packageManagerThrowsException_shouldReturnInfoWithZeroUid() {
         val packageName = "com.android.note.app"
-        whenever(roleManager.getRoleHoldersAsUser(NoteTaskInfoResolver.ROLE_NOTES, context.user))
-            .then { listOf(packageName) }
+        whenever(roleManager.getRoleHoldersAsUser(RoleManager.ROLE_NOTES, context.user)).then {
+            listOf(packageName)
+        }
         whenever(
                 packageManager.getApplicationInfoAsUser(
                     eq(packageName),
@@ -98,8 +103,9 @@ internal class NoteTaskInfoResolverTest : SysuiTestCase() {
 
     @Test
     fun resolveInfo_noRoleHolderIsSet_shouldReturnNull() {
-        whenever(roleManager.getRoleHoldersAsUser(eq(NoteTaskInfoResolver.ROLE_NOTES), any()))
-            .then { listOf<String>() }
+        whenever(roleManager.getRoleHoldersAsUser(eq(RoleManager.ROLE_NOTES), any())).then {
+            emptyList<String>()
+        }
 
         val actual = underTest.resolveInfo()
 

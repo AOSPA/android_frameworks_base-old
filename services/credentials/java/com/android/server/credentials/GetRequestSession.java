@@ -16,12 +16,10 @@
 
 package com.android.server.credentials;
 
-import static com.android.server.credentials.MetricUtilities.METRICS_PROVIDER_STATUS_FINAL_FAILURE;
-import static com.android.server.credentials.MetricUtilities.METRICS_PROVIDER_STATUS_FINAL_SUCCESS;
-
 import android.annotation.Nullable;
 import android.content.ComponentName;
 import android.content.Context;
+import android.credentials.CredentialProviderInfo;
 import android.credentials.GetCredentialException;
 import android.credentials.GetCredentialRequest;
 import android.credentials.GetCredentialResponse;
@@ -31,8 +29,11 @@ import android.credentials.ui.RequestInfo;
 import android.os.CancellationSignal;
 import android.os.RemoteException;
 import android.service.credentials.CallingAppInfo;
-import android.service.credentials.CredentialProviderInfo;
 import android.util.Log;
+
+import com.android.server.credentials.metrics.ApiName;
+import com.android.server.credentials.metrics.ApiStatus;
+import com.android.server.credentials.metrics.ProviderStatusForMetrics;
 
 import java.util.ArrayList;
 
@@ -40,11 +41,10 @@ import java.util.ArrayList;
  * Central session for a single getCredentials request. This class listens to the
  * responses from providers, and the UX app, and updates the provider(S) state.
  */
-public final class GetRequestSession extends RequestSession<GetCredentialRequest,
+public class GetRequestSession extends RequestSession<GetCredentialRequest,
         IGetCredentialCallback>
         implements ProviderSession.ProviderInternalCallback<GetCredentialResponse> {
     private static final String TAG = "GetRequestSession";
-
     public GetRequestSession(Context context, int userId, int callingUid,
             IGetCredentialCallback callback, GetCredentialRequest request,
             CallingAppInfo callingAppInfo, CancellationSignal cancellationSignal) {
@@ -93,11 +93,11 @@ public final class GetRequestSession extends RequestSession<GetCredentialRequest
         setChosenMetric(componentName);
         if (response != null) {
             mChosenProviderMetric.setChosenProviderStatus(
-                    METRICS_PROVIDER_STATUS_FINAL_SUCCESS);
+                    ProviderStatusForMetrics.FINAL_SUCCESS.getMetricCode());
             respondToClientWithResponseAndFinish(response);
         } else {
             mChosenProviderMetric.setChosenProviderStatus(
-                    METRICS_PROVIDER_STATUS_FINAL_FAILURE);
+                    ProviderStatusForMetrics.FINAL_FAILURE.getMetricCode());
             respondToClientWithErrorAndFinish(GetCredentialException.TYPE_NO_CREDENTIAL,
                     "Invalid response from provider");
         }
@@ -112,35 +112,57 @@ public final class GetRequestSession extends RequestSession<GetCredentialRequest
     }
 
     private void respondToClientWithResponseAndFinish(GetCredentialResponse response) {
+        if (mRequestSessionStatus == RequestSessionStatus.COMPLETE) {
+            Log.i(TAG, "Request has already been completed. This is strange.");
+            return;
+        }
         if (isSessionCancelled()) {
-            // TODO: Differentiate btw cancelled and false
-            logApiCalled(RequestType.GET_CREDENTIALS, /* isSuccessful */ false);
+            logApiCall(ApiName.GET_CREDENTIAL, /* apiStatus */
+                    ApiStatus.CLIENT_CANCELED);
             finishSession(/*propagateCancellation=*/true);
             return;
         }
         try {
             mClientCallback.onResponse(response);
-            logApiCalled(RequestType.GET_CREDENTIALS, /* isSuccessful */ true);
+            logApiCall(ApiName.GET_CREDENTIAL, /* apiStatus */
+                    ApiStatus.SUCCESS);
         } catch (RemoteException e) {
             Log.i(TAG, "Issue while responding to client with a response : " + e.getMessage());
-            logApiCalled(RequestType.GET_CREDENTIALS, /* isSuccessful */ false);
+            logApiCall(ApiName.GET_CREDENTIAL, /* apiStatus */
+                    ApiStatus.FAILURE);
         }
         finishSession(/*propagateCancellation=*/false);
     }
 
     private void respondToClientWithErrorAndFinish(String errorType, String errorMsg) {
+        if (mRequestSessionStatus == RequestSessionStatus.COMPLETE) {
+            Log.i(TAG, "Request has already been completed. This is strange.");
+            return;
+        }
         if (isSessionCancelled()) {
-            logApiCalled(RequestType.GET_CREDENTIALS, /* isSuccessful */ false);
+            logApiCall(ApiName.GET_CREDENTIAL, /* apiStatus */
+                    ApiStatus.CLIENT_CANCELED);
             finishSession(/*propagateCancellation=*/true);
             return;
         }
+
         try {
             mClientCallback.onError(errorType, errorMsg);
         } catch (RemoteException e) {
             Log.i(TAG, "Issue while responding to client with error : " + e.getMessage());
         }
-        logApiCalled(RequestType.GET_CREDENTIALS, /* isSuccessful */ false);
+        logFailureOrUserCancel(errorType);
         finishSession(/*propagateCancellation=*/false);
+    }
+
+    private void logFailureOrUserCancel(String errorType) {
+        if (GetCredentialException.TYPE_USER_CANCELED.equals(errorType)) {
+            logApiCall(ApiName.GET_CREDENTIAL,
+                    /* apiStatus */ ApiStatus.USER_CANCELED);
+        } else {
+            logApiCall(ApiName.GET_CREDENTIAL,
+                    /* apiStatus */ ApiStatus.FAILURE);
+        }
     }
 
     @Override
@@ -157,13 +179,19 @@ public final class GetRequestSession extends RequestSession<GetCredentialRequest
     @Override
     public void onUiSelectorInvocationFailure() {
         respondToClientWithErrorAndFinish(GetCredentialException.TYPE_NO_CREDENTIAL,
-                    "No credentials to show on the selector.");
+                    "No credentials available.");
     }
 
     @Override
     public void onProviderStatusChanged(ProviderSession.Status status,
             ComponentName componentName) {
         Log.i(TAG, "in onStatusChanged with status: " + status);
+        // Auth entry was selected, and it did not have any underlying credentials
+        if (status == ProviderSession.Status.NO_CREDENTIALS_FROM_AUTH_ENTRY) {
+            handleEmptyAuthenticationSelection(componentName);
+            return;
+        }
+        // For any other status, we check if all providers are done and then invoke UI if needed
         if (!isAnyProviderPending()) {
             // If all provider responses have been received, we can either need the UI,
             // or we need to respond with error. The only other case is the entry being
@@ -176,5 +204,35 @@ public final class GetRequestSession extends RequestSession<GetCredentialRequest
                         "No credentials available");
             }
         }
+    }
+
+    private void handleEmptyAuthenticationSelection(ComponentName componentName) {
+        // Update auth entry statuses across different provider sessions
+        mProviders.keySet().forEach(key -> {
+            ProviderGetSession session = (ProviderGetSession) mProviders.get(key);
+            if (!session.mComponentName.equals(componentName)) {
+                session.updateAuthEntriesStatusFromAnotherSession();
+            }
+        });
+
+        // Invoke UI since it needs to show a snackbar if last auth entry, or a status on each
+        // auth entries along with other valid entries
+        getProviderDataAndInitiateUi();
+
+        // Respond to client if all auth entries are empty and nothing else to show on the UI
+        if (providerDataContainsEmptyAuthEntriesOnly()) {
+            respondToClientWithErrorAndFinish(GetCredentialException.TYPE_NO_CREDENTIAL,
+                    "No credentials available");
+        }
+    }
+
+    private boolean providerDataContainsEmptyAuthEntriesOnly() {
+        for (String key : mProviders.keySet()) {
+            ProviderGetSession session = (ProviderGetSession) mProviders.get(key);
+            if (!session.containsEmptyAuthEntriesOnly()) {
+                return false;
+            }
+        }
+        return true;
     }
 }

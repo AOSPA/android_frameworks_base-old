@@ -21,13 +21,12 @@ import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.keyguard.data.repository.KeyguardTransitionRepository
 import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.keyguard.shared.model.KeyguardState.AOD
-import com.android.systemui.keyguard.shared.model.KeyguardState.BOUNCER
 import com.android.systemui.keyguard.shared.model.KeyguardState.DREAMING
 import com.android.systemui.keyguard.shared.model.KeyguardState.GONE
 import com.android.systemui.keyguard.shared.model.KeyguardState.LOCKSCREEN
 import com.android.systemui.keyguard.shared.model.KeyguardState.OCCLUDED
+import com.android.systemui.keyguard.shared.model.KeyguardState.PRIMARY_BOUNCER
 import com.android.systemui.keyguard.shared.model.TransitionState
-import com.android.systemui.keyguard.shared.model.TransitionState.STARTED
 import com.android.systemui.keyguard.shared.model.TransitionStep
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
@@ -63,9 +62,9 @@ constructor(
     /** LOCKSCREEN->AOD transition information. */
     val lockscreenToAodTransition: Flow<TransitionStep> = repository.transition(LOCKSCREEN, AOD)
 
-    /** LOCKSCREEN->BOUNCER transition information. */
-    val lockscreenToBouncerTransition: Flow<TransitionStep> =
-        repository.transition(LOCKSCREEN, BOUNCER)
+    /** LOCKSCREEN->PRIMARY_BOUNCER transition information. */
+    val mLockscreenToPrimaryBouncerTransition: Flow<TransitionStep> =
+        repository.transition(LOCKSCREEN, PRIMARY_BOUNCER)
 
     /** LOCKSCREEN->DREAMING transition information. */
     val lockscreenToDreamingTransition: Flow<TransitionStep> =
@@ -78,6 +77,10 @@ constructor(
     /** OCCLUDED->LOCKSCREEN transition information. */
     val occludedToLockscreenTransition: Flow<TransitionStep> =
         repository.transition(OCCLUDED, LOCKSCREEN)
+
+    /** PRIMARY_BOUNCER->GONE transition information. */
+    val primaryBouncerToGoneTransition: Flow<TransitionStep> =
+        repository.transition(PRIMARY_BOUNCER, GONE)
 
     /**
      * AOD<->LOCKSCREEN transition information, mapped to dozeAmount range of AOD (1f) <->

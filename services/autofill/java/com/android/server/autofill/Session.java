@@ -276,6 +276,9 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
     @GuardedBy("mLock")
     private DeathRecipient mClientVulture;
 
+    @GuardedBy("mLock")
+    private boolean mLoggedInlineDatasetShown;
+
     /**
      * Reference to the remote service.
      *
@@ -440,6 +443,18 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
     @NonNull
     @GuardedBy("mLock")
     private boolean mPreviouslyFillDialogPotentiallyStarted;
+
+    /**
+     * Keeps track of if the user entered view, this is used to
+     * distinguish Fill Request that did not have user interaction
+     * with ones that did.
+     *
+     * This is set to true when entering view - after FillDialog FillRequest
+     * or on plain user tap.
+     */
+    @NonNull
+    @GuardedBy("mLock")
+    private boolean mLogViewEntered;
 
     /**
      * Keeps the fill dialog trigger ids of the last response. This invalidates
@@ -1289,6 +1304,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
 
         mMetricsLogger.write(newLogMaker(MetricsEvent.AUTOFILL_SESSION_STARTED)
                 .addTaggedData(MetricsEvent.FIELD_AUTOFILL_FLAGS, flags));
+        mLogViewEntered = false;
     }
 
     /**
@@ -1412,6 +1428,14 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         }
 
         mService.setLastResponse(id, response);
+
+        synchronized (mLock) {
+            if (mLogViewEntered) {
+                mLogViewEntered = false;
+                mService.logViewEntered(id, null);
+            }
+        }
+
 
         final long disableDuration = response.getDisableDuration();
         final boolean autofillDisabled = disableDuration > 0;
@@ -1958,6 +1982,22 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         }
         mHandler.sendMessage(obtainMessage(
                 Session::removeFromService, this));
+    }
+
+    // AutofillUiCallback
+    @Override
+    public void onShown(int uiType) {
+        synchronized (mLock) {
+            if (uiType == UI_TYPE_INLINE) {
+                if (mLoggedInlineDatasetShown) {
+                    // Chip inflation already logged, do not log again.
+                    // This is needed because every chip inflation will call this.
+                    return;
+                }
+                mLoggedInlineDatasetShown = true;
+            }
+            mService.logDatasetShown(this.id, mClientState, uiType);
+        }
     }
 
     // AutoFillUiCallback
@@ -3545,6 +3585,28 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                     return;
                 }
 
+                synchronized (mLock) {
+                    if (!mLogViewEntered) {
+                        // If the current request is for FillDialog (preemptive)
+                        // then this is the first time that the view is entered
+                        // (mLogViewEntered == false) in this case, setLastResponse()
+                        // has already been called, so just log here.
+                        // If the current request is not and (mLogViewEntered == false)
+                        // then the last session is being tracked (setLastResponse not called)
+                        // so this calling logViewEntered will be a nop.
+                        // Calling logViewEntered() twice will only log it once
+                        // TODO(271181979): this is broken for multiple partitions
+                        mService.logViewEntered(this.id, null);
+                    }
+
+                    // If this is the first time view is entered for inline, the last
+                    // session is still being tracked, so logViewEntered() needs
+                    // to be delayed until setLastResponse is called.
+                    // For fill dialog requests case logViewEntered is already called above
+                    // so this will do nothing. Assumption: only one fill dialog per session
+                    mLogViewEntered = true;
+                }
+
                 // Previously, fill request will only start whenever a view is entered.
                 // With Fill Dialog, request starts prior to view getting entered. So, we can't end
                 // the event at this moment, otherwise we will be wrongly attributing fill dialog
@@ -3818,8 +3880,6 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                 synchronized (mLock) {
                     final ViewState currentView = mViewStates.get(mCurrentViewId);
                     currentView.setState(ViewState.STATE_FILL_DIALOG_SHOWN);
-                    mService.logDatasetShown(id, mClientState, UI_TYPE_DIALOG);
-
                     mPresentationStatsEventLogger.maybeSetCountShown(
                             response.getDatasets(), mCurrentViewId);
                     mPresentationStatsEventLogger.maybeSetDisplayPresentationType(UI_TYPE_DIALOG);
@@ -3849,10 +3909,6 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                     // back a response via callback.
                     final ViewState currentView = mViewStates.get(mCurrentViewId);
                     currentView.setState(ViewState.STATE_INLINE_SHOWN);
-                    // TODO(b/248378401): Fix it to log showed only when IME asks for inflation,
-                    // rather than here where framework sends back the response.
-                    mService.logDatasetShown(id, mClientState, UI_TYPE_INLINE);
-
                     // TODO(b/234475358): Log more accurate value of number of inline suggestions
                     // shown, inflated, and filtered.
                     mPresentationStatsEventLogger.maybeSetCountShown(
@@ -3869,7 +3925,6 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                 targetLabel, targetIcon, this, id, mCompatMode);
 
         synchronized (mLock) {
-            mService.logDatasetShown(id, mClientState, UI_TYPE_MENU);
             mPresentationStatsEventLogger.maybeSetCountShown(
                     response.getDatasets(), mCurrentViewId);
             mPresentationStatsEventLogger.maybeSetDisplayPresentationType(UI_TYPE_MENU);
@@ -4081,6 +4136,12 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             return false;
         }
 
+        // Set this to false - we are requesting a new inline request and haven't shown
+        // anything yet
+        synchronized (mLock) {
+            mLoggedInlineDatasetShown = false;
+        }
+
         final InlineFillUi.InlineFillUiInfo inlineFillUiInfo =
                 new InlineFillUi.InlineFillUiInfo(request, focusedId,
                         filterText, remoteRenderService, userId, id);
@@ -4109,6 +4170,11 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                             mInlineSessionController.setInlineFillUiLocked(
                                     InlineFillUi.emptyUi(focusedId));
                         }
+                    }
+
+                    @Override
+                    public void onInflate() {
+                        Session.this.onShown(UI_TYPE_INLINE);
                     }
                 });
         return mInlineSessionController.setInlineFillUiLocked(inlineFillUi);

@@ -16,13 +16,17 @@
 
 package com.android.server.display.brightness;
 
+import android.annotation.Nullable;
 import android.content.Context;
 import android.hardware.display.DisplayManagerInternal;
+import android.os.HandlerExecutor;
 import android.os.PowerManager;
 import android.util.IndentingPrintWriter;
+import android.view.Display;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.server.display.AutomaticBrightnessController;
 import com.android.server.display.BrightnessSetting;
 import com.android.server.display.DisplayBrightnessState;
 import com.android.server.display.brightness.strategy.DisplayBrightnessStrategy;
@@ -79,12 +83,25 @@ public final class DisplayBrightnessController {
     @GuardedBy("mLock")
     private DisplayBrightnessStrategy mDisplayBrightnessStrategy;
 
+    // The executor on which the mOnBrightnessChangeRunnable is executed. This ensures that the
+    // callback is not executed in sync and is not blocking the thread from which it is called.
+    private final HandlerExecutor mBrightnessChangeExecutor;
+
+    // True if we want to persist the brightness value in nits even if the underlying display
+    // device changes.
+    private final boolean mPersistBrightnessNitsForDefaultDisplay;
+
+    // The controller for the automatic brightness level.
+    // TODO(b/265415257): Move to the automatic brightness strategy
+    @Nullable
+    private AutomaticBrightnessController mAutomaticBrightnessController;
+
     /**
      * The constructor of DisplayBrightnessController.
      */
     public DisplayBrightnessController(Context context, Injector injector, int displayId,
             float defaultScreenBrightness, BrightnessSetting brightnessSetting,
-            Runnable onBrightnessChangeRunnable) {
+            Runnable onBrightnessChangeRunnable, HandlerExecutor brightnessChangeExecutor) {
         if (injector == null) {
             injector = new Injector();
         }
@@ -97,6 +114,9 @@ public final class DisplayBrightnessController {
         mOnBrightnessChangeRunnable = onBrightnessChangeRunnable;
         mDisplayBrightnessStrategySelector = injector.getDisplayBrightnessStrategySelector(context,
                 displayId);
+        mBrightnessChangeExecutor = brightnessChangeExecutor;
+        mPersistBrightnessNitsForDefaultDisplay = context.getResources().getBoolean(
+                com.android.internal.R.bool.config_persistBrightnessNitsForDefaultDisplay);
     }
 
     /**
@@ -152,12 +172,14 @@ public final class DisplayBrightnessController {
      * Sets the current screen brightness to the supplied value, and notifies all the listeners
      * requesting for change events on brightness change.
      */
-    public void setCurrentScreenBrightness(float brightnessValue) {
+    public void setAndNotifyCurrentScreenBrightness(float brightnessValue) {
+        final boolean hasBrightnessChanged;
         synchronized (mLock) {
-            if (brightnessValue != mCurrentScreenBrightness) {
-                mCurrentScreenBrightness = brightnessValue;
-                mOnBrightnessChangeRunnable.run();
-            }
+            hasBrightnessChanged = (brightnessValue != mCurrentScreenBrightness);
+            setCurrentScreenBrightnessLocked(brightnessValue);
+        }
+        if (hasBrightnessChanged) {
+            notifyCurrentScreenBrightness();
         }
     }
 
@@ -205,12 +227,14 @@ public final class DisplayBrightnessController {
                 setTemporaryBrightnessLocked(PowerManager.BRIGHTNESS_INVALID_FLOAT);
                 return false;
             }
-            setCurrentScreenBrightness(mPendingScreenBrightness);
+            setCurrentScreenBrightnessLocked(mPendingScreenBrightness);
             mLastUserSetScreenBrightness = mPendingScreenBrightness;
             mPendingScreenBrightness = PowerManager.BRIGHTNESS_INVALID_FLOAT;
             setTemporaryBrightnessLocked(PowerManager.BRIGHTNESS_INVALID_FLOAT);
-            return true;
         }
+        notifyCurrentScreenBrightness();
+        return true;
+
     }
 
     /**
@@ -253,6 +277,12 @@ public final class DisplayBrightnessController {
         // Update the setting, which will eventually call back into DPC to have us actually
         // update the display with the new value.
         mBrightnessSetting.setBrightness(brightnessValue);
+        if (mDisplayId == Display.DEFAULT_DISPLAY && mPersistBrightnessNitsForDefaultDisplay) {
+            float nits = convertToNits(brightnessValue);
+            if (nits >= 0) {
+                mBrightnessSetting.setBrightnessNitsForDefaultDisplay(nits);
+            }
+        }
     }
 
     /**
@@ -264,9 +294,46 @@ public final class DisplayBrightnessController {
                     || brightnessValue == mCurrentScreenBrightness) {
                 return;
             }
-            setCurrentScreenBrightness(brightnessValue);
-            setBrightness(brightnessValue);
+            setCurrentScreenBrightnessLocked(brightnessValue);
         }
+        notifyCurrentScreenBrightness();
+        setBrightness(brightnessValue);
+    }
+
+    /**
+     * Set the {@link AutomaticBrightnessController} which is needed to perform nit-to-float-scale
+     * conversion.
+     * @param automaticBrightnessController The ABC
+     */
+    public void setAutomaticBrightnessController(
+            AutomaticBrightnessController automaticBrightnessController) {
+        mAutomaticBrightnessController = automaticBrightnessController;
+        loadNitBasedBrightnessSetting();
+    }
+
+    /**
+     * Convert a brightness float scale value to a nit value.
+     * @param brightness The float scale value
+     * @return The nit value or -1f if no conversion is possible.
+     */
+    public float convertToNits(float brightness) {
+        if (mAutomaticBrightnessController == null) {
+            return -1f;
+        }
+        return mAutomaticBrightnessController.convertToNits(brightness);
+    }
+
+    /**
+     * Convert a brightness nit value to a float scale value.
+     * @param nits The nit value
+     * @return The float scale value or {@link PowerManager.BRIGHTNESS_INVALID_FLOAT} if no
+     * conversion is possible.
+     */
+    public float convertToFloatScale(float nits) {
+        if (mAutomaticBrightnessController == null) {
+            return PowerManager.BRIGHTNESS_INVALID_FLOAT;
+        }
+        return mAutomaticBrightnessController.convertToFloatScale(nits);
     }
 
     /**
@@ -289,6 +356,8 @@ public final class DisplayBrightnessController {
         writer.println("DisplayBrightnessController:");
         writer.println("  mDisplayId=: " + mDisplayId);
         writer.println("  mScreenBrightnessDefault=" + mScreenBrightnessDefault);
+        writer.println("  mPersistBrightnessNitsForDefaultDisplay="
+                + mPersistBrightnessNitsForDefaultDisplay);
         synchronized (mLock) {
             writer.println("  mPendingScreenBrightness=" + mPendingScreenBrightness);
             writer.println("  mCurrentScreenBrightness=" + mCurrentScreenBrightness);
@@ -312,7 +381,7 @@ public final class DisplayBrightnessController {
     }
 
     @VisibleForTesting
-    BrightnessSetting.BrightnessSettingListener getBrightnessSettingListenerLocked() {
+    BrightnessSetting.BrightnessSettingListener getBrightnessSettingListener() {
         return mBrightnessSettingListener;
     }
 
@@ -320,16 +389,51 @@ public final class DisplayBrightnessController {
      * Returns the current selected DisplayBrightnessStrategy
      */
     @VisibleForTesting
-    DisplayBrightnessStrategy getCurrentDisplayBrightnessStrategyLocked() {
+    DisplayBrightnessStrategy getCurrentDisplayBrightnessStrategy() {
         synchronized (mLock) {
             return mDisplayBrightnessStrategy;
         }
     }
 
+    @GuardedBy("mLock")
     private void setTemporaryBrightnessLocked(float temporaryBrightness) {
+        mDisplayBrightnessStrategySelector.getTemporaryDisplayBrightnessStrategy()
+                .setTemporaryScreenBrightness(temporaryBrightness);
+    }
+
+    @GuardedBy("mLock")
+    private void setCurrentScreenBrightnessLocked(float brightnessValue) {
+        if (brightnessValue != mCurrentScreenBrightness) {
+            mCurrentScreenBrightness = brightnessValue;
+        }
+    }
+
+    private void notifyCurrentScreenBrightness() {
+        mBrightnessChangeExecutor.execute(mOnBrightnessChangeRunnable);
+    }
+
+    /**
+     * Loads the brightness value. If this is the default display and the config says that we should
+     * persist the nit value, the nit value for the default display will be loaded.
+     */
+    private void loadNitBasedBrightnessSetting() {
+        if (mDisplayId == Display.DEFAULT_DISPLAY && mPersistBrightnessNitsForDefaultDisplay) {
+            float brightnessNitsForDefaultDisplay =
+                    mBrightnessSetting.getBrightnessNitsForDefaultDisplay();
+            if (brightnessNitsForDefaultDisplay >= 0) {
+                float brightnessForDefaultDisplay = convertToFloatScale(
+                        brightnessNitsForDefaultDisplay);
+                if (BrightnessUtils.isValidBrightnessValue(brightnessForDefaultDisplay)) {
+                    mBrightnessSetting.setBrightness(brightnessForDefaultDisplay);
+                    synchronized (mLock) {
+                        mCurrentScreenBrightness = brightnessForDefaultDisplay;
+                    }
+                    return;
+                }
+            }
+        }
         synchronized (mLock) {
-            mDisplayBrightnessStrategySelector.getTemporaryDisplayBrightnessStrategy()
-                    .setTemporaryScreenBrightness(temporaryBrightness);
+            mCurrentScreenBrightness = getScreenBrightnessSetting();
         }
     }
 }

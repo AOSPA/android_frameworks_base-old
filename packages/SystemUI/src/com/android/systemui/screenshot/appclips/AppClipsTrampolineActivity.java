@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.android.systemui.screenshot;
+package com.android.systemui.screenshot.appclips;
 
 import static android.content.Intent.CAPTURE_CONTENT_FOR_NOTE_BLOCKED_BY_ADMIN;
 import static android.content.Intent.CAPTURE_CONTENT_FOR_NOTE_FAILED;
@@ -24,7 +24,7 @@ import static android.content.Intent.EXTRA_CAPTURE_CONTENT_FOR_NOTE_STATUS_CODE;
 import static android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION;
 
 import static com.android.systemui.flags.Flags.SCREENSHOT_APP_CLIPS;
-import static com.android.systemui.screenshot.ScreenshotEvent.SCREENSHOT_FOR_NOTE_TRIGGERED;
+import static com.android.systemui.screenshot.appclips.AppClipsEvent.SCREENSHOT_FOR_NOTE_TRIGGERED;
 
 import android.app.Activity;
 import android.app.admin.DevicePolicyManager;
@@ -50,6 +50,7 @@ import com.android.systemui.R;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.notetask.NoteTaskController;
+import com.android.systemui.notetask.NoteTaskEntryPoint;
 import com.android.systemui.settings.UserTracker;
 import com.android.wm.shell.bubbles.Bubbles;
 
@@ -239,9 +240,8 @@ public class AppClipsTrampolineActivity extends Activity {
             // Broadcast no longer required, setting it to null.
             mKillAppClipsBroadcastIntent = null;
 
-            // Expand the note bubble before returning the result. As App Clips API is only
-            // available when in a bubble, isInMultiWindowMode is always false below.
-            mNoteTaskController.showNoteTask(false);
+            // Expand the note bubble before returning the result.
+            mNoteTaskController.showNoteTask(NoteTaskEntryPoint.APP_CLIPS);
             setResult(RESULT_OK, convertedData);
             finish();
         }

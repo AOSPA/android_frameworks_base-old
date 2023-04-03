@@ -317,7 +317,7 @@ public class ExpandableNotificationRowController implements NotifViewController 
         }
         mView.removeChildNotification(childView);
         if (!isTransfer) {
-            mListContainer.notifyGroupChildRemoved(childView, mView);
+            mListContainer.notifyGroupChildRemoved(childView, mView.getChildrenContainer());
         }
     }
 
@@ -345,6 +345,15 @@ public class ExpandableNotificationRowController implements NotifViewController 
             mView.setUntruncatedChildCount(childCount);
         } else {
             Log.w(TAG, "Called setUntruncatedChildCount(" + childCount + ") on a leaf row");
+        }
+    }
+
+    @Override
+    public void setNotificationGroupWhen(long whenMillis) {
+        if (mView.isSummaryWithChildren()) {
+            mView.setNotificationGroupWhen(whenMillis);
+        } else {
+            Log.w(TAG, "Called setNotificationTime(" + whenMillis + ") on a leaf row");
         }
     }
 

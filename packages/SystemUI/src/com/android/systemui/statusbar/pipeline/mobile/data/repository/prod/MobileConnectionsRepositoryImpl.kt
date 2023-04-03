@@ -45,13 +45,12 @@ import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.log.table.logDiffsForTable
 import com.android.systemui.statusbar.pipeline.dagger.MobileSummaryLog
+import com.android.systemui.statusbar.pipeline.mobile.data.MobileInputLogger
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectivityModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.SubscriptionModel
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionsRepository
 import com.android.systemui.statusbar.pipeline.mobile.util.MobileMappingsProxy
-import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger
-import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger.Companion.logInputChange
 import com.android.systemui.statusbar.pipeline.wifi.data.repository.WifiRepository
 import com.android.systemui.statusbar.pipeline.wifi.shared.model.WifiNetworkModel
 import com.android.systemui.util.kotlin.pairwise
@@ -84,7 +83,7 @@ constructor(
     private val connectivityManager: ConnectivityManager,
     private val subscriptionManager: SubscriptionManager,
     private val telephonyManager: TelephonyManager,
-    private val logger: ConnectivityPipelineLogger,
+    private val logger: MobileInputLogger,
     @MobileSummaryLog private val tableLogger: TableLogBuffer,
     mobileMappingsProxy: MobileMappingsProxy,
     broadcastDispatcher: BroadcastDispatcher,
@@ -222,13 +221,13 @@ constructor(
     private val carrierConfigChangedEvent =
         broadcastDispatcher
             .broadcastFlow(IntentFilter(CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED))
-            .logInputChange(logger, "ACTION_CARRIER_CONFIG_CHANGED")
+            .onEach { logger.logActionCarrierConfigChanged() }
 
     override val defaultDataSubRatConfig: StateFlow<Config> =
         merge(defaultDataSubIdChangeEvent, carrierConfigChangedEvent)
             .mapLatest { Config.readConfig(context) }
             .distinctUntilChanged()
-            .logInputChange(logger, "defaultDataSubRatConfig")
+            .onEach { logger.logDefaultDataSubRatConfig(it) }
             .stateIn(
                 scope,
                 SharingStarted.WhileSubscribed(),
@@ -239,13 +238,13 @@ constructor(
         defaultDataSubRatConfig
             .map { mobileMappingsProxy.mapIconSets(it) }
             .distinctUntilChanged()
-            .logInputChange(logger, "defaultMobileIconMapping")
+            .onEach { logger.logDefaultMobileIconMapping(it) }
 
     override val defaultMobileIconGroup: Flow<MobileIconGroup> =
         defaultDataSubRatConfig
             .map { mobileMappingsProxy.getDefaultIcons(it) }
             .distinctUntilChanged()
-            .logInputChange(logger, "defaultMobileIconGroup")
+            .onEach { logger.logDefaultMobileIconGroup(it) }
 
     override fun getRepoForSubId(subId: Int): FullMobileConnectionRepository {
         if (!isValidSubId(subId)) {
@@ -267,6 +266,7 @@ constructor(
                 val callback =
                     object : NetworkCallback(FLAG_INCLUDE_LOCATION_INFO) {
                         override fun onLost(network: Network) {
+                            logger.logOnLost(network, isDefaultNetworkCallback = true)
                             // Send a disconnected model when lost. Maybe should create a sealed
                             // type or null here?
                             trySend(MobileConnectivityModel())
@@ -276,6 +276,11 @@ constructor(
                             network: Network,
                             caps: NetworkCapabilities
                         ) {
+                            logger.logOnCapabilitiesChanged(
+                                network,
+                                caps,
+                                isDefaultNetworkCallback = true,
+                            )
                             trySend(
                                 MobileConnectivityModel(
                                     isConnected = caps.hasTransport(TRANSPORT_CELLULAR),
@@ -354,8 +359,8 @@ constructor(
      * True if the checked subId is in the list of current subs or the active mobile data subId
      *
      * @param checkedSubs the list to validate [subId] against. To invalidate the cache, pass in the
-     * new subscription list. Otherwise use [subscriptions.value] to validate a subId against the
-     * current known subscriptions
+     *   new subscription list. Otherwise use [subscriptions.value] to validate a subId against the
+     *   current known subscriptions
      */
     private fun checkSub(subId: Int, checkedSubs: List<SubscriptionModel>): Boolean {
         if (activeMobileDataSubscriptionId.value == subId) return true

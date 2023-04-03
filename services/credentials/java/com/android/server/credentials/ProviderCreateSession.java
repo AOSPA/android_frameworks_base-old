@@ -24,6 +24,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.credentials.CreateCredentialException;
 import android.credentials.CreateCredentialResponse;
+import android.credentials.CredentialProviderInfo;
 import android.credentials.ui.CreateCredentialProviderData;
 import android.credentials.ui.Entry;
 import android.credentials.ui.ProviderPendingIntentResponse;
@@ -33,8 +34,8 @@ import android.service.credentials.BeginCreateCredentialResponse;
 import android.service.credentials.CallingAppInfo;
 import android.service.credentials.CreateCredentialRequest;
 import android.service.credentials.CreateEntry;
-import android.service.credentials.CredentialProviderInfo;
 import android.service.credentials.CredentialProviderService;
+import android.service.credentials.RemoteEntry;
 import android.util.Log;
 import android.util.Pair;
 import android.util.Slog;
@@ -136,7 +137,8 @@ public final class ProviderCreateSession extends ProviderSession<
                 remoteCredentialService);
         mCompleteRequest = completeCreateRequest;
         setStatus(Status.PENDING);
-        mProviderResponseDataHandler = new ProviderResponseDataHandler(hybridService);
+        mProviderResponseDataHandler = new ProviderResponseDataHandler(
+                ComponentName.unflattenFromString(hybridService));
     }
 
     @Override
@@ -224,8 +226,8 @@ public final class ProviderCreateSession extends ProviderSession<
     @Override
     protected void invokeSession() {
         if (mRemoteCredentialService != null) {
+            mCandidateProviderMetric.setStartQueryTimeNanoseconds(System.nanoTime());
             mRemoteCredentialService.onCreateCredential(mProviderRequest, this);
-            mCandidateProviderMetric.setStartTimeNanoseconds(System.nanoTime());
         }
     }
 
@@ -296,21 +298,23 @@ public final class ProviderCreateSession extends ProviderSession<
     }
 
     private class ProviderResponseDataHandler {
-        private final ComponentName mExpectedRemoteEntryProviderService;
+        @Nullable private final ComponentName mExpectedRemoteEntryProviderService;
 
         @NonNull
         private final Map<String, Pair<CreateEntry, Entry>> mUiCreateEntries = new HashMap<>();
 
-        @Nullable private Pair<String, Pair<CreateEntry, Entry>> mUiRemoteEntry = null;
+        @Nullable private Pair<String, Pair<RemoteEntry, Entry>> mUiRemoteEntry = null;
 
-        ProviderResponseDataHandler(String hybridService) {
-            mExpectedRemoteEntryProviderService = ComponentName.unflattenFromString(hybridService);
+        ProviderResponseDataHandler(@Nullable ComponentName expectedRemoteEntryProviderService) {
+            mExpectedRemoteEntryProviderService = expectedRemoteEntryProviderService;
         }
 
         public void addResponseContent(List<CreateEntry> createEntries,
-                CreateEntry remoteEntry) {
+                RemoteEntry remoteEntry) {
             createEntries.forEach(this::addCreateEntry);
-            setRemoteEntry(remoteEntry);
+            if (remoteEntry != null) {
+                setRemoteEntry(remoteEntry);
+            }
         }
         public void addCreateEntry(CreateEntry createEntry) {
             String id = generateUniqueId();
@@ -319,14 +323,14 @@ public final class ProviderCreateSession extends ProviderSession<
             mUiCreateEntries.put(id, new Pair<>(createEntry, entry));
         }
 
-        public void setRemoteEntry(@Nullable CreateEntry remoteEntry) {
-            if (remoteEntry == null) {
-                mUiRemoteEntry = null;
+        public void setRemoteEntry(@Nullable RemoteEntry remoteEntry) {
+            if (!enforceRemoteEntryRestrictions(mExpectedRemoteEntryProviderService)) {
+                Log.i(TAG, "Remote entry being dropped as it does not meet the restriction"
+                        + "checks.");
                 return;
             }
-            if (!mComponentName.equals(mExpectedRemoteEntryProviderService)) {
-                Log.i(TAG, "Remote entry being dropped as it is not from the service "
-                        + "configured by the OEM.");
+            if (remoteEntry == null) {
+                mUiRemoteEntry = null;
                 return;
             }
             String id = generateUniqueId();
@@ -363,7 +367,7 @@ public final class ProviderCreateSession extends ProviderSession<
             return mUiCreateEntries.isEmpty() && mUiRemoteEntry == null;
         }
         @Nullable
-        public CreateEntry getRemoteEntry(String entryKey) {
+        public RemoteEntry getRemoteEntry(String entryKey) {
             return mUiRemoteEntry == null || mUiRemoteEntry
                     .first == null || !mUiRemoteEntry.first.equals(entryKey)
                     || mUiRemoteEntry.second == null

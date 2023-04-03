@@ -30,8 +30,8 @@ import com.android.systemui.broadcast.BroadcastDispatcher
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dump.DumpManager
+import com.android.systemui.statusbar.pipeline.mobile.data.MobileInputLogger
 import com.android.systemui.statusbar.pipeline.mobile.data.model.SystemUiCarrierConfig
-import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger
 import java.io.PrintWriter
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -57,7 +57,7 @@ constructor(
     broadcastDispatcher: BroadcastDispatcher,
     private val carrierConfigManager: CarrierConfigManager,
     dumpManager: DumpManager,
-    logger: ConnectivityPipelineLogger,
+    logger: MobileInputLogger,
     @Application scope: CoroutineScope,
 ) : Dumpable {
     private var isListening = false

@@ -196,9 +196,6 @@
     <!-- Increased height of a small notification in the status bar -->
     <dimen name="notification_min_height_increased">146dp</dimen>
 
-    <!-- Increased height of a collapsed media notification in the status bar -->
-    <dimen name="notification_min_height_media">160dp</dimen>
-
     <!-- Height of a small notification in the status bar which was used before android N -->
     <dimen name="notification_min_height_legacy">64dp</dimen>
 
@@ -256,9 +253,6 @@
 
     <!-- Radius for notifications corners with adjacent notifications -->
     <dimen name="notification_corner_radius_small">4dp</dimen>
-
-    <!-- Vertical padding of the FSI container -->
-    <dimen name="fsi_chrome_vertical_padding">80dp</dimen>
 
     <!-- the padding of the shelf icon container -->
     <dimen name="shelf_icon_container_padding">13dp</dimen>
@@ -576,7 +570,7 @@
     <dimen name="qs_tile_margin_horizontal">8dp</dimen>
     <dimen name="qs_tile_margin_vertical">@dimen/qs_tile_margin_horizontal</dimen>
     <dimen name="qs_tile_margin_top_bottom">4dp</dimen>
-    <dimen name="qs_brightness_margin_top">12dp</dimen>
+    <dimen name="qs_brightness_margin_top">8dp</dimen>
     <dimen name="qs_brightness_margin_bottom">16dp</dimen>
     <dimen name="qqs_layout_margin_top">16dp</dimen>
     <dimen name="qqs_layout_padding_bottom">24dp</dimen>
@@ -616,8 +610,7 @@
     <dimen name="qs_dual_tile_padding_horizontal">6dp</dimen>
     <dimen name="qs_panel_elevation">4dp</dimen>
     <dimen name="qs_panel_padding_bottom">@dimen/footer_actions_height</dimen>
-    <dimen name="qs_panel_padding_top">48dp</dimen>
-    <dimen name="qs_panel_padding_top_combined_headers">80dp</dimen>
+    <dimen name="qs_panel_padding_top">80dp</dimen>
 
     <dimen name="qs_data_usage_text_size">14sp</dimen>
     <dimen name="qs_data_usage_usage_text_size">36sp</dimen>
@@ -629,7 +622,7 @@
     <dimen name="qs_header_row_min_height">48dp</dimen>
 
     <dimen name="qs_header_non_clickable_element_height">24dp</dimen>
-    <dimen name="new_qs_header_non_clickable_element_height">20dp</dimen>
+    <dimen name="new_qs_header_non_clickable_element_height">24dp</dimen>
 
     <dimen name="qs_footer_padding">20dp</dimen>
     <dimen name="qs_security_footer_height">88dp</dimen>
@@ -1196,11 +1189,13 @@
 
     <!-- Home Controls -->
     <dimen name="controls_header_menu_size">48dp</dimen>
+    <dimen name="controls_header_menu_button_size">48dp</dimen>
     <dimen name="controls_header_bottom_margin">16dp</dimen>
+    <dimen name="controls_header_horizontal_padding">12dp</dimen>
     <dimen name="controls_header_app_icon_size">24dp</dimen>
     <dimen name="controls_top_margin">48dp</dimen>
-    <dimen name="controls_padding_horizontal">0dp</dimen>
-    <dimen name="control_header_text_size">20sp</dimen>
+    <dimen name="controls_content_margin_horizontal">0dp</dimen>
+    <dimen name="control_header_text_size">24sp</dimen>
     <dimen name="control_item_text_size">16sp</dimen>
     <dimen name="control_menu_item_text_size">16sp</dimen>
     <dimen name="control_menu_item_min_height">56dp</dimen>
@@ -1230,6 +1225,8 @@
     <!-- Limit the TaskView to this percentage of the overall screen width (0.0 - 1.0) -->
     <item name="controls_task_view_width_percentage" translatable="false" format="float" type="dimen">1.0</item>
     <dimen name="controls_task_view_right_margin">0dp</dimen>
+
+    <dimen name="controls_panel_corner_radius">42dp</dimen>
 
     <!-- Home Controls activity view detail panel-->
     <dimen name="controls_activity_view_corner_radius">@*android:dimen/config_bottomDialogCornerRadius</dimen>
@@ -1701,6 +1698,19 @@
     <dimen name="media_output_broadcast_info_summary_height">20dp</dimen>
     <dimen name="media_output_broadcast_info_edit">18dp</dimen>
 
+    <!-- Keyboard backlight indicator-->
+    <dimen name="backlight_indicator_root_corner_radius">48dp</dimen>
+    <dimen name="backlight_indicator_root_vertical_padding">8dp</dimen>
+    <dimen name="backlight_indicator_root_horizontal_padding">4dp</dimen>
+    <dimen name="backlight_indicator_icon_width">22dp</dimen>
+    <dimen name="backlight_indicator_icon_height">11dp</dimen>
+    <dimen name="backlight_indicator_icon_left_margin">2dp</dimen>
+    <dimen name="backlight_indicator_step_width">52dp</dimen>
+    <dimen name="backlight_indicator_step_height">40dp</dimen>
+    <dimen name="backlight_indicator_step_horizontal_margin">4dp</dimen>
+    <dimen name="backlight_indicator_step_small_radius">4dp</dimen>
+    <dimen name="backlight_indicator_step_large_radius">48dp</dimen>
+
     <!-- Broadcast dialog -->
     <dimen name="broadcast_dialog_title_img_margin_top">18dp</dimen>
     <dimen name="broadcast_dialog_title_text_size">24sp</dimen>
@@ -1749,4 +1759,9 @@
     it is long-pressed.
     -->
     <dimen name="keyguard_long_press_settings_popup_vertical_offset">96dp</dimen>
+
+
+    <!-- Bouncer user switcher margins -->
+    <dimen name="bouncer_user_switcher_view_mode_user_switcher_bottom_margin">0dp</dimen>
+    <dimen name="bouncer_user_switcher_view_mode_view_flipper_bottom_margin">0dp</dimen>
 </resources>

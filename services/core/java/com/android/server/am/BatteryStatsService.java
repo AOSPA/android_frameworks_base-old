@@ -23,12 +23,14 @@ import static android.Manifest.permission.NETWORK_STACK;
 import static android.Manifest.permission.POWER_SAVER;
 import static android.Manifest.permission.UPDATE_DEVICE_STATS;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_SUSPENDED;
+import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
 import static android.net.NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK;
 import static android.os.BatteryStats.POWER_DATA_UNAVAILABLE;
 
 import android.annotation.EnforcePermission;
 import android.annotation.NonNull;
 import android.annotation.RequiresNoPermission;
+import android.app.AlarmManager;
 import android.app.StatsManager;
 import android.app.usage.NetworkStatsManager;
 import android.bluetooth.BluetoothActivityEnergyInfo;
@@ -370,6 +372,16 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         mStats.setRadioScanningTimeoutLocked(mContext.getResources().getInteger(
                 com.android.internal.R.integer.config_radioScanningTimeout) * 1000L);
         mStats.setPowerProfileLocked(mPowerProfile);
+
+        final boolean resetOnUnplugHighBatteryLevel = context.getResources().getBoolean(
+                com.android.internal.R.bool.config_batteryStatsResetOnUnplugHighBatteryLevel);
+        final boolean resetOnUnplugAfterSignificantCharge = context.getResources().getBoolean(
+                com.android.internal.R.bool.config_batteryStatsResetOnUnplugAfterSignificantCharge);
+        mStats.setBatteryStatsConfig(
+                new BatteryStatsImpl.BatteryStatsConfig.Builder()
+                        .setResetOnUnplugHighBatteryLevel(resetOnUnplugHighBatteryLevel)
+                        .setResetOnUnplugAfterSignificantCharge(resetOnUnplugAfterSignificantCharge)
+                        .build());
         mStats.startTrackingSystemServerCpuTime();
 
         if (BATTERY_USAGE_STORE_ENABLED) {
@@ -390,6 +402,7 @@ public final class BatteryStatsService extends IBatteryStats.Stub
 
     public void systemServicesReady() {
         mStats.systemServicesReady(mContext);
+        mCpuWakeupStats.systemServicesReady();
         mWorker.systemServicesReady();
         final INetworkManagementService nms = INetworkManagementService.Stub.asInterface(
                 ServiceManager.getService(Context.NETWORKMANAGEMENT_SERVICE));
@@ -400,6 +413,18 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         } catch (RemoteException e) {
             Slog.e(TAG, "Could not register INetworkManagement event observer " + e);
         }
+
+        final AlarmManager am = mContext.getSystemService(AlarmManager.class);
+        mHandler.post(() -> {
+            synchronized (mStats) {
+                mStats.setLongPlugInAlarmInterface(new AlarmInterface(am, () -> {
+                    synchronized (mStats) {
+                        if (mStats.isOnBattery()) return;
+                        mStats.maybeResetWhilePluggedInLocked();
+                    }
+                }));
+            }
+        });
 
         synchronized (mPowerStatsLock) {
             mPowerStatsInternal = LocalServices.getService(PowerStatsInternal.class);
@@ -456,9 +481,29 @@ public final class BatteryStatsService extends IBatteryStats.Stub
             BatteryStatsService.this.noteJobsDeferred(uid, numDeferred, sinceLast);
         }
 
+        private int transportToSubsystem(NetworkCapabilities nc) {
+            if (nc.hasTransport(TRANSPORT_WIFI)) {
+                return CPU_WAKEUP_SUBSYSTEM_WIFI;
+            }
+            return CPU_WAKEUP_SUBSYSTEM_UNKNOWN;
+        }
+
         @Override
         public void noteCpuWakingNetworkPacket(Network network, long elapsedMillis, int uid) {
-            Slog.d(TAG, "Wakeup due to incoming packet on network " + network + " to uid " + uid);
+            if (uid < 0) {
+                Slog.e(TAG, "Invalid uid for waking network packet: " + uid);
+                return;
+            }
+            final ConnectivityManager cm = mContext.getSystemService(ConnectivityManager.class);
+            final NetworkCapabilities nc = cm.getNetworkCapabilities(network);
+            final int subsystem = transportToSubsystem(nc);
+
+            if (subsystem == CPU_WAKEUP_SUBSYSTEM_UNKNOWN) {
+                Slog.wtf(TAG, "Could not map transport for network: " + network
+                        + " while attributing wakeup by packet sent to uid: " + uid);
+                return;
+            }
+            noteCpuWakingActivity(subsystem, elapsedMillis, uid);
         }
 
         @Override
@@ -2484,6 +2529,32 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         }
     }
 
+    final class AlarmInterface implements BatteryStatsImpl.AlarmInterface,
+            AlarmManager.OnAlarmListener {
+        private AlarmManager mAm;
+        private Runnable mOnAlarm;
+
+        AlarmInterface(AlarmManager am, Runnable onAlarm) {
+            mAm = am;
+            mOnAlarm = onAlarm;
+        }
+
+        @Override
+        public void schedule(long rtcTimeMs, long windowLengthMs) {
+            mAm.setWindow(AlarmManager.RTC, rtcTimeMs, windowLengthMs, TAG, this, mHandler);
+        }
+
+        @Override
+        public void cancel() {
+            mAm.cancel(this);
+        }
+
+        @Override
+        public void onAlarm() {
+            mOnAlarm.run();
+        }
+    }
+
     private static native int nativeWaitWakeup(ByteBuffer outBuffer);
 
     private void dumpHelp(PrintWriter pw) {
@@ -2684,7 +2755,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
                 } else if ("--reset-all".equals(arg)) {
                     awaitCompletion();
                     synchronized (mStats) {
-                        mStats.resetAllStatsCmdLocked();
+                        mStats.resetAllStatsAndHistoryLocked(
+                                BatteryStatsImpl.RESET_REASON_ADB_COMMAND);
                         mBatteryUsageStatsStore.removeAllSnapshots();
                         pw.println("Battery stats and history reset.");
                         noOutput = true;
@@ -2692,7 +2764,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
                 } else if ("--reset".equals(arg)) {
                     awaitCompletion();
                     synchronized (mStats) {
-                        mStats.resetAllStatsCmdLocked();
+                        mStats.resetAllStatsAndHistoryLocked(
+                                BatteryStatsImpl.RESET_REASON_ADB_COMMAND);
                         pw.println("Battery stats reset.");
                         noOutput = true;
                     }

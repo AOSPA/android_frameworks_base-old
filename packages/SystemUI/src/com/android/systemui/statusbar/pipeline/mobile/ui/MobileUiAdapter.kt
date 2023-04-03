@@ -23,7 +23,6 @@ import com.android.systemui.statusbar.phone.StatusBarIconController
 import com.android.systemui.statusbar.pipeline.StatusBarPipelineFlags
 import com.android.systemui.statusbar.pipeline.mobile.domain.interactor.MobileIconsInteractor
 import com.android.systemui.statusbar.pipeline.mobile.ui.viewmodel.MobileIconsViewModel
-import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger
 import java.io.PrintWriter
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -55,17 +54,14 @@ constructor(
     interactor: MobileIconsInteractor,
     private val iconController: StatusBarIconController,
     private val iconsViewModelFactory: MobileIconsViewModel.Factory,
-    private val logger: ConnectivityPipelineLogger,
+    private val logger: MobileViewLogger,
     @Application private val scope: CoroutineScope,
     private val statusBarPipelineFlags: StatusBarPipelineFlags,
 ) : CoreStartable {
     private val mobileSubIds: Flow<List<Int>> =
-        interactor.filteredSubscriptions
-            .mapLatest { subscriptions ->
-                subscriptions.map { subscriptionModel -> subscriptionModel.subscriptionId }
-            }
-            .distinctUntilChanged()
-            .onEach { logger.logUiAdapterSubIdsUpdated(it) }
+        interactor.filteredSubscriptions.mapLatest { subscriptions ->
+            subscriptions.map { subscriptionModel -> subscriptionModel.subscriptionId }
+        }
 
     /**
      * We expose the list of tracked subscriptions as a flow of a list of ints, where each int is
@@ -75,7 +71,10 @@ constructor(
      * NOTE: this should go away as the view presenter learns more about this data pipeline
      */
     private val mobileSubIdsState: StateFlow<List<Int>> =
-        mobileSubIds.stateIn(scope, SharingStarted.WhileSubscribed(), listOf())
+        mobileSubIds
+            .distinctUntilChanged()
+            .onEach { logger.logUiAdapterSubIdsUpdated(it) }
+            .stateIn(scope, SharingStarted.WhileSubscribed(), listOf())
 
     /** In order to keep the logs tame, we will reuse the same top-level mobile icons view model */
     val mobileIconsViewModel = iconsViewModelFactory.create(mobileSubIdsState)

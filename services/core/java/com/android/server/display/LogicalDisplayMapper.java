@@ -1015,25 +1015,27 @@ class LogicalDisplayMapper implements DisplayDeviceRepository.Listener {
             if (newDisplay != oldDisplay) {
                 newDisplay.swapDisplaysLocked(oldDisplay);
             }
+            DisplayDeviceConfig config = device.getDisplayDeviceConfig();
 
             newDisplay.setDevicePositionLocked(displayLayout.getPosition());
             newDisplay.setLeadDisplayLocked(displayLayout.getLeadDisplayId());
-            setLayoutLimitedRefreshRate(newDisplay, device, displayLayout);
+            newDisplay.updateLayoutLimitedRefreshRateLocked(
+                    config.getRefreshRange(displayLayout.getRefreshRateZoneId())
+            );
+            newDisplay.updateRefreshRateThermalThrottling(
+                    config.getRefreshRateThrottlingData(
+                            displayLayout.getRefreshRateThermalThrottlingMapId()
+                    )
+            );
+
             setEnabledLocked(newDisplay, displayLayout.isEnabled());
             newDisplay.setBrightnessThrottlingDataIdLocked(
                     displayLayout.getBrightnessThrottlingMapId() == null
-                            ? DisplayDeviceConfig.DEFAULT_BRIGHTNESS_THROTTLING_DATA_ID
+                            ? DisplayDeviceConfig.DEFAULT_ID
                             : displayLayout.getBrightnessThrottlingMapId());
 
             newDisplay.setDisplayGroupNameLocked(displayLayout.getDisplayGroupName());
         }
-    }
-
-    private void setLayoutLimitedRefreshRate(@NonNull LogicalDisplay logicalDisplay,
-            @NonNull DisplayDevice device, @NonNull Layout.Display display) {
-        DisplayDeviceConfig config = device.getDisplayDeviceConfig();
-        DisplayInfo info = logicalDisplay.getDisplayInfoLocked();
-        info.layoutLimitedRefreshRate = config.getRefreshRange(display.getRefreshRateZoneId());
     }
 
     /**

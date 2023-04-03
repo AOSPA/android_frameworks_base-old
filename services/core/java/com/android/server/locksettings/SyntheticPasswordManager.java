@@ -744,6 +744,11 @@ class SyntheticPasswordManager {
                 && hasState(SP_P1_NAME, NULL_PROTECTOR_ID, userId);
     }
 
+    public boolean hasAnyEscrowData(int userId) {
+        return hasState(SP_E0_NAME, NULL_PROTECTOR_ID, userId)
+                || hasState(SP_P1_NAME, NULL_PROTECTOR_ID, userId);
+    }
+
     public void destroyEscrowData(int userId) {
         destroyState(SP_E0_NAME, NULL_PROTECTOR_ID, userId);
         destroyState(SP_P1_NAME, NULL_PROTECTOR_ID, userId);
@@ -780,13 +785,17 @@ class SyntheticPasswordManager {
         int slot = loadWeaverSlot(protectorId, userId);
         destroyState(WEAVER_SLOT_NAME, protectorId, userId);
         if (slot != INVALID_WEAVER_SLOT) {
+            if (!isWeaverAvailable()) {
+                Slog.e(TAG, "Cannot erase Weaver slot because Weaver is unavailable");
+                return;
+            }
             Set<Integer> usedSlots = getUsedWeaverSlots();
             if (!usedSlots.contains(slot)) {
-                Slog.i(TAG, "Destroy weaver slot " + slot + " for user " + userId);
+                Slogf.i(TAG, "Erasing Weaver slot %d", slot);
                 weaverEnroll(slot, null, null);
                 mPasswordSlotManager.markSlotDeleted(slot);
             } else {
-                Slog.w(TAG, "Skip destroying reused weaver slot " + slot + " for user " + userId);
+                Slogf.i(TAG, "Weaver slot %d was already reused; not erasing it", slot);
             }
         }
     }
@@ -854,11 +863,13 @@ class SyntheticPasswordManager {
         long sid = GateKeeper.INVALID_SECURE_USER_ID;
         final byte[] protectorSecret;
 
+        Slogf.i(TAG, "Creating LSKF-based protector %016x for user %d", protectorId, userId);
+
         if (isWeaverAvailable()) {
             // Weaver is available, so make the protector use it to verify the LSKF.  Do this even
             // if the LSKF is empty, as that gives us support for securely deleting the protector.
             int weaverSlot = getNextAvailableWeaverSlot();
-            Slog.i(TAG, "Weaver enroll password to slot " + weaverSlot + " for user " + userId);
+            Slogf.i(TAG, "Enrolling LSKF for user %d into Weaver slot %d", userId, weaverSlot);
             byte[] weaverSecret = weaverEnroll(weaverSlot, stretchedLskfToWeaverKey(stretchedLskf),
                     null);
             if (weaverSecret == null) {
@@ -888,6 +899,7 @@ class SyntheticPasswordManager {
                 } catch (RemoteException ignore) {
                     Slog.w(TAG, "Failed to clear SID from gatekeeper");
                 }
+                Slogf.i(TAG, "Enrolling LSKF for user %d into Gatekeeper", userId);
                 GateKeeperResponse response;
                 try {
                     response = gatekeeper.enroll(fakeUserId(userId), null, null,
@@ -960,6 +972,7 @@ class SyntheticPasswordManager {
                 && LockPatternUtils.userOwnsFrpCredential(mContext, userInfo)
                 && getCredentialType(protectorId, userInfo.id) !=
                         LockPatternUtils.CREDENTIAL_TYPE_NONE) {
+            Slog.i(TAG, "Migrating FRP credential to persistent data block");
             PasswordData pwd = PasswordData.fromBytes(loadState(PASSWORD_DATA_NAME, protectorId,
                     userInfo.id));
             int weaverSlot = loadWeaverSlot(protectorId, userInfo.id);
@@ -1088,9 +1101,10 @@ class SyntheticPasswordManager {
             Slog.w(TAG, "User is not escrowable");
             return false;
         }
+        Slogf.i(TAG, "Creating token-based protector %016x for user %d", tokenHandle, userId);
         if (isWeaverAvailable()) {
             int slot = getNextAvailableWeaverSlot();
-            Slog.i(TAG, "Weaver enroll token to slot " + slot + " for user " + userId);
+            Slogf.i(TAG, "Using Weaver slot %d for new token-based protector", slot);
             if (weaverEnroll(slot, null, tokenData.weaverSecret) == null) {
                 Slog.e(TAG, "Failed to enroll weaver secret when activating token");
                 return false;
@@ -1166,8 +1180,9 @@ class SyntheticPasswordManager {
             storedType = pwd.credentialType;
         }
         if (!credential.checkAgainstStoredType(storedType)) {
-            Slog.e(TAG, TextUtils.formatSimple("Credential type mismatch: expected %d actual %d",
-                    storedType, credential.getType()));
+            Slogf.e(TAG, "Credential type mismatch: stored type is %s but provided type is %s",
+                    LockPatternUtils.credentialTypeToString(storedType),
+                    LockPatternUtils.credentialTypeToString(credential.getType()));
             result.gkResponse = VerifyCredentialResponse.ERROR;
             return result;
         }
@@ -1245,8 +1260,13 @@ class SyntheticPasswordManager {
                 }
                 sid = sidFromPasswordHandle(pwd.passwordHandle);
             }
-            protectorSecret = transformUnderSecdiscardable(stretchedLskf,
-                    loadSecdiscardable(protectorId, userId));
+            byte[] secdiscardable = loadSecdiscardable(protectorId, userId);
+            if (secdiscardable == null) {
+                Slog.e(TAG, "secdiscardable file not found");
+                result.gkResponse = VerifyCredentialResponse.ERROR;
+                return result;
+            }
+            protectorSecret = transformUnderSecdiscardable(stretchedLskf, secdiscardable);
         }
         // Supplied credential passes first stage weaver/gatekeeper check so it should be correct.
         // Notify the callback so the keyguard UI can proceed immediately.
@@ -1311,6 +1331,11 @@ class SyntheticPasswordManager {
             byte[] token, int userId) {
         AuthenticationResult result = new AuthenticationResult();
         byte[] secdiscardable = loadSecdiscardable(protectorId, userId);
+        if (secdiscardable == null) {
+            Slog.e(TAG, "secdiscardable file not found");
+            result.gkResponse = VerifyCredentialResponse.ERROR;
+            return result;
+        }
         int slotId = loadWeaverSlot(protectorId, userId);
         if (slotId != INVALID_WEAVER_SLOT) {
             if (!isWeaverAvailable()) {
@@ -1459,6 +1484,7 @@ class SyntheticPasswordManager {
 
     /** Destroy a token-based SP protector. */
     public void destroyTokenBasedProtector(long protectorId, int userId) {
+        Slogf.i(TAG, "Destroying token-based protector %016x for user %d", protectorId, userId);
         SyntheticPasswordBlob blob = SyntheticPasswordBlob.fromBytes(loadState(SP_BLOB_NAME,
                     protectorId, userId));
         destroyProtectorCommon(protectorId, userId);
@@ -1484,6 +1510,7 @@ class SyntheticPasswordManager {
      * Destroy an LSKF-based SP protector.  This is used when the user's LSKF is changed.
      */
     public void destroyLskfBasedProtector(long protectorId, int userId) {
+        Slogf.i(TAG, "Destroying LSKF-based protector %016x for user %d", protectorId, userId);
         destroyProtectorCommon(protectorId, userId);
         destroyState(PASSWORD_DATA_NAME, protectorId, userId);
         destroyState(PASSWORD_METRICS_NAME, protectorId, userId);
@@ -1644,6 +1671,9 @@ class SyntheticPasswordManager {
     }
 
     private String getProtectorKeyAlias(long protectorId) {
+        // Note, this arguably has a bug: %x should be %016x so that the protector ID is left-padded
+        // with zeroes, like how the synthetic password state files are named.  It's too late to fix
+        // this, though, and it doesn't actually matter.
         return TextUtils.formatSimple("%s%x", PROTECTOR_KEY_ALIAS_PREFIX, protectorId);
     }
 

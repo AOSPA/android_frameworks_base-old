@@ -19,6 +19,7 @@ package com.android.server.wm;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
+import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_NOSENSOR;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_SEAMLESS;
@@ -1018,6 +1019,10 @@ public class TransitionTests extends WindowTestsBase {
 
     @Test
     public void testDisplayRotationChange() {
+        final DisplayPolicy displayPolicy = mDisplayContent.getDisplayPolicy();
+        spyOn(displayPolicy);
+        // Simulate gesture navigation (non-movable) so it is not seamless.
+        doReturn(false).when(displayPolicy).navigationBarCanMove();
         final Task task = createActivityRecord(mDisplayContent).getTask();
         final WindowState statusBar = createWindow(null, TYPE_STATUS_BAR, "statusBar");
         final WindowState navBar = createWindow(null, TYPE_NAVIGATION_BAR, "navBar");
@@ -1072,7 +1077,8 @@ public class TransitionTests extends WindowTestsBase {
 
         // Navigation bar finishes drawing after the start transaction, so its fade-in animation
         // can execute directly.
-        asyncRotationController.handleFinishDrawing(navBar, mMockT);
+        navBar.mWinAnimator.mDrawState = WindowStateAnimator.HAS_DRAWN;
+        asyncRotationController.updateTargetWindows();
         assertFalse(asyncRotationController.isTargetToken(navBar.mToken));
         assertNull(mDisplayContent.getAsyncRotationController());
     }
@@ -1370,6 +1376,9 @@ public class TransitionTests extends WindowTestsBase {
 
         enteringAnimReports.clear();
         closeTransition.finishTransition();
+
+        assertEquals(ActivityTaskManagerService.APP_SWITCH_DISALLOW, mAtm.getBalAppSwitchesState());
+        assertFalse(activity1.app.hasActivityInVisibleTask());
 
         verify(snapshotController, times(1)).recordSnapshot(eq(task1), eq(false));
         assertTrue(enteringAnimReports.contains(activity2));
@@ -1691,7 +1700,8 @@ public class TransitionTests extends WindowTestsBase {
     @Test
     public void testTransitionVisibleChange() {
         registerTestTransitionPlayer();
-        final ActivityRecord app = createActivityRecord(mDisplayContent);
+        final ActivityRecord app = createActivityRecord(
+                mDisplayContent, WINDOWING_MODE_MULTI_WINDOW, ACTIVITY_TYPE_STANDARD);
         final Transition transition = new Transition(TRANSIT_OPEN, 0 /* flags */,
                 app.mTransitionController, mWm.mSyncEngine);
         app.mTransitionController.moveToCollecting(transition, BLASTSyncEngine.METHOD_NONE);
@@ -1741,7 +1751,8 @@ public class TransitionTests extends WindowTestsBase {
     @Test
     public void testVisibleChange_snapshot() {
         registerTestTransitionPlayer();
-        final ActivityRecord app = createActivityRecord(mDisplayContent);
+        final ActivityRecord app = createActivityRecord(
+                mDisplayContent, WINDOWING_MODE_MULTI_WINDOW, ACTIVITY_TYPE_STANDARD);
         final Transition transition = new Transition(TRANSIT_CHANGE, 0 /* flags */,
                 app.mTransitionController, mWm.mSyncEngine);
         app.mTransitionController.moveToCollecting(transition, BLASTSyncEngine.METHOD_NONE);

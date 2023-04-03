@@ -23,6 +23,8 @@ import android.service.credentials.CredentialEntry;
 import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
+
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -32,7 +34,7 @@ import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 
 /** Contains information on what CredentialProvider has what provisioned Credential. */
-public final class CredentialDescriptionRegistry {
+public class CredentialDescriptionRegistry {
 
     private static final int MAX_ALLOWED_CREDENTIAL_DESCRIPTIONS = 128;
     private static final int MAX_ALLOWED_ENTRIES_PER_PROVIDER = 16;
@@ -49,11 +51,15 @@ public final class CredentialDescriptionRegistry {
     /** Represents the results of a given query into the registry. */
     public static final class FilterResult {
         final String mPackageName;
+        final String mFlattenedRequest;
         final List<CredentialEntry> mCredentialEntries;
 
-        private FilterResult(String packageName,
+        @VisibleForTesting
+        FilterResult(String packageName,
+                String flattenedRequest,
                 List<CredentialEntry> credentialEntries) {
             mPackageName = packageName;
+            mFlattenedRequest = flattenedRequest;
             mCredentialEntries = credentialEntries;
         }
     }
@@ -82,6 +88,31 @@ public final class CredentialDescriptionRegistry {
         sLock.lock();
         try {
             sCredentialDescriptionSessionPerUser.remove(userId);
+        } finally {
+            sLock.unlock();
+        }
+    }
+
+    /** Clears an existing session for a given user identifier. Used when testing only. */
+    @GuardedBy("sLock")
+    @VisibleForTesting
+    static void clearAllSessions() {
+        sLock.lock();
+        try {
+            sCredentialDescriptionSessionPerUser.clear();
+        } finally {
+            sLock.unlock();
+        }
+    }
+
+    /** Sets an existing session for a given user identifier. Used when testing only. */
+    @GuardedBy("sLock")
+    @VisibleForTesting
+    static void setSession(int userId, CredentialDescriptionRegistry
+            credentialDescriptionRegistry) {
+        sLock.lock();
+        try {
+            sCredentialDescriptionSessionPerUser.put(userId, credentialDescriptionRegistry);
         } finally {
             sLock.unlock();
         }
@@ -133,12 +164,16 @@ public final class CredentialDescriptionRegistry {
     /** Returns package names and entries of a CredentialProviders that can satisfy a given
      * {@link CredentialDescription}. */
     public Set<FilterResult> getFilteredResultForProvider(String packageName,
-            List<String> flatRequestStrings) {
+            String flatRequestStrings) {
         Set<FilterResult> result = new HashSet<>();
+        if (!mCredentialDescriptions.containsKey(packageName)) {
+            return result;
+        }
         Set<CredentialDescription> currentSet = mCredentialDescriptions.get(packageName);
         for (CredentialDescription containedDescription: currentSet) {
-            if (flatRequestStrings.contains(containedDescription.getFlattenedRequestString())) {
-                result.add(new FilterResult(packageName, containedDescription
+            if (flatRequestStrings.equals(containedDescription.getFlattenedRequestString())) {
+                result.add(new FilterResult(packageName,
+                        containedDescription.getFlattenedRequestString(), containedDescription
                         .getCredentialEntries()));
             }
         }
@@ -147,13 +182,15 @@ public final class CredentialDescriptionRegistry {
 
     /** Returns package names of CredentialProviders that can satisfy a given
      * {@link CredentialDescription}. */
-    public Set<String> getMatchingProviders(Set<String> flatRequestString) {
-        Set<String> result = new HashSet<>();
+    public Set<FilterResult> getMatchingProviders(Set<String> flatRequestString) {
+        Set<FilterResult> result = new HashSet<>();
         for (String packageName: mCredentialDescriptions.keySet()) {
             Set<CredentialDescription> currentSet = mCredentialDescriptions.get(packageName);
             for (CredentialDescription containedDescription : currentSet) {
                 if (flatRequestString.contains(containedDescription.getFlattenedRequestString())) {
-                    result.add(packageName);
+                    result.add(new FilterResult(packageName,
+                            containedDescription.getFlattenedRequestString(), containedDescription
+                            .getCredentialEntries()));
                 }
             }
         }

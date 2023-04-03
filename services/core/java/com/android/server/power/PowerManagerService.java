@@ -40,7 +40,6 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
-import android.app.ActivityManagerInternal;
 import android.app.AppOpsManager;
 import android.app.SynchronousUserSwitchObserver;
 import android.content.BroadcastReceiver;
@@ -317,7 +316,6 @@ public final class PowerManagerService extends SystemService
     private SettingsObserver mSettingsObserver;
     private DreamManagerInternal mDreamManager;
     private LogicalLight mAttentionLight;
-    private ActivityManagerInternal mAmInternal;
 
     private final InattentiveSleepWarningController mInattentiveSleepWarningOverlayController;
     private final AmbientDisplaySuppressionController mAmbientDisplaySuppressionController;
@@ -1244,7 +1242,6 @@ public final class PowerManagerService extends SystemService
             mDisplayManagerInternal = getLocalService(DisplayManagerInternal.class);
             mPolicy = getLocalService(WindowManagerPolicy.class);
             mBatteryManagerInternal = getLocalService(BatteryManagerInternal.class);
-            mAmInternal = getLocalService(ActivityManagerInternal.class);
             mAttentionDetector.systemReady(mContext);
 
             SensorManager sensorManager = new SystemSensorManager(mContext, mHandler.getLooper());
@@ -4088,8 +4085,9 @@ public final class PowerManagerService extends SystemService
                     final UidState state = wakeLock.mUidState;
                     if (Arrays.binarySearch(mDeviceIdleWhitelist, appid) < 0 &&
                             Arrays.binarySearch(mDeviceIdleTempWhitelist, appid) < 0 &&
-                            (mAmInternal != null && !mAmInternal.canHoldWakeLocksInDeepDoze(
-                                    state.mUid, state.mProcState))) {
+                            state.mProcState != ActivityManager.PROCESS_STATE_NONEXISTENT &&
+                            state.mProcState >
+                                    ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE) {
                         disabled = true;
                     }
                 }
@@ -5695,6 +5693,7 @@ public final class PowerManagerService extends SystemService
             }
 
             if (eventTime > now) {
+                Slog.e(TAG, "Event time " + eventTime + " cannot be newer than " + now);
                 throw new IllegalArgumentException("event time must not be in the future");
             }
 
@@ -5710,7 +5709,9 @@ public final class PowerManagerService extends SystemService
         @Override // Binder call
         public void wakeUp(long eventTime, @WakeReason int reason, String details,
                 String opPackageName) {
-            if (eventTime > mClock.uptimeMillis()) {
+            final long now = mClock.uptimeMillis();
+            if (eventTime > now) {
+                Slog.e(TAG, "Event time " + eventTime + " cannot be newer than " + now);
                 throw new IllegalArgumentException("event time must not be in the future");
             }
 
@@ -5762,7 +5763,9 @@ public final class PowerManagerService extends SystemService
 
         @Override // Binder call
         public void nap(long eventTime) {
-            if (eventTime > mClock.uptimeMillis()) {
+            final long now = mClock.uptimeMillis();
+            if (eventTime > now) {
+                Slog.e(TAG, "Event time " + eventTime + " cannot be newer than " + now);
                 throw new IllegalArgumentException("event time must not be in the future");
             }
 
@@ -6226,6 +6229,61 @@ public final class PowerManagerService extends SystemService
             }
         }
 
+        @Override // Binder call
+        @RequiresPermission(android.Manifest.permission.SET_LOW_POWER_STANDBY_PORTS)
+        public void acquireLowPowerStandbyPorts(IBinder token,
+                List<LowPowerStandbyPortDescription> ports) {
+            mContext.enforceCallingOrSelfPermission(
+                    android.Manifest.permission.SET_LOW_POWER_STANDBY_PORTS,
+                    "acquireLowPowerStandbyPorts");
+
+            final int callingUid = Binder.getCallingUid();
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                mLowPowerStandbyController.acquireStandbyPorts(token, callingUid,
+                        PowerManager.LowPowerStandbyPortDescription.fromParcelable(ports));
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+
+        @Override // Binder call
+        @RequiresPermission(android.Manifest.permission.SET_LOW_POWER_STANDBY_PORTS)
+        public void releaseLowPowerStandbyPorts(IBinder token) {
+            mContext.enforceCallingOrSelfPermission(
+                    android.Manifest.permission.SET_LOW_POWER_STANDBY_PORTS,
+                    "releaseLowPowerStandbyPorts");
+
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                mLowPowerStandbyController.releaseStandbyPorts(token);
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+
+        @Override // Binder call
+        @RequiresPermission(anyOf = {
+                android.Manifest.permission.MANAGE_LOW_POWER_STANDBY,
+                android.Manifest.permission.DEVICE_POWER
+        })
+        public List<LowPowerStandbyPortDescription> getActiveLowPowerStandbyPorts() {
+            if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.DEVICE_POWER)
+                    != PackageManager.PERMISSION_GRANTED) {
+                mContext.enforceCallingOrSelfPermission(
+                        android.Manifest.permission.MANAGE_LOW_POWER_STANDBY,
+                        "getActiveLowPowerStandbyPorts");
+            }
+
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                return PowerManager.LowPowerStandbyPortDescription.toParcelable(
+                        mLowPowerStandbyController.getActiveStandbyPorts());
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+
         /**
          * Gets the reason for the last time the phone had to reboot.
          *
@@ -6472,7 +6530,9 @@ public final class PowerManagerService extends SystemService
 
         @Override // Binder call
         public void boostScreenBrightness(long eventTime) {
+            final long now = mClock.uptimeMillis();
             if (eventTime > mClock.uptimeMillis()) {
+                Slog.e(TAG, "Event time " + eventTime + " cannot be newer than " + now);
                 throw new IllegalArgumentException("event time must not be in the future");
             }
 
@@ -6631,7 +6691,9 @@ public final class PowerManagerService extends SystemService
 
     @RequiresPermission(android.Manifest.permission.DEVICE_POWER)
     private void goToSleepInternal(IntArray groupIds, long eventTime, int reason, int flags) {
-        if (eventTime > mClock.uptimeMillis()) {
+        final long now = mClock.uptimeMillis();
+        if (eventTime > now) {
+            Slog.e(TAG, "Event time " + eventTime + " cannot be newer than " + now);
             throw new IllegalArgumentException("event time must not be in the future");
         }
 

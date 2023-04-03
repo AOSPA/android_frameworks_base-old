@@ -155,6 +155,12 @@ class BroadcastProcessQueue {
     private boolean mActiveViaColdStart;
 
     /**
+     * Flag indicating that the currently active broadcast is being dispatched
+     * to a package that was in the stopped state.
+     */
+    private boolean mActiveWasStopped;
+
+    /**
      * Number of consecutive urgent broadcasts that have been dispatched
      * since the last non-urgent dispatch.
      */
@@ -461,8 +467,16 @@ class BroadcastProcessQueue {
         mActiveViaColdStart = activeViaColdStart;
     }
 
+    public void setActiveWasStopped(boolean activeWasStopped) {
+        mActiveWasStopped = activeWasStopped;
+    }
+
     public boolean getActiveViaColdStart() {
         return mActiveViaColdStart;
+    }
+
+    public boolean getActiveWasStopped() {
+        return mActiveWasStopped;
     }
 
     /**
@@ -484,6 +498,7 @@ class BroadcastProcessQueue {
         final boolean wouldBeSkipped = (next.argi2 == 1);
         mActiveCountSinceIdle++;
         mActiveViaColdStart = false;
+        mActiveWasStopped = false;
         next.recycle();
         onBroadcastDequeued(mActive, mActiveIndex, wouldBeSkipped);
     }
@@ -733,6 +748,22 @@ class BroadcastProcessQueue {
      */
     public boolean isPendingManifest() {
         return mCountManifest > 0;
+    }
+
+    /**
+     * Quickly determine if this queue has ordered broadcasts waiting to be delivered,
+     * which indicates we should request an OOM adjust.
+     */
+    public boolean isPendingOrdered() {
+        return mCountOrdered > 0;
+    }
+
+    /**
+     * Quickly determine if this queue has broadcasts waiting to be delivered for which result is
+     * expected from the senders, which indicates we should request an OOM adjust.
+     */
+    public boolean isPendingResultTo() {
+        return mCountResultTo > 0;
     }
 
     /**
@@ -1114,8 +1145,11 @@ class BroadcastProcessQueue {
         pw.print(" because ");
         pw.print(reasonToString(mRunnableAtReason));
         pw.println();
-        pw.print("mProcessCached="); pw.println(mProcessCached);
+
         pw.increaseIndent();
+        dumpProcessState(pw);
+        dumpBroadcastCounts(pw);
+
         if (mActive != null) {
             dumpRecord("ACTIVE", now, pw, mActive, mActiveIndex);
         }
@@ -1132,6 +1166,49 @@ class BroadcastProcessQueue {
             dumpRecord("OFFLOAD", now, pw, r, args.argi1);
         }
         pw.decreaseIndent();
+        pw.println();
+    }
+
+    @NeverCompile
+    private void dumpProcessState(@NonNull IndentingPrintWriter pw) {
+        final StringBuilder sb = new StringBuilder();
+        if (mProcessCached) {
+            sb.append("CACHED");
+        }
+        if (mProcessInstrumented) {
+            if (sb.length() > 0) sb.append("|");
+            sb.append("INSTR");
+        }
+        if (mProcessPersistent) {
+            if (sb.length() > 0) sb.append("|");
+            sb.append("PER");
+        }
+        if (sb.length() > 0) {
+            pw.print("state:"); pw.println(sb);
+        }
+        if (runningOomAdjusted) {
+            pw.print("runningOomAdjusted:"); pw.println(runningOomAdjusted);
+        }
+    }
+
+    @NeverCompile
+    private void dumpBroadcastCounts(@NonNull IndentingPrintWriter pw) {
+        pw.print("e:"); pw.print(mCountEnqueued);
+        pw.print(" d:"); pw.print(mCountDeferred);
+        pw.print(" f:"); pw.print(mCountForeground);
+        pw.print(" fd:"); pw.print(mCountForegroundDeferred);
+        pw.print(" o:"); pw.print(mCountOrdered);
+        pw.print(" a:"); pw.print(mCountAlarm);
+        pw.print(" p:"); pw.print(mCountPrioritized);
+        pw.print(" pd:"); pw.print(mCountPrioritizedDeferred);
+        pw.print(" int:"); pw.print(mCountInteractive);
+        pw.print(" rt:"); pw.print(mCountResultTo);
+        pw.print(" ins:"); pw.print(mCountInstrumented);
+        pw.print(" m:"); pw.print(mCountManifest);
+
+        pw.print(" csi:"); pw.print(mActiveCountSinceIdle);
+        pw.print(" ccu:"); pw.print(mActiveCountConsecutiveUrgent);
+        pw.print(" ccn:"); pw.print(mActiveCountConsecutiveNormal);
         pw.println();
     }
 

@@ -18,6 +18,7 @@ package com.android.systemui.qs.tiles
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.view.View
 import com.android.internal.jank.InteractionJankMonitor
 import com.android.internal.logging.MetricsLogger
@@ -27,6 +28,8 @@ import com.android.systemui.animation.DialogCuj
 import com.android.systemui.animation.DialogLaunchAnimator
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.dagger.qualifiers.Main
+import com.android.systemui.flags.FeatureFlags
+import com.android.systemui.flags.Flags
 import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.plugins.qs.QSTile
@@ -50,7 +53,8 @@ constructor(
     activityStarter: ActivityStarter,
     qsLogger: QSLogger,
     private val dialogLaunchAnimator: DialogLaunchAnimator,
-    private val systemSettings: SystemSettings
+    private val systemSettings: SystemSettings,
+    private val featureFlags: FeatureFlags
 ) :
     QSTileImpl<QSTile.State?>(
         host,
@@ -65,13 +69,11 @@ constructor(
     private val icon = ResourceIcon.get(R.drawable.ic_qs_font_scaling)
 
     override fun isAvailable(): Boolean {
-        return false
+        return featureFlags.isEnabled(Flags.ENABLE_FONT_SCALING_TILE)
     }
 
     override fun newTileState(): QSTile.State {
-        val state = QSTile.State()
-        state.handlesLongClick = false
-        return state
+        return QSTile.State()
     }
 
     override fun handleClick(view: View?) {
@@ -95,7 +97,7 @@ constructor(
     }
 
     override fun getLongClickIntent(): Intent? {
-        return null
+        return Intent(Settings.ACTION_TEXT_READING_SETTINGS)
     }
 
     override fun getTileLabel(): CharSequence {

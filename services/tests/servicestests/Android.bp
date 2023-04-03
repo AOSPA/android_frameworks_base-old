@@ -32,6 +32,7 @@ android_test {
         "services.backup",
         "services.companion",
         "services.core",
+        "services.credentials",
         "services.devicepolicy",
         "services.net",
         "services.people",
@@ -116,6 +117,7 @@ android_test {
         ":StubTestApp",
         ":SuspendTestApp",
         ":MediaButtonReceiverHolderTestHelperApp",
+        "data/broken_shortcut.xml",
     ],
 
     java_resources: [

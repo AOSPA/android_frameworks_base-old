@@ -19,7 +19,7 @@ package com.android.server.am;
 import static android.app.ActivityManager.PROCESS_CAPABILITY_FOREGROUND_CAMERA;
 import static android.app.ActivityManager.PROCESS_CAPABILITY_FOREGROUND_LOCATION;
 import static android.app.ActivityManager.PROCESS_CAPABILITY_FOREGROUND_MICROPHONE;
-import static android.app.ActivityManager.PROCESS_CAPABILITY_NETWORK;
+import static android.app.ActivityManager.PROCESS_CAPABILITY_POWER_RESTRICTED_NETWORK;
 import static android.app.ActivityManagerInternal.ALLOW_NON_FULL;
 import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.app.ActivityTaskManager.RESIZE_MODE_SYSTEM;
@@ -146,6 +146,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.microedition.khronos.egl.EGL10;
 import javax.microedition.khronos.egl.EGLConfig;
@@ -358,6 +359,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     return runWaitForBroadcastIdle(pw);
                 case "wait-for-broadcast-barrier":
                     return runWaitForBroadcastBarrier(pw);
+                case "wait-for-application-barrier":
+                    return runWaitForApplicationBarrier(pw);
                 case "set-ignore-delivery-group-policy":
                     return runSetIgnoreDeliveryGroupPolicy(pw);
                 case "clear-ignore-delivery-group-policy":
@@ -595,10 +598,14 @@ final class ActivityManagerShellCommand extends ShellCommand {
             return 1;
         }
 
-        String mimeType = intent.getType();
-        if (mimeType == null && intent.getData() != null
+        AtomicReference<String> mimeType = new AtomicReference<>(intent.getType());
+
+        if (mimeType.get() == null && intent.getData() != null
                 && "content".equals(intent.getData().getScheme())) {
-            mimeType = mInterface.getProviderMimeType(intent.getData(), mUserId);
+            mInterface.getMimeTypeFilterAsync(intent.getData(), mUserId,
+                    new RemoteCallback(result -> {
+                        mimeType.set(result.getPairValue());
+                    }));
         }
 
         do {
@@ -611,8 +618,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     int userIdForQuery = mInternal.mUserController.handleIncomingUser(
                             Binder.getCallingPid(), Binder.getCallingUid(), mUserId, false,
                             ALLOW_NON_FULL, "ActivityManagerShellCommand", null);
-                    List<ResolveInfo> activities = mPm.queryIntentActivities(intent, mimeType, 0,
-                            userIdForQuery).getList();
+                    List<ResolveInfo> activities = mPm.queryIntentActivities(intent, mimeType.get(),
+                            0, userIdForQuery).getList();
                     if (activities == null || activities.size() <= 0) {
                         getErrPrintWriter().println("Error: Intent does not match any activities: "
                                 + intent);
@@ -708,12 +715,12 @@ final class ActivityManagerShellCommand extends ShellCommand {
             }
             if (mWaitOption) {
                 result = mInternal.startActivityAndWait(null, SHELL_PACKAGE_NAME, null, intent,
-                        mimeType, null, null, 0, mStartFlags, profilerInfo,
+                        mimeType.get(), null, null, 0, mStartFlags, profilerInfo,
                         options != null ? options.toBundle() : null, mUserId);
                 res = result.result;
             } else {
                 res = mInternal.startActivityAsUserWithFeature(null, SHELL_PACKAGE_NAME, null,
-                        intent, mimeType, null, null, 0, mStartFlags, profilerInfo,
+                        intent, mimeType.get(), null, null, 0, mStartFlags, profilerInfo,
                         options != null ? options.toBundle() : null, mUserId);
             }
             final long endTime = SystemClock.uptimeMillis();
@@ -2009,7 +2016,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         int mask = PROCESS_CAPABILITY_FOREGROUND_LOCATION
                 | PROCESS_CAPABILITY_FOREGROUND_CAMERA
                 | PROCESS_CAPABILITY_FOREGROUND_MICROPHONE
-                | PROCESS_CAPABILITY_NETWORK;
+                | PROCESS_CAPABILITY_POWER_RESTRICTED_NETWORK;
 
         while ((opt=getNextOption()) != null) {
             if (opt.equals("--oom")) {
@@ -3327,16 +3334,24 @@ final class ActivityManagerShellCommand extends ShellCommand {
 
     int runWaitForBroadcastBarrier(PrintWriter pw) throws RemoteException {
         boolean flushBroadcastLoopers = false;
+        boolean flushApplicationThreads = false;
         String opt;
         while ((opt = getNextOption()) != null) {
             if (opt.equals("--flush-broadcast-loopers")) {
                 flushBroadcastLoopers = true;
+            } else if (opt.equals("--flush-application-threads")) {
+                flushApplicationThreads = true;
             } else {
                 getErrPrintWriter().println("Error: Unknown option: " + opt);
                 return -1;
             }
         }
-        mInternal.waitForBroadcastBarrier(pw, flushBroadcastLoopers);
+        mInternal.waitForBroadcastBarrier(pw, flushBroadcastLoopers, flushApplicationThreads);
+        return 0;
+    }
+
+    int runWaitForApplicationBarrier(PrintWriter pw) throws RemoteException {
+        mInternal.waitForApplicationBarrier(pw);
         return 0;
     }
 
@@ -3531,9 +3546,14 @@ final class ActivityManagerShellCommand extends ShellCommand {
             if (foregroundActivities) {
                 try {
                     int prcState = mIam.getUidProcessState(uid, "android");
-                    int topPid = mInternal.getTopApp().getPid();
-                    if (prcState == ProcessStateEnum.TOP && topPid == pid) {
-                        mPw.println("New foreground process: " + pid);
+                    ProcessRecord topApp = mInternal.getTopApp();
+                    if (topApp == null) {
+                        mPw.println("No top app found");
+                    } else {
+                        int topPid = topApp.getPid();
+                        if (prcState == ProcessStateEnum.TOP && topPid == pid) {
+                            mPw.println("New foreground process: " + pid);
+                        }
                     }
                     mPw.flush();
                 } catch (RemoteException e) {
@@ -3925,6 +3945,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("    package [PACKAGE_NAME]: all state related to given package");
             pw.println("    all: dump all activities");
             pw.println("    top: dump the top activity");
+            pw.println("    users: user state");
             pw.println("  WHAT may also be a COMP_SPEC to dump activities.");
             pw.println("  COMP_SPEC may be a component name (com.foo/.myApp),");
             pw.println("    a partial substring in a component name, a");
@@ -3932,9 +3953,11 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("  -a: include all available server state.");
             pw.println("  -c: include client state.");
             pw.println("  -p: limit output to given package.");
+            pw.println("  -d: limit output to given display.");
             pw.println("  --checkin: output checkin format, resetting data.");
             pw.println("  --C: output checkin format, not resetting data.");
             pw.println("  --proto: output dump in protocol buffer format.");
+            pw.println("  --verbose: dumps extra information.");
             pw.printf("  %s: dump just the DUMPABLE-related state of an activity. Use the %s "
                     + "option to list the supported DUMPABLEs\n", Activity.DUMP_ARG_DUMP_DUMPABLE,
                     Activity.DUMP_ARG_LIST_DUMPABLES);

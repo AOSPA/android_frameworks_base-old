@@ -891,6 +891,11 @@
     <!-- UI debug setting: force right to left layout summary [CHAR LIMIT=100] -->
     <string name="force_rtl_layout_all_locales_summary">Force screen layout direction to RTL for all locales</string>
 
+    <!-- UI debug setting: make navigation bar background color transparent by default [CHAR LIMIT=50] -->
+    <string name="transparent_navigation_bar">Transparent navigation bar</string>
+    <!-- UI debug setting: make navigation bar background color transparent by default summary [CHAR LIMIT=100] -->
+    <string name="transparent_navigation_bar_summary">Make navigation bar background color transparent by default</string>
+
     <!-- UI debug setting: enable or disable window blurs [CHAR LIMIT=50] -->
     <string name="window_blurs">Allow window-level blurs</string>
 
@@ -1671,4 +1676,7 @@
         <item>Move right</item>
         <item>Move up</item>
     </string-array>
+
+    <!-- Formatting states for the scale of font size, in percent. Double "%" is required to represent the symbol "%". [CHAR LIMIT=20] -->
+    <string name="font_scale_percentage"> <xliff:g id="percentage">%1$d</xliff:g> %%</string>
 </resources>

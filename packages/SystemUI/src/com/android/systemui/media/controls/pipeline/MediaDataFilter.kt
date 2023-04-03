@@ -23,6 +23,7 @@ import com.android.internal.annotations.VisibleForTesting
 import com.android.systemui.broadcast.BroadcastSender
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.media.controls.models.player.MediaData
+import com.android.systemui.media.controls.models.recommendation.EXTRA_KEY_TRIGGER_RESUME
 import com.android.systemui.media.controls.models.recommendation.SmartspaceMediaData
 import com.android.systemui.media.controls.util.MediaFlags
 import com.android.systemui.media.controls.util.MediaUiEventLogger
@@ -138,14 +139,23 @@ constructor(
         val sorted = userEntries.toSortedMap(compareBy { userEntries.get(it)?.lastActive ?: -1 })
         val timeSinceActive = timeSinceActiveForMostRecentMedia(sorted)
         var smartspaceMaxAgeMillis = SMARTSPACE_MAX_AGE
-        data.cardAction?.let {
-            val smartspaceMaxAgeSeconds = it.extras.getLong(RESUMABLE_MEDIA_MAX_AGE_SECONDS_KEY, 0)
+        data.cardAction?.extras?.let {
+            val smartspaceMaxAgeSeconds = it.getLong(RESUMABLE_MEDIA_MAX_AGE_SECONDS_KEY, 0)
             if (smartspaceMaxAgeSeconds > 0) {
                 smartspaceMaxAgeMillis = TimeUnit.SECONDS.toMillis(smartspaceMaxAgeSeconds)
             }
         }
 
-        val shouldReactivate = !hasActiveMedia() && hasAnyMedia() && data.isActive
+        // Check if smartspace has explicitly specified whether to re-activate resumable media.
+        // The default behavior is to trigger if the smartspace data is active.
+        val shouldTriggerResume =
+            if (data.cardAction?.extras?.containsKey(EXTRA_KEY_TRIGGER_RESUME) == true) {
+                data.cardAction.extras.getBoolean(EXTRA_KEY_TRIGGER_RESUME, true)
+            } else {
+                true
+            }
+        val shouldReactivate =
+            shouldTriggerResume && !hasActiveMedia() && hasAnyMedia() && data.isActive
 
         if (timeSinceActive < smartspaceMaxAgeMillis) {
             // It could happen there are existing active media resume cards, then we don't need to
@@ -319,9 +329,8 @@ constructor(
      * Return the time since last active for the most-recent media.
      *
      * @param sortedEntries userEntries sorted from the earliest to the most-recent.
-     *
      * @return The duration in milliseconds from the most-recent media's last active timestamp to
-     * the present. MAX_VALUE will be returned if there is no media.
+     *   the present. MAX_VALUE will be returned if there is no media.
      */
     private fun timeSinceActiveForMostRecentMedia(
         sortedEntries: SortedMap<String, MediaData>

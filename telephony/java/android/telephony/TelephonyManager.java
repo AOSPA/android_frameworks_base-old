@@ -667,6 +667,69 @@ public class TelephonyManager {
         return mSimVoiceConfig == MultiSimVoiceCapability.DSDA;
     }
 
+
+    /**
+     * Returns true if device is in DSDA mode where concurrent calls on both subscriptions are
+     * possible or if device is in a mode that supports DSDA features ex.DSDS Transition mode
+     * Returns false for other cases.
+     */
+    /** {@hide} */
+    public boolean isDsdaOrDsdsTransitionMode() {
+        return isConcurrentCallsPossible() || isDsdsTransitionMode();
+    }
+
+    /**
+     * DSDS Transition mode is a mode when the device in DSDA transitions into DSDS mode due
+     * to temporary RAT changes while still retaining the calls on both subscriptions.
+     * In this mode, incoming calls and call swap work like DSDA mode but outgoing concurrent
+     * calls are only allowed on the subscription that has a call in ACTIVE state. Outgoing
+     * calls made on the subscription with call(s) in non-ACTIVE state will result in framework
+     * disconnecting calls on the other subscription.
+     * This API is not guaranteed to work when invoked from ImsPhoneCallTracker as the call states
+     * might not be updated at the time of invocation.
+     *
+     * Returns true if there are calls on both subscriptions in DSDS mode
+     * Returns false otherwise
+     */
+    /** {@hide} */
+    public boolean isDsdsTransitionMode() {
+        if (!isDsdsTransitionSupported()) {
+            return false;
+        }
+
+        if (TelephonyProperties.multi_sim_voice_capability().orElse(
+                MultiSimVoiceCapability.UNKNOWN) != MultiSimVoiceCapability.DSDS) {
+            return false;
+        }
+
+        for (int i = 0; i < getActiveModemCount(); i++) {
+            if (getCallState(SubscriptionManager.getSubscriptionId(i))== CALL_STATE_IDLE) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Returns true if on multisim devices, DSDA features are supported in non-DSDA modes
+     * Returns false otherwise
+     */
+    /** {@hide} */
+    public static boolean isDsdsTransitionSupported() {
+        return TelephonyProperties.dsds_transition_supported().orElse(false);
+    }
+
+    /**
+     * Returns true if Multi SIM voice capability is DSDS.
+     * Returns false for other cases.
+     */
+    /** {@hide} */
+    public static boolean isDsdsMode() {
+        int mSimVoiceConfig = TelephonyProperties.multi_sim_voice_capability().orElse(
+                MultiSimVoiceCapability.UNKNOWN);
+        return mSimVoiceConfig == MultiSimVoiceCapability.DSDS;
+    }
+
     /**
      * Returns the number of phones available.
      * Returns 0 if none of voice, sms, data is not supported
@@ -18071,6 +18134,87 @@ public class TelephonyManager {
      */
     @SystemApi
     public static final int CELL_BROADCAST_RESULT_FAIL_ACTIVATION = 3;
+
+    /**
+     * Callback mode type
+     * @hide
+     */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = {"EMERGENCY_CALLBACK_MODE_"}, value = {
+            EMERGENCY_CALLBACK_MODE_CALL,
+            EMERGENCY_CALLBACK_MODE_SMS})
+    public @interface EmergencyCallbackModeType {}
+
+    /**
+     * The callback mode is due to emergency call.
+     * @hide
+     */
+    public static final int EMERGENCY_CALLBACK_MODE_CALL = 1;
+
+    /**
+     * The callback mode is due to emergency SMS.
+     * @hide
+     */
+    public static final int EMERGENCY_CALLBACK_MODE_SMS = 2;
+
+    /**
+     * The reason for changing callback mode.
+     * @hide
+     */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = {"STOP_REASON_"},
+            value = {
+                    STOP_REASON_UNKNOWN,
+                    STOP_REASON_OUTGOING_NORMAL_CALL_INITIATED,
+                    STOP_REASON_NORMAL_SMS_SENT,
+                    STOP_REASON_OUTGOING_EMERGENCY_CALL_INITIATED,
+                    STOP_REASON_EMERGENCY_SMS_SENT,
+                    STOP_REASON_TIMER_EXPIRED,
+                    STOP_REASON_USER_ACTION,
+            })
+    public @interface EmergencyCallbackModeStopReason {}
+
+    /**
+     * unknown reason.
+     * @hide
+     */
+    public static final int STOP_REASON_UNKNOWN = 0;
+
+    /**
+     * The call back mode is exited due to a new normal call is originated.
+     * @hide
+     */
+    public static final int STOP_REASON_OUTGOING_NORMAL_CALL_INITIATED = 1;
+
+    /**
+     * The call back mode is exited due to a new normal SMS is originated.
+     * @hide
+     */
+    public static final int STOP_REASON_NORMAL_SMS_SENT = 2;
+
+    /**
+     * The call back mode is exited due to a new emergency call is originated.
+     * @hide
+     */
+    public static final int STOP_REASON_OUTGOING_EMERGENCY_CALL_INITIATED = 3;
+
+    /**
+     * The call back mode is exited due to a new emergency SMS is originated.
+     * @hide
+     */
+    public static final int STOP_REASON_EMERGENCY_SMS_SENT = 4;
+
+    /**
+     * The call back mode is exited due to timer expiry.
+     * @hide
+     */
+    public static final int STOP_REASON_TIMER_EXPIRED = 5;
+
+    /**
+     * The call back mode is exited due to user action.
+     * @hide
+     */
+    public static final int STOP_REASON_USER_ACTION = 6;
 
     /**
      * Set reception of cell broadcast messages with the list of the given ranges

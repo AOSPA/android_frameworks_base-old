@@ -43,15 +43,18 @@ public final class KeyEventTest {
 
     private static final int DOWN_TIME = 50;
     private static final long EVENT_TIME = 100;
+    private static final long ANOTHER_EVENT_TIME = 108;
     private static final int ACTION = KeyEvent.ACTION_DOWN;
+    private static final int ANOTHER_ACTION = KeyEvent.ACTION_UP;
     private static final int KEYCODE = KeyEvent.KEYCODE_0;
-    private static final int REPEAT = 0;
-    private static final int METASTATE = 0;
-    private static final int DEVICE_ID = 0;
-    private static final int SCAN_CODE = 0;
-    private static final int FLAGS = 0;
+    private static final int REPEAT = 4;
+    private static final int ANOTHER_REPEAT = 8;
+    private static final int METASTATE = 15;
+    private static final int DEVICE_ID = 16;
+    private static final int SCAN_CODE = 23;
+    private static final int FLAGS = 42;
     private static final int SOURCE = InputDevice.SOURCE_KEYBOARD;
-    private static final String CHARACTERS = null;
+    private static final String CHARACTERS = "CHARACTERS, Y U NO @NONNULL?";
 
     private static final int ID_SOURCE_MASK = 0x3 << 30;
 
@@ -156,12 +159,26 @@ public final class KeyEventTest {
     }
 
     @Test
+    public void testCopyConstructorWith2ChangedFields() {
+        KeyEvent key1 = createKey();
+        @SuppressWarnings("deprecation")
+        KeyEvent key2 = new KeyEvent(key1, ANOTHER_EVENT_TIME, ANOTHER_REPEAT);
+
+
+        assertKeyEventFields(key2, DOWN_TIME, ANOTHER_EVENT_TIME, ACTION, KEYCODE, ANOTHER_REPEAT,
+                METASTATE, DEVICE_ID, SCAN_CODE, FLAGS, InputDevice.SOURCE_KEYBOARD,
+                INVALID_DISPLAY, CHARACTERS);
+        expect.withMessage("id (key1=%s, key2=%s", key1, key2).that(key2.getId())
+                .isNotEqualTo(key1.getId());
+    }
+
+    @Test
     public void testConstructorWith10Args() {
         KeyEvent key = new KeyEvent(DOWN_TIME, EVENT_TIME, ACTION, KEYCODE, REPEAT, METASTATE,
                 DEVICE_ID, SCAN_CODE, FLAGS, SOURCE);
 
         assertKeyEventFields(key, DOWN_TIME, EVENT_TIME, ACTION, KEYCODE, REPEAT, METASTATE,
-                DEVICE_ID, SCAN_CODE, FLAGS, SOURCE, INVALID_DISPLAY, CHARACTERS);
+                DEVICE_ID, SCAN_CODE, FLAGS, SOURCE, INVALID_DISPLAY, /* characters= */ null);
     }
 
     @Test
@@ -170,7 +187,8 @@ public final class KeyEventTest {
                 DEVICE_ID, SCAN_CODE, FLAGS);
 
         assertKeyEventFields(key, DOWN_TIME, EVENT_TIME, ACTION, KEYCODE, REPEAT, METASTATE,
-                DEVICE_ID, SCAN_CODE, FLAGS, /* source= */ 0, INVALID_DISPLAY, CHARACTERS);
+                DEVICE_ID, SCAN_CODE, FLAGS, /* source= */ 0, INVALID_DISPLAY,
+                /* characters= */ null);
     }
 
     @Test
@@ -180,7 +198,7 @@ public final class KeyEventTest {
 
         assertKeyEventFields(key, DOWN_TIME, EVENT_TIME, ACTION, KEYCODE, REPEAT, METASTATE,
                 DEVICE_ID, SCAN_CODE, /* flags= */ 0, /* source= */ 0, INVALID_DISPLAY,
-                CHARACTERS);
+                /* characters= */ null);
     }
 
     @Test
@@ -188,8 +206,8 @@ public final class KeyEventTest {
         KeyEvent key = new KeyEvent(DOWN_TIME, EVENT_TIME, ACTION, KEYCODE, REPEAT, METASTATE);
 
         assertKeyEventFields(key, DOWN_TIME, EVENT_TIME, ACTION, KEYCODE, REPEAT, METASTATE,
-                KeyCharacterMap.VIRTUAL_KEYBOARD, /* scanCode= */ 0, /* flags= */ 0,
-                /* source= */ 0, INVALID_DISPLAY, CHARACTERS);
+                /* deviceId= */ KeyCharacterMap.VIRTUAL_KEYBOARD, /* scanCode= */ 0, /* flags= */ 0,
+                /* source= */ 0, INVALID_DISPLAY, /* characters= */ null);
     }
 
     @Test
@@ -197,8 +215,9 @@ public final class KeyEventTest {
         KeyEvent key = new KeyEvent(DOWN_TIME, EVENT_TIME, ACTION, KEYCODE, REPEAT);
 
         assertKeyEventFields(key, DOWN_TIME, EVENT_TIME, ACTION, KEYCODE, REPEAT,
-                /* metaState= */ 0, KeyCharacterMap.VIRTUAL_KEYBOARD, /* scanCode= */ 0,
-                /* flags= */ 0, /* source= */ 0, INVALID_DISPLAY, CHARACTERS);
+                /* metaState= */ 0, /* deviceId= */ KeyCharacterMap.VIRTUAL_KEYBOARD,
+                /* scanCode= */ 0, /* flags= */ 0, /* source= */ 0, INVALID_DISPLAY,
+                /* characters= */ null);
     }
 
     @Test
@@ -211,17 +230,30 @@ public final class KeyEventTest {
     }
 
     @Test
-    public void testConstructorWith2rgs() {
+    public void testConstructorWith2Args() {
         KeyEvent key = new KeyEvent(ACTION, KEYCODE);
 
         assertKeyEventFields(key, /* downTime= */ 0, /* eventTime= */ 0, ACTION, KEYCODE,
-                /* repeat= */ 0, /* metaState= */ 0, KeyCharacterMap.VIRTUAL_KEYBOARD,
-                /* scanCode= */ 0, FLAGS, /* source= */ 0, INVALID_DISPLAY, CHARACTERS);
+                /* repeat= */ 0, /* metaState= */ 0,
+                /* deviceId= */ KeyCharacterMap.VIRTUAL_KEYBOARD, /* scanCode= */ 0, /* flags= */ 0,
+                /* source= */ 0, INVALID_DISPLAY, /* characters= */ null);
+    }
+
+    @Test
+    public void testCopyChangeAction() {
+        KeyEvent key1 = createKey();
+        KeyEvent key2 = KeyEvent.changeAction(key1, ANOTHER_ACTION);
+
+        assertKeyEventFields(key2, DOWN_TIME, EVENT_TIME, ANOTHER_ACTION, KEYCODE, REPEAT,
+                METASTATE, DEVICE_ID, SCAN_CODE, FLAGS, InputDevice.SOURCE_KEYBOARD,
+                INVALID_DISPLAY, /* characters= */ null);
+        expect.withMessage("id (key1=%s, key2=%s", key1, key2).that(key2.getId())
+                .isNotEqualTo(key1.getId());
     }
 
     private static KeyEvent createKey() {
-        return KeyEvent.obtain(DOWN_TIME, EVENT_TIME, ACTION, KEYCODE, REPEAT, METASTATE,
-                DEVICE_ID, SCAN_CODE, FLAGS, SOURCE, INVALID_DISPLAY, CHARACTERS);
+        return KeyEvent.obtain(DOWN_TIME, EVENT_TIME, ACTION, KEYCODE, REPEAT, METASTATE, DEVICE_ID,
+                SCAN_CODE, FLAGS, SOURCE, INVALID_DISPLAY, CHARACTERS);
     }
 
     private void compareKeys(KeyEvent key1, KeyEvent key2) {
@@ -247,9 +279,9 @@ public final class KeyEventTest {
                 .that(key2.getFlags()).isEqualTo(key1.getFlags());
         expect.withMessage("source (key1=%s, key2=%s)", key1, key2)
                 .that(key2.getSource()).isEqualTo(key1.getSource());
-        expect.withMessage("displayId(key1=%s, key2=%s)", key1, key2)
+        expect.withMessage("displayId (key1=%s, key2=%s)", key1, key2)
                 .that(key2.getDisplayId()).isEqualTo(key1.getDisplayId());
-        expect.withMessage("characters(key1=%s, key2=%s)", key1, key2)
+        expect.withMessage("characters (key1=%s, key2=%s)", key1, key2)
                 .that(key2.getCharacters()).isEqualTo(key1.getCharacters());
     }
 

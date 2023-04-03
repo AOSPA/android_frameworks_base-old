@@ -23,11 +23,6 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.Display.TYPE_INTERNAL;
 import static android.view.InsetsFrameProvider.SOURCE_FRAME;
-import static android.view.InsetsState.ITYPE_CAPTION_BAR;
-import static android.view.InsetsState.ITYPE_CLIMATE_BAR;
-import static android.view.InsetsState.ITYPE_EXTRA_NAVIGATION_BAR;
-import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
-import static android.view.InsetsState.ITYPE_STATUS_BAR;
 import static android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
 import static android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS;
 import static android.view.WindowInsetsController.APPEARANCE_LOW_PROFILE_BARS;
@@ -216,6 +211,11 @@ public class DisplayPolicy {
     private int mRightGestureInset;
 
     private boolean mCanSystemBarsBeShownByUser;
+
+    /**
+     * Let remote insets controller control system bars regardless of other settings.
+     */
+    private boolean mRemoteInsetsControllerControlsSystemBars;
 
     StatusBarManagerInternal getStatusBarManagerInternal() {
         synchronized (mServiceAcquireLock) {
@@ -938,6 +938,17 @@ public class DisplayPolicy {
         return mScreenOnListener;
     }
 
+
+    boolean isRemoteInsetsControllerControllingSystemBars() {
+        return mRemoteInsetsControllerControlsSystemBars;
+    }
+
+    @VisibleForTesting
+    void setRemoteInsetsControllerControlsSystemBars(
+            boolean remoteInsetsControllerControlsSystemBars) {
+        mRemoteInsetsControllerControlsSystemBars = remoteInsetsControllerControlsSystemBars;
+    }
+
     public void screenTurnedOn(ScreenOnListener screenOnListener) {
         synchronized (mLock) {
             mScreenOnEarly = true;
@@ -1088,7 +1099,7 @@ public class DisplayPolicy {
         }
 
         final InsetsSourceProvider provider = win.getControllableInsetProvider();
-        if (provider != null && provider.getSource().getInsetsRoundedCornerFrame()
+        if (provider != null && provider.getSource().insetsRoundedCornerFrame()
                 != attrs.insetsRoundedCornerFrame) {
             provider.getSource().setInsetsRoundedCornerFrame(attrs.insetsRoundedCornerFrame);
         }
@@ -1186,7 +1197,6 @@ public class DisplayPolicy {
                         android.Manifest.permission.STATUS_BAR_SERVICE, callingPid, callingUid,
                         "DisplayPolicy");
             }
-            enforceSingleInsetsTypeCorrespondingToWindowType(attrs.providedInsets);
         }
         return ADD_OKAY;
     }
@@ -1218,7 +1228,7 @@ public class DisplayPolicy {
                 final TriConsumer<DisplayFrames, WindowContainer, Rect> frameProvider =
                         getFrameProvider(win, provider, i);
                 final InsetsFrameProvider.InsetsSizeOverride[] overrides =
-                        provider.insetsSizeOverrides;
+                        provider.getInsetsSizeOverrides();
                 final SparseArray<TriConsumer<DisplayFrames, WindowContainer, Rect>>
                         overrideProviders;
                 if (overrides != null) {
@@ -1227,19 +1237,14 @@ public class DisplayPolicy {
                         final TriConsumer<DisplayFrames, WindowContainer, Rect>
                                 overrideFrameProvider =
                                 getOverrideFrameProvider(win, i, j);
-                        overrideProviders.put(overrides[j].windowType, overrideFrameProvider);
+                        overrideProviders.put(overrides[j].getWindowType(), overrideFrameProvider);
                     }
                 } else {
                     overrideProviders = null;
                 }
-                // TODO (b/234093736): Let InsetsFrameProvider have the following fields:
-                //                     - IBinder owner.
-                //                     - int index.
-                //                     - @InsetsType int type.
-                //                     So we can create the id by using InsetsSource#createId.
-                //                     And we won't need toPublicType anymore.
-                final int id = provider.type;
-                final @InsetsType int type = InsetsState.toPublicType(id);
+                final @InsetsType int type = provider.getType();
+                final int id = InsetsSource.createId(
+                        provider.getOwner(), provider.getIndex(), type);
                 mDisplayContent.getInsetsStateController().getOrCreateSourceProvider(id, type)
                         .setWindowContainer(win, frameProvider, overrideProviders);
                 mInsetsSourceWindowsExceptIme.add(win);
@@ -1250,7 +1255,7 @@ public class DisplayPolicy {
     @Nullable
     private TriConsumer<DisplayFrames, WindowContainer, Rect> getFrameProvider(WindowState win,
             InsetsFrameProvider provider, int index) {
-        if (provider.insetsSize == null && provider.source == SOURCE_FRAME) {
+        if (provider.getInsetsSize() == null && provider.getSource() == SOURCE_FRAME) {
             return null;
         }
         return (displayFrames, windowContainer, inOutFrame) -> {
@@ -1258,8 +1263,8 @@ public class DisplayPolicy {
             final InsetsFrameProvider ifp = lp.providedInsets[index];
             InsetsFrameProvider.calculateInsetsFrame(displayFrames.mUnrestricted,
                     windowContainer.getBounds(), displayFrames.mDisplayCutoutSafe, inOutFrame,
-                    ifp.source, ifp.insetsSize, lp.privateFlags,
-                    ifp.minimalInsetsSizeInDisplayCutoutSafe);
+                    ifp.getSource(), ifp.getInsetsSize(), lp.privateFlags,
+                    ifp.getMinimalInsetsSizeInDisplayCutoutSafe());
         };
     }
 
@@ -1271,8 +1276,8 @@ public class DisplayPolicy {
             final InsetsFrameProvider ifp = lp.providedInsets[index];
             InsetsFrameProvider.calculateInsetsFrame(displayFrames.mUnrestricted,
                     windowContainer.getBounds(), displayFrames.mDisplayCutoutSafe, inOutFrame,
-                    ifp.source, ifp.insetsSizeOverrides[overrideIndex].insetsSize, lp.privateFlags,
-                    null);
+                    ifp.getSource(), ifp.getInsetsSizeOverrides()[overrideIndex].getInsetsSize(),
+                    lp.privateFlags, null /* displayCutoutSafeInsetsSize */);
         };
     }
 
@@ -1296,24 +1301,6 @@ public class DisplayPolicy {
                 inOutFrame.inset(windowState.mGivenContentInsets);
             }
         };
-    }
-
-    private static void enforceSingleInsetsTypeCorrespondingToWindowType(
-            InsetsFrameProvider[] providers) {
-        int count = 0;
-        for (InsetsFrameProvider provider : providers) {
-            switch (provider.type) {
-                case ITYPE_NAVIGATION_BAR:
-                case ITYPE_STATUS_BAR:
-                case ITYPE_CLIMATE_BAR:
-                case ITYPE_EXTRA_NAVIGATION_BAR:
-                case ITYPE_CAPTION_BAR:
-                    if (++count > 1) {
-                        throw new IllegalArgumentException(
-                                "Multiple InsetsTypes corresponding to Window type");
-                    }
-            }
-        }
     }
 
     /**
@@ -1521,9 +1508,8 @@ public class DisplayPolicy {
         applyKeyguardPolicy(win, imeTarget);
 
         // Check if the freeform window overlaps with the navigation bar area.
-        final boolean isOverlappingWithNavBar = isOverlappingWithNavBar(win);
-        if (isOverlappingWithNavBar && !mIsFreeformWindowOverlappingWithNavBar
-                && win.inFreeformWindowingMode()) {
+        if (!mIsFreeformWindowOverlappingWithNavBar && win.inFreeformWindowingMode()
+                && win.mActivityRecord != null && isOverlappingWithNavBar(win)) {
             mIsFreeformWindowOverlappingWithNavBar = true;
         }
 
@@ -1611,7 +1597,7 @@ public class DisplayPolicy {
             // mode; if it's in gesture navigation mode, the navigation bar will be
             // NAV_BAR_FORCE_TRANSPARENT and its appearance won't be decided by overlapping
             // windows.
-            if (isOverlappingWithNavBar) {
+            if (isOverlappingWithNavBar(win)) {
                 if (mNavBarColorWindowCandidate == null) {
                     mNavBarColorWindowCandidate = win;
                     addSystemBarColorApp(win);
@@ -1639,7 +1625,7 @@ public class DisplayPolicy {
                     addSystemBarColorApp(win);
                 }
             }
-            if (isOverlappingWithNavBar && mNavBarColorWindowCandidate == null) {
+            if (isOverlappingWithNavBar(win) && mNavBarColorWindowCandidate == null) {
                 mNavBarColorWindowCandidate = win;
             }
         }
@@ -1822,6 +1808,8 @@ public class DisplayPolicy {
         mRightGestureInset = mGestureNavigationSettingsObserver.getRightSensitivity(res);
         mNavigationBarAlwaysShowOnSideGesture =
                 res.getBoolean(R.bool.config_navBarAlwaysShowOnSideEdgeGesture);
+        mRemoteInsetsControllerControlsSystemBars = res.getBoolean(
+                R.bool.config_remoteInsetsControllerControlsSystemBars);
 
         updateConfigurationAndScreenSizeDependentBehaviors();
 
@@ -2097,7 +2085,8 @@ public class DisplayPolicy {
         final @InsetsType int restorePositionTypes = (Type.statusBars() | Type.navigationBars())
                 & controlTarget.getRequestedVisibleTypes();
 
-        if (swipeTarget == mNavigationBar
+        final InsetsSourceProvider sp = swipeTarget.getControllableInsetProvider();
+        if (sp != null && sp.getSource().getType() == Type.navigationBars()
                 && (restorePositionTypes & Type.navigationBars()) != 0) {
             // Don't show status bar when swiping on already visible navigation bar.
             // But restore the position of navigation bar if it has been moved by the control
@@ -2710,7 +2699,7 @@ public class DisplayPolicy {
         pw.print(mForceShowNavigationBarEnabled);
         pw.print(" mAllowLockscreenWhenOn="); pw.println(mAllowLockscreenWhenOn);
         pw.print(prefix); pw.print("mRemoteInsetsControllerControlsSystemBars=");
-        pw.println(mDisplayContent.getInsetsPolicy().getRemoteInsetsControllerControlsSystemBars());
+        pw.println(mRemoteInsetsControllerControlsSystemBars);
         pw.print(prefix); pw.println("mDecorInsetsInfo:");
         for (int rotation = 0; rotation < mDecorInsets.mInfoForRotation.length; rotation++) {
             final DecorInsets.Info info = mDecorInsets.mInfoForRotation[rotation];
@@ -2747,6 +2736,7 @@ public class DisplayPolicy {
         lp.flags = WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                 | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                 | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
+        lp.privateFlags |= LayoutParams.SYSTEM_FLAG_SHOW_FOR_ALL_USERS;
         lp.setFitInsetsTypes(0);
         lp.layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
         if (ActivityManager.isHighEndGfx()) {
@@ -2802,7 +2792,7 @@ public class DisplayPolicy {
 
     @VisibleForTesting
     static boolean isOverlappingWithNavBar(@NonNull WindowState win) {
-        if (win.mActivityRecord == null || !win.isVisible()) {
+        if (!win.isVisible()) {
             return false;
         }
 
@@ -2818,10 +2808,9 @@ public class DisplayPolicy {
      */
     private static boolean intersectsAnyInsets(Rect bounds, InsetsState insetsState,
             @InsetsType int insetsType) {
-        final ArraySet<Integer> internalTypes = InsetsState.toInternalType(insetsType);
-        for (int i = 0; i < internalTypes.size(); i++) {
-            final InsetsSource source = insetsState.peekSource(internalTypes.valueAt(i));
-            if (source == null || !source.isVisible()) {
+        for (int i = insetsState.sourceSize() - 1; i >= 0; i--) {
+            final InsetsSource source = insetsState.sourceAt(i);
+            if ((source.getType() & insetsType) == 0 || !source.isVisible()) {
                 continue;
             }
             if (Rect.intersects(bounds, source.getFrame())) {

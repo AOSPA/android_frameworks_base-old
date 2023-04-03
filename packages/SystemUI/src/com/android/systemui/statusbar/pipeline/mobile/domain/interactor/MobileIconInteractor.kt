@@ -17,7 +17,6 @@
 package com.android.systemui.statusbar.pipeline.mobile.domain.interactor
 
 import android.telephony.CarrierConfigManager
-import android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN
 import android.telephony.TelephonyDisplayInfo
 import android.telephony.TelephonyManager
 import com.android.settingslib.SignalIcon.MobileIconGroup
@@ -26,7 +25,6 @@ import com.android.settingslib.mobile.TelephonyIcons.NOT_DEFAULT_DATA
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.statusbar.pipeline.mobile.data.model.DataConnectionState.Connected
-import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectionModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectivityModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.ResolvedNetworkType
@@ -41,6 +39,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
@@ -99,7 +98,8 @@ interface MobileIconInteractor {
      * 1. The default network name, if one is configured
      * 2. A derived name based off of the intent [ACTION_SERVICE_PROVIDERS_UPDATED]
      * 3. Or, in the case where the repository sends us the default network name, we check for an
-     * override in [connectionInfo.operatorAlphaShort], a value that is derived from [ServiceState]
+     *    override in [connectionInfo.operatorAlphaShort], a value that is derived from
+     *    [ServiceState]
      */
     val networkName: StateFlow<NetworkNameModel>
 
@@ -127,14 +127,6 @@ interface MobileIconInteractor {
 
     /** True if the no internet icon should be hidden.  */
     val hideNoInternetState: StateFlow<Boolean>
-
-    val imsInfo: StateFlow<MobileConnectionModel>
-
-    val showVolteIcon: StateFlow<Boolean>
-
-    val showVowifiIcon: StateFlow<Boolean>
-
-    val voWifiAvailable: StateFlow<Boolean>
 }
 
 /** Interactor for a single mobile connection. This connection _should_ have one subscription ID */
@@ -154,20 +146,14 @@ class MobileIconInteractorImpl(
     connectionRepository: MobileConnectionRepository,
     override val alwaysUseRsrpLevelForLte: StateFlow<Boolean>,
     override val hideNoInternetState: StateFlow<Boolean>,
-    override val showVolteIcon: StateFlow<Boolean>,
-    override val showVowifiIcon: StateFlow<Boolean>,
-    ) : MobileIconInteractor {
-    private val connectionInfo = connectionRepository.connectionInfo
-
+) : MobileIconInteractor {
     override val tableLogBuffer: TableLogBuffer = connectionRepository.tableLogBuffer
 
-    override val activity = connectionInfo.mapLatest { it.dataActivityDirection }
+    override val activity = connectionRepository.dataActivityDirection
 
     override val isConnected: Flow<Boolean> = defaultMobileConnectivity.mapLatest { it.isConnected }
 
     override val isDataEnabled: StateFlow<Boolean> = connectionRepository.dataEnabled
-
-    override val imsInfo: StateFlow<MobileConnectionModel> = connectionRepository.imsInfo
 
     private val isDefault =
         defaultDataSubId
@@ -181,11 +167,11 @@ class MobileIconInteractorImpl(
     override val isDefaultDataEnabled = defaultSubscriptionHasDataEnabled
 
     override val networkName =
-        combine(connectionInfo, connectionRepository.networkName) { connection, networkName ->
-                if (
-                    networkName is NetworkNameModel.Default && connection.operatorAlphaShort != null
-                ) {
-                    NetworkNameModel.IntentDerived(connection.operatorAlphaShort)
+        combine(connectionRepository.operatorAlphaShort, connectionRepository.networkName) {
+                operatorAlphaShort,
+                networkName ->
+                if (networkName is NetworkNameModel.Default && operatorAlphaShort != null) {
+                    NetworkNameModel.IntentDerived(operatorAlphaShort)
                 } else {
                     networkName
                 }
@@ -199,19 +185,19 @@ class MobileIconInteractorImpl(
     /** Observable for the current RAT indicator icon ([MobileIconGroup]) */
     override val networkTypeIconGroup: StateFlow<MobileIconGroup> =
         combine(
-                connectionInfo,
+                connectionRepository.resolvedNetworkType,
                 defaultMobileIconMapping,
                 defaultMobileIconGroup,
                 isDefault,
-            ) { info, mapping, defaultGroup, isDefault ->
+            ) { resolvedNetworkType, mapping, defaultGroup, isDefault ->
                 if (!isDefault) {
                     return@combine NOT_DEFAULT_DATA
                 }
 
-                when (info.resolvedNetworkType) {
+                when (resolvedNetworkType) {
                     is ResolvedNetworkType.CarrierMergedNetworkType ->
-                        info.resolvedNetworkType.iconGroupOverride
-                    else -> getMobileIconGroup(info, mapping) ?: defaultGroup
+                        resolvedNetworkType.iconGroupOverride
+                    else -> mapping[resolvedNetworkType.lookupKey] ?: defaultGroup
                 }
             }
             .distinctUntilChanged()
@@ -226,17 +212,19 @@ class MobileIconInteractorImpl(
             }
             .stateIn(scope, SharingStarted.WhileSubscribed(), defaultMobileIconGroup.value)
 
-    override val isEmergencyOnly: StateFlow<Boolean> =
-        connectionInfo
-            .mapLatest { it.isEmergencyOnly }
-            .stateIn(scope, SharingStarted.WhileSubscribed(), false)
+    override val isEmergencyOnly = connectionRepository.isEmergencyOnly
 
     override val isRoaming: StateFlow<Boolean> =
-        combine(connectionInfo, connectionRepository.cdmaRoaming) { connection, cdmaRoaming ->
-                if (connection.carrierNetworkChangeActive) {
+        combine(
+                connectionRepository.carrierNetworkChangeActive,
+                connectionRepository.isGsm,
+                connectionRepository.isRoaming,
+                connectionRepository.cdmaRoaming,
+            ) { carrierNetworkChangeActive, isGsm, isRoaming, cdmaRoaming ->
+                if (carrierNetworkChangeActive) {
                     false
-                } else if (connection.isGsm) {
-                    connection.isRoaming
+                } else if (isGsm) {
+                    isRoaming
                 } else {
                     cdmaRoaming
                 }
@@ -245,22 +233,17 @@ class MobileIconInteractorImpl(
 
     override val level: StateFlow<Int> =
         combine(
-            connectionInfo,
-            alwaysUseCdmaLevel,
-            alwaysUseRsrpLevelForLte
-        ) { connection, alwaysUseCdmaLevel, alwaysUseRsrpLevelForLte ->
+                connectionRepository.isGsm,
+                connectionRepository.primaryLevel,
+                connectionRepository.cdmaLevel,
+                alwaysUseCdmaLevel,
+                alwaysUseRsrpLevelForLte
+            ) { isGsm, primaryLevel, cdmaLevel, alwaysUseCdmaLevel, alwaysUseRsrpLevelForLte ->
                 when {
-                    alwaysUseRsrpLevelForLte -> {
-                        if (isLteCamped(connection)) {
-                            connection.lteRsrpLevel
-                        } else {
-                            connection.primaryLevel
-                        }
-                    }
                     // GSM connections should never use the CDMA level
-                    connection.isGsm -> connection.primaryLevel
-                    alwaysUseCdmaLevel -> connection.cdmaLevel
-                    else -> connection.primaryLevel
+                    isGsm -> primaryLevel
+                    alwaysUseCdmaLevel -> cdmaLevel
+                    else -> primaryLevel
                 }
             }
             .stateIn(scope, SharingStarted.WhileSubscribed(), 0)
@@ -273,64 +256,9 @@ class MobileIconInteractorImpl(
         )
 
     override val isDataConnected: StateFlow<Boolean> =
-        connectionInfo
-            .mapLatest { connection -> connection.dataConnectionState == Connected }
+        connectionRepository.dataConnectionState
+            .map { it == Connected }
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
-    override val isInService =
-        connectionRepository.connectionInfo
-            .mapLatest { it.isInService }
-            .stateIn(scope, SharingStarted.WhileSubscribed(), false)
-
-    override val voWifiAvailable: StateFlow<Boolean> =
-        combine(
-                imsInfo,
-                showVowifiIcon,
-            ) { imsInfo, showVowifiIcon ->
-                imsInfo.voiceCapable
-                        && imsInfo.imsRegistrationTech == REGISTRATION_TECH_IWLAN
-                        && showVowifiIcon
-            }
-            .stateIn(scope, SharingStarted.WhileSubscribed(), false)
-
-    private fun isLteCamped(connectionInfo: MobileConnectionModel): Boolean {
-        return (connectionInfo.dataNetworkType == TelephonyManager.NETWORK_TYPE_LTE
-            || connectionInfo.dataNetworkType == TelephonyManager.NETWORK_TYPE_LTE_CA
-            || connectionInfo.voiceNetworkType == TelephonyManager.NETWORK_TYPE_LTE
-            || connectionInfo.voiceNetworkType == TelephonyManager.NETWORK_TYPE_LTE_CA)
-    }
-
-    private fun getMobileIconGroup(info: MobileConnectionModel,
-                                   mapping: Map<String, MobileIconGroup>): MobileIconGroup ?{
-        return if (info.fiveGServiceState.isNrIconTypeValid) {
-            info.fiveGServiceState.iconGroup
-        } else {
-            when (info.resolvedNetworkType) {
-                is DefaultNetworkType ->
-                    mapping[info.resolvedNetworkType.lookupKey]
-                is OverrideNetworkType ->
-                    mapping[getLookupKey(info)]
-                else ->
-                    mapping[MobileMappings.toIconKey(info.voiceNetworkType)]
-            }
-        }
-    }
-
-    private fun getLookupKey(connectionInfo: MobileConnectionModel): String {
-        return if (isNsa(connectionInfo)) {
-            if (connectionInfo.dataNetworkType == TelephonyManager.NETWORK_TYPE_UNKNOWN) {
-                MobileMappings.toIconKey(connectionInfo.voiceNetworkType)
-            }else {
-                MobileMappings.toIconKey(connectionInfo.dataNetworkType)
-            }
-        }else {
-            connectionInfo.resolvedNetworkType.lookupKey
-        }
-    }
-
-    private fun isNsa(connectionInfo: MobileConnectionModel): Boolean {
-        val networkType = connectionInfo.resolvedNetworkType.networkType
-        return networkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA_MMWAVE
-                || networkType == TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA
-    }
+    override val isInService = connectionRepository.isInService
 }

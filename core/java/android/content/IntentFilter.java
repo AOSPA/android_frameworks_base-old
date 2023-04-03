@@ -531,6 +531,28 @@ public class IntentFilter implements Parcelable {
         mInstantAppVisibility = o.mInstantAppVisibility;
     }
 
+    /** {@inheritDoc} */
+    public String toString() {
+        final StringBuilder sb = new StringBuilder();
+        sb.append("IntentFilter {");
+        sb.append(" pri=");
+        sb.append(mPriority);
+        if (countActions() > 0) {
+            sb.append(" act=");
+            sb.append(mActions.toString());
+        }
+        if (countCategories() > 0) {
+            sb.append(" cat=");
+            sb.append(mCategories.toString());
+        }
+        if (countDataSchemes() > 0) {
+            sb.append(" sch=");
+            sb.append(mDataSchemes.toString());
+        }
+        sb.append(" }");
+        return sb.toString();
+    }
+
     /**
      * Modify priority of this filter.  This only affects receiver filters.
      * The priority of activity filters are set in XML and cannot be changed
@@ -2182,9 +2204,7 @@ public class IntentFilter implements Parcelable {
      * <p> Subsequent calls to this method  will override any previously set extras.
      *
      * @param extras The intent extras to match against.
-     * @hide
      */
-    @SystemApi
     public final void setExtras(@NonNull PersistableBundle extras) {
         mExtras = extras;
     }
@@ -2194,11 +2214,8 @@ public class IntentFilter implements Parcelable {
      *
      * @return the extras that were previously set using {@link #setExtras(PersistableBundle)} or
      *         an empty {@link PersistableBundle} object if no extras were set.
-     * @hide
      */
-    @SystemApi
-    @NonNull
-    public final PersistableBundle getExtras() {
+    public final @NonNull PersistableBundle getExtras() {
         return mExtras == null ? new PersistableBundle() : mExtras;
     }
 

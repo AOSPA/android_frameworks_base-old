@@ -445,8 +445,7 @@ public class ITvInteractiveAppSessionWrapper
 
     @Override
     public void sendTimeShiftMode(int mode) {
-        mCaller.executeOrSendMessage(
-                mCaller.obtainMessageI(DO_SEND_TIME_SHIFT_MODE, mode));
+        mCaller.executeOrSendMessage(mCaller.obtainMessageO(DO_SEND_TIME_SHIFT_MODE, mode));
     }
 
     @Override

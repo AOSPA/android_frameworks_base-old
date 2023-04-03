@@ -26,11 +26,8 @@ import static android.accessibilityservice.AccessibilityTrace.FLAGS_USER_BROADCA
 import static android.accessibilityservice.AccessibilityTrace.FLAGS_WINDOW_MAGNIFICATION_CONNECTION;
 import static android.accessibilityservice.AccessibilityTrace.FLAGS_WINDOW_MANAGER_INTERNAL;
 import static android.provider.Settings.Secure.ACCESSIBILITY_DISPLAY_MAGNIFICATION_NAVBAR_ENABLED;
-import static android.provider.Settings.Secure.CONTRAST_LEVEL;
 import static android.view.accessibility.AccessibilityManager.ACCESSIBILITY_BUTTON;
 import static android.view.accessibility.AccessibilityManager.ACCESSIBILITY_SHORTCUT_KEY;
-import static android.view.accessibility.AccessibilityManager.CONTRAST_DEFAULT_VALUE;
-import static android.view.accessibility.AccessibilityManager.CONTRAST_NOT_SET;
 import static android.view.accessibility.AccessibilityManager.FlashNotificationReason;
 import static android.view.accessibility.AccessibilityManager.ShortcutType;
 
@@ -1997,16 +1994,6 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         return false;
     }
 
-    private boolean readUiContrastLocked(AccessibilityUserState userState) {
-        float contrast = Settings.Secure.getFloatForUser(mContext.getContentResolver(),
-                CONTRAST_LEVEL, CONTRAST_DEFAULT_VALUE, userState.mUserId);
-        if (Math.abs(userState.getUiContrastLocked() - contrast) >= 1e-10) {
-            userState.setUiContrastLocked(contrast);
-            return true;
-        }
-        return false;
-    }
-
     /**
      * Performs {@link AccessibilityService}s delayed notification. The delay is configurable
      * and denotes the period after the last event before notifying the service.
@@ -2676,7 +2663,6 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         somethingChanged |= readMagnificationCapabilitiesLocked(userState);
         somethingChanged |= readMagnificationFollowTypingLocked(userState);
         somethingChanged |= readAlwaysOnMagnificationLocked(userState);
-        somethingChanged |= readUiContrastLocked(userState);
         return somethingChanged;
     }
 
@@ -3801,6 +3787,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
     public boolean registerProxyForDisplay(IAccessibilityServiceClient client, int displayId)
             throws RemoteException {
         mSecurityPolicy.enforceCallingOrSelfPermission(Manifest.permission.MANAGE_ACCESSIBILITY);
+        mSecurityPolicy.enforceCallingOrSelfPermission(Manifest.permission.CREATE_VIRTUAL_DEVICE);
         if (client == null) {
             return false;
         }
@@ -3819,37 +3806,35 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     + "proxy-ed");
         }
 
-        mProxyManager.registerProxy(client, displayId, mContext,
-                sIdCounter++, mMainHandler, mSecurityPolicy, this, getTraceManager(),
-                mWindowManagerService, mA11yWindowManager);
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            mProxyManager.registerProxy(client, displayId, mContext,
+                    sIdCounter++, mMainHandler, mSecurityPolicy, this, getTraceManager(),
+                    mWindowManagerService);
 
-        synchronized (mLock) {
-            notifyClearAccessibilityCacheLocked();
+            synchronized (mLock) {
+                notifyClearAccessibilityCacheLocked();
+            }
+        } finally {
+            Binder.restoreCallingIdentity(identity);
         }
         return true;
     }
 
     @Override
-    public boolean unregisterProxyForDisplay(int displayId) throws RemoteException {
+    public boolean unregisterProxyForDisplay(int displayId) {
         mSecurityPolicy.enforceCallingOrSelfPermission(Manifest.permission.MANAGE_ACCESSIBILITY);
-        return mProxyManager.unregisterProxy(displayId);
+        mSecurityPolicy.enforceCallingOrSelfPermission(Manifest.permission.CREATE_VIRTUAL_DEVICE);
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return mProxyManager.unregisterProxy(displayId);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
     }
 
     boolean isDisplayProxyed(int displayId) {
         return mProxyManager.isProxyed(displayId);
-    }
-
-    @Override public float getUiContrast() {
-        if (mTraceManager.isA11yTracingEnabledForTypes(FLAGS_ACCESSIBILITY_MANAGER)) {
-            mTraceManager.logTrace(LOG_TAG + ".getUiContrast", FLAGS_ACCESSIBILITY_MANAGER);
-        }
-        synchronized (mLock) {
-            AccessibilityUserState userState = getCurrentUserStateLocked();
-            float contrast = userState.getUiContrastLocked();
-            if (contrast != CONTRAST_NOT_SET) return contrast;
-            readUiContrastLocked(userState);
-            return userState.getUiContrastLocked();
-        }
     }
 
     @Override
@@ -3918,6 +3903,8 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                         mGlobalClients.getRegisteredCallbackCookie(i);
                 pw.append(Arrays.toString(client.mPackageNames));
             }
+            pw.println();
+            mProxyManager.dump(fd, pw, args);
         }
     }
 
@@ -4336,9 +4323,6 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         private final Uri mAlwaysOnMagnificationUri = Settings.Secure.getUriFor(
                 Settings.Secure.ACCESSIBILITY_MAGNIFICATION_ALWAYS_ON_ENABLED);
 
-        private final Uri mUiContrastUri = Settings.Secure.getUriFor(
-                CONTRAST_LEVEL);
-
         public AccessibilityContentObserver(Handler handler) {
             super(handler);
         }
@@ -4381,8 +4365,6 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     mMagnificationFollowTypingUri, false, this, UserHandle.USER_ALL);
             contentResolver.registerContentObserver(
                     mAlwaysOnMagnificationUri, false, this, UserHandle.USER_ALL);
-            contentResolver.registerContentObserver(
-                    mUiContrastUri, false, this, UserHandle.USER_ALL);
         }
 
         @Override
@@ -4454,10 +4436,6 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     readMagnificationFollowTypingLocked(userState);
                 } else if (mAlwaysOnMagnificationUri.equals(uri)) {
                     readAlwaysOnMagnificationLocked(userState);
-                } else if (mUiContrastUri.equals(uri)) {
-                    if (readUiContrastLocked(userState)) {
-                        updateUiContrastLocked(userState);
-                    }
                 }
             }
         }
@@ -4567,6 +4545,17 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         return false;
     }
 
+    /**
+     * Called when always on magnification feature flag flips to check if the feature should be
+     * enabled for current user state.
+     */
+    public void updateAlwaysOnMagnification() {
+        synchronized (mLock) {
+            readAlwaysOnMagnificationLocked(getCurrentUserState());
+        }
+    }
+
+    @GuardedBy("mLock")
     boolean readAlwaysOnMagnificationLocked(AccessibilityUserState userState) {
         final boolean isSettingsAlwaysOnEnabled = Settings.Secure.getIntForUser(
                 mContext.getContentResolver(),
@@ -4763,22 +4752,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                         userState.getFocusColorLocked());
             }));
         });
-    }
 
-    private void updateUiContrastLocked(AccessibilityUserState userState) {
-        if (userState.mUserId != mCurrentUserId) {
-            return;
-        }
-        if (mTraceManager.isA11yTracingEnabledForTypes(FLAGS_ACCESSIBILITY_SERVICE_CLIENT)) {
-            mTraceManager.logTrace(LOG_TAG + ".updateUiContrastLocked",
-                    FLAGS_ACCESSIBILITY_SERVICE_CLIENT, "userState=" + userState);
-        }
-        float contrast = userState.getUiContrastLocked();
-        mMainHandler.post(() -> {
-            broadcastToClients(userState, ignoreRemoteException(client -> {
-                client.mCallback.setUiContrast(contrast);
-            }));
-        });
     }
 
     public AccessibilityTraceManager getTraceManager() {

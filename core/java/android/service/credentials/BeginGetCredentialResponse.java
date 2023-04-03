@@ -16,8 +16,10 @@
 
 package android.service.credentials;
 
+import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.os.Parcel;
 import android.os.Parcelable;
 
@@ -42,7 +44,7 @@ public final class BeginGetCredentialResponse implements Parcelable {
     private final @NonNull List<Action> mActions;
 
     /** Remote credential entry to get the response from a different device. */
-    private final @Nullable CredentialEntry mRemoteCredentialEntry;
+    private final @Nullable RemoteEntry mRemoteCredentialEntry;
 
     /**
      * Creates an empty response instance, to be used when there are no {@link CredentialEntry},
@@ -57,7 +59,7 @@ public final class BeginGetCredentialResponse implements Parcelable {
 
     private BeginGetCredentialResponse(@NonNull List<CredentialEntry> credentialEntries,
             @NonNull List<Action> authenticationEntries, @NonNull List<Action> actions,
-            @Nullable CredentialEntry remoteCredentialEntry) {
+            @Nullable RemoteEntry remoteCredentialEntry) {
         mCredentialEntries = new ArrayList<>(credentialEntries);
         mAuthenticationEntries = new ArrayList<>(authenticationEntries);
         mActions = new ArrayList<>(actions);
@@ -74,7 +76,7 @@ public final class BeginGetCredentialResponse implements Parcelable {
         List<Action> actions = new ArrayList<>();
         in.readTypedList(actions, Action.CREATOR);
         mActions = actions;
-        mRemoteCredentialEntry = in.readTypedObject(CredentialEntry.CREATOR);
+        mRemoteCredentialEntry = in.readTypedObject(RemoteEntry.CREATOR);
     }
 
     public static final @NonNull Creator<BeginGetCredentialResponse> CREATOR =
@@ -127,7 +129,7 @@ public final class BeginGetCredentialResponse implements Parcelable {
     /**
      * Returns the remote credential entry to be displayed on the UI.
      */
-    public @Nullable CredentialEntry getRemoteCredentialEntry() {
+    public @Nullable RemoteEntry getRemoteCredentialEntry() {
         return mRemoteCredentialEntry;
     }
 
@@ -139,7 +141,7 @@ public final class BeginGetCredentialResponse implements Parcelable {
 
         private List<Action> mAuthenticationEntries = new ArrayList<>();
         private List<Action> mActions = new ArrayList<>();
-        private CredentialEntry mRemoteCredentialEntry;
+        private RemoteEntry mRemoteCredentialEntry;
 
         /**
          * Sets a remote credential entry to be shown on the UI. Provider must set this if they
@@ -154,8 +156,18 @@ public final class BeginGetCredentialResponse implements Parcelable {
          * result should be set to {@link android.app.Activity#RESULT_OK} and an extra with the
          * {@link CredentialProviderService#EXTRA_GET_CREDENTIAL_RESPONSE} key should be populated
          * with a {@link android.credentials.Credential} object.
+         *
+         * <p> Note that as a provider service you will only be able to set a remote entry if :
+         * - Provider service possesses the
+         * {@link Manifest.permission.PROVIDE_REMOTE_CREDENTIALS} permission.
+         * - Provider service is configured as the provider that can provide remote entries.
+         *
+         * If the above conditions are not met, setting back {@link BeginGetCredentialResponse}
+         * on the callback from {@link CredentialProviderService#onBeginGetCredential} will
+         * throw a {@link SecurityException}.
          */
-        public @NonNull Builder setRemoteCredentialEntry(@Nullable CredentialEntry
+        @RequiresPermission(Manifest.permission.PROVIDE_REMOTE_CREDENTIALS)
+        public @NonNull Builder setRemoteCredentialEntry(@Nullable RemoteEntry
                 remoteCredentialEntry) {
             mRemoteCredentialEntry = remoteCredentialEntry;
             return this;

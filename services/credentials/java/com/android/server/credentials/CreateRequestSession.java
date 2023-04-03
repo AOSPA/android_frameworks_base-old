@@ -16,9 +16,6 @@
 
 package com.android.server.credentials;
 
-import static com.android.server.credentials.MetricUtilities.METRICS_PROVIDER_STATUS_FINAL_FAILURE;
-import static com.android.server.credentials.MetricUtilities.METRICS_PROVIDER_STATUS_FINAL_SUCCESS;
-
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.ComponentName;
@@ -27,14 +24,18 @@ import android.credentials.CreateCredentialException;
 import android.credentials.CreateCredentialRequest;
 import android.credentials.CreateCredentialResponse;
 import android.credentials.CredentialManager;
+import android.credentials.CredentialProviderInfo;
 import android.credentials.ICreateCredentialCallback;
 import android.credentials.ui.ProviderData;
 import android.credentials.ui.RequestInfo;
 import android.os.CancellationSignal;
 import android.os.RemoteException;
 import android.service.credentials.CallingAppInfo;
-import android.service.credentials.CredentialProviderInfo;
 import android.util.Log;
+
+import com.android.server.credentials.metrics.ApiName;
+import com.android.server.credentials.metrics.ApiStatus;
+import com.android.server.credentials.metrics.ProviderStatusForMetrics;
 
 import java.util.ArrayList;
 
@@ -100,11 +101,11 @@ public final class CreateRequestSession extends RequestSession<CreateCredentialR
         setChosenMetric(componentName);
         if (response != null) {
             mChosenProviderMetric.setChosenProviderStatus(
-                    METRICS_PROVIDER_STATUS_FINAL_SUCCESS);
+                    ProviderStatusForMetrics.FINAL_SUCCESS.getMetricCode());
             respondToClientWithResponseAndFinish(response);
         } else {
             mChosenProviderMetric.setChosenProviderStatus(
-                    METRICS_PROVIDER_STATUS_FINAL_FAILURE);
+                    ProviderStatusForMetrics.FINAL_FAILURE.getMetricCode());
             respondToClientWithErrorAndFinish(CreateCredentialException.TYPE_NO_CREATE_OPTIONS,
                     "Invalid response");
         }
@@ -135,27 +136,37 @@ public final class CreateRequestSession extends RequestSession<CreateCredentialR
 
     private void respondToClientWithResponseAndFinish(CreateCredentialResponse response) {
         Log.i(TAG, "respondToClientWithResponseAndFinish");
+        if (mRequestSessionStatus == RequestSessionStatus.COMPLETE) {
+            Log.i(TAG, "Request has already been completed. This is strange.");
+            return;
+        }
         if (isSessionCancelled()) {
-            // TODO: Differentiate btw cancelled and false
-            logApiCalled(RequestType.CREATE_CREDENTIALS, /* isSuccessful */ true);
+            logApiCall(ApiName.CREATE_CREDENTIAL, /* apiStatus */
+                    ApiStatus.CLIENT_CANCELED);
             finishSession(/*propagateCancellation=*/true);
             return;
         }
         try {
             mClientCallback.onResponse(response);
-            logApiCalled(RequestType.CREATE_CREDENTIALS, /* isSuccessful */ true);
+            logApiCall(ApiName.CREATE_CREDENTIAL, /* apiStatus */
+                    ApiStatus.SUCCESS);
         } catch (RemoteException e) {
             Log.i(TAG, "Issue while responding to client: " + e.getMessage());
-            logApiCalled(RequestType.CREATE_CREDENTIALS, /* isSuccessful */ false);
+            logApiCall(ApiName.CREATE_CREDENTIAL, /* apiStatus */
+                    ApiStatus.FAILURE);
         }
         finishSession(/*propagateCancellation=*/false);
     }
 
     private void respondToClientWithErrorAndFinish(String errorType, String errorMsg) {
         Log.i(TAG, "respondToClientWithErrorAndFinish");
+        if (mRequestSessionStatus == RequestSessionStatus.COMPLETE) {
+            Log.i(TAG, "Request has already been completed. This is strange.");
+            return;
+        }
         if (isSessionCancelled()) {
-            // TODO: Differentiate btw cancelled and false
-            logApiCalled(RequestType.CREATE_CREDENTIALS, /* isSuccessful */ true);
+            logApiCall(ApiName.CREATE_CREDENTIAL, /* apiStatus */
+                    ApiStatus.CLIENT_CANCELED);
             finishSession(/*propagateCancellation=*/true);
             return;
         }
@@ -164,8 +175,18 @@ public final class CreateRequestSession extends RequestSession<CreateCredentialR
         } catch (RemoteException e) {
             Log.i(TAG, "Issue while responding to client: " + e.getMessage());
         }
-        logApiCalled(RequestType.CREATE_CREDENTIALS, /* isSuccessful */ false);
+        logFailureOrUserCancel(errorType);
         finishSession(/*propagateCancellation=*/false);
+    }
+
+    private void logFailureOrUserCancel(String errorType) {
+        if (CreateCredentialException.TYPE_USER_CANCELED.equals(errorType)) {
+            logApiCall(ApiName.CREATE_CREDENTIAL,
+                    /* apiStatus */ ApiStatus.USER_CANCELED);
+        } else {
+            logApiCall(ApiName.CREATE_CREDENTIAL,
+                    /* apiStatus */ ApiStatus.FAILURE);
+        }
     }
 
     @Override

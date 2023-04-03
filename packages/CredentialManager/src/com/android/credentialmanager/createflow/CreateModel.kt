@@ -38,7 +38,9 @@ data class CreateCredentialUiState(
 )
 
 internal fun hasContentToDisplay(state: CreateCredentialUiState): Boolean {
-    return state.sortedCreateOptionsPairs.isNotEmpty()
+    return state.sortedCreateOptionsPairs.isNotEmpty() ||
+        (!state.requestDisplayInfo.preferImmediatelyAvailableCredentials &&
+            state.remoteEntry != null)
 }
 
 open class ProviderInfo(
@@ -67,7 +69,7 @@ class CreateOptionInfo(
     entrySubkey: String,
     pendingIntent: PendingIntent?,
     fillInIntent: Intent?,
-    val userProviderDisplayName: String?,
+    val userProviderDisplayName: String,
     val profileIcon: Drawable?,
     val passwordCount: Int?,
     val passkeyCount: Int?,
@@ -104,6 +106,7 @@ data class RequestDisplayInfo(
   val type: CredentialType,
   val appName: String,
   val typeIcon: Drawable,
+  val preferImmediatelyAvailableCredentials: Boolean,
 )
 
 /**
