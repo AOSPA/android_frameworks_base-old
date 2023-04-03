@@ -45,6 +45,7 @@ import android.net.NetworkCapabilities;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.RemoteException;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.telephony.AccessNetworkConstants;
@@ -98,6 +99,9 @@ import com.android.systemui.util.CarrierNameCustomization;
 import com.android.systemui.util.settings.GlobalSettings;
 import com.android.wifitrackerlib.MergedCarrierEntry;
 import com.android.wifitrackerlib.WifiEntry;
+
+import com.qti.extphone.ExtTelephonyManager;
+import com.qti.extphone.ServiceCallback;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -220,6 +224,32 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     protected boolean mCarrierNetworkChangeMode;
     private CarrierNameCustomization mCarrierNameCustomization;
 
+    private boolean mIsSmartDdsSwitchFeatureAvailable;
+    private boolean mIsExtTelServiceConnected = false;
+    private ExtTelephonyManager mExtTelephonyManager;
+
+    private ServiceCallback mExtTelServiceCallback = new ServiceCallback() {
+        @Override
+        public void onConnected() {
+            Log.d(TAG, "ExtTelephony service connected");
+            mIsExtTelServiceConnected = true;
+            try {
+                mIsSmartDdsSwitchFeatureAvailable =
+                        mExtTelephonyManager.isSmartDdsSwitchFeatureAvailable();
+                Log.d(TAG, "isSmartDdsSwitchFeatureAvailable: " +
+                        mIsSmartDdsSwitchFeatureAvailable);
+            } catch (RemoteException ex) {
+                Log.e(TAG, "isSmartDdsSwitchFeatureAvailable exception " + ex);
+            }
+        }
+
+        @Override
+        public void onDisconnected() {
+            Log.d(TAG, "ExtTelephony service disconnected");
+            mIsExtTelServiceConnected = false;
+        }
+    };
+
     private final KeyguardUpdateMonitorCallback mKeyguardUpdateCallback =
             new KeyguardUpdateMonitorCallback() {
                 @Override
@@ -289,6 +319,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         mFeatureFlags = featureFlags;
         mNonDdsCallStateCallbacksMap = new HashMap<Integer, NonDdsCallStateCallback>();
         mCarrierNameCustomization = carrierNameCustomization;
+        mExtTelephonyManager = ExtTelephonyManager.getInstance(context);
     }
 
     void onStart(@NonNull InternetDialogCallback callback, boolean canConfigWifi) {
@@ -336,6 +367,9 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         mConnectivityManager.registerDefaultNetworkCallback(mConnectivityManagerNetworkCallback);
         mCanConfigWifi = canConfigWifi;
         scanWifiAccessPoints();
+        if (!mIsExtTelServiceConnected) {
+            mExtTelephonyManager.connectService(mExtTelServiceCallback);
+        }
     }
 
     void onStop() {
@@ -362,6 +396,9 @@ public class InternetDialogController implements AccessPointController.AccessPoi
                     unregisterTelephonyCallback(mNonDdsCallStateCallbacksMap.get(subId));
         }
         mNonDdsCallStateCallbacksMap.clear();
+        if (mIsExtTelServiceConnected) {
+            mExtTelephonyManager.disconnectService(mExtTelServiceCallback);
+        }
     }
 
     @VisibleForTesting
@@ -681,6 +718,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
                 mSubIdTelephonyCallbackMap.put(subId, telephonyCallback);
                 mSubIdTelephonyManagerMap.put(subId, secondaryTm);
             }
+            Log.d(TAG, "getActiveAutoSwitchNonDdsSubId: " + subId);
             return subId;
         }
         return SubscriptionManager.INVALID_SUBSCRIPTION_ID;
@@ -1021,6 +1059,13 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         final ServiceState serviceState = tm.getServiceState();
         return serviceState != null
                 && serviceState.getState() == serviceState.STATE_IN_SERVICE;
+    }
+
+    /**
+     * Return {@code true} if Smart DDS Switch feature is available
+     */
+    boolean isSmartDdsSwitchFeatureAvailable() {
+        return mIsSmartDdsSwitchFeatureAvailable;
     }
 
     public boolean isDeviceLocked() {
