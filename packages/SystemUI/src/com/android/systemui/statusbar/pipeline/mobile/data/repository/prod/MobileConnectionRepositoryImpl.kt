@@ -14,10 +14,21 @@
  * limitations under the License.
  */
 
+/*
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
+
 package com.android.systemui.statusbar.pipeline.mobile.data.repository.prod
 
 import android.content.Context
 import android.content.IntentFilter
+import android.telephony.CellSignalStrength.SIGNAL_STRENGTH_GREAT
+import android.telephony.CellSignalStrength.SIGNAL_STRENGTH_GOOD
+import android.telephony.CellSignalStrength.SIGNAL_STRENGTH_MODERATE
+import android.telephony.CellSignalStrength.SIGNAL_STRENGTH_POOR
 import android.telephony.CellSignalStrength.SIGNAL_STRENGTH_NONE_OR_UNKNOWN
 import android.telephony.CellSignalStrengthCdma
 import android.telephony.CellSignalStrengthLte
@@ -325,6 +336,40 @@ class MobileConnectionRepositoryImpl(
             .map { it.enabled }
             .stateIn(scope, SharingStarted.WhileSubscribed(), initial)
     }
+
+    override val lteRsrpLevel: StateFlow<Int> =
+        callbackEvents
+            .mapNotNull { it.onSignalStrengthChanged }
+            .map {
+                it.signalStrength.getCellSignalStrengths(CellSignalStrengthLte::class.java).let {
+                    strengths ->
+                        if (strengths.isNotEmpty()) {
+                            when (strengths[0].rsrp) {
+                                SignalStrength.INVALID -> it.signalStrength.level
+                                in -120 until -113 -> SIGNAL_STRENGTH_POOR
+                                in -113 until -105 -> SIGNAL_STRENGTH_MODERATE
+                                in -105 until -97 -> SIGNAL_STRENGTH_GOOD
+                                in -97 until -43 -> SIGNAL_STRENGTH_GREAT
+                                else -> SIGNAL_STRENGTH_NONE_OR_UNKNOWN
+                            }
+                        } else {
+                            it.signalStrength.level
+                        }
+                    }
+            }
+            .stateIn(scope, SharingStarted.WhileSubscribed(), SIGNAL_STRENGTH_NONE_OR_UNKNOWN)
+
+    override val voiceNetworkType: StateFlow<Int> =
+        callbackEvents
+            .mapNotNull { it.onServiceStateChanged }
+            .map { it.serviceState.voiceNetworkType }
+            .stateIn(scope, SharingStarted.WhileSubscribed(), NETWORK_TYPE_UNKNOWN)
+
+    override val dataNetworkType: StateFlow<Int> =
+        callbackEvents
+            .mapNotNull { it.onServiceStateChanged }
+            .map { it.serviceState.dataNetworkType }
+            .stateIn(scope, SharingStarted.WhileSubscribed(), NETWORK_TYPE_UNKNOWN)
 
     private fun getSlotIndex(subId: Int): Int {
         var subscriptionManager: SubscriptionManager =

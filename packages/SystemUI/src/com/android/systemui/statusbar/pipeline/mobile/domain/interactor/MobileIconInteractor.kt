@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/*
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 package com.android.systemui.statusbar.pipeline.mobile.domain.interactor
 
 import android.telephony.CarrierConfigManager
@@ -26,6 +32,7 @@ import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.statusbar.pipeline.mobile.data.model.DataConnectionState.Connected
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectivityModel
+import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileIconCustomizationMode
 import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.ResolvedNetworkType
 import com.android.systemui.statusbar.pipeline.mobile.data.model.ResolvedNetworkType.DefaultNetworkType
@@ -182,6 +189,22 @@ class MobileIconInteractorImpl(
                 connectionRepository.networkName.value
             )
 
+    private val signalStrengthCustomization: StateFlow<MobileIconCustomizationMode> =
+        combine(
+            alwaysUseRsrpLevelForLte,
+            connectionRepository.lteRsrpLevel,
+            connectionRepository.voiceNetworkType,
+            connectionRepository.dataNetworkType,
+        ) { alwaysUseRsrpLevelForLte, lteRsrpLevel, voiceNetworkType, dataNetworkType ->
+            MobileIconCustomizationMode(
+                alwaysUseRsrpLevelForLte = alwaysUseRsrpLevelForLte,
+                lteRsrpLevel = lteRsrpLevel,
+                voiceNetworkType = voiceNetworkType,
+                dataNetworkType = dataNetworkType,
+            )
+        }
+        .stateIn(scope, SharingStarted.WhileSubscribed(), MobileIconCustomizationMode())
+
     /** Observable for the current RAT indicator icon ([MobileIconGroup]) */
     override val networkTypeIconGroup: StateFlow<MobileIconGroup> =
         combine(
@@ -237,9 +260,16 @@ class MobileIconInteractorImpl(
                 connectionRepository.primaryLevel,
                 connectionRepository.cdmaLevel,
                 alwaysUseCdmaLevel,
-                alwaysUseRsrpLevelForLte
-            ) { isGsm, primaryLevel, cdmaLevel, alwaysUseCdmaLevel, alwaysUseRsrpLevelForLte ->
+                signalStrengthCustomization
+            ) { isGsm, primaryLevel, cdmaLevel, alwaysUseCdmaLevel, signalStrengthCustomization ->
                 when {
+                    signalStrengthCustomization.alwaysUseRsrpLevelForLte -> {
+                        if (isLteCamped(signalStrengthCustomization)) {
+                            signalStrengthCustomization.lteRsrpLevel
+                        } else {
+                            primaryLevel
+                        }
+                    }
                     // GSM connections should never use the CDMA level
                     isGsm -> primaryLevel
                     alwaysUseCdmaLevel -> cdmaLevel
@@ -261,4 +291,11 @@ class MobileIconInteractorImpl(
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
     override val isInService = connectionRepository.isInService
+
+    private fun isLteCamped(mobileIconCustmization: MobileIconCustomizationMode): Boolean {
+        return (mobileIconCustmization.dataNetworkType == TelephonyManager.NETWORK_TYPE_LTE
+                || mobileIconCustmization.dataNetworkType == TelephonyManager.NETWORK_TYPE_LTE_CA
+                || mobileIconCustmization.voiceNetworkType == TelephonyManager.NETWORK_TYPE_LTE
+                || mobileIconCustmization.voiceNetworkType == TelephonyManager.NETWORK_TYPE_LTE_CA)
+    }
 }
