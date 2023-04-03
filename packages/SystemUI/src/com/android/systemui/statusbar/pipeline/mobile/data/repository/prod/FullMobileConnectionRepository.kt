@@ -343,6 +343,15 @@ class FullMobileConnectionRepository(
                 activeRepo.value.nrIconType.value
             )
 
+    override val dataRoamingEnabled =
+        activeRepo
+            .flatMapLatest { it.dataRoamingEnabled }
+            .stateIn(
+                scope,
+                SharingStarted.WhileSubscribed(),
+                activeRepo.value.dataRoamingEnabled.value
+            )
+
     class Factory
     @Inject
     constructor(

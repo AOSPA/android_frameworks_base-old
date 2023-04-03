@@ -135,6 +135,8 @@ interface MobileIconInteractor {
 
     /** True if the no internet icon should be hidden.  */
     val hideNoInternetState: StateFlow<Boolean>
+
+    val networkTypeIconCustomization: StateFlow<MobileIconCustomizationMode>
 }
 
 /** Interactor for a single mobile connection. This connection _should_ have one subscription ID */
@@ -154,6 +156,7 @@ class MobileIconInteractorImpl(
     connectionRepository: MobileConnectionRepository,
     override val alwaysUseRsrpLevelForLte: StateFlow<Boolean>,
     override val hideNoInternetState: StateFlow<Boolean>,
+    networkTypeIconCustomizationFlow: StateFlow<MobileIconCustomizationMode>,
 ) : MobileIconInteractor {
     override val tableLogBuffer: TableLogBuffer = connectionRepository.tableLogBuffer
 
@@ -206,15 +209,64 @@ class MobileIconInteractorImpl(
         }
         .stateIn(scope, SharingStarted.WhileSubscribed(), MobileIconCustomizationMode())
 
+    override val isRoaming: StateFlow<Boolean> =
+        combine(
+            connectionRepository.carrierNetworkChangeActive,
+            connectionRepository.isGsm,
+            connectionRepository.isRoaming,
+            connectionRepository.cdmaRoaming,
+        ) { carrierNetworkChangeActive, isGsm, isRoaming, cdmaRoaming ->
+            if (carrierNetworkChangeActive) {
+                false
+            } else if (isGsm) {
+                isRoaming
+            } else {
+                cdmaRoaming
+            }
+        }
+        .stateIn(scope, SharingStarted.WhileSubscribed(), false)
+
+    override val networkTypeIconCustomization: StateFlow<MobileIconCustomizationMode> =
+        combine(
+            networkTypeIconCustomizationFlow,
+            isDataEnabled,
+            isDefault,
+            connectionRepository.dataRoamingEnabled,
+            isRoaming,
+        ){ state, mobileDataEnabled, isDefault, dataRoamingEnabled, isRoaming ->
+            MobileIconCustomizationMode(
+                isRatCustomization = state.isRatCustomization,
+                alwaysShowNetworkTypeIcon = state.alwaysShowNetworkTypeIcon,
+                ddsRatIconEnhancementEnabled = state.ddsRatIconEnhancementEnabled,
+                nonDdsRatIconEnhancementEnabled = state.nonDdsRatIconEnhancementEnabled,
+                mobileDataEnabled = mobileDataEnabled,
+                dataRoamingEnabled = dataRoamingEnabled,
+                isDefaultDataSub = isDefault,
+                isRoaming = isRoaming
+            )
+        }.stateIn(scope, SharingStarted.WhileSubscribed(), MobileIconCustomizationMode())
+
     private val mobileIconCustomization: StateFlow<MobileIconCustomizationMode> =
         combine(
             signalStrengthCustomization,
-            connectionRepository.nrIconType
-        ) { signalStrengthCustomization, nrIconType ->
+            connectionRepository.nrIconType,
+            networkTypeIconCustomization,
+        ) { signalStrengthCustomization, nrIconType, networkTypeIconCustomization ->
             MobileIconCustomizationMode(
                 dataNetworkType = signalStrengthCustomization.dataNetworkType,
                 voiceNetworkType = signalStrengthCustomization.voiceNetworkType,
-                fiveGServiceState = FiveGServiceState(nrIconType)
+                fiveGServiceState = FiveGServiceState(nrIconType),
+                isRatCustomization = networkTypeIconCustomization.isRatCustomization,
+                alwaysShowNetworkTypeIcon =
+                    networkTypeIconCustomization.alwaysShowNetworkTypeIcon,
+                ddsRatIconEnhancementEnabled =
+                    networkTypeIconCustomization.ddsRatIconEnhancementEnabled,
+                nonDdsRatIconEnhancementEnabled =
+                    networkTypeIconCustomization.nonDdsRatIconEnhancementEnabled,
+                mobileDataEnabled = networkTypeIconCustomization.mobileDataEnabled,
+                dataRoamingEnabled = networkTypeIconCustomization.dataRoamingEnabled,
+                isDefaultDataSub = networkTypeIconCustomization.isDefaultDataSub,
+                isRoaming = networkTypeIconCustomization.isRoaming
             )
         }
         .stateIn(scope, SharingStarted.WhileSubscribed(), MobileIconCustomizationMode())
@@ -228,7 +280,7 @@ class MobileIconInteractorImpl(
                 isDefault,
                 mobileIconCustomization,
             ) { resolvedNetworkType, mapping, defaultGroup, isDefault, mobileIconCustomization ->
-                if (!isDefault) {
+                if (!isDefault && !mobileIconCustomization.isRatCustomization) {
                     return@combine NOT_DEFAULT_DATA
                 }
 
@@ -253,23 +305,6 @@ class MobileIconInteractorImpl(
             .stateIn(scope, SharingStarted.WhileSubscribed(), defaultMobileIconGroup.value)
 
     override val isEmergencyOnly = connectionRepository.isEmergencyOnly
-
-    override val isRoaming: StateFlow<Boolean> =
-        combine(
-                connectionRepository.carrierNetworkChangeActive,
-                connectionRepository.isGsm,
-                connectionRepository.isRoaming,
-                connectionRepository.cdmaRoaming,
-            ) { carrierNetworkChangeActive, isGsm, isRoaming, cdmaRoaming ->
-                if (carrierNetworkChangeActive) {
-                    false
-                } else if (isGsm) {
-                    isRoaming
-                } else {
-                    cdmaRoaming
-                }
-            }
-            .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
     override val level: StateFlow<Int> =
         combine(

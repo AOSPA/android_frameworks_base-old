@@ -64,6 +64,7 @@ class FakeMobileConnectionRepository(
     override val voiceNetworkType = MutableStateFlow(0)
     override val dataNetworkType = MutableStateFlow(0)
     override val nrIconType = MutableStateFlow(NrIconType.TYPE_NONE)
+    override val dataRoamingEnabled = MutableStateFlow(true)
 
     fun setDataEnabled(enabled: Boolean) {
         _dataEnabled.value = enabled

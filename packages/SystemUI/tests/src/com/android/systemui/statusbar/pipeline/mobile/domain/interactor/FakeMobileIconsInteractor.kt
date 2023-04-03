@@ -24,6 +24,7 @@ import com.android.settingslib.SignalIcon.MobileIconGroup
 import com.android.settingslib.mobile.TelephonyIcons
 import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectivityModel
+import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileIconCustomizationMode
 import com.android.systemui.statusbar.pipeline.mobile.data.model.SubscriptionModel
 import com.android.systemui.statusbar.pipeline.mobile.util.MobileMappingsProxy
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -80,6 +81,9 @@ class FakeMobileIconsInteractor(
 
     private val _hideNoInternetState = MutableStateFlow(false)
     override val hideNoInternetState = _hideNoInternetState
+
+    private val _networkTypeIconCustomization = MutableStateFlow(MobileIconCustomizationMode())
+    override val networkTypeIconCustomization = _networkTypeIconCustomization
 
     /** Always returns a new fake interactor */
     override fun createMobileConnectionInteractorForSubId(subId: Int): MobileIconInteractor {
