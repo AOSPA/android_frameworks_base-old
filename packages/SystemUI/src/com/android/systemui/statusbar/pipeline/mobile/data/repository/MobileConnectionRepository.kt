@@ -124,6 +124,7 @@ interface MobileConnectionRepository {
     val lteRsrpLevel: StateFlow<Int>
     val voiceNetworkType: StateFlow<Int>
     val dataNetworkType: StateFlow<Int>
+    val nrIconType: StateFlow<Int>
 
     companion object {
         /** The default number of levels to use for [numberOfLevels]. */

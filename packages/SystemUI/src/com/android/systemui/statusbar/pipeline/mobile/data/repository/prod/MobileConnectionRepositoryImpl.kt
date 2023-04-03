@@ -68,6 +68,7 @@ import com.android.systemui.statusbar.pipeline.shared.data.model.toMobileDataAct
 import com.android.systemui.statusbar.policy.FiveGServiceClient
 import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState
 import com.android.systemui.statusbar.policy.FiveGServiceClient.IFiveGStateListener
+import com.qti.extphone.NrIconType
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -279,11 +280,13 @@ class MobileConnectionRepositoryImpl(
                     OverrideNetworkType(
                         mobileMappingsProxy.toIconKeyOverride(
                             it.telephonyDisplayInfo.overrideNetworkType
-                        )
+                        ),
+                        it.telephonyDisplayInfo.overrideNetworkType
                     )
                 } else if (it.telephonyDisplayInfo.networkType != NETWORK_TYPE_UNKNOWN) {
                     DefaultNetworkType(
-                        mobileMappingsProxy.toIconKey(it.telephonyDisplayInfo.networkType)
+                        mobileMappingsProxy.toIconKey(it.telephonyDisplayInfo.networkType),
+                        it.telephonyDisplayInfo.networkType
                     )
                 } else {
                     UnknownNetworkType
@@ -370,6 +373,12 @@ class MobileConnectionRepositoryImpl(
             .mapNotNull { it.onServiceStateChanged }
             .map { it.serviceState.dataNetworkType }
             .stateIn(scope, SharingStarted.WhileSubscribed(), NETWORK_TYPE_UNKNOWN)
+
+    override val nrIconType: StateFlow<Int> =
+        callbackEvents
+            .mapNotNull {it.onNrIconTypeChanged }
+            .map { it.nrIconType}
+            .stateIn(scope, SharingStarted.WhileSubscribed(), NrIconType.TYPE_NONE)
 
     private fun getSlotIndex(subId: Int): Int {
         var subscriptionManager: SubscriptionManager =
