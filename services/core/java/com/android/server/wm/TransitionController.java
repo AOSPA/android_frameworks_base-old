@@ -88,8 +88,9 @@ class TransitionController {
 
     private WindowProcessController mTransitionPlayerProc;
     final ActivityTaskManagerService mAtm;
+
     final RemotePlayer mRemotePlayer;
-    TaskSnapshotController mTaskSnapshotController;
+    SnapshotController mSnapshotController;
     TransitionTracer mTransitionTracer;
 
     private final ArrayList<WindowManagerInternal.AppTransitionListener> mLegacyListeners =
@@ -106,6 +107,9 @@ class TransitionController {
      * removed from this list.
      */
     private final ArrayList<Transition> mPlayingTransitions = new ArrayList<>();
+
+    /** The currently finishing transition. */
+    Transition mFinishingTransition;
 
     /**
      * The windows that request to be invisible while it is in transition. After the transition
@@ -150,7 +154,7 @@ class TransitionController {
     }
 
     void setWindowManager(WindowManagerService wms) {
-        mTaskSnapshotController = wms.mTaskSnapshotController;
+        mSnapshotController = wms.mSnapshotController;
         mTransitionTracer = wms.mTransitionTracer;
         mIsWaitingForDisplayEnabled = !wms.mDisplayEnabled;
         registerLegacyListener(wms.mActivityManagerAppTransitionNotifier);
@@ -313,6 +317,11 @@ class TransitionController {
         return false;
     }
 
+    /** Returns {@code true} if the `wc` is a participant of the finishing transition. */
+    boolean inFinishingTransition(WindowContainer<?> wc) {
+        return mFinishingTransition != null && mFinishingTransition.mParticipants.contains(wc);
+    }
+
     /** @return {@code true} if a transition is running */
     boolean inTransition() {
         // TODO(shell-transitions): eventually properly support multiple
@@ -358,11 +367,11 @@ class TransitionController {
     }
 
     boolean isTransientHide(@NonNull Task task) {
-        if (mCollectingTransition != null && mCollectingTransition.isTransientHide(task)) {
+        if (mCollectingTransition != null && mCollectingTransition.isInTransientHide(task)) {
             return true;
         }
         for (int i = mPlayingTransitions.size() - 1; i >= 0; --i) {
-            if (mPlayingTransitions.get(i).isTransientHide(task)) return true;
+            if (mPlayingTransitions.get(i).isInTransientHide(task)) return true;
         }
         return false;
     }
@@ -672,14 +681,13 @@ class TransitionController {
     }
 
     /** @see Transition#finishTransition */
-    void finishTransition(@NonNull IBinder token) {
+    void finishTransition(Transition record) {
         // It is usually a no-op but make sure that the metric consumer is removed.
-        mTransitionMetricsReporter.reportAnimationStart(token, 0 /* startTime */);
+        mTransitionMetricsReporter.reportAnimationStart(record.getToken(), 0 /* startTime */);
         // It is a no-op if the transition did not change the display.
         mAtm.endLaunchPowerMode(POWER_MODE_REASON_CHANGE_DISPLAY);
-        final Transition record = Transition.fromBinder(token);
-        if (record == null || !mPlayingTransitions.contains(record)) {
-            Slog.e(TAG, "Trying to finish a non-playing transition " + token);
+        if (!mPlayingTransitions.contains(record)) {
+            Slog.e(TAG, "Trying to finish a non-playing transition " + record);
             return;
         }
         ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Finish Transition: %s", record);
@@ -732,12 +740,12 @@ class TransitionController {
             t.setEarlyWakeupStart();
             // Usually transitions put quite a load onto the system already (with all the things
             // happening in app), so pause task snapshot persisting to not increase the load.
-            mAtm.mWindowManager.mSnapshotPersistQueue.setPaused(true);
+            mAtm.mWindowManager.mSnapshotController.setPause(true);
             mAnimatingState = true;
             Trace.asyncTraceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "transitAnim", 0);
         } else if (!animatingState && mAnimatingState) {
             t.setEarlyWakeupEnd();
-            mAtm.mWindowManager.mSnapshotPersistQueue.setPaused(false);
+            mAtm.mWindowManager.mSnapshotController.setPause(false);
             mAnimatingState = false;
             Trace.asyncTraceEnd(Trace.TRACE_TAG_WINDOW_MANAGER, "transitAnim", 0);
         }
@@ -969,6 +977,8 @@ class TransitionController {
         WindowContainerTransaction mStartWCT;
         int mSyncId;
         TransitionInfo mInfo;
+        ProtoOutputStream mProtoOutputStream = new ProtoOutputStream();
+        long mProtoToken;
 
         private String buildOnSendLog() {
             StringBuilder sb = new StringBuilder("Sent Transition #").append(mSyncId)

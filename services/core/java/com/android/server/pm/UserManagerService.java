@@ -1275,7 +1275,7 @@ public class UserManagerService extends IUserManager.Stub {
         intent.putExtra(Intent.EXTRA_USER_HANDLE, profileHandle.getIdentifier());
         getDevicePolicyManagerInternal().broadcastIntentToManifestReceivers(
                 intent, parentHandle, /* requiresPermission= */ true);
-        intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
+        intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY | Intent.FLAG_RECEIVER_FOREGROUND);
         mContext.sendBroadcastAsUser(intent, parentHandle);
     }
 
@@ -1996,10 +1996,10 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     @Override
-    public int getDisplayIdAssignedToUser() {
+    public int getMainDisplayIdAssignedToUser() {
         // Not checking for any permission as it returns info about calling user
         int userId = UserHandle.getUserId(Binder.getCallingUid());
-        int displayId = mUserVisibilityMediator.getDisplayAssignedToUser(userId);
+        int displayId = mUserVisibilityMediator.getMainDisplayAssignedToUser(userId);
         return displayId;
     }
 
@@ -4737,9 +4737,9 @@ public class UserManagerService extends IUserManager.Stub {
                             UserManager.USER_OPERATION_ERROR_MAX_USERS);
                 }
                 // Keep logic in sync with getRemainingCreatableUserCount()
-                if (!isGuest && !isProfile && !isDemo && isUserLimitReached()) {
+                if (!isGuest && !isManagedProfile && !isDemo && isUserLimitReached()) {
                     // If the user limit has been reached, we cannot add a user (except guest/demo).
-                    // Note that profiles can bypass it in certain circumstances (taken
+                    // Note that managed profiles can bypass it in certain circumstances (taken
                     // into account in the profile check below).
                     throwCheckedUserOperationException(
                             "Cannot add user. Maximum user limit is reached.",
@@ -5865,20 +5865,24 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     /**
-     * @deprecated Use {@link
-     * android.content.RestrictionsManager#getApplicationRestrictionsPerAdmin} instead.
+     * <p>Starting from Android version {@link android.os.Build.VERSION_CODES#UPSIDE_DOWN_CAKE},
+     * it is possible for there to be multiple managing agents on the device with the ability to set
+     * restrictions, e.g. an Enterprise DPC and a Supervision admin. This API will only to return
+     * the restrictions set by the DPCs. To retrieve restrictions set by all agents, use
+     * {@link android.content.RestrictionsManager#getApplicationRestrictionsPerAdmin} instead.
      */
-    @Deprecated
     @Override
     public Bundle getApplicationRestrictions(String packageName) {
         return getApplicationRestrictionsForUser(packageName, UserHandle.getCallingUserId());
     }
 
     /**
-     * @deprecated Use {@link
-     * android.content.RestrictionsManager#getApplicationRestrictionsPerAdmin} instead.
+     * <p>Starting from Android version {@link android.os.Build.VERSION_CODES#UPSIDE_DOWN_CAKE},
+     * it is possible for there to be multiple managing agents on the device with the ability to set
+     * restrictions, e.g. an Enterprise DPC and a Supervision admin. This API will only to return
+     * the restrictions set by the DPCs. To retrieve restrictions set by all agents, use
+     * {@link android.content.RestrictionsManager#getApplicationRestrictionsPerAdmin} instead.
      */
-    @Deprecated
     @Override
     public Bundle getApplicationRestrictionsForUser(String packageName, @UserIdInt int userId) {
         if (UserHandle.getCallingUserId() != userId
@@ -7185,8 +7189,8 @@ public class UserManagerService extends IUserManager.Stub {
         }
 
         @Override
-        public int getDisplayAssignedToUser(@UserIdInt int userId) {
-            return mUserVisibilityMediator.getDisplayAssignedToUser(userId);
+        public int getMainDisplayAssignedToUser(@UserIdInt int userId) {
+            return mUserVisibilityMediator.getMainDisplayAssignedToUser(userId);
         }
 
         @Override

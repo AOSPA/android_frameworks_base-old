@@ -66,6 +66,7 @@ import com.android.systemui.biometrics.SideFpsUiRequestSource;
 import com.android.systemui.classifier.FalsingA11yDelegate;
 import com.android.systemui.classifier.FalsingCollector;
 import com.android.systemui.flags.FeatureFlags;
+import com.android.systemui.flags.Flags;
 import com.android.systemui.log.SessionTracker;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.FalsingManager;
@@ -195,6 +196,7 @@ public class KeyguardSecurityContainerControllerTest extends SysuiTestCase {
                 .thenReturn(mKeyguardMessageAreaController);
         when(mKeyguardPasswordView.getWindowInsetsController()).thenReturn(mWindowInsetsController);
         when(mKeyguardSecurityModel.getSecurityMode(anyInt())).thenReturn(SecurityMode.PIN);
+        when(mKeyguardStateController.canDismissLockScreen()).thenReturn(true);
         mKeyguardPasswordViewController = new KeyguardPasswordViewController(
                 (KeyguardPasswordView) mKeyguardPasswordView, mKeyguardUpdateMonitor,
                 SecurityMode.Password, mLockPatternUtils, null,
@@ -553,6 +555,22 @@ public class KeyguardSecurityContainerControllerTest extends SysuiTestCase {
     }
 
     @Test
+    public void testSecurityCallbackFinish() {
+        when(mKeyguardStateController.canDismissLockScreen()).thenReturn(true);
+        when(mKeyguardUpdateMonitor.isUserUnlocked(0)).thenReturn(true);
+        mKeyguardSecurityContainerController.finish(true, 0);
+        verify(mViewMediatorCallback).keyguardDone(anyBoolean(), anyInt());
+    }
+
+    @Test
+    public void testSecurityCallbackFinish_cannotDismissLockScreenAndNotStrongAuth() {
+        when(mFeatureFlags.isEnabled(Flags.PREVENT_BYPASS_KEYGUARD)).thenReturn(true);
+        when(mKeyguardStateController.canDismissLockScreen()).thenReturn(false);
+        mKeyguardSecurityContainerController.finish(false, 0);
+        verify(mViewMediatorCallback, never()).keyguardDone(anyBoolean(), anyInt());
+    }
+
+    @Test
     public void testOnStartingToHide() {
         mKeyguardSecurityContainerController.onStartingToHide();
         verify(mInputViewController).onStartingToHide();
@@ -619,10 +637,23 @@ public class KeyguardSecurityContainerControllerTest extends SysuiTestCase {
 
     @Test
     public void testReinflateViewFlipper() {
-        mKeyguardSecurityContainerController.reinflateViewFlipper();
+        mKeyguardSecurityContainerController.reinflateViewFlipper(() -> {});
         verify(mKeyguardSecurityViewFlipperController).clearViews();
         verify(mKeyguardSecurityViewFlipperController).getSecurityView(any(SecurityMode.class),
                 any(KeyguardSecurityCallback.class));
+    }
+
+    @Test
+    public void testReinflateViewFlipper_asyncBouncerFlagOn() {
+        when(mFeatureFlags.isEnabled(Flags.ASYNC_INFLATE_BOUNCER)).thenReturn(true);
+        KeyguardSecurityViewFlipperController.OnViewInflatedListener onViewInflatedListener =
+                () -> {
+                };
+        mKeyguardSecurityContainerController.reinflateViewFlipper(onViewInflatedListener);
+        verify(mKeyguardSecurityViewFlipperController).clearViews();
+        verify(mKeyguardSecurityViewFlipperController).asynchronouslyInflateView(
+                any(SecurityMode.class),
+                any(KeyguardSecurityCallback.class), eq(onViewInflatedListener));
     }
 
     @Test

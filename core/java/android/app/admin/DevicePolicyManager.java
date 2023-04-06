@@ -57,6 +57,7 @@ import static com.android.internal.util.function.pooled.PooledLambda.obtainMessa
 
 import android.Manifest.permission;
 import android.accounts.Account;
+import android.annotation.BroadcastBehavior;
 import android.annotation.CallbackExecutor;
 import android.annotation.ColorInt;
 import android.annotation.IntDef;
@@ -3997,6 +3998,27 @@ public class DevicePolicyManager {
      */
     public static final String EXTRA_RESOURCE_IDS =
             "android.app.extra.RESOURCE_IDS";
+
+    /**
+     * Broadcast Action: Broadcast sent to indicate that the device financing state has changed.
+     *
+     * <p>This occurs when, for example, a financing kiosk app has been added or removed.
+     *
+     * <p>To query the current device financing state see {@link #isDeviceFinanced}.
+     *
+     * <p>This will be delivered to the following apps if they include a receiver for this action
+     * in their manifest:
+     * <ul>
+     *     <li>Device owner admins.
+     *     <li>Organization-owned profile owner admins
+     *     <li>The supervision app
+     *     <li>The device management role holder
+     * </ul>
+     */
+    @SdkConstant(SdkConstant.SdkConstantType.BROADCAST_INTENT_ACTION)
+    @BroadcastBehavior(explicitOnly = true, includeBackground = true)
+    public static final String ACTION_DEVICE_FINANCING_STATE_CHANGED =
+            "android.app.admin.action.DEVICE_FINANCING_STATE_CHANGED";
 
     /** Allow the user to choose whether to enable MTE on the device. */
     public static final int MTE_NOT_CONTROLLED_BY_POLICY = 0;
@@ -15818,9 +15840,8 @@ public class DevicePolicyManager {
      * Called by a device owner or a profile owner or holder of the permission
      * {@link android.Manifest.permission#MANAGE_DEVICE_POLICY_APPS_CONTROL} to disable user
      * control over apps. User will not be able to clear app data or force-stop packages. When
-     * called by a device owner, applies to all users on the device. Starting from Android 13,
-     * packages with user control disabled are exempted from being put in the "restricted" App
-     * Standby Bucket.
+     * called by a device owner, applies to all users on the device. Packages with user control
+     * disabled are exempted from App Standby Buckets.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with. Null if the
      *               caller is not a device admin.
@@ -16879,5 +16900,56 @@ public class DevicePolicyManager {
             }
         }
         return false;
+    }
+
+    /**
+     * Returns {@code true} if this device is marked as a financed device.
+     *
+     * <p>A financed device can be entered into lock task mode (see {@link #setLockTaskPackages})
+     * by the holder of the role {@link android.app.role.RoleManager#ROLE_FINANCED_DEVICE_KIOSK}.
+     * If this occurs, Device Owners and Profile Owners that have set lock task packages or
+     * features, or that attempt to set lock task packages or features, will receive a callback
+     * indicating that it could not be set. See {@link PolicyUpdateReceiver#onPolicyChanged} and
+     * {@link PolicyUpdateReceiver#onPolicySetResult}.
+     *
+     * <p>To be informed of changes to this status you can subscribe to the broadcast
+     * {@link ACTION_DEVICE_FINANCING_STATE_CHANGED}.
+     *
+     * @throws SecurityException if the caller is not a device owner, profile owner of an
+     * organization-owned managed profile, profile owner on the primary user or holder of one of the
+     * following roles: {@link android.app.role.RoleManager.ROLE_DEVICE_POLICY_MANAGEMENT},
+     * android.app.role.RoleManager.ROLE_SYSTEM_SUPERVISION.
+     */
+    public boolean isDeviceFinanced() {
+        if (mService != null) {
+            try {
+                return mService.isDeviceFinanced(mContext.getPackageName());
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Returns the package name of the application holding the role:
+     * {@link android.app.role.RoleManager#ROLE_FINANCED_DEVICE_KIOSK}.
+     *
+     * @return the package name of the application holding the role or {@code null} if the role is
+     * not held by any applications.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(permission.MANAGE_PROFILE_AND_DEVICE_OWNERS)
+    @Nullable
+    public String getFinancedDeviceKioskRoleHolder() {
+        if (mService != null) {
+            try {
+                return mService.getFinancedDeviceKioskRoleHolder(mContext.getPackageName());
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+        return null;
     }
 }

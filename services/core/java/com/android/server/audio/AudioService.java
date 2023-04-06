@@ -16,6 +16,7 @@
 
 package com.android.server.audio;
 
+import static android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED;
 import static android.Manifest.permission.REMOTE_AUDIO_PLAYBACK;
 import static android.app.BroadcastOptions.DELIVERY_GROUP_POLICY_MOST_RECENT;
 import static android.media.AudioManager.RINGER_MODE_NORMAL;
@@ -170,6 +171,7 @@ import android.provider.Settings;
 import android.provider.Settings.System;
 import android.service.notification.ZenModeConfig;
 import android.telecom.TelecomManager;
+import android.telephony.SubscriptionManager;
 import android.text.TextUtils;
 import android.util.AndroidRuntimeException;
 import android.util.ArrayMap;
@@ -183,6 +185,7 @@ import android.util.SparseIntArray;
 import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityManager;
 import android.widget.Toast;
+
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
@@ -317,7 +320,7 @@ public class AudioService extends IAudioService.Stub
      * volumes will be updated in case of a change.
      * @param alias if true, STREAM_NOTIFICATION is aliased to STREAM_RING
      */
-    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
+    @android.annotation.EnforcePermission(MODIFY_AUDIO_SETTINGS_PRIVILEGED)
     public void setNotifAliasRingForTest(boolean alias) {
         super.setNotifAliasRingForTest_enforcePermission();
         boolean update = (mNotifAliasRing != alias);
@@ -399,6 +402,7 @@ public class AudioService extends IAudioService.Stub
     private static final int MSG_NO_LOG_FOR_PLAYER_I = 51;
     private static final int MSG_DISPATCH_PREFERRED_MIXER_ATTRIBUTES = 52;
     private static final int MSG_LOWER_VOLUME_TO_RS1 = 53;
+    private static final int MSG_CONFIGURATION_CHANGED = 54;
 
     /** Messages handled by the {@link SoundDoseHelper}. */
     /*package*/ static final int SAFE_MEDIA_VOLUME_MSG_START = 1000;
@@ -1052,9 +1056,14 @@ public class AudioService extends IAudioService.Stub
 
         mSfxHelper = new SoundEffectsHelper(mContext, playerBase -> ignorePlayerLogs(playerBase));
 
-        final boolean headTrackingDefault = mContext.getResources().getBoolean(
+        final boolean binauralEnabledDefault = SystemProperties.getBoolean(
+                "ro.audio.spatializer_binaural_enabled_default", true);
+        final boolean transauralEnabledDefault = SystemProperties.getBoolean(
+                "ro.audio.spatializer_transaural_enabled_default", true);
+        final boolean headTrackingEnabledDefault = mContext.getResources().getBoolean(
                 com.android.internal.R.bool.config_spatial_audio_head_tracking_enabled_default);
-        mSpatializerHelper = new SpatializerHelper(this, mAudioSystem, headTrackingDefault);
+        mSpatializerHelper = new SpatializerHelper(this, mAudioSystem,
+                binauralEnabledDefault, transauralEnabledDefault, headTrackingEnabledDefault);
 
         mVibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
         mHasVibrator = mVibrator == null ? false : mVibrator.hasVibrator();
@@ -1220,17 +1229,6 @@ public class AudioService extends IAudioService.Stub
 
         updateAudioHalPids();
 
-        boolean cameraSoundForced = readCameraSoundForced();
-        mCameraSoundForced = new Boolean(cameraSoundForced);
-        sendMsg(mAudioHandler,
-                MSG_SET_FORCE_USE,
-                SENDMSG_QUEUE,
-                AudioSystem.FOR_SYSTEM,
-                cameraSoundForced ?
-                        AudioSystem.FORCE_SYSTEM_ENFORCED : AudioSystem.FORCE_NONE,
-                new String("AudioService ctor"),
-                0);
-
         mUseFixedVolume = mContext.getResources().getBoolean(
                 com.android.internal.R.bool.config_useFixedVolume);
 
@@ -1324,6 +1322,18 @@ public class AudioService extends IAudioService.Stub
      * Called by handling of MSG_INIT_STREAMS_VOLUMES
      */
     private void onInitStreamsAndVolumes() {
+        synchronized (mSettingsLock) {
+            mCameraSoundForced = readCameraSoundForced();
+            sendMsg(mAudioHandler,
+                    MSG_SET_FORCE_USE,
+                    SENDMSG_QUEUE,
+                    AudioSystem.FOR_SYSTEM,
+                    mCameraSoundForced
+                            ? AudioSystem.FORCE_SYSTEM_ENFORCED : AudioSystem.FORCE_NONE,
+                    new String("AudioService ctor"),
+                    0);
+        }
+
         createStreamStates();
 
         // must be called after createStreamStates() as it uses MUSIC volume as default if no
@@ -1359,7 +1369,18 @@ public class AudioService extends IAudioService.Stub
 
         // check on volume initialization
         checkVolumeRangeInitialization("AudioService()");
+
     }
+
+    private SubscriptionManager.OnSubscriptionsChangedListener mSubscriptionChangedListener =
+            new SubscriptionManager.OnSubscriptionsChangedListener() {
+                @Override
+                public void onSubscriptionsChanged() {
+                    Log.i(TAG, "onSubscriptionsChanged()");
+                    sendMsg(mAudioHandler, MSG_CONFIGURATION_CHANGED, SENDMSG_REPLACE,
+                            0, 0, null, 0);
+                }
+            };
 
     /**
      * Initialize intent receives and settings observers for this service.
@@ -1387,8 +1408,8 @@ public class AudioService extends IAudioService.Stub
         intentFilter.addAction(Intent.ACTION_CONFIGURATION_CHANGED);
         if (mMonitorRotation) {
             RotationHelper.init(mContext, mAudioHandler,
-                    rotationParam -> onRotationUpdate(rotationParam),
-                    foldParam -> onFoldUpdate(foldParam));
+                    rotation -> onRotationUpdate(rotation),
+                    foldState -> onFoldStateUpdate(foldState));
         }
 
         intentFilter.addAction(AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION);
@@ -1398,6 +1419,13 @@ public class AudioService extends IAudioService.Stub
         mContext.registerReceiverAsUser(mReceiver, UserHandle.ALL, intentFilter, null, null,
                 Context.RECEIVER_EXPORTED);
 
+        SubscriptionManager subscriptionManager = mContext.getSystemService(
+                SubscriptionManager.class);
+        if (subscriptionManager == null) {
+            Log.e(TAG, "initExternalEventReceivers cannot create SubscriptionManager!");
+        } else {
+            subscriptionManager.addOnSubscriptionsChangedListener(mSubscriptionChangedListener);
+        }
     }
 
     public void systemReady() {
@@ -1530,16 +1558,20 @@ public class AudioService extends IAudioService.Stub
 
     //-----------------------------------------------------------------
     // rotation/fold updates coming from RotationHelper
-    void onRotationUpdate(String rotationParameter) {
+    void onRotationUpdate(Integer rotation) {
+        mSpatializerHelper.setDisplayOrientation((float) (rotation * Math.PI / 180.));
         // use REPLACE as only the last rotation matters
+        final String rotationParameter = "rotation=" + rotation;
         sendMsg(mAudioHandler, MSG_ROTATION_UPDATE, SENDMSG_REPLACE, /*arg1*/ 0, /*arg2*/ 0,
                 /*obj*/ rotationParameter, /*delay*/ 0);
     }
 
-    void onFoldUpdate(String foldParameter) {
+    void onFoldStateUpdate(Boolean foldState) {
+        mSpatializerHelper.setFoldState(foldState);
         // use REPLACE as only the last fold state matters
+        final String foldStateParameter = "device_folded=" + (foldState ? "on" : "off");
         sendMsg(mAudioHandler, MSG_FOLD_UPDATE, SENDMSG_REPLACE, /*arg1*/ 0, /*arg2*/ 0,
-                /*obj*/ foldParameter, /*delay*/ 0);
+                /*obj*/ foldStateParameter, /*delay*/ 0);
     }
 
     //-----------------------------------------------------------------
@@ -1774,6 +1806,11 @@ public class AudioService extends IAudioService.Stub
 
         mSpatializerHelper.reset(/* featureEnabled */ mHasSpatializerEffect);
         mSoundDoseHelper.reset();
+
+        // Restore rotation information.
+        if (mMonitorRotation) {
+            RotationHelper.forceUpdate();
+        }
 
         onIndicateSystemReady();
         // indicate the end of reconfiguration phase to audio HAL
@@ -3691,7 +3728,7 @@ public class AudioService extends IAudioService.Stub
             for (int stream = 0; stream < mStreamStates.length; stream++) {
                 VolumeStreamState vss = mStreamStates[stream];
                 if (streamAlias == mStreamVolumeAlias[stream] && vss.isMutable()) {
-                    if (!(readCameraSoundForced()
+                    if (!(mCameraSoundForced
                             && (vss.getStreamType()
                                     == AudioSystem.STREAM_SYSTEM_ENFORCED))) {
                         boolean changed = vss.mute(state, /* apply= */ false);
@@ -3871,7 +3908,7 @@ public class AudioService extends IAudioService.Stub
 
     @Override
     @android.annotation.EnforcePermission(anyOf = {
-            android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED,
+            MODIFY_AUDIO_SETTINGS_PRIVILEGED,
             android.Manifest.permission.MODIFY_AUDIO_ROUTING
     })
     /** @see AudioManager#setVolumeGroupVolumeIndex(int, int, int) */
@@ -3918,7 +3955,7 @@ public class AudioService extends IAudioService.Stub
 
     @Override
     @android.annotation.EnforcePermission(anyOf = {
-            android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED,
+            MODIFY_AUDIO_SETTINGS_PRIVILEGED,
             android.Manifest.permission.MODIFY_AUDIO_ROUTING
     })
     /** @see AudioManager#getVolumeGroupVolumeIndex(int) */
@@ -3937,7 +3974,7 @@ public class AudioService extends IAudioService.Stub
 
     /** @see AudioManager#getVolumeGroupMaxVolumeIndex(int) */
     @android.annotation.EnforcePermission(anyOf = {
-            android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED,
+            MODIFY_AUDIO_SETTINGS_PRIVILEGED,
             android.Manifest.permission.MODIFY_AUDIO_ROUTING
     })
     public int getVolumeGroupMaxVolumeIndex(int groupId) {
@@ -3953,7 +3990,7 @@ public class AudioService extends IAudioService.Stub
 
     /** @see AudioManager#getVolumeGroupMinVolumeIndex(int) */
     @android.annotation.EnforcePermission(anyOf = {
-            android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED,
+            MODIFY_AUDIO_SETTINGS_PRIVILEGED,
             android.Manifest.permission.MODIFY_AUDIO_ROUTING
     })
     public int getVolumeGroupMinVolumeIndex(int groupId) {
@@ -5080,7 +5117,7 @@ public class AudioService extends IAudioService.Stub
      * @see AudioManager#addOnStreamAliasingChangedListener(Executor, Runnable)
      * @see AudioManager#removeOnStreamAliasingChangedListener(Runnable)
      */
-    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
+    @android.annotation.EnforcePermission(MODIFY_AUDIO_SETTINGS_PRIVILEGED)
     public void registerStreamAliasingDispatcher(IStreamAliasingDispatcher isad, boolean register) {
         super.registerStreamAliasingDispatcher_enforcePermission();
         Objects.requireNonNull(isad);
@@ -5108,7 +5145,7 @@ public class AudioService extends IAudioService.Stub
      * @see AudioManager#getIndependentStreamTypes()
      * @return the list of non-aliased stream types
      */
-    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
+    @android.annotation.EnforcePermission(MODIFY_AUDIO_SETTINGS_PRIVILEGED)
     public ArrayList<Integer> getIndependentStreamTypes() {
         super.getIndependentStreamTypes_enforcePermission();
 
@@ -5130,7 +5167,7 @@ public class AudioService extends IAudioService.Stub
      * @param sourceStreamType the stream type for which the alias is queried
      * @return the stream alias
      */
-    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
+    @android.annotation.EnforcePermission(MODIFY_AUDIO_SETTINGS_PRIVILEGED)
     public @AudioManager.PublicStreamTypes
     int getStreamTypeAlias(@AudioManager.PublicStreamTypes int sourceStreamType) {
         super.getStreamTypeAlias_enforcePermission();
@@ -5145,7 +5182,7 @@ public class AudioService extends IAudioService.Stub
      * @return true when volume control is performed through volume groups, false if it uses
      *     stream types.
      */
-    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
+    @android.annotation.EnforcePermission(MODIFY_AUDIO_SETTINGS_PRIVILEGED)
     public boolean isVolumeControlUsingVolumeGroups() {
         super.isVolumeControlUsingVolumeGroups_enforcePermission();
 
@@ -8251,7 +8288,7 @@ public class AudioService extends IAudioService.Stub
             volumeChangedOptions.setDeliveryGroupPolicy(DELIVERY_GROUP_POLICY_MOST_RECENT);
             volumeChangedOptions.setDeliveryGroupMatchingKey(
                     AudioManager.VOLUME_CHANGED_ACTION, String.valueOf(mStreamType));
-            volumeChangedOptions.setDeferUntilActive(true);
+            volumeChangedOptions.setDeferralPolicy(BroadcastOptions.DEFERRAL_POLICY_UNTIL_ACTIVE);
             mVolumeChangedOptions = volumeChangedOptions.toBundle();
 
             mStreamDevicesChanged = new Intent(AudioManager.STREAM_DEVICES_CHANGED_ACTION);
@@ -8260,7 +8297,8 @@ public class AudioService extends IAudioService.Stub
             streamDevicesChangedOptions.setDeliveryGroupPolicy(DELIVERY_GROUP_POLICY_MOST_RECENT);
             streamDevicesChangedOptions.setDeliveryGroupMatchingKey(
                     AudioManager.STREAM_DEVICES_CHANGED_ACTION, String.valueOf(mStreamType));
-            streamDevicesChangedOptions.setDeferUntilActive(true);
+            streamDevicesChangedOptions.setDeferralPolicy(
+                    BroadcastOptions.DEFERRAL_POLICY_UNTIL_ACTIVE);
             mStreamDevicesChangedOptions = streamDevicesChangedOptions.toBundle();
         }
 
@@ -9303,6 +9341,10 @@ public class AudioService extends IAudioService.Stub
                     onLowerVolumeToRs1();
                     break;
 
+                case MSG_CONFIGURATION_CHANGED:
+                    onConfigurationChanged();
+                    break;
+
                 default:
                     if (msg.what >= SAFE_MEDIA_VOLUME_MSG_START) {
                         // msg could be for the SoundDoseHelper
@@ -9485,7 +9527,12 @@ public class AudioService extends IAudioService.Stub
                 }
                 AudioSystem.setParameters("screen_state=off");
             } else if (action.equals(Intent.ACTION_CONFIGURATION_CHANGED)) {
-                handleConfigurationChanged(context);
+                sendMsg(mAudioHandler,
+                        MSG_CONFIGURATION_CHANGED,
+                        SENDMSG_REPLACE,
+                        0,
+                        0,
+                        null, 0);
             } else if (action.equals(Intent.ACTION_USER_SWITCHED)) {
                 if (mUserSwitchedReceived) {
                     // attempt to stop music playback for background user except on first user
@@ -10226,10 +10273,30 @@ public class AudioService extends IAudioService.Stub
     }
 
     //==========================================================================================
+
+    // camera sound is forced if any of the resources corresponding to one active SIM
+    // demands it.
     private boolean readCameraSoundForced() {
-        return SystemProperties.getBoolean("audio.camerasound.force", false) ||
-                mContext.getResources().getBoolean(
-                        com.android.internal.R.bool.config_camera_sound_forced);
+        if (SystemProperties.getBoolean("audio.camerasound.force", false)
+                || mContext.getResources().getBoolean(
+                        com.android.internal.R.bool.config_camera_sound_forced)) {
+            return true;
+        }
+
+        SubscriptionManager subscriptionManager = mContext.getSystemService(
+                SubscriptionManager.class);
+        if (subscriptionManager == null) {
+            Log.e(TAG, "readCameraSoundForced cannot create SubscriptionManager!");
+            return false;
+        }
+        int[] subscriptionIds = subscriptionManager.getActiveSubscriptionIdList(false);
+        for (int subId : subscriptionIds) {
+            if (SubscriptionManager.getResourcesForSubId(mContext, subId).getBoolean(
+                    com.android.internal.R.bool.config_camera_sound_forced)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     //==========================================================================================
@@ -10440,11 +10507,11 @@ public class AudioService extends IAudioService.Stub
      * Monitoring rotation is optional, and is defined by the definition and value
      * of the "ro.audio.monitorRotation" system property.
      */
-    private void handleConfigurationChanged(Context context) {
+    private void onConfigurationChanged() {
         try {
             // reading new configuration "safely" (i.e. under try catch) in case anything
             // goes wrong.
-            Configuration config = context.getResources().getConfiguration();
+            Configuration config = mContext.getResources().getConfiguration();
             mSoundDoseHelper.configureSafeMedia(/*forced*/false, TAG);
 
             boolean cameraSoundForced = readCameraSoundForced();
@@ -10471,7 +10538,7 @@ public class AudioService extends IAudioService.Stub
                     mDeviceBroker.setForceUse_Async(AudioSystem.FOR_SYSTEM,
                             cameraSoundForced ?
                                     AudioSystem.FORCE_SYSTEM_ENFORCED : AudioSystem.FORCE_NONE,
-                            "handleConfigurationChanged");
+                            "onConfigurationChanged");
                     sendMsg(mAudioHandler,
                             MSG_SET_ALL_VOLUMES,
                             SENDMSG_QUEUE,
@@ -10542,49 +10609,53 @@ public class AudioService extends IAudioService.Stub
     }
 
     @Override
-    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
-    public float getRs2Value() {
-        super.getRs2Value_enforcePermission();
-        return mSoundDoseHelper.getRs2Value();
+    @android.annotation.EnforcePermission(MODIFY_AUDIO_SETTINGS_PRIVILEGED)
+    public float getOutputRs2UpperBound() {
+        super.getOutputRs2UpperBound_enforcePermission();
+        return mSoundDoseHelper.getOutputRs2UpperBound();
     }
 
     @Override
-    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
-    public void setRs2Value(float rs2Value) {
-        super.setRs2Value_enforcePermission();
-        mSoundDoseHelper.setRs2Value(rs2Value);
+    @android.annotation.EnforcePermission(MODIFY_AUDIO_SETTINGS_PRIVILEGED)
+    public void setOutputRs2UpperBound(float rs2Value) {
+        super.setOutputRs2UpperBound_enforcePermission();
+        mSoundDoseHelper.setOutputRs2UpperBound(rs2Value);
     }
 
     @Override
-    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
+    @android.annotation.EnforcePermission(MODIFY_AUDIO_SETTINGS_PRIVILEGED)
     public float getCsd() {
         super.getCsd_enforcePermission();
         return mSoundDoseHelper.getCsd();
     }
 
     @Override
-    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
+    @android.annotation.EnforcePermission(MODIFY_AUDIO_SETTINGS_PRIVILEGED)
     public void setCsd(float csd) {
         super.setCsd_enforcePermission();
-        mSoundDoseHelper.setCsd(csd);
+        if (csd < 0.0f) {
+            mSoundDoseHelper.resetCsdTimeouts();
+        } else {
+            mSoundDoseHelper.setCsd(csd);
+        }
     }
 
     @Override
-    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
+    @android.annotation.EnforcePermission(MODIFY_AUDIO_SETTINGS_PRIVILEGED)
     public void forceUseFrameworkMel(boolean useFrameworkMel) {
         super.forceUseFrameworkMel_enforcePermission();
         mSoundDoseHelper.forceUseFrameworkMel(useFrameworkMel);
     }
 
     @Override
-    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
+    @android.annotation.EnforcePermission(MODIFY_AUDIO_SETTINGS_PRIVILEGED)
     public void forceComputeCsdOnAllDevices(boolean computeCsdOnAllDevices) {
         super.forceComputeCsdOnAllDevices_enforcePermission();
         mSoundDoseHelper.forceComputeCsdOnAllDevices(computeCsdOnAllDevices);
     }
 
     @Override
-    @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED)
+    @android.annotation.EnforcePermission(MODIFY_AUDIO_SETTINGS_PRIVILEGED)
     public boolean isCsdEnabled() {
         super.isCsdEnabled_enforcePermission();
         return mSoundDoseHelper.isCsdEnabled();

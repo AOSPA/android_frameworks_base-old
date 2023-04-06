@@ -385,9 +385,11 @@ class BroadcastProcessQueue {
     public void setProcess(@Nullable ProcessRecord app) {
         this.app = app;
         if (app != null) {
+            setProcessCached(app.isCached());
             setProcessInstrumented(app.getActiveInstrumentation() != null);
             setProcessPersistent(app.isPersistent());
         } else {
+            setProcessCached(false);
             setProcessInstrumented(false);
             setProcessPersistent(false);
         }
@@ -397,7 +399,8 @@ class BroadcastProcessQueue {
      * Update if this process is in the "cached" state, typically signaling that
      * broadcast dispatch should be paused or delayed.
      */
-    public void setProcessCached(boolean cached) {
+    @VisibleForTesting
+    void setProcessCached(boolean cached) {
         if (mProcessCached != cached) {
             mProcessCached = cached;
             invalidateRunnableAt();

@@ -22,7 +22,6 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.Display.TYPE_INTERNAL;
-import static android.view.InsetsFrameProvider.SOURCE_FRAME;
 import static android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
 import static android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS;
 import static android.view.WindowInsetsController.APPEARANCE_LOW_PROFILE_BARS;
@@ -185,6 +184,7 @@ public class DisplayPolicy {
 
     private final boolean mCarDockEnablesAccelerometer;
     private final boolean mDeskDockEnablesAccelerometer;
+    private final boolean mDeskDockRespectsNoSensorAndLockedWithoutAccelerometer;
     private final AccessibilityManager mAccessibilityManager;
     private final ImmersiveModeConfirmation mImmersiveModeConfirmation;
     private final ScreenshotHelper mScreenshotHelper;
@@ -440,6 +440,8 @@ public class DisplayPolicy {
         final Resources r = mContext.getResources();
         mCarDockEnablesAccelerometer = r.getBoolean(R.bool.config_carDockEnablesAccelerometer);
         mDeskDockEnablesAccelerometer = r.getBoolean(R.bool.config_deskDockEnablesAccelerometer);
+        mDeskDockRespectsNoSensorAndLockedWithoutAccelerometer =
+                r.getBoolean(R.bool.config_deskRespectsNoSensorAndLockedWithoutAccelerometer);
         mCanSystemBarsBeShownByUser = !r.getBoolean(
                 R.bool.config_remoteInsetsControllerControlsSystemBars) || r.getBoolean(
                 R.bool.config_remoteInsetsControllerSystemBarsCanBeShownByUserAction);
@@ -856,6 +858,10 @@ public class DisplayPolicy {
         return mDeskDockEnablesAccelerometer;
     }
 
+    boolean isDeskDockRespectsNoSensorAndLockedWithoutAccelerometer() {
+        return mDeskDockRespectsNoSensorAndLockedWithoutAccelerometer;
+    }
+
     public void setPersistentVrModeEnabled(boolean persistentVrModeEnabled) {
         mPersistentVrModeEnabled = persistentVrModeEnabled;
     }
@@ -1226,7 +1232,7 @@ public class DisplayPolicy {
                 // runtime as ensured in WMS. Make use of the index in the provider directly
                 // to access the latest provided size at runtime.
                 final TriConsumer<DisplayFrames, WindowContainer, Rect> frameProvider =
-                        getFrameProvider(win, provider, i);
+                        getFrameProvider(win, i);
                 final InsetsFrameProvider.InsetsSizeOverride[] overrides =
                         provider.getInsetsSizeOverrides();
                 final SparseArray<TriConsumer<DisplayFrames, WindowContainer, Rect>>
@@ -1252,19 +1258,15 @@ public class DisplayPolicy {
         }
     }
 
-    @Nullable
     private TriConsumer<DisplayFrames, WindowContainer, Rect> getFrameProvider(WindowState win,
-            InsetsFrameProvider provider, int index) {
-        if (provider.getInsetsSize() == null && provider.getSource() == SOURCE_FRAME) {
-            return null;
-        }
+            int index) {
         return (displayFrames, windowContainer, inOutFrame) -> {
             final LayoutParams lp = win.mAttrs.forRotation(displayFrames.mRotation);
             final InsetsFrameProvider ifp = lp.providedInsets[index];
             InsetsFrameProvider.calculateInsetsFrame(displayFrames.mUnrestricted,
                     windowContainer.getBounds(), displayFrames.mDisplayCutoutSafe, inOutFrame,
                     ifp.getSource(), ifp.getInsetsSize(), lp.privateFlags,
-                    ifp.getMinimalInsetsSizeInDisplayCutoutSafe());
+                    ifp.getMinimalInsetsSizeInDisplayCutoutSafe(), win.mGivenContentInsets);
         };
     }
 
@@ -1277,7 +1279,8 @@ public class DisplayPolicy {
             InsetsFrameProvider.calculateInsetsFrame(displayFrames.mUnrestricted,
                     windowContainer.getBounds(), displayFrames.mDisplayCutoutSafe, inOutFrame,
                     ifp.getSource(), ifp.getInsetsSizeOverrides()[overrideIndex].getInsetsSize(),
-                    lp.privateFlags, null /* displayCutoutSafeInsetsSize */);
+                    lp.privateFlags, null /* displayCutoutSafeInsetsSize */,
+                    null /* givenContentInsets */);
         };
     }
 
@@ -2604,6 +2607,8 @@ public class DisplayPolicy {
         pw.print("mCarDockEnablesAccelerometer="); pw.print(mCarDockEnablesAccelerometer);
         pw.print(" mDeskDockEnablesAccelerometer=");
         pw.println(mDeskDockEnablesAccelerometer);
+        pw.print(" mDeskDockRespectsNoSensorAndLockedWithoutAccelerometer=");
+        pw.println(mDeskDockRespectsNoSensorAndLockedWithoutAccelerometer);
         pw.print(prefix); pw.print("mDockMode="); pw.print(Intent.dockStateToString(mDockMode));
         pw.print(" mLidState="); pw.println(WindowManagerFuncs.lidStateToString(mLidState));
         pw.print(prefix); pw.print("mAwake="); pw.print(mAwake);

@@ -1122,7 +1122,7 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
             }
 
             r.terminalCount++;
-            notifyFinishReceiver(queue, r, index, receiver);
+            notifyFinishReceiver(queue, app, r, index, receiver);
             checkFinished = true;
         }
         // When entire ordered broadcast finished, deliver final result
@@ -1328,7 +1328,9 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
                 synchronized (mService) {
                     BroadcastProcessQueue leaf = mProcessQueues.get(uid);
                     while (leaf != null) {
-                        leaf.setProcessCached(cached);
+                        // Update internal state by refreshing values previously
+                        // read from any known running process
+                        leaf.setProcess(leaf.app);
                         updateQueueDeferred(leaf);
                         updateRunnableList(leaf);
                         leaf = leaf.processNameNext;
@@ -1339,7 +1341,7 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
         }, ActivityManager.UID_OBSERVER_CACHED, 0, "android");
 
         // Kick off periodic health checks
-        checkHealthLocked();
+        mLocalHandler.sendEmptyMessage(MSG_CHECK_HEALTH);
     }
 
     @Override
@@ -1593,9 +1595,10 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
      * typically for internal bookkeeping.
      */
     private void notifyFinishReceiver(@Nullable BroadcastProcessQueue queue,
-            @NonNull BroadcastRecord r, int index, @NonNull Object receiver) {
+            @Nullable ProcessRecord app, @NonNull BroadcastRecord r, int index,
+            @NonNull Object receiver) {
         if (r.wasDeliveryAttempted(index)) {
-            logBroadcastDeliveryEventReported(queue, r, index, receiver);
+            logBroadcastDeliveryEventReported(queue, app, r, index, receiver);
         }
 
         final boolean recordFinished = (r.terminalCount == r.receivers.size());
@@ -1605,7 +1608,8 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
     }
 
     private void logBroadcastDeliveryEventReported(@Nullable BroadcastProcessQueue queue,
-            @NonNull BroadcastRecord r, int index, @NonNull Object receiver) {
+            @Nullable ProcessRecord app, @NonNull BroadcastRecord r, int index,
+            @NonNull Object receiver) {
         // Report statistics for each individual receiver
         final int uid = getReceiverUid(receiver);
         final int senderUid = (r.callingUid == -1) ? Process.SYSTEM_UID : r.callingUid;
@@ -1631,7 +1635,8 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
                     ? SERVICE_REQUEST_EVENT_REPORTED__PACKAGE_STOPPED_STATE__PACKAGE_STATE_STOPPED
                     : SERVICE_REQUEST_EVENT_REPORTED__PACKAGE_STOPPED_STATE__PACKAGE_STATE_NORMAL;
             FrameworkStatsLog.write(BROADCAST_DELIVERY_EVENT_REPORTED, uid, senderUid, actionName,
-                    receiverType, type, dispatchDelay, receiveDelay, finishDelay, packageState);
+                    receiverType, type, dispatchDelay, receiveDelay, finishDelay, packageState,
+                    app != null ? app.info.packageName : null, r.callerPackage);
         }
     }
 

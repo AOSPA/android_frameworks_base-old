@@ -720,14 +720,13 @@
          display is powered on at the same time. -->
     <bool name="config_supportsConcurrentInternalDisplays">true</bool>
 
-    <!-- Map of DeviceState to rotation lock setting. Each entry must be in the format
-         "key:value", for example: "0:1".
-          The keys are device states, and the values are one of
-          Settings.Secure.DeviceStateRotationLockSetting.
-          Any device state that doesn't have a default set here will be treated as
-          DEVICE_STATE_ROTATION_LOCK_IGNORED meaning it will not have its own rotation lock setting.
-          If this map is missing, the feature is disabled and only one global rotation lock setting
-           will apply, regardless of device state. -->
+    <!-- Map of device posture to rotation lock setting. Each entry must be in the format
+         "key:value", or "key:value:fallback_key" for example: "0:1" or "2:0:1". The keys are one of
+         Settings.Secure.DeviceStateRotationLockKey, and the values are one of
+         Settings.Secure.DeviceStateRotationLockSetting.
+         The fallback is a key to a device posture that can be specified when the value is
+         Settings.Secure.DEVICE_STATE_ROTATION_LOCK_IGNORED.
+     -->
     <string-array name="config_perDeviceStateRotationLockDefaults" />
 
     <!-- Dock behavior -->
@@ -755,6 +754,11 @@
          apart and the docks cannot report their true orientation on their own,
          we rely on gravity to determine the effective orientation. -->
     <bool name="config_deskDockEnablesAccelerometer">true</bool>
+
+    <!-- Control whether nosensor and locked orientation requests are respected from the app when
+         config_deskDockEnablesAccelerometer is set to false.
+         TODO(b/274763533): Consider making true by default and removing this. -->
+    <bool name="config_deskRespectsNoSensorAndLockedWithoutAccelerometer">false</bool>
 
     <!-- Car dock behavior -->
 
@@ -2082,7 +2086,7 @@
     <integer name="config_audio_ring_vol_default">5</integer>
 
     <!-- Enable sound dose computation and warnings -->
-    <bool name="config_audio_csd_enabled_default">false</bool>
+    <bool name="config_audio_csd_enabled_default">true</bool>
 
     <!-- The default value for whether head tracking for
          spatial audio is enabled for a newly connected audio device -->
@@ -3256,6 +3260,9 @@
 
     <!-- Feature flag to store TaskSnapshot in 16 bit pixel format to save memory. -->
     <bool name="config_use16BitTaskSnapshotPixelFormat">false</bool>
+
+    <!-- The amount to scale fullscreen activity snapshot for predict-back animation. -->
+    <item name="config_resActivitySnapshotScale" format="float" type="dimen">0.6</item>
 
     <!-- Determines whether recent tasks are provided to the user. Default device has recents
          property. If this is false, then the following recents config flags are ignored. -->
@@ -5515,6 +5522,10 @@
     <!-- Whether vertical reachability repositioning is allowed for letterboxed fullscreen apps. -->
     <bool name="config_letterboxIsVerticalReachabilityEnabled">false</bool>
 
+    <!-- Whether book mode automatic horizontal reachability positioning is allowed for letterboxed
+        fullscreen apps -->
+    <bool name="config_letterboxIsAutomaticReachabilityInBookModeEnabled">false</bool>
+
     <!-- Default horizontal position of the letterboxed app window when reachability is
         enabled and an app is fullscreen in landscape device orientation. When reachability is
         enabled, the position can change between left, center and right. This config defines the
@@ -6117,7 +6128,7 @@
     <bool name="config_settingsHelpLinksEnabled">false</bool>
 
     <!-- Whether or not to enable the lock screen entry point for the QR code scanner. -->
-    <bool name="config_enableQrCodeScannerOnLockScreen">false</bool>
+    <bool name="config_enableQrCodeScannerOnLockScreen">true</bool>
 
     <!-- Default component for QR code scanner -->
     <string name="config_defaultQrCodeComponent"></string>

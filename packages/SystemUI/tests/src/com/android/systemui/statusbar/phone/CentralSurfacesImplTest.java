@@ -347,7 +347,6 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
         mNotificationInterruptStateProvider =
                 new TestableNotificationInterruptStateProviderImpl(mContext.getContentResolver(),
                         mPowerManager,
-                        mDreamManager,
                         mAmbientDisplayConfiguration,
                         mStatusBarStateController,
                         mKeyguardStateController,
@@ -730,7 +729,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
     public void testShouldHeadsUp_nonSuppressedGroupSummary() throws Exception {
         when(mPowerManager.isScreenOn()).thenReturn(true);
         when(mHeadsUpManager.isSnoozed(anyString())).thenReturn(false);
-        when(mDreamManager.isDreaming()).thenReturn(false);
+        when(mStatusBarStateController.isDreaming()).thenReturn(false);
 
         Notification n = new Notification.Builder(getContext(), "a")
                 .setGroup("a")
@@ -753,7 +752,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
     public void testShouldHeadsUp_suppressedGroupSummary() throws Exception {
         when(mPowerManager.isScreenOn()).thenReturn(true);
         when(mHeadsUpManager.isSnoozed(anyString())).thenReturn(false);
-        when(mDreamManager.isDreaming()).thenReturn(false);
+        when(mStatusBarStateController.isDreaming()).thenReturn(false);
 
         Notification n = new Notification.Builder(getContext(), "a")
                 .setGroup("a")
@@ -776,7 +775,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
     public void testShouldHeadsUp_suppressedHeadsUp() throws Exception {
         when(mPowerManager.isScreenOn()).thenReturn(true);
         when(mHeadsUpManager.isSnoozed(anyString())).thenReturn(false);
-        when(mDreamManager.isDreaming()).thenReturn(false);
+        when(mStatusBarStateController.isDreaming()).thenReturn(false);
 
         Notification n = new Notification.Builder(getContext(), "a").build();
 
@@ -797,7 +796,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
     public void testShouldHeadsUp_noSuppressedHeadsUp() throws Exception {
         when(mPowerManager.isScreenOn()).thenReturn(true);
         when(mHeadsUpManager.isSnoozed(anyString())).thenReturn(false);
-        when(mDreamManager.isDreaming()).thenReturn(false);
+        when(mStatusBarStateController.isDreaming()).thenReturn(false);
 
         Notification n = new Notification.Builder(getContext(), "a").build();
 
@@ -1343,6 +1342,18 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
     }
 
     @Test
+    public void keyguard_notHidden_ifGoingAwayAndOccluded() {
+        setKeyguardShowingAndOccluded(true /* showing */, false /* occluded */);
+
+        when(mKeyguardStateController.isKeyguardGoingAway()).thenReturn(true);
+        when(mKeyguardStateController.isOccluded()).thenReturn(true);
+
+        mCentralSurfaces.updateIsKeyguard(false);
+
+        verify(mStatusBarStateController, never()).setState(eq(SHADE), anyBoolean());
+    }
+
+    @Test
     public void frpLockedDevice_shadeDisabled() {
         when(mDeviceProvisionedController.isFrpActive()).thenReturn(true);
         when(mDozeServiceHost.isPulsing()).thenReturn(true);
@@ -1400,7 +1411,6 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
         TestableNotificationInterruptStateProviderImpl(
                 ContentResolver contentResolver,
                 PowerManager powerManager,
-                IDreamManager dreamManager,
                 AmbientDisplayConfiguration ambientDisplayConfiguration,
                 StatusBarStateController controller,
                 KeyguardStateController keyguardStateController,
@@ -1415,7 +1425,6 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
             super(
                     contentResolver,
                     powerManager,
-                    dreamManager,
                     ambientDisplayConfiguration,
                     batteryController,
                     controller,

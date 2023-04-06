@@ -1746,7 +1746,8 @@ class WindowTestsBase extends SystemServiceTestsBase {
     static class TestTransitionController extends TransitionController {
         TestTransitionController(ActivityTaskManagerService atms) {
             super(atms);
-            mTaskSnapshotController = mock(TaskSnapshotController.class);
+            doReturn(this).when(atms).getTransitionController();
+            mSnapshotController = mock(SnapshotController.class);
             mTransitionTracer = mock(TransitionTracer.class);
         }
     }
@@ -1799,7 +1800,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
         }
 
         public void finish() {
-            mController.finishTransition(mLastTransit.getToken());
+            mController.finishTransition(mLastTransit);
         }
     }
 }

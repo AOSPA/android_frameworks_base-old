@@ -57,6 +57,7 @@ import android.content.pm.UserInfo;
 import android.content.res.Configuration;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
+import android.graphics.drawable.Icon;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.RemoteException;
@@ -1028,19 +1029,22 @@ public class BubbleController implements ConfigurationChangeListener {
      * the bubble or bubble stack.
      *
      * Some notes:
-     *    - Only one app bubble is supported at a time
+     *    - Only one app bubble is supported at a time, regardless of users. Multi-users support is
+     *      tracked in b/273533235.
      *    - Calling this method with a different intent than the existing app bubble will do nothing
      *
      * @param intent the intent to display in the bubble expanded view.
+     * @param user the {@link UserHandle} of the user to start this activity for.
+     * @param icon the {@link Icon} to use for the bubble view.
      */
-    public void showOrHideAppBubble(Intent intent) {
+    public void showOrHideAppBubble(Intent intent, UserHandle user, @Nullable Icon icon) {
         if (intent == null || intent.getPackage() == null) {
             Log.w(TAG, "App bubble failed to show, invalid intent: " + intent
                     + ((intent != null) ? " with package: " + intent.getPackage() : " "));
             return;
         }
 
-        PackageManager packageManager = getPackageManagerForUser(mContext, mCurrentUserId);
+        PackageManager packageManager = getPackageManagerForUser(mContext, user.getIdentifier());
         if (!isResizableActivity(intent, packageManager, KEY_APP_BUBBLE)) return;
 
         Bubble existingAppBubble = mBubbleData.getBubbleInStackWithKey(KEY_APP_BUBBLE);
@@ -1061,7 +1065,7 @@ public class BubbleController implements ConfigurationChangeListener {
             }
         } else {
             // App bubble does not exist, lets add and expand it
-            Bubble b = new Bubble(intent, UserHandle.of(mCurrentUserId), mMainExecutor);
+            Bubble b = new Bubble(intent, user, icon, mMainExecutor);
             b.setShouldAutoExpand(true);
             inflateAndAdd(b, /* suppressFlyout= */ true, /* showInShade= */ false);
         }
@@ -1869,10 +1873,9 @@ public class BubbleController implements ConfigurationChangeListener {
         }
 
         @Override
-        public void showOrHideAppBubble(Intent intent) {
-            mMainExecutor.execute(() -> {
-                BubbleController.this.showOrHideAppBubble(intent);
-            });
+        public void showOrHideAppBubble(Intent intent, UserHandle user, @Nullable Icon icon) {
+            mMainExecutor.execute(
+                    () -> BubbleController.this.showOrHideAppBubble(intent, user, icon));
         }
 
         @Override

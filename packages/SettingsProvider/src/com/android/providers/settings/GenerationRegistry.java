@@ -18,6 +18,7 @@ package com.android.providers.settings;
 
 import android.annotation.NonNull;
 import android.os.Bundle;
+import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.ArrayMap;
 import android.util.MemoryIntArray;
@@ -30,7 +31,7 @@ import java.io.IOException;
 
 /**
  * This class tracks changes for config/global/secure/system tables
- * on a per user basis and updates shared memory regions which
+ * on a per-user basis and updates shared memory regions which
  * client processes can read to determine if their local caches are
  * stale.
  */
@@ -49,10 +50,6 @@ final class GenerationRegistry {
     @GuardedBy("mLock")
     private final ArrayMap<Integer, ArrayMap<String, Integer>> mKeyToIndexMapMap = new ArrayMap<>();
 
-    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PRIVATE)
-    // Maximum number of backing stores allowed
-    static final int NUM_MAX_BACKING_STORE = 8;
-
     @GuardedBy("mLock")
     private int mNumBackingStore = 0;
 
@@ -64,8 +61,24 @@ final class GenerationRegistry {
     // The generation number is only increased when a new non-predefined setting is inserted
     private static final String DEFAULT_MAP_KEY_FOR_UNSET_SETTINGS = "";
 
-    public GenerationRegistry(Object lock) {
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PRIVATE)
+    // Minimum number of backing stores; supports 3 users
+    static final int MIN_NUM_BACKING_STORE = 8;
+    // Maximum number of backing stores; supports 18 users
+    static final int MAX_NUM_BACKING_STORE = 38;
+
+    private final int mMaxNumBackingStore;
+
+    GenerationRegistry(Object lock, int maxNumUsers) {
         mLock = lock;
+        // Add some buffer to maxNumUsers to accommodate corner cases when the actual number of
+        // users in the system exceeds the limit
+        maxNumUsers = maxNumUsers + 2;
+        // Number of backing stores needed for N users is (N + N + 1 + 1) = N * 2 + 2
+        // N Secure backing stores and N System backing stores, 1 Config and 1 Global for all users
+        // However, we always make sure that at least 3 users and at most 18 users are supported.
+        mMaxNumBackingStore = Math.min(Math.max(maxNumUsers * 2 + 2, MIN_NUM_BACKING_STORE),
+                MAX_NUM_BACKING_STORE);
     }
 
     /**
@@ -81,6 +94,10 @@ final class GenerationRegistry {
     }
 
     private void incrementGenerationInternal(int key, @NonNull String indexMapKey) {
+        if (SettingsState.isGlobalSettingsKey(key)) {
+            // Global settings are shared across users, so ignore the userId in the key
+            key = SettingsState.makeKey(SettingsState.SETTINGS_TYPE_GLOBAL, UserHandle.USER_SYSTEM);
+        }
         synchronized (mLock) {
             final MemoryIntArray backingStore = getBackingStoreLocked(key,
                     /* createIfNotExist= */ false);
@@ -126,6 +143,10 @@ final class GenerationRegistry {
      *  returning the result.
      */
     public void addGenerationData(Bundle bundle, int key, String indexMapKey) {
+        if (SettingsState.isGlobalSettingsKey(key)) {
+            // Global settings are shared across users, so ignore the userId in the key
+            key = SettingsState.makeKey(SettingsState.SETTINGS_TYPE_GLOBAL, UserHandle.USER_SYSTEM);
+        }
         synchronized (mLock) {
             final MemoryIntArray backingStore = getBackingStoreLocked(key,
                     /* createIfNotExist= */ true);
@@ -140,11 +161,9 @@ final class GenerationRegistry {
                     // Should not happen unless having error accessing the backing store
                     return;
                 }
-                bundle.putParcelable(Settings.CALL_METHOD_TRACK_GENERATION_KEY,
-                        backingStore);
+                bundle.putParcelable(Settings.CALL_METHOD_TRACK_GENERATION_KEY, backingStore);
                 bundle.putInt(Settings.CALL_METHOD_GENERATION_INDEX_KEY, index);
-                bundle.putInt(Settings.CALL_METHOD_GENERATION_KEY,
-                        backingStore.get(index));
+                bundle.putInt(Settings.CALL_METHOD_GENERATION_KEY, backingStore.get(index));
                 if (DEBUG) {
                     Slog.i(LOG_TAG, "Exported index:" + index + " for "
                             + (indexMapKey.isEmpty() ? "unset settings" : "setting:" + indexMapKey)
@@ -188,8 +207,10 @@ final class GenerationRegistry {
         }
         if (backingStore == null) {
             try {
-                if (mNumBackingStore >= NUM_MAX_BACKING_STORE) {
-                    Slog.e(LOG_TAG, "Error creating backing store - at capacity");
+                if (mNumBackingStore >= mMaxNumBackingStore) {
+                    if (DEBUG) {
+                        Slog.e(LOG_TAG, "Error creating backing store - at capacity");
+                    }
                     return null;
                 }
                 backingStore = new MemoryIntArray(MAX_BACKING_STORE_SIZE);
@@ -249,7 +270,9 @@ final class GenerationRegistry {
                             + " on user:" + SettingsState.getUserIdFromKey(key));
                 }
             } else {
-                Slog.e(LOG_TAG, "Could not allocate generation index");
+                if (DEBUG) {
+                    Slog.e(LOG_TAG, "Could not allocate generation index");
+                }
             }
         }
         return index;
@@ -263,5 +286,10 @@ final class GenerationRegistry {
             }
         }
         return -1;
+    }
+
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PRIVATE)
+    int getMaxNumBackingStores() {
+        return mMaxNumBackingStore;
     }
 }

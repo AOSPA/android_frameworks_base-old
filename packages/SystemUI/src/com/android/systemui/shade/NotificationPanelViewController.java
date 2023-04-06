@@ -161,6 +161,7 @@ import com.android.systemui.model.SysUiState;
 import com.android.systemui.navigationbar.NavigationBarController;
 import com.android.systemui.navigationbar.NavigationBarView;
 import com.android.systemui.navigationbar.NavigationModeController;
+import com.android.systemui.plugins.ClockAnimations;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.FalsingManager.FalsingTapListener;
 import com.android.systemui.plugins.qs.QS;
@@ -857,7 +858,7 @@ public final class NotificationPanelViewController implements Dumpable {
         mLayoutInflater = layoutInflater;
         mFeatureFlags = featureFlags;
         mAnimateBack = mFeatureFlags.isEnabled(Flags.WM_SHADE_ANIMATE_BACK_GESTURE);
-        mTrackpadGestureBack = mFeatureFlags.isEnabled(Flags.TRACKPAD_GESTURE_BACK);
+        mTrackpadGestureBack = mFeatureFlags.isEnabled(Flags.TRACKPAD_GESTURE_FEATURES);
         mFalsingCollector = falsingCollector;
         mPowerManager = powerManager;
         mWakeUpCoordinator = coordinator;
@@ -986,6 +987,7 @@ public final class NotificationPanelViewController implements Dumpable {
                 onTrackingStopped(false);
                 instantCollapse();
             } else {
+                mView.animate().cancel();
                 mView.animate()
                         .alpha(0f)
                         .setStartDelay(0)
@@ -1604,10 +1606,9 @@ public final class NotificationPanelViewController implements Dumpable {
                 transition.setInterpolator(Interpolators.FAST_OUT_SLOW_IN);
                 transition.setDuration(StackStateAnimator.ANIMATION_DURATION_STANDARD);
 
-                boolean customClockAnimation =
-                            mKeyguardStatusViewController.getClockAnimations() != null
-                            && mKeyguardStatusViewController.getClockAnimations()
-                                    .getHasCustomPositionUpdatedAnimation();
+                ClockAnimations clockAnims = mKeyguardStatusViewController.getClockAnimations();
+                boolean customClockAnimation = clockAnims != null
+                        && clockAnims.getHasCustomPositionUpdatedAnimation();
 
                 if (mFeatureFlags.isEnabled(Flags.STEP_CLOCK_ANIMATION) && customClockAnimation) {
                     // Find the clock, so we can exclude it from this transition.
@@ -2817,6 +2818,7 @@ public final class NotificationPanelViewController implements Dumpable {
     public void setIsLaunchAnimationRunning(boolean running) {
         boolean wasRunning = mIsLaunchAnimationRunning;
         mIsLaunchAnimationRunning = running;
+        mCentralSurfaces.updateIsKeyguard();
         if (wasRunning != mIsLaunchAnimationRunning) {
             mShadeExpansionStateManager.notifyLaunchingActivityChanged(running);
         }
@@ -2908,15 +2910,7 @@ public final class NotificationPanelViewController implements Dumpable {
         mHeadsUpManager.addListener(mOnHeadsUpChangedListener);
         mHeadsUpTouchHelper = new HeadsUpTouchHelper(headsUpManager,
                 mNotificationStackScrollLayoutController.getHeadsUpCallback(),
-                NotificationPanelViewController.this);
-    }
-
-    public void setTrackedHeadsUp(ExpandableNotificationRow pickedChild) {
-        if (pickedChild != null) {
-            updateTrackingHeadsUp(pickedChild);
-            mExpandingFromHeadsUp = true;
-        }
-        // otherwise we update the state when the expansion is finished
+                new HeadsUpNotificationViewControllerImpl());
     }
 
     private void onClosingFinished() {
@@ -2964,7 +2958,8 @@ public final class NotificationPanelViewController implements Dumpable {
     }
 
     /** Called when a HUN is dragged up or down to indicate the starting height for shade motion. */
-    public void setHeadsUpDraggingStartingHeight(int startHeight) {
+    @VisibleForTesting
+    void setHeadsUpDraggingStartingHeight(int startHeight) {
         mHeadsUpStartHeight = startHeight;
         float scrimMinFraction;
         if (mSplitShadeEnabled) {
@@ -2996,10 +2991,6 @@ public final class NotificationPanelViewController implements Dumpable {
         mMinFraction = minFraction;
         mDepthController.setPanelPullDownMinFraction(mMinFraction);
         mScrimController.setPanelScrimMinFraction(mMinFraction);
-    }
-
-    public void clearNotificationEffects() {
-        mCentralSurfaces.clearNotificationEffects();
     }
 
     private boolean isPanelVisibleBecauseOfHeadsUp() {
@@ -3171,7 +3162,9 @@ public final class NotificationPanelViewController implements Dumpable {
      */
     public void startFoldToAodAnimation(Runnable startAction, Runnable endAction,
             Runnable cancelAction) {
-        mView.animate()
+        final ViewPropertyAnimator viewAnimator = mView.animate();
+        viewAnimator.cancel();
+        viewAnimator
                 .translationX(0)
                 .alpha(1f)
                 .setDuration(ANIMATION_DURATION_FOLD_TO_AOD)
@@ -3190,9 +3183,14 @@ public final class NotificationPanelViewController implements Dumpable {
                     @Override
                     public void onAnimationEnd(Animator animation) {
                         endAction.run();
+
+                        viewAnimator.setListener(null);
+                        viewAnimator.setUpdateListener(null);
                     }
-                }).setUpdateListener(anim -> mKeyguardStatusViewController.animateFoldToAod(
-                        anim.getAnimatedFraction())).start();
+                })
+                .setUpdateListener(anim ->
+                        mKeyguardStatusViewController.animateFoldToAod(anim.getAnimatedFraction()))
+                .start();
     }
 
     /** Cancels fold to AOD transition and resets view state. */
@@ -3391,6 +3389,7 @@ public final class NotificationPanelViewController implements Dumpable {
     }
 
     public ViewPropertyAnimator fadeOut(long startDelayMs, long durationMs, Runnable endAction) {
+        mView.animate().cancel();
         return mView.animate().alpha(0).setStartDelay(startDelayMs).setDuration(
                 durationMs).setInterpolator(Interpolators.ALPHA_OUT).withLayer().withEndAction(
                 endAction);
@@ -3593,15 +3592,12 @@ public final class NotificationPanelViewController implements Dumpable {
     }
 
     private void endMotionEvent(MotionEvent event, float x, float y, boolean forceCancel) {
-        // don't fling while in keyguard to avoid jump in shade expand animation
-        boolean fullyExpandedInKeyguard = mBarState == KEYGUARD && mExpandedFraction >= 1.0;
         mTrackingPointer = -1;
         mAmbientState.setSwipingUp(false);
-        if (!fullyExpandedInKeyguard && ((mTracking && mTouchSlopExceeded)
-                || Math.abs(x - mInitialExpandX) > mTouchSlop
+        if ((mTracking && mTouchSlopExceeded) || Math.abs(x - mInitialExpandX) > mTouchSlop
                 || Math.abs(y - mInitialExpandY) > mTouchSlop
                 || (!isFullyExpanded() && !isFullyCollapsed())
-                || event.getActionMasked() == MotionEvent.ACTION_CANCEL || forceCancel)) {
+                || event.getActionMasked() == MotionEvent.ACTION_CANCEL || forceCancel) {
             mVelocityTracker.computeCurrentVelocity(1000);
             float vel = mVelocityTracker.getYVelocity();
             float vectorVel = (float) Math.hypot(
@@ -3643,15 +3639,21 @@ public final class NotificationPanelViewController implements Dumpable {
                             : (mKeyguardStateController.canDismissLockScreen()
                                     ? UNLOCK : BOUNCER_UNLOCK);
 
-            fling(vel, expand, isFalseTouch(x, y, interactionType));
+            // don't fling while in keyguard to avoid jump in shade expand animation;
+            // touch has been intercepted already so flinging here is redundant
+            if (mBarState == KEYGUARD && mExpandedFraction >= 1.0) {
+                mShadeLog.d("NPVC endMotionEvent - skipping fling on keyguard");
+            } else {
+                fling(vel, expand, isFalseTouch(x, y, interactionType));
+            }
             onTrackingStopped(expand);
             mUpdateFlingOnLayout = expand && mPanelClosedOnDown && !mHasLayoutedSinceDown;
             if (mUpdateFlingOnLayout) {
                 mUpdateFlingVelocity = vel;
             }
-        } else if (fullyExpandedInKeyguard || (!mCentralSurfaces.isBouncerShowing()
+        } else if (!mCentralSurfaces.isBouncerShowing()
                 && !mAlternateBouncerInteractor.isVisibleState()
-                && !mKeyguardStateController.isKeyguardGoingAway())) {
+                && !mKeyguardStateController.isKeyguardGoingAway()) {
             onEmptySpaceClick();
             onTrackingStopped(true);
         }
@@ -3794,10 +3796,10 @@ public final class NotificationPanelViewController implements Dumpable {
                     mHeightAnimator.end();
                 }
             }
-            mQsController.setShadeExpandedHeight(mExpandedHeight);
-            mExpansionDragDownAmountPx = h;
             mExpandedFraction = Math.min(1f,
                     maxPanelHeight == 0 ? 0 : mExpandedHeight / maxPanelHeight);
+            mQsController.setShadeExpansion(mExpandedHeight, mExpandedFraction);
+            mExpansionDragDownAmountPx = h;
             mAmbientState.setExpansionFraction(mExpandedFraction);
             onHeightUpdated(mExpandedHeight);
             updatePanelExpansionAndVisibility();
@@ -3875,6 +3877,10 @@ public final class NotificationPanelViewController implements Dumpable {
 
     public boolean isCollapsing() {
         return mClosing || mIsLaunchAnimationRunning;
+    }
+
+    public boolean isLaunchAnimationRunning() {
+        return mIsLaunchAnimationRunning;
     }
 
     public boolean isTracking() {
@@ -5122,17 +5128,26 @@ public final class NotificationPanelViewController implements Dumpable {
             captureValues(transitionValues);
         }
 
+        @Nullable
         @Override
-        public Animator createAnimator(ViewGroup sceneRoot, TransitionValues startValues,
-                TransitionValues endValues) {
+        public Animator createAnimator(ViewGroup sceneRoot, @Nullable TransitionValues startValues,
+                @Nullable TransitionValues endValues) {
+            if (startValues == null || endValues == null) {
+                return null;
+            }
             ValueAnimator anim = ValueAnimator.ofFloat(0, 1);
 
             Rect from = (Rect) startValues.values.get(PROP_BOUNDS);
             Rect to = (Rect) endValues.values.get(PROP_BOUNDS);
 
-            anim.addUpdateListener(
-                    animation -> mController.getClockAnimations().onPositionUpdated(
-                            from, to, animation.getAnimatedFraction()));
+            anim.addUpdateListener(animation -> {
+                ClockAnimations clockAnims = mController.getClockAnimations();
+                if (clockAnims == null) {
+                    return;
+                }
+
+                clockAnims.onPositionUpdated(from, to, animation.getAnimatedFraction());
+            });
 
             return anim;
         }
@@ -5140,6 +5155,33 @@ public final class NotificationPanelViewController implements Dumpable {
         @Override
         public String[] getTransitionProperties() {
             return TRANSITION_PROPERTIES;
+        }
+    }
+
+    private final class HeadsUpNotificationViewControllerImpl implements
+            HeadsUpTouchHelper.HeadsUpNotificationViewController {
+        @Override
+        public void setHeadsUpDraggingStartingHeight(int startHeight) {
+            NotificationPanelViewController.this.setHeadsUpDraggingStartingHeight(startHeight);
+        }
+
+        @Override
+        public void setTrackedHeadsUp(ExpandableNotificationRow pickedChild) {
+            if (pickedChild != null) {
+                updateTrackingHeadsUp(pickedChild);
+                mExpandingFromHeadsUp = true;
+            }
+            // otherwise we update the state when the expansion is finished
+        }
+
+        @Override
+        public void startExpand(float x, float y, boolean startTracking, float expandedHeight) {
+            startExpandMotion(x, y, startTracking, expandedHeight);
+        }
+
+        @Override
+        public void clearNotificationEffects() {
+            mCentralSurfaces.clearNotificationEffects();
         }
     }
 

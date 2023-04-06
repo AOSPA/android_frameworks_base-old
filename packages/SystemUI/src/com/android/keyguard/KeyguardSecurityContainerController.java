@@ -260,6 +260,14 @@ public class KeyguardSecurityContainerController extends ViewController<Keyguard
          */
         @Override
         public void finish(boolean strongAuth, int targetUserId) {
+            if (mFeatureFlags.isEnabled(Flags.PREVENT_BYPASS_KEYGUARD)
+                    && !mKeyguardStateController.canDismissLockScreen() && !strongAuth) {
+                Log.e(TAG,
+                        "Tried to dismiss keyguard when lockscreen is not dismissible and user "
+                                + "was not authenticated with a primary security method "
+                                + "(pin/password/pattern).");
+                return;
+            }
             // If there's a pending runnable because the user interacted with a widget
             // and we're leaving keyguard, then run it.
             boolean deferKeyguardDone = false;
@@ -1066,23 +1074,28 @@ public class KeyguardSecurityContainerController extends ViewController<Keyguard
     }
 
     private void reloadColors() {
-        reinflateViewFlipper();
-        mView.reloadColors();
+        reinflateViewFlipper(() -> mView.reloadColors());
     }
 
     /** Handles density or font scale changes. */
     private void onDensityOrFontScaleChanged() {
-        reinflateViewFlipper();
-        mView.onDensityOrFontScaleChanged();
+        reinflateViewFlipper(() -> mView.onDensityOrFontScaleChanged());
     }
 
     /**
      * Reinflate the view flipper child view.
      */
-    public void reinflateViewFlipper() {
+    public void reinflateViewFlipper(
+            KeyguardSecurityViewFlipperController.OnViewInflatedListener onViewInflatedListener) {
         mSecurityViewFlipperController.clearViews();
-        mSecurityViewFlipperController.getSecurityView(mCurrentSecurityMode,
-                mKeyguardSecurityCallback);
+        if (mFeatureFlags.isEnabled(Flags.ASYNC_INFLATE_BOUNCER)) {
+            mSecurityViewFlipperController.asynchronouslyInflateView(mCurrentSecurityMode,
+                    mKeyguardSecurityCallback, onViewInflatedListener);
+        } else {
+            mSecurityViewFlipperController.getSecurityView(mCurrentSecurityMode,
+                    mKeyguardSecurityCallback);
+            onViewInflatedListener.onViewInflated();
+        }
     }
 
     /**
