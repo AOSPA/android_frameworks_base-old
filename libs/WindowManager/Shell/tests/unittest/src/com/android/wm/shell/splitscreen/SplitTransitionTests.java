@@ -259,7 +259,8 @@ public class SplitTransitionTests extends ShellTestCase {
                 .build();
 
         // Create a request to bring home forward
-        TransitionRequestInfo request = new TransitionRequestInfo(TRANSIT_TO_FRONT, homeTask, null);
+        TransitionRequestInfo request = new TransitionRequestInfo(TRANSIT_TO_FRONT, homeTask,
+                mock(RemoteTransition.class));
         IBinder transition = mock(IBinder.class);
         WindowContainerTransaction result = mStageCoordinator.handleRequest(transition, request);
         // Don't handle recents opening
@@ -292,7 +293,8 @@ public class SplitTransitionTests extends ShellTestCase {
                 .build();
 
         // Create a request to bring home forward
-        TransitionRequestInfo request = new TransitionRequestInfo(TRANSIT_TO_FRONT, homeTask, null);
+        TransitionRequestInfo request = new TransitionRequestInfo(TRANSIT_TO_FRONT, homeTask,
+                mock(RemoteTransition.class));
         IBinder transition = mock(IBinder.class);
         WindowContainerTransaction result = mStageCoordinator.handleRequest(transition, request);
         // Don't handle recents opening

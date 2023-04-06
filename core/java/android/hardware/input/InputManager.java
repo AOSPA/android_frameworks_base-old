@@ -33,25 +33,18 @@ import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.hardware.BatteryState;
 import android.hardware.SensorManager;
-import android.hardware.lights.Light;
-import android.hardware.lights.LightState;
 import android.hardware.lights.LightsManager;
-import android.hardware.lights.LightsRequest;
 import android.os.Binder;
 import android.os.Build;
-import android.os.CombinedVibration;
 import android.os.Handler;
 import android.os.IBinder;
-import android.os.IVibratorStateListener;
 import android.os.InputEventInjectionSync;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.SystemClock;
-import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.os.VibratorManager;
 import android.util.Log;
-import android.util.SparseArray;
 import android.view.Display;
 import android.view.InputDevice;
 import android.view.InputEvent;
@@ -64,7 +57,6 @@ import android.view.WindowManager.LayoutParams;
 import android.view.inputmethod.InputMethodInfo;
 import android.view.inputmethod.InputMethodSubtype;
 
-import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 
 import java.lang.annotation.Retention;
@@ -105,21 +97,6 @@ public final class InputManager {
     @Nullable
     private Boolean mIsStylusPointerIconEnabled = null;
 
-    private final Object mBatteryListenersLock = new Object();
-    // Maps a deviceId whose battery is currently being monitored to an entry containing the
-    // registered listeners for that device.
-    @GuardedBy("mBatteryListenersLock")
-    private SparseArray<RegisteredBatteryListeners> mBatteryListeners;
-    @GuardedBy("mBatteryListenersLock")
-    private IInputDeviceBatteryListener mInputDeviceBatteryListener;
-
-    private final Object mKeyboardBacklightListenerLock = new Object();
-    @GuardedBy("mKeyboardBacklightListenerLock")
-    private ArrayList<KeyboardBacklightListenerDelegate> mKeyboardBacklightListeners;
-    @GuardedBy("mKeyboardBacklightListenerLock")
-    private IKeyboardBacklightListener mKeyboardBacklightListener;
-
-    private InputDeviceSensorManager mInputDeviceSensorManager;
     /**
      * Broadcast Action: Query available keyboard layouts.
      * <p>
@@ -1240,11 +1217,7 @@ public final class InputManager {
      * @hide
      */
     public InputSensorInfo[] getSensorList(int deviceId) {
-        try {
-            return mIm.getSensorList(deviceId);
-        } catch (RemoteException ex) {
-            throw ex.rethrowFromSystemServer();
-        }
+        return mGlobal.getSensorList(deviceId);
     }
 
     /**
@@ -1254,12 +1227,8 @@ public final class InputManager {
      */
     public boolean enableSensor(int deviceId, int sensorType, int samplingPeriodUs,
             int maxBatchReportLatencyUs) {
-        try {
-            return mIm.enableSensor(deviceId, sensorType, samplingPeriodUs,
-                    maxBatchReportLatencyUs);
-        } catch (RemoteException ex) {
-            throw ex.rethrowFromSystemServer();
-        }
+        return mGlobal.enableSensor(deviceId, sensorType, samplingPeriodUs,
+                maxBatchReportLatencyUs);
     }
 
     /**
@@ -1268,11 +1237,7 @@ public final class InputManager {
      * @hide
      */
     public void disableSensor(int deviceId, int sensorType) {
-        try {
-            mIm.disableSensor(deviceId, sensorType);
-        } catch (RemoteException ex) {
-            throw ex.rethrowFromSystemServer();
-        }
+        mGlobal.disableSensor(deviceId, sensorType);
     }
 
     /**
@@ -1281,11 +1246,7 @@ public final class InputManager {
      * @hide
      */
     public boolean flushSensor(int deviceId, int sensorType) {
-        try {
-            return mIm.flushSensor(deviceId, sensorType);
-        } catch (RemoteException ex) {
-            throw ex.rethrowFromSystemServer();
-        }
+        return mGlobal.flushSensor(deviceId, sensorType);
     }
 
     /**
@@ -1294,11 +1255,7 @@ public final class InputManager {
      * @hide
      */
     public boolean registerSensorListener(IInputSensorEventListener listener) {
-        try {
-            return mIm.registerSensorListener(listener);
-        } catch (RemoteException ex) {
-            throw ex.rethrowFromSystemServer();
-        }
+        return mGlobal.registerSensorListener(listener);
     }
 
     /**
@@ -1307,11 +1264,7 @@ public final class InputManager {
      * @hide
      */
     public void unregisterSensorListener(IInputSensorEventListener listener) {
-        try {
-            mIm.unregisterSensorListener(listener);
-        } catch (RemoteException ex) {
-            throw ex.rethrowFromSystemServer();
-        }
+        mGlobal.unregisterSensorListener(listener);
     }
 
     /**
@@ -1421,7 +1374,7 @@ public final class InputManager {
      * @hide
      */
     public Vibrator getInputDeviceVibrator(int deviceId, int vibratorId) {
-        return new InputDeviceVibrator(this, deviceId, vibratorId);
+        return new InputDeviceVibrator(deviceId, vibratorId);
     }
 
     /**
@@ -1432,85 +1385,7 @@ public final class InputManager {
      */
     @NonNull
     public VibratorManager getInputDeviceVibratorManager(int deviceId) {
-        return new InputDeviceVibratorManager(InputManager.this, deviceId);
-    }
-
-    /*
-     * Get the list of device vibrators
-     * @return The list of vibrators IDs
-     */
-    int[] getVibratorIds(int deviceId) {
-        try {
-            return mIm.getVibratorIds(deviceId);
-        } catch (RemoteException ex) {
-            throw ex.rethrowFromSystemServer();
-        }
-    }
-
-    /*
-     * Perform vibration effect
-     */
-    void vibrate(int deviceId, VibrationEffect effect, IBinder token) {
-        try {
-            mIm.vibrate(deviceId, effect, token);
-        } catch (RemoteException ex) {
-            throw ex.rethrowFromSystemServer();
-        }
-    }
-
-    /*
-     * Perform combined vibration effect
-     */
-    void vibrate(int deviceId, CombinedVibration effect, IBinder token) {
-        try {
-            mIm.vibrateCombined(deviceId, effect, token);
-        } catch (RemoteException ex) {
-            throw ex.rethrowFromSystemServer();
-        }
-    }
-
-    /*
-     * Cancel an ongoing vibration
-     */
-    void cancelVibrate(int deviceId, IBinder token) {
-        try {
-            mIm.cancelVibrate(deviceId, token);
-        } catch (RemoteException ex) {
-            throw ex.rethrowFromSystemServer();
-        }
-    }
-
-    /*
-     * Check if input device is vibrating
-     */
-    boolean isVibrating(int deviceId)  {
-        try {
-            return mIm.isVibrating(deviceId);
-        } catch (RemoteException ex) {
-            throw ex.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * Register input device vibrator state listener
-     */
-    boolean registerVibratorStateListener(int deviceId, IVibratorStateListener listener) {
-        try {
-            return mIm.registerVibratorStateListener(deviceId, listener);
-        } catch (RemoteException ex) {
-            throw ex.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * Unregister input device vibrator state listener
-     */
-    boolean unregisterVibratorStateListener(int deviceId, IVibratorStateListener listener) {
-        try {
-            return mIm.unregisterVibratorStateListener(deviceId, listener);
-        } catch (RemoteException ex) {
-            throw ex.rethrowFromSystemServer();
-        }
+        return new InputDeviceVibratorManager(deviceId);
     }
 
     /**
@@ -1520,10 +1395,7 @@ public final class InputManager {
      */
     @NonNull
     public SensorManager getInputDeviceSensorManager(int deviceId) {
-        if (mInputDeviceSensorManager == null) {
-            mInputDeviceSensorManager = new InputDeviceSensorManager(this);
-        }
-        return mInputDeviceSensorManager.getSensorManager(deviceId);
+        return mGlobal.getInputDeviceSensorManager(deviceId);
     }
 
     /**
@@ -1533,15 +1405,7 @@ public final class InputManager {
      */
     @NonNull
     public BatteryState getInputDeviceBatteryState(int deviceId, boolean hasBattery) {
-        if (!hasBattery) {
-            return new LocalBatteryState();
-        }
-        try {
-            final IInputDeviceBatteryState state = mIm.getBatteryState(deviceId);
-            return new LocalBatteryState(state.isPresent, state.status, state.capacity);
-        } catch (RemoteException ex) {
-            throw ex.rethrowFromSystemServer();
-        }
+        return mGlobal.getInputDeviceBatteryState(deviceId, hasBattery);
     }
 
     /**
@@ -1551,77 +1415,7 @@ public final class InputManager {
      */
     @NonNull
     public LightsManager getInputDeviceLightsManager(int deviceId) {
-        return new InputDeviceLightsManager(InputManager.this, deviceId);
-    }
-
-    /**
-     * Gets a list of light objects associated with an input device.
-     * @return The list of lights, never null.
-     */
-    @NonNull List<Light> getLights(int deviceId) {
-        try {
-            return mIm.getLights(deviceId);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * Returns the state of an input device light.
-     * @return the light state
-     */
-    @NonNull LightState getLightState(int deviceId, @NonNull Light light) {
-        try {
-            return mIm.getLightState(deviceId, light.getId());
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * Request to modify the states of multiple lights.
-     *
-     * @param request the settings for lights that should change
-     */
-    void requestLights(int deviceId, @NonNull LightsRequest request, IBinder token) {
-        try {
-            List<Integer> lightIdList = request.getLights();
-            int[] lightIds = new int[lightIdList.size()];
-            for (int i = 0; i < lightIds.length; i++) {
-                lightIds[i] = lightIdList.get(i);
-            }
-            List<LightState> lightStateList = request.getLightStates();
-            mIm.setLightStates(deviceId, lightIds,
-                    lightStateList.toArray(new LightState[0]),
-                    token);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * Open light session for input device manager
-     *
-     * @param token The token for the light session
-     */
-    void openLightSession(int deviceId, String opPkg, @NonNull IBinder token) {
-        try {
-            mIm.openLightSession(deviceId, opPkg, token);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * Close light session
-     *
-     */
-    void closeLightSession(int deviceId, @NonNull IBinder token) {
-        try {
-            mIm.closeLightSession(deviceId, token);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
+        return new InputDeviceLightsManager(getContext(), deviceId);
     }
 
     /**
@@ -1677,49 +1471,7 @@ public final class InputManager {
      */
     public void addInputDeviceBatteryListener(int deviceId, @NonNull Executor executor,
             @NonNull InputDeviceBatteryListener listener) {
-        Objects.requireNonNull(executor, "executor should not be null");
-        Objects.requireNonNull(listener, "listener should not be null");
-
-        synchronized (mBatteryListenersLock) {
-            if (mBatteryListeners == null) {
-                mBatteryListeners = new SparseArray<>();
-                mInputDeviceBatteryListener = new LocalInputDeviceBatteryListener();
-            }
-            RegisteredBatteryListeners listenersForDevice = mBatteryListeners.get(deviceId);
-            if (listenersForDevice == null) {
-                // The deviceId is currently not being monitored for battery changes.
-                // Start monitoring the device.
-                listenersForDevice = new RegisteredBatteryListeners();
-                mBatteryListeners.put(deviceId, listenersForDevice);
-                try {
-                    mIm.registerBatteryListener(deviceId, mInputDeviceBatteryListener);
-                } catch (RemoteException e) {
-                    throw e.rethrowFromSystemServer();
-                }
-            } else {
-                // The deviceId is already being monitored for battery changes.
-                // Ensure that the listener is not already registered.
-                final int numDelegates = listenersForDevice.mDelegates.size();
-                for (int i = 0; i < numDelegates; i++) {
-                    InputDeviceBatteryListener registeredListener =
-                            listenersForDevice.mDelegates.get(i).mListener;
-                    if (Objects.equals(listener, registeredListener)) {
-                        throw new IllegalArgumentException(
-                                "Attempting to register an InputDeviceBatteryListener that has "
-                                        + "already been registered for deviceId: "
-                                        + deviceId);
-                    }
-                }
-            }
-            final InputDeviceBatteryListenerDelegate delegate =
-                    new InputDeviceBatteryListenerDelegate(listener, executor);
-            listenersForDevice.mDelegates.add(delegate);
-
-            // Notify the listener immediately if we already have the latest battery state.
-            if (listenersForDevice.mInputDeviceBatteryState != null) {
-                delegate.notifyBatteryStateChanged(listenersForDevice.mInputDeviceBatteryState);
-            }
-        }
+        mGlobal.addInputDeviceBatteryListener(deviceId, executor, listener);
     }
 
     /**
@@ -1729,44 +1481,7 @@ public final class InputManager {
      */
     public void removeInputDeviceBatteryListener(int deviceId,
             @NonNull InputDeviceBatteryListener listener) {
-        Objects.requireNonNull(listener, "listener should not be null");
-
-        synchronized (mBatteryListenersLock) {
-            if (mBatteryListeners == null) {
-                return;
-            }
-            RegisteredBatteryListeners listenersForDevice = mBatteryListeners.get(deviceId);
-            if (listenersForDevice == null) {
-                // The deviceId is not currently being monitored.
-                return;
-            }
-            final List<InputDeviceBatteryListenerDelegate> delegates =
-                    listenersForDevice.mDelegates;
-            for (int i = 0; i < delegates.size();) {
-                if (Objects.equals(listener, delegates.get(i).mListener)) {
-                    delegates.remove(i);
-                    continue;
-                }
-                i++;
-            }
-            if (!delegates.isEmpty()) {
-                return;
-            }
-
-            // There are no more battery listeners for this deviceId. Stop monitoring this device.
-            mBatteryListeners.remove(deviceId);
-            try {
-                mIm.unregisterBatteryListener(deviceId, mInputDeviceBatteryListener);
-            } catch (RemoteException e) {
-                throw e.rethrowFromSystemServer();
-            }
-            if (mBatteryListeners.size() == 0) {
-                // There are no more devices being monitored, so the registered
-                // IInputDeviceBatteryListener will be automatically dropped by the server.
-                mBatteryListeners = null;
-                mInputDeviceBatteryListener = null;
-            }
-        }
+        mGlobal.removeInputDeviceBatteryListener(deviceId, listener);
     }
 
     /**
@@ -1792,30 +1507,7 @@ public final class InputManager {
     @RequiresPermission(Manifest.permission.MONITOR_KEYBOARD_BACKLIGHT)
     public void registerKeyboardBacklightListener(@NonNull Executor executor,
             @NonNull KeyboardBacklightListener listener) throws IllegalArgumentException {
-        Objects.requireNonNull(executor, "executor should not be null");
-        Objects.requireNonNull(listener, "listener should not be null");
-
-        synchronized (mKeyboardBacklightListenerLock) {
-            if (mKeyboardBacklightListener == null) {
-                mKeyboardBacklightListeners = new ArrayList<>();
-                mKeyboardBacklightListener = new LocalKeyboardBacklightListener();
-
-                try {
-                    mIm.registerKeyboardBacklightListener(mKeyboardBacklightListener);
-                } catch (RemoteException e) {
-                    throw e.rethrowFromSystemServer();
-                }
-            }
-            final int numListeners = mKeyboardBacklightListeners.size();
-            for (int i = 0; i < numListeners; i++) {
-                if (mKeyboardBacklightListeners.get(i).mListener == listener) {
-                    throw new IllegalArgumentException("Listener has already been registered!");
-                }
-            }
-            KeyboardBacklightListenerDelegate delegate =
-                    new KeyboardBacklightListenerDelegate(listener, executor);
-            mKeyboardBacklightListeners.add(delegate);
-        }
+        mGlobal.registerKeyboardBacklightListener(executor, listener);
     }
 
     /**
@@ -1828,23 +1520,7 @@ public final class InputManager {
     @RequiresPermission(Manifest.permission.MONITOR_KEYBOARD_BACKLIGHT)
     public void unregisterKeyboardBacklightListener(
             @NonNull KeyboardBacklightListener listener) {
-        Objects.requireNonNull(listener, "listener should not be null");
-
-        synchronized (mKeyboardBacklightListenerLock) {
-            if (mKeyboardBacklightListeners == null) {
-                return;
-            }
-            mKeyboardBacklightListeners.removeIf((delegate) -> delegate.mListener == listener);
-            if (mKeyboardBacklightListeners.isEmpty()) {
-                try {
-                    mIm.unregisterKeyboardBacklightListener(mKeyboardBacklightListener);
-                } catch (RemoteException e) {
-                    throw e.rethrowFromSystemServer();
-                }
-                mKeyboardBacklightListeners = null;
-                mKeyboardBacklightListener = null;
-            }
-        }
+        mGlobal.unregisterKeyboardBacklightListener(listener);
     }
 
     /**
@@ -1928,134 +1604,5 @@ public final class InputManager {
          */
         void onKeyboardBacklightChanged(
                 int deviceId, @NonNull KeyboardBacklightState state, boolean isTriggeredByKeyPress);
-    }
-
-    // Implementation of the android.hardware.BatteryState interface used to report the battery
-    // state via the InputDevice#getBatteryState() and InputDeviceBatteryListener interfaces.
-    private static final class LocalBatteryState extends BatteryState {
-        private final boolean mIsPresent;
-        private final int mStatus;
-        private final float mCapacity;
-
-        LocalBatteryState() {
-            this(false /*isPresent*/, BatteryState.STATUS_UNKNOWN, Float.NaN /*capacity*/);
-        }
-
-        LocalBatteryState(boolean isPresent, int status, float capacity) {
-            mIsPresent = isPresent;
-            mStatus = status;
-            mCapacity = capacity;
-        }
-
-        @Override
-        public boolean isPresent() {
-            return mIsPresent;
-        }
-
-        @Override
-        public int getStatus() {
-            return mStatus;
-        }
-
-        @Override
-        public float getCapacity() {
-            return mCapacity;
-        }
-    }
-
-    private static final class RegisteredBatteryListeners {
-        final List<InputDeviceBatteryListenerDelegate> mDelegates = new ArrayList<>();
-        IInputDeviceBatteryState mInputDeviceBatteryState;
-    }
-
-    private static final class InputDeviceBatteryListenerDelegate {
-        final InputDeviceBatteryListener mListener;
-        final Executor mExecutor;
-
-        InputDeviceBatteryListenerDelegate(InputDeviceBatteryListener listener, Executor executor) {
-            mListener = listener;
-            mExecutor = executor;
-        }
-
-        void notifyBatteryStateChanged(IInputDeviceBatteryState state) {
-            mExecutor.execute(() ->
-                    mListener.onBatteryStateChanged(state.deviceId, state.updateTime,
-                            new LocalBatteryState(state.isPresent, state.status, state.capacity)));
-        }
-    }
-
-    private class LocalInputDeviceBatteryListener extends IInputDeviceBatteryListener.Stub {
-        @Override
-        public void onBatteryStateChanged(IInputDeviceBatteryState state) {
-            synchronized (mBatteryListenersLock) {
-                if (mBatteryListeners == null) return;
-                final RegisteredBatteryListeners entry = mBatteryListeners.get(state.deviceId);
-                if (entry == null) return;
-
-                entry.mInputDeviceBatteryState = state;
-                final int numDelegates = entry.mDelegates.size();
-                for (int i = 0; i < numDelegates; i++) {
-                    entry.mDelegates.get(i)
-                            .notifyBatteryStateChanged(entry.mInputDeviceBatteryState);
-                }
-            }
-        }
-    }
-
-    // Implementation of the android.hardware.input.KeyboardBacklightState interface used to report
-    // the keyboard backlight state via the KeyboardBacklightListener interfaces.
-    private static final class LocalKeyboardBacklightState extends KeyboardBacklightState {
-
-        private final int mBrightnessLevel;
-        private final int mMaxBrightnessLevel;
-
-        LocalKeyboardBacklightState(int brightnessLevel, int maxBrightnessLevel) {
-            mBrightnessLevel = brightnessLevel;
-            mMaxBrightnessLevel = maxBrightnessLevel;
-        }
-
-        @Override
-        public int getBrightnessLevel() {
-            return mBrightnessLevel;
-        }
-
-        @Override
-        public int getMaxBrightnessLevel() {
-            return mMaxBrightnessLevel;
-        }
-    }
-
-    private static final class KeyboardBacklightListenerDelegate {
-        final KeyboardBacklightListener mListener;
-        final Executor mExecutor;
-
-        KeyboardBacklightListenerDelegate(KeyboardBacklightListener listener, Executor executor) {
-            mListener = listener;
-            mExecutor = executor;
-        }
-
-        void notifyKeyboardBacklightChange(int deviceId, IKeyboardBacklightState state,
-                boolean isTriggeredByKeyPress) {
-            mExecutor.execute(() ->
-                    mListener.onKeyboardBacklightChanged(deviceId,
-                            new LocalKeyboardBacklightState(state.brightnessLevel,
-                                    state.maxBrightnessLevel), isTriggeredByKeyPress));
-        }
-    }
-
-    private class LocalKeyboardBacklightListener extends IKeyboardBacklightListener.Stub {
-
-        @Override
-        public void onBrightnessChanged(int deviceId, IKeyboardBacklightState state,
-                boolean isTriggeredByKeyPress) {
-            synchronized (mKeyboardBacklightListenerLock) {
-                if (mKeyboardBacklightListeners == null) return;
-                final int numListeners = mKeyboardBacklightListeners.size();
-                for (int i = 0; i < numListeners; i++) {
-                    mKeyboardBacklightListeners.get(i)
-                            .notifyKeyboardBacklightChange(deviceId, state, isTriggeredByKeyPress);
-                }
-            }
-        }
     }
 }

@@ -3269,6 +3269,43 @@ public class Notification implements Parcelable
     /**
      * @hide
      */
+    public static boolean areIconsDifferent(Notification first, Notification second) {
+        return areIconsMaybeDifferent(first.getSmallIcon(), second.getSmallIcon())
+                || areIconsMaybeDifferent(first.getLargeIcon(), second.getLargeIcon());
+    }
+
+    /**
+     * Note that we aren't actually comparing the contents of the bitmaps here; this is only a
+     * cursory inspection. We will not return false negatives, but false positives are likely.
+     */
+    private static boolean areIconsMaybeDifferent(Icon a, Icon b) {
+        if (a == b) {
+            return false;
+        }
+        if (a == null || b == null) {
+            return true;
+        }
+        if (a.sameAs(b)) {
+            return false;
+        }
+        final int aType = a.getType();
+        if (aType != b.getType()) {
+            return true;
+        }
+        if (aType == Icon.TYPE_BITMAP || aType == Icon.TYPE_ADAPTIVE_BITMAP) {
+            final Bitmap aBitmap = a.getBitmap();
+            final Bitmap bBitmap = b.getBitmap();
+            return aBitmap.getWidth() != bBitmap.getWidth()
+                    || aBitmap.getHeight() != bBitmap.getHeight()
+                    || aBitmap.getConfig() != bBitmap.getConfig()
+                    || aBitmap.getGenerationId() != bBitmap.getGenerationId();
+        }
+        return true;
+    }
+
+    /**
+     * @hide
+     */
     public static boolean areStyledNotificationsVisiblyDifferent(Builder first, Builder second) {
         if (first.getStyle() == null) {
             return second.getStyle() != null;
@@ -4634,9 +4671,9 @@ public class Notification implements Parcelable
          * Set whether this is an "ongoing" notification.
          *
          * Ongoing notifications cannot be dismissed by the user on locked devices, or by
-         * notification listeners, and some notifications  (device management, media) cannot be
-         * dismissed on unlocked devices, so your application or service must take
-         * care of canceling them.
+         * notification listeners, and some notifications (call, device management, media) cannot
+         * be dismissed on unlocked devices, so your application or service must take care of
+         * canceling them.
          *
          * They are typically used to indicate a background task that the user is actively engaged
          * with (e.g., playing music) or is pending in some way and therefore occupying the device
@@ -5717,8 +5754,8 @@ public class Notification implements Parcelable
 
         private boolean isSnoozeSettingEnabled() {
             try {
-                return Settings.Secure.getInt(mContext.getContentResolver(),
-                    Settings.Secure.SHOW_NOTIFICATION_SNOOZE, 0) == 1;
+                return Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                    Settings.Secure.SHOW_NOTIFICATION_SNOOZE, 0, UserHandle.USER_CURRENT) == 1;
             } catch (SecurityException ex) {
                 // Most 3p apps can't access this snooze setting, so their NotificationListeners
                 // would be unable to create notification views if we propagated this exception.
@@ -7643,8 +7680,6 @@ public class Notification implements Parcelable
 
         /**
          * @hide
-         * Note that we aren't actually comparing the contents of the bitmaps here, so this
-         * is only doing a cursory inspection. Bitmaps of equal size will appear the same.
          */
         @Override
         public boolean areNotificationsVisiblyDifferent(Style other) {
@@ -7652,32 +7687,7 @@ public class Notification implements Parcelable
                 return true;
             }
             BigPictureStyle otherS = (BigPictureStyle) other;
-            return areIconsObviouslyDifferent(getBigPicture(), otherS.getBigPicture());
-        }
-
-        private static boolean areIconsObviouslyDifferent(Icon a, Icon b) {
-            if (a == b) {
-                return false;
-            }
-            if (a == null || b == null) {
-                return true;
-            }
-            if (a.sameAs(b)) {
-                return false;
-            }
-            final int aType = a.getType();
-            if (aType != b.getType()) {
-                return true;
-            }
-            if (aType == Icon.TYPE_BITMAP || aType == Icon.TYPE_ADAPTIVE_BITMAP) {
-                final Bitmap aBitmap = a.getBitmap();
-                final Bitmap bBitmap = b.getBitmap();
-                return aBitmap.getWidth() != bBitmap.getWidth()
-                        || aBitmap.getHeight() != bBitmap.getHeight()
-                        || aBitmap.getConfig() != bBitmap.getConfig()
-                        || aBitmap.getGenerationId() != bBitmap.getGenerationId();
-            }
-            return true;
+            return areIconsMaybeDifferent(getBigPicture(), otherS.getBigPicture());
         }
     }
 
@@ -9163,10 +9173,7 @@ public class Notification implements Parcelable
          *                   {@code null}, in which case the output switcher will be disabled.
          *                   This intent should open an Activity or it will be ignored.
          * @return MediaStyle
-         *
-         * @hide
          */
-        @SystemApi
         @RequiresPermission(android.Manifest.permission.MEDIA_CONTENT_CONTROL)
         @NonNull
         public MediaStyle setRemotePlaybackInfo(@NonNull CharSequence deviceName,

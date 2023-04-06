@@ -1228,7 +1228,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     private void finishHoldScreenUpdate() {
         final boolean hold = mTmpHoldScreenWindow != null;
         if (hold && mTmpHoldScreenWindow != mHoldScreenWindow) {
-            mHoldScreenWakeLock.setWorkSource(new WorkSource(mTmpHoldScreenWindow.mSession.mUid));
+            mHoldScreenWakeLock.setWorkSource(new WorkSource(mTmpHoldScreenWindow.mSession.mUid,
+                    mTmpHoldScreenWindow.mSession.mPackageName));
         }
         mHoldScreenWindow = mTmpHoldScreenWindow;
         mTmpHoldScreenWindow = null;
@@ -5932,7 +5933,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 mOffTokenAcquirer.release(mDisplayId);
             }
             ProtoLog.v(WM_DEBUG_CONTENT_RECORDING,
-                    "Display %d state is now (%d), so update recording?",
+                    "Content Recording: Display %d state is now (%d), so update recording?",
                     mDisplayId, displayState);
             if (lastDisplayState != displayState) {
                 // If state is on due to surface being added, then start recording.
@@ -6557,7 +6558,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         if (mirrorDisplayId == mDisplayId) {
             if (mDisplayId != DEFAULT_DISPLAY) {
                 ProtoLog.w(WM_DEBUG_CONTENT_RECORDING,
-                        "Attempting to mirror self on %d", mirrorDisplayId);
+                        "Content Recording: Attempting to mirror self on %d", mirrorDisplayId);
             }
             return false;
         }
@@ -6567,16 +6568,18 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         // to mirror the DEFAULT_DISPLAY so instead we just return
         DisplayContent mirrorDc = mRootWindowContainer.getDisplayContentOrCreate(mirrorDisplayId);
         if (mirrorDc == null && mDisplayId == DEFAULT_DISPLAY) {
-            ProtoLog.w(WM_DEBUG_CONTENT_RECORDING, "Found no matching mirror display for id=%d for"
-                    + " DEFAULT_DISPLAY. Nothing to mirror.", mirrorDisplayId);
+            ProtoLog.w(WM_DEBUG_CONTENT_RECORDING,
+                    "Content Recording: Found no matching mirror display for id=%d for "
+                            + "DEFAULT_DISPLAY. Nothing to mirror.",
+                    mirrorDisplayId);
             return false;
         }
 
         if (mirrorDc == null) {
             mirrorDc = mRootWindowContainer.getDefaultDisplay();
             ProtoLog.w(WM_DEBUG_CONTENT_RECORDING,
-                    "Attempting to mirror %d from %d but no DisplayContent associated. Changing "
-                            + "to mirror default display.",
+                    "Content Recording: Attempting to mirror %d from %d but no DisplayContent "
+                            + "associated. Changing to mirror default display.",
                     mirrorDisplayId, mDisplayId);
         }
 
@@ -6585,8 +6588,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 .setDisplayId(mDisplayId);
         setContentRecordingSession(session);
         ProtoLog.v(WM_DEBUG_CONTENT_RECORDING,
-                "Successfully created a ContentRecordingSession for displayId=%d to mirror "
-                        + "content from displayId=%d",
+                "Content Recording: Successfully created a ContentRecordingSession for "
+                        + "displayId=%d to mirror content from displayId=%d",
                 mDisplayId, mirrorDisplayId);
         return true;
     }

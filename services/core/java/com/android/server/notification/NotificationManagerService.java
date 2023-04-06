@@ -2340,7 +2340,6 @@ public class NotificationManagerService extends SystemService {
                 mAppOps,
                 new SysUiStatsEvent.BuilderFactory(),
                 mShowReviewPermissionsNotification);
-        mPreferencesHelper.updateFixedImportance(mUm.getUsers());
         mRankingHelper = new RankingHelper(getContext(),
                 mRankingHandler,
                 mPreferencesHelper,
@@ -2771,6 +2770,9 @@ public class NotificationManagerService extends SystemService {
             maybeShowInitialReviewPermissionsNotification();
         } else if (phase == SystemService.PHASE_ACTIVITY_MANAGER_READY) {
             mSnoozeHelper.scheduleRepostsForPersistedNotifications(System.currentTimeMillis());
+        } else if (phase == SystemService.PHASE_DEVICE_SPECIFIC_SERVICES_READY) {
+            mPreferencesHelper.updateFixedImportance(mUm.getUsers());
+            mPreferencesHelper.migrateNotificationPermissions(mUm.getUsers());
         }
     }
 
@@ -6827,7 +6829,8 @@ public class NotificationManagerService extends SystemService {
         }
 
         // Ensure MediaStyle has correct permissions for remote device extras
-        if (notification.isStyle(Notification.MediaStyle.class)) {
+        if (notification.isStyle(Notification.MediaStyle.class)
+                || notification.isStyle(Notification.DecoratedMediaCustomViewStyle.class)) {
             int hasMediaContentControlPermission = getContext().checkPermission(
                     android.Manifest.permission.MEDIA_CONTENT_CONTROL, -1, notificationUid);
             if (hasMediaContentControlPermission != PERMISSION_GRANTED) {
@@ -6864,7 +6867,8 @@ public class NotificationManagerService extends SystemService {
      * A notification should be dismissible, unless it's exempted for some reason.
      */
     private boolean canBeNonDismissible(ApplicationInfo ai, Notification notification) {
-        return notification.isMediaNotification() || isEnterpriseExempted(ai);
+        return notification.isMediaNotification() || isEnterpriseExempted(ai)
+                || isCallNotification(ai.packageName, ai.uid, notification);
     }
 
     private boolean isEnterpriseExempted(ApplicationInfo ai) {
@@ -7799,7 +7803,8 @@ public class NotificationManagerService extends SystemService {
      */
     @GuardedBy("mNotificationLock")
     @VisibleForTesting
-    protected boolean isVisuallyInterruptive(NotificationRecord old, NotificationRecord r) {
+    protected boolean isVisuallyInterruptive(@Nullable NotificationRecord old,
+            @NonNull NotificationRecord r) {
         // Ignore summary updates because we don't display most of the information.
         if (r.getSbn().isGroup() && r.getSbn().getNotification().isGroupSummary()) {
             if (DEBUG_INTERRUPTIVENESS) {
@@ -7815,14 +7820,6 @@ public class NotificationManagerService extends SystemService {
                         +  r.getKey() + " is interruptive: new notification");
             }
             return true;
-        }
-
-        if (r == null) {
-            if (DEBUG_INTERRUPTIVENESS) {
-                Slog.v(TAG, "INTERRUPTIVENESS: "
-                        +  r.getKey() + " is not interruptive: null");
-            }
-            return false;
         }
 
         Notification oldN = old.getSbn().getNotification();
@@ -7878,6 +7875,14 @@ public class NotificationManagerService extends SystemService {
             if (DEBUG_INTERRUPTIVENESS) {
                 Slog.v(TAG, "INTERRUPTIVENESS: "
                     +  r.getKey() + " is interruptive: completed progress");
+            }
+            return true;
+        }
+
+        if (Notification.areIconsDifferent(oldN, newN)) {
+            if (DEBUG_INTERRUPTIVENESS) {
+                Slog.v(TAG, "INTERRUPTIVENESS: "
+                        +  r.getKey() + " is interruptive: icons differ");
             }
             return true;
         }

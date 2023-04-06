@@ -26,6 +26,7 @@ import static java.lang.annotation.RetentionPolicy.SOURCE;
 import android.app.NotificationChannel;
 import android.content.Intent;
 import android.content.pm.UserInfo;
+import android.graphics.drawable.Icon;
 import android.hardware.HardwareBuffer;
 import android.os.UserHandle;
 import android.service.notification.NotificationListenerService;
@@ -129,12 +130,15 @@ public interface Bubbles {
      * the bubble or bubble stack.
      *
      * Some notes:
-     *    - Only one app bubble is supported at a time
+     *    - Only one app bubble is supported at a time, regardless of users. Multi-users support is
+     *      tracked in b/273533235.
      *    - Calling this method with a different intent than the existing app bubble will do nothing
      *
      * @param intent the intent to display in the bubble expanded view.
+     * @param user the {@link UserHandle} of the user to start this activity for.
+     * @param icon the {@link Icon} to use for the bubble view.
      */
-    void showOrHideAppBubble(Intent intent);
+    void showOrHideAppBubble(Intent intent, UserHandle user, @Nullable Icon icon);
 
     /** @return true if the specified {@code taskId} corresponds to app bubble's taskId. */
     boolean isAppBubbleTaskId(int taskId);

@@ -4413,6 +4413,43 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
         assertFalse(posted.getNotification().extras
                 .containsKey(Notification.EXTRA_MEDIA_REMOTE_DEVICE));
+        assertFalse(posted.getNotification().extras
+                .containsKey(Notification.EXTRA_MEDIA_REMOTE_ICON));
+        assertFalse(posted.getNotification().extras
+                .containsKey(Notification.EXTRA_MEDIA_REMOTE_INTENT));
+    }
+
+    @Test
+    public void testCustomMediaStyleRemote_noPermission() throws RemoteException {
+        String deviceName = "device";
+        when(mPackageManager.checkPermission(
+                eq(android.Manifest.permission.MEDIA_CONTENT_CONTROL), any(), anyInt()))
+                .thenReturn(PERMISSION_DENIED);
+        Notification.DecoratedMediaCustomViewStyle style =
+                new Notification.DecoratedMediaCustomViewStyle();
+        style.setRemotePlaybackInfo(deviceName, 0, null);
+        Notification.Builder nb = new Notification.Builder(mContext,
+                mTestNotificationChannel.getId())
+                .setStyle(style);
+
+        StatusBarNotification sbn = new StatusBarNotification(PKG, PKG, 1,
+                "testCustomMediaStyleRemoteNoPermission", mUid, 0,
+                nb.build(), UserHandle.getUserHandleForUid(mUid), null, 0);
+        NotificationRecord nr = new NotificationRecord(mContext, sbn, mTestNotificationChannel);
+
+        mBinderService.enqueueNotificationWithTag(PKG, PKG, sbn.getTag(),
+                nr.getSbn().getId(), nr.getSbn().getNotification(), nr.getSbn().getUserId());
+        waitForIdle();
+
+        NotificationRecord posted = mService.findNotificationLocked(
+                PKG, nr.getSbn().getTag(), nr.getSbn().getId(), nr.getSbn().getUserId());
+
+        assertFalse(posted.getNotification().extras
+                .containsKey(Notification.EXTRA_MEDIA_REMOTE_DEVICE));
+        assertFalse(posted.getNotification().extras
+                .containsKey(Notification.EXTRA_MEDIA_REMOTE_ICON));
+        assertFalse(posted.getNotification().extras
+                .containsKey(Notification.EXTRA_MEDIA_REMOTE_INTENT));
     }
 
     @Test
@@ -5801,6 +5838,57 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                 new NotificationRecord(mContext, sbn2, mock(NotificationChannel.class));
 
         assertFalse(mService.isVisuallyInterruptive(null, r2));
+    }
+
+    @Test
+    public void testVisualDifference_sameImages() {
+        Icon large = Icon.createWithResource(mContext, 1);
+        Notification n1 = new Notification.Builder(mContext, "channel")
+                .setSmallIcon(1).setLargeIcon(large).build();
+        Notification n2 = new Notification.Builder(mContext, "channel")
+                .setSmallIcon(1).setLargeIcon(large).build();
+
+        NotificationRecord r1 = notificationToRecord(n1);
+        NotificationRecord r2 = notificationToRecord(n2);
+
+        assertThat(mService.isVisuallyInterruptive(r1, r2)).isFalse();
+    }
+
+    @Test
+    public void testVisualDifference_differentSmallImage() {
+        Icon large = Icon.createWithResource(mContext, 1);
+        Notification n1 = new Notification.Builder(mContext, "channel")
+                .setSmallIcon(1).setLargeIcon(large).build();
+        Notification n2 = new Notification.Builder(mContext, "channel")
+                .setSmallIcon(2).setLargeIcon(large).build();
+
+        NotificationRecord r1 = notificationToRecord(n1);
+        NotificationRecord r2 = notificationToRecord(n2);
+
+        assertThat(mService.isVisuallyInterruptive(r1, r2)).isTrue();
+    }
+
+    @Test
+    public void testVisualDifference_differentLargeImage() {
+        Icon large1 = Icon.createWithResource(mContext, 1);
+        Icon large2 = Icon.createWithResource(mContext, 2);
+        Notification n1 = new Notification.Builder(mContext, "channel")
+                .setSmallIcon(1).setLargeIcon(large1).build();
+        Notification n2 = new Notification.Builder(mContext, "channel")
+                .setSmallIcon(1).setLargeIcon(large2).build();
+
+        NotificationRecord r1 = notificationToRecord(n1);
+        NotificationRecord r2 = notificationToRecord(n2);
+
+        assertThat(mService.isVisuallyInterruptive(r1, r2)).isTrue();
+    }
+
+    private NotificationRecord notificationToRecord(Notification n) {
+        return new NotificationRecord(
+                mContext,
+                new StatusBarNotification(PKG, PKG, 0, "tag", mUid, 0, n,
+                        UserHandle.getUserHandleForUid(mUid), null, 0),
+                mock(NotificationChannel.class));
     }
 
     @Test
@@ -10439,6 +10527,31 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         // Then: the notification's flag FLAG_NO_DISMISS should be set
         assertNotSame(0, n.flags & Notification.FLAG_NO_DISMISS);
     }
+
+    @Test
+    public void fixCallNotification_withOnGoingFlag_shouldNotBeNonDismissible()
+            throws Exception {
+        // Given: a call notification has the flag FLAG_ONGOING_EVENT set
+        // feature flag: ALLOW_DISMISS_ONGOING is on
+        mTestFlagResolver.setFlagOverride(ALLOW_DISMISS_ONGOING, true);
+        when(mTelecomManager.isInManagedCall()).thenReturn(true);
+
+        Person person = new Person.Builder()
+                .setName("caller")
+                .build();
+        Notification n = new Notification.Builder(mContext, "test")
+                .setOngoing(true)
+                .setStyle(Notification.CallStyle.forOngoingCall(
+                        person, mock(PendingIntent.class)))
+                .build();
+
+        // When: fix the notification with NotificationManagerService
+        mService.fixNotification(n, PKG, "tag", 9, 0, mUid, NOT_FOREGROUND_SERVICE);
+
+        // Then: the notification's flag FLAG_NO_DISMISS should be set
+        assertNotSame(0, n.flags & Notification.FLAG_NO_DISMISS);
+    }
+
 
     @Test
     public void fixNonExemptNotification_withOnGoingFlag_shouldBeDismissible() throws Exception {
