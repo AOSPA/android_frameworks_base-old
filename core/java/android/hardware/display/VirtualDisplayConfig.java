@@ -161,9 +161,8 @@ public final class VirtualDisplayConfig implements Parcelable {
     }
 
     /**
-     * Returns the recording session associated with this VirtualDisplay. Only used for
+     * Returns the recording session associated with this {@link VirtualDisplay}. Only used for
      * recording via {@link MediaProjection}.
-     *
      * @hide
      */
     @Nullable
@@ -438,7 +437,7 @@ public final class VirtualDisplayConfig implements Parcelable {
          *
          * <p>For best results, specify a divisor of the physical refresh rate, e.g., 30 or 60 on
          * a 120hz display. If an arbitrary refresh rate is specified, the rate will be rounded up
-         * down to a divisor of the physical display. If unset or zero, the virtual display will be
+         * to a divisor of the physical display. If unset or zero, the virtual display will be
          * refreshed at the physical display refresh rate.
          *
          * @see Display#getRefreshRate()

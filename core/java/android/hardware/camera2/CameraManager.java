@@ -124,6 +124,7 @@ public final class CameraManager {
      * System property for allowing the above
      * @hide
      */
+    @TestApi
     public static final String LANDSCAPE_TO_PORTRAIT_PROP =
             "camera.enable_landscape_to_portrait";
 
@@ -258,7 +259,7 @@ public final class CameraManager {
 
     /**
      * Similar to getCameraIdList(). However, getCamerIdListNoLazy() necessarily communicates with
-     * cameraserver in order to get the list of camera ids. This is to faciliate testing since some
+     * cameraserver in order to get the list of camera ids. This is to facilitate testing since some
      * camera ids may go 'offline' without callbacks from cameraserver because of changes in
      * SYSTEM_CAMERA permissions (though this is not a changeable permission, tests may call
      * adopt(drop)ShellPermissionIdentity() and effectively change their permissions). This call
@@ -562,7 +563,7 @@ public final class CameraManager {
         }
 
         // Query the characteristics of all physical sub-cameras, and combine the multi-resolution
-        // stream configurations. Alternatively, for ultra-high resolution camera, direclty use
+        // stream configurations. Alternatively, for ultra-high resolution camera, directly use
         // its multi-resolution stream configurations. Note that framework derived formats such as
         // HEIC and DEPTH_JPEG aren't supported as multi-resolution input or output formats.
         Set<String> physicalCameraIds = info.getPhysicalCameraIds();
@@ -625,6 +626,16 @@ public final class CameraManager {
     @NonNull
     public CameraCharacteristics getCameraCharacteristics(@NonNull String cameraId)
             throws CameraAccessException {
+        return getCameraCharacteristics(cameraId, shouldOverrideToPortrait(mContext));
+    }
+
+    /**
+     * @hide
+     */
+    @TestApi
+    @NonNull
+    public CameraCharacteristics getCameraCharacteristics(@NonNull String cameraId,
+            boolean overrideToPortrait) throws CameraAccessException {
         CameraCharacteristics characteristics = null;
         if (CameraManagerGlobal.sCameraServiceDisabled) {
             throw new IllegalArgumentException("No cameras available on device");
@@ -638,7 +649,6 @@ public final class CameraManager {
             try {
                 Size displaySize = getDisplaySize();
 
-                boolean overrideToPortrait = shouldOverrideToPortrait(mContext);
                 CameraMetadataNative info = cameraService.getCameraCharacteristics(cameraId,
                         mContext.getApplicationInfo().targetSdkVersion, overrideToPortrait);
                 try {
@@ -730,7 +740,7 @@ public final class CameraManager {
      */
     private CameraDevice openCameraDeviceUserAsync(String cameraId,
             CameraDevice.StateCallback callback, Executor executor, final int uid,
-            final int oomScoreOffset) throws CameraAccessException {
+            final int oomScoreOffset, boolean overrideToPortrait) throws CameraAccessException {
         CameraCharacteristics characteristics = getCameraCharacteristics(cameraId);
         CameraDevice device = null;
         Map<String, CameraCharacteristics> physicalIdsToChars =
@@ -758,7 +768,6 @@ public final class CameraManager {
                         "Camera service is currently unavailable");
                 }
 
-                boolean overrideToPortrait = shouldOverrideToPortrait(mContext);
                 cameraUser = cameraService.connectDevice(callbacks, cameraId,
                     mContext.getOpPackageName(), mContext.getAttributionTag(), uid,
                     oomScoreOffset, mContext.getApplicationInfo().targetSdkVersion,
@@ -829,7 +838,7 @@ public final class CameraManager {
      * Opening the same camera ID twice in the same application will similarly cause the
      * {@link android.hardware.camera2.CameraDevice.StateCallback#onDisconnected} callback
      * being fired for the {@link CameraDevice} from the first open call and all ongoing tasks
-     * being droppped.</p>
+     * being dropped.</p>
      *
      * <p>Once the camera is successfully opened, {@link CameraDevice.StateCallback#onOpened} will
      * be invoked with the newly opened {@link CameraDevice}. The camera device can then be set up
@@ -891,6 +900,43 @@ public final class CameraManager {
 
         openCameraForUid(cameraId, callback, CameraDeviceImpl.checkAndWrapHandler(handler),
                 USE_CALLING_UID);
+    }
+
+    /**
+     * Open a connection to a camera with the given ID. Also specify overrideToPortrait for testing.
+     *
+     * @param cameraId
+     *             The unique identifier of the camera device to open
+     * @param handler
+     *             The handler on which the callback should be invoked, or
+     *             {@code null} to use the current thread's {@link android.os.Looper looper}.
+     * @param callback
+     *             The callback which is invoked once the camera is opened
+     * @param overrideToPortrait
+     *             Whether to apply the landscape to portrait override, using rotate and crop.
+     *
+     * @throws CameraAccessException if the camera is disabled by device policy,
+     * has been disconnected, or is being used by a higher-priority camera API client.
+     *
+     * @throws IllegalArgumentException if cameraId, the callback or the executor was null,
+     * or the cameraId does not match any currently or previously available
+     * camera device.
+     *
+     * @throws SecurityException if the application does not have permission to
+     * access the camera
+     *
+     * @see #getCameraIdList
+     * @see android.app.admin.DevicePolicyManager#setCameraDisabled
+     *
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.CAMERA)
+    public void openCamera(@NonNull String cameraId, boolean overrideToPortrait,
+            @Nullable Handler handler,
+            @NonNull final CameraDevice.StateCallback callback) throws CameraAccessException {
+        openCameraForUid(cameraId, callback, CameraDeviceImpl.checkAndWrapHandler(handler),
+                         USE_CALLING_UID, /*oomScoreOffset*/0, overrideToPortrait);
     }
 
     /**
@@ -997,7 +1043,8 @@ public final class CameraManager {
             throw new IllegalArgumentException(
                     "oomScoreOffset < 0, cannot increase priority of camera client");
         }
-        openCameraForUid(cameraId, callback, executor, USE_CALLING_UID, oomScoreOffset);
+        openCameraForUid(cameraId, callback, executor, USE_CALLING_UID, oomScoreOffset,
+                shouldOverrideToPortrait(mContext));
     }
 
     /**
@@ -1019,7 +1066,8 @@ public final class CameraManager {
      */
     public void openCameraForUid(@NonNull String cameraId,
             @NonNull final CameraDevice.StateCallback callback, @NonNull Executor executor,
-            int clientUid, int oomScoreOffset) throws CameraAccessException {
+            int clientUid, int oomScoreOffset, boolean overrideToPortrait)
+            throws CameraAccessException {
 
         if (cameraId == null) {
             throw new IllegalArgumentException("cameraId was null");
@@ -1030,7 +1078,8 @@ public final class CameraManager {
             throw new IllegalArgumentException("No cameras available on device");
         }
 
-        openCameraDeviceUserAsync(cameraId, callback, executor, clientUid, oomScoreOffset);
+        openCameraDeviceUserAsync(cameraId, callback, executor, clientUid, oomScoreOffset,
+                overrideToPortrait);
     }
 
     /**
@@ -1051,7 +1100,8 @@ public final class CameraManager {
     public void openCameraForUid(@NonNull String cameraId,
             @NonNull final CameraDevice.StateCallback callback, @NonNull Executor executor,
             int clientUid) throws CameraAccessException {
-            openCameraForUid(cameraId, callback, executor, clientUid, /*oomScoreOffset*/0);
+        openCameraForUid(cameraId, callback, executor, clientUid, /*oomScoreOffset*/0,
+                shouldOverrideToPortrait(mContext));
     }
 
     /**
@@ -1194,17 +1244,32 @@ public final class CameraManager {
      * @hide
      */
     public static boolean shouldOverrideToPortrait(@Nullable Context context) {
+        PackageManager packageManager = null;
+        String packageName = null;
+
+        if (context != null) {
+            packageManager = context.getPackageManager();
+            packageName = context.getOpPackageName();
+        }
+
+        return shouldOverrideToPortrait(packageManager, packageName);
+    }
+
+    /**
+     * @hide
+     */
+    @TestApi
+    public static boolean shouldOverrideToPortrait(@Nullable PackageManager packageManager,
+                                                   @Nullable String packageName) {
         if (!CameraManagerGlobal.sLandscapeToPortrait) {
             return false;
         }
 
-        if (context != null) {
-            PackageManager packageManager = context.getPackageManager();
-
+        if (packageManager != null && packageName != null) {
             try {
                 return packageManager.getProperty(
                         PackageManager.PROPERTY_COMPAT_OVERRIDE_LANDSCAPE_TO_PORTRAIT,
-                        context.getOpPackageName()).getBoolean();
+                        packageName).getBoolean();
             } catch (PackageManager.NameNotFoundException e) {
                 // No such property
             }
@@ -1697,7 +1762,7 @@ public final class CameraManager {
         private final Set<Set<String>> mConcurrentCameraIdCombinations =
                 new ArraySet<Set<String>>();
 
-        // Registered availablility callbacks and their executors
+        // Registered availability callbacks and their executors
         private final ArrayMap<AvailabilityCallback, Executor> mCallbackMap =
             new ArrayMap<AvailabilityCallback, Executor>();
 
@@ -2868,7 +2933,7 @@ public final class CameraManager {
                 // Tell listeners that the cameras and torch modes are unavailable and schedule a
                 // reconnection to camera service. When camera service is reconnected, the camera
                 // and torch statuses will be updated.
-                // Iterate from the end to the beginning befcause onStatusChangedLocked removes
+                // Iterate from the end to the beginning because onStatusChangedLocked removes
                 // entries from the ArrayMap.
                 for (int i = mDeviceStatus.size() - 1; i >= 0; i--) {
                     String cameraId = mDeviceStatus.keyAt(i);

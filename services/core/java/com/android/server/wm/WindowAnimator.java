@@ -69,10 +69,6 @@ public class WindowAnimator {
     SparseArray<DisplayContentsAnimator> mDisplayContentsAnimators = new SparseArray<>(2);
     private boolean mInitialized = false;
 
-    // When set to true the animator will go over all windows after an animation frame is posted and
-    // check if some got replaced and can be removed.
-    private boolean mRemoveReplacedWindows = false;
-
     private Choreographer mChoreographer;
 
     /**
@@ -204,11 +200,11 @@ public class WindowAnimator {
                                 | ANIMATION_TYPE_RECENTS /* typesToCheck */);
         if (runningExpensiveAnimations && !mRunningExpensiveAnimations) {
             // Usually app transitions put quite a load onto the system already (with all the things
-            // happening in app), so pause task snapshot persisting to not increase the load.
-            mService.mSnapshotPersistQueue.setPaused(true);
+            // happening in app), so pause snapshot persisting to not increase the load.
+            mService.mSnapshotController.setPause(true);
             mTransaction.setEarlyWakeupStart();
         } else if (!runningExpensiveAnimations && mRunningExpensiveAnimations) {
-            mService.mSnapshotPersistQueue.setPaused(false);
+            mService.mSnapshotController.setPause(false);
             mTransaction.setEarlyWakeupEnd();
         }
         mRunningExpensiveAnimations = runningExpensiveAnimations;
@@ -216,11 +212,6 @@ public class WindowAnimator {
         SurfaceControl.mergeToGlobalTransaction(mTransaction);
         mService.closeSurfaceTransaction("WindowAnimator");
         ProtoLog.i(WM_SHOW_TRANSACTIONS, "<<< CLOSE TRANSACTION animate");
-
-        if (mRemoveReplacedWindows) {
-            root.removeReplacedWindows();
-            mRemoveReplacedWindows = false;
-        }
 
         mService.mAtmService.mTaskOrganizerController.dispatchPendingEvents();
         executeAfterPrepareSurfacesRunnables();
@@ -284,10 +275,6 @@ public class WindowAnimator {
             mDisplayContentsAnimators.put(displayId, displayAnimator);
         }
         return displayAnimator;
-    }
-
-    void requestRemovalOfReplacedWindows(WindowState win) {
-        mRemoveReplacedWindows = true;
     }
 
     void scheduleAnimation() {

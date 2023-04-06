@@ -558,14 +558,6 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
     // How many required verifiers can be on the system.
     private static final int REQUIRED_VERIFIERS_MAX_COUNT = 2;
 
-    /**
-     * Specifies the minimum target SDK version an apk must specify in order to be installed
-     * on the system. This improves security and privacy by blocking low
-     * target sdk apps as malware can target older sdk versions to avoid
-     * the enforcement of new API behavior.
-     */
-    public static final int MIN_INSTALLABLE_TARGET_SDK = Build.VERSION_CODES.M;
-
     // Compilation reasons.
     // TODO(b/260124949): Clean this up with the legacy dexopt code.
     public static final int REASON_FIRST_BOOT = 0;
@@ -1338,7 +1330,8 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
             throw new ParcelableException(new PackageManager.NameNotFoundException(packageName));
         }
 
-        final InstallSourceInfo installSourceInfo = snapshot.getInstallSourceInfo(packageName);
+        final InstallSourceInfo installSourceInfo = snapshot.getInstallSourceInfo(packageName,
+                userId);
         final String installerPackageName;
         if (installSourceInfo != null) {
             if (!TextUtils.isEmpty(installSourceInfo.getInitiatingPackageName())) {
@@ -2601,7 +2594,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
 
             if (best == null || cur.priority > best.priority) {
                 if (computer.isComponentEffectivelyEnabled(cur.getComponentInfo(),
-                        UserHandle.USER_SYSTEM)) {
+                        UserHandle.SYSTEM)) {
                     best = cur;
                 } else {
                     Slog.w(TAG, "Domain verification agent found but not enabled");
@@ -4917,13 +4910,10 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
             mHandler.post(() -> {
                 final int id = verificationId >= 0 ? verificationId : -verificationId;
                 final PackageVerificationState state = mPendingVerification.get(id);
-                if (state == null || state.timeoutExtended() || !state.checkRequiredVerifierUid(
-                        callingUid)) {
-                    // Only allow calls from required verifiers.
+                if (state == null || !state.extendTimeout(callingUid)) {
+                    // Invalid uid or already extended.
                     return;
                 }
-
-                state.extendTimeout();
 
                 final PackageVerificationResponse response = new PackageVerificationResponse(
                         verificationCodeAtTimeout, callingUid);
@@ -5593,32 +5583,18 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         public void registerDexModule(String packageName, String dexModulePath,
                 boolean isSharedModule,
                 IDexModuleRegisterCallback callback) {
-            if (useArtService()) {
-                // ART Service currently doesn't support this explicit dexopting and instead relies
-                // on background dexopt for secondary dex files. This API is problematic since it
-                // doesn't provide the correct classloader context.
-                Slog.i(TAG,
-                        "Ignored unsupported registerDexModule call for " + dexModulePath + " in "
-                                + packageName);
-                return;
-            }
-
-            int userId = UserHandle.getCallingUserId();
-            ApplicationInfo ai = snapshot().getApplicationInfo(packageName, /*flags*/ 0, userId);
-            DexManager.RegisterDexModuleResult result;
-            if (ai == null) {
-                Slog.w(PackageManagerService.TAG,
-                        "Registering a dex module for a package that does not exist for the" +
-                                " calling user. package=" + packageName + ", user=" + userId);
-                result = new DexManager.RegisterDexModuleResult(false, "Package not installed");
-            } else {
-                try {
-                    result = mDexManager.registerDexModule(
-                            ai, dexModulePath, isSharedModule, userId);
-                } catch (LegacyDexoptDisabledException e) {
-                    throw new RuntimeException(e);
-                }
-            }
+            // ART Service doesn't support this explicit dexopting and instead relies on background
+            // dexopt for secondary dex files. For compat parity between ART Service and the legacy
+            // code it's disabled for both.
+            //
+            // Also, this API is problematic anyway since it doesn't provide the correct classloader
+            // context, so it is hard to produce dexopt artifacts that the runtime can load
+            // successfully.
+            Slog.i(TAG,
+                    "Ignored unsupported registerDexModule call for " + dexModulePath + " in "
+                            + packageName);
+            DexManager.RegisterDexModuleResult result = new DexManager.RegisterDexModuleResult(
+                    false, "registerDexModule call not supported since Android U");
 
             if (callback != null) {
                 mHandler.post(() -> {
@@ -6844,7 +6820,8 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
             if (ps == null) {
                 return null;
             }
-            return new IncrementalStatesInfo(ps.isLoading(), ps.getLoadingProgress());
+            return new IncrementalStatesInfo(ps.isLoading(), ps.getLoadingProgress(),
+                    ps.getLoadingCompletedTime());
         }
 
         @Override

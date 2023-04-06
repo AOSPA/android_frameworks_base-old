@@ -19,9 +19,9 @@ package com.android.providers.settings;
 import static android.os.Process.ROOT_UID;
 import static android.os.Process.SHELL_UID;
 import static android.os.Process.SYSTEM_UID;
-import static android.provider.Settings.Config.SYNC_DISABLED_MODE_NONE;
-import static android.provider.Settings.Config.SYNC_DISABLED_MODE_PERSISTENT;
-import static android.provider.Settings.Config.SYNC_DISABLED_MODE_UNTIL_REBOOT;
+import static android.provider.DeviceConfig.SYNC_DISABLED_MODE_NONE;
+import static android.provider.DeviceConfig.SYNC_DISABLED_MODE_PERSISTENT;
+import static android.provider.DeviceConfig.SYNC_DISABLED_MODE_UNTIL_REBOOT;
 import static android.provider.Settings.SET_ALL_RESULT_DISABLED;
 import static android.provider.Settings.SET_ALL_RESULT_FAILURE;
 import static android.provider.Settings.SET_ALL_RESULT_SUCCESS;
@@ -35,6 +35,13 @@ import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OV
 import static com.android.internal.accessibility.AccessibilityShortcutController.MAGNIFICATION_CONTROLLER_NAME;
 import static com.android.internal.accessibility.util.AccessibilityUtils.ACCESSIBILITY_MENU_IN_SYSTEM;
 import static com.android.providers.settings.SettingsState.FALLBACK_FILE_SUFFIX;
+import static com.android.providers.settings.SettingsState.getTypeFromKey;
+import static com.android.providers.settings.SettingsState.getUserIdFromKey;
+import static com.android.providers.settings.SettingsState.isConfigSettingsKey;
+import static com.android.providers.settings.SettingsState.isGlobalSettingsKey;
+import static com.android.providers.settings.SettingsState.isSecureSettingsKey;
+import static com.android.providers.settings.SettingsState.isSsaidSettingsKey;
+import static com.android.providers.settings.SettingsState.isSystemSettingsKey;
 import static com.android.providers.settings.SettingsState.makeKey;
 
 import android.Manifest;
@@ -375,14 +382,6 @@ public class SettingsProvider extends ContentProvider {
 
     @GuardedBy("mLock")
     private boolean mSyncConfigDisabledUntilReboot;
-
-    public static int getTypeFromKey(int key) {
-        return SettingsState.getTypeFromKey(key);
-    }
-
-    public static int getUserIdFromKey(int key) {
-        return SettingsState.getUserIdFromKey(key);
-    }
 
     @ChangeId
     @EnabledSince(targetSdkVersion=android.os.Build.VERSION_CODES.S)
@@ -2832,7 +2831,7 @@ public class SettingsProvider extends ContentProvider {
 
         public SettingsRegistry() {
             mHandler = new MyHandler(getContext().getMainLooper());
-            mGenerationRegistry = new GenerationRegistry(mLock);
+            mGenerationRegistry = new GenerationRegistry(mLock, UserManager.getMaxSupportedUsers());
             mBackupManager = new BackupManager(getContext());
         }
 
@@ -3618,26 +3617,6 @@ public class SettingsProvider extends ContentProvider {
                             userId, 0, uri).sendToTarget();
                 }
             }
-        }
-
-        private boolean isConfigSettingsKey(int key) {
-            return getTypeFromKey(key) == SETTINGS_TYPE_CONFIG;
-        }
-
-        private boolean isGlobalSettingsKey(int key) {
-            return getTypeFromKey(key) == SETTINGS_TYPE_GLOBAL;
-        }
-
-        private boolean isSystemSettingsKey(int key) {
-            return getTypeFromKey(key) == SETTINGS_TYPE_SYSTEM;
-        }
-
-        private boolean isSecureSettingsKey(int key) {
-            return getTypeFromKey(key) == SETTINGS_TYPE_SECURE;
-        }
-
-        private boolean isSsaidSettingsKey(int key) {
-            return getTypeFromKey(key) == SETTINGS_TYPE_SSAID;
         }
 
         private boolean shouldBan(int type) {

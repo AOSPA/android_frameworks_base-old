@@ -38,6 +38,10 @@ import static android.content.pm.ActivityInfo.isFixedOrientationLandscape;
 import static android.content.pm.ActivityInfo.screenOrientationToString;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
+import static android.content.res.Configuration.ORIENTATION_UNDEFINED;
+import static android.content.res.Configuration.SCREEN_HEIGHT_DP_UNDEFINED;
+import static android.content.res.Configuration.SCREEN_WIDTH_DP_UNDEFINED;
+import static android.content.res.Configuration.SMALLEST_SCREEN_WIDTH_DP_UNDEFINED;
 import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
 import static android.view.WindowManager.PROPERTY_CAMERA_COMPAT_ALLOW_FORCE_ROTATION;
 import static android.view.WindowManager.PROPERTY_CAMERA_COMPAT_ALLOW_REFRESH;
@@ -183,7 +187,7 @@ final class LetterboxUiController {
     private float mInheritedMaxAspectRatio = UNDEFINED_ASPECT_RATIO;
 
     @Configuration.Orientation
-    private int mInheritedOrientation = Configuration.ORIENTATION_UNDEFINED;
+    private int mInheritedOrientation = ORIENTATION_UNDEFINED;
 
     // The app compat state for the opaque activity if any
     private int mInheritedAppCompatState = APP_COMPAT_STATE_CHANGED__STATE__UNKNOWN;
@@ -314,6 +318,10 @@ final class LetterboxUiController {
         if (mLetterbox != null) {
             mLetterbox.destroy();
             mLetterbox = null;
+        }
+        if (mLetterboxConfigListener != null) {
+            mLetterboxConfigListener.onRemoved();
+            mLetterboxConfigListener = null;
         }
     }
 
@@ -447,6 +455,10 @@ final class LetterboxUiController {
 
     @ScreenOrientation
     int overrideOrientationIfNeeded(@ScreenOrientation int candidate) {
+        // In some cases (e.g. Kids app) we need to map the candidate orientation to some other
+        // orientation.
+        candidate = mActivityRecord.mWmService.mapOrientationRequest(candidate);
+
         if (FALSE.equals(mBooleanPropertyAllowOrientationOverride)) {
             return candidate;
         }
@@ -737,6 +749,8 @@ final class LetterboxUiController {
             final Rect innerFrame = hasInheritedLetterboxBehavior()
                     ? mActivityRecord.getBounds() : w.getFrame();
             mLetterbox.layout(spaceToFill, innerFrame, mTmpPoint);
+            // We need to notify Shell that letterbox position has changed.
+            mActivityRecord.getTask().dispatchTaskInfoChangedIfNeeded(true /* force */);
         } else if (mLetterbox != null) {
             mLetterbox.hide();
         }
@@ -785,13 +799,18 @@ final class LetterboxUiController {
     float getHorizontalPositionMultiplier(Configuration parentConfiguration) {
         // Don't check resolved configuration because it may not be updated yet during
         // configuration change.
-        boolean bookMode = isDisplayFullScreenAndInPosture(
-                DeviceStateController.DeviceState.HALF_FOLDED, false /* isTabletop */);
+        boolean bookModeEnabled = isFullScreenAndBookModeEnabled();
         return isHorizontalReachabilityEnabled(parentConfiguration)
                 // Using the last global dynamic position to avoid "jumps" when moving
                 // between apps or activities.
-                ? mLetterboxConfiguration.getHorizontalMultiplierForReachability(bookMode)
-                : mLetterboxConfiguration.getLetterboxHorizontalPositionMultiplier(bookMode);
+                ? mLetterboxConfiguration.getHorizontalMultiplierForReachability(bookModeEnabled)
+                : mLetterboxConfiguration.getLetterboxHorizontalPositionMultiplier(bookModeEnabled);
+    }
+
+    private boolean isFullScreenAndBookModeEnabled() {
+        return isDisplayFullScreenAndInPosture(
+                DeviceStateController.DeviceState.HALF_FOLDED, false /* isTabletop */)
+                && mLetterboxConfiguration.getIsAutomaticReachabilityInBookModeEnabled();
     }
 
     float getVerticalPositionMultiplier(Configuration parentConfiguration) {
@@ -806,12 +825,14 @@ final class LetterboxUiController {
                 : mLetterboxConfiguration.getLetterboxVerticalPositionMultiplier(tabletopMode);
     }
 
-    float getFixedOrientationLetterboxAspectRatio() {
+    float getFixedOrientationLetterboxAspectRatio(@NonNull Configuration parentConfiguration) {
+        // Don't resize to split screen size when half folded if letterbox position is centered
         return isDisplayFullScreenAndSeparatingHinge()
-                ? getSplitScreenAspectRatio()
-                : mActivityRecord.shouldCreateCompatDisplayInsets()
-                    ? getDefaultMinAspectRatioForUnresizableApps()
-                    : getDefaultMinAspectRatio();
+                    && getHorizontalPositionMultiplier(parentConfiguration) != 0.5f
+                        ? getSplitScreenAspectRatio()
+                        : mActivityRecord.shouldCreateCompatDisplayInsets()
+                            ? getDefaultMinAspectRatioForUnresizableApps()
+                            : getDefaultMinAspectRatio();
     }
 
     private float getDefaultMinAspectRatioForUnresizableApps() {
@@ -837,7 +858,7 @@ final class LetterboxUiController {
         int dividerInsets =
                 getResources().getDimensionPixelSize(R.dimen.docked_stack_divider_insets);
         int dividerSize = dividerWindowWidth - dividerInsets * 2;
-        final Rect bounds = new Rect(displayContent.getBounds());
+        final Rect bounds = new Rect(displayContent.getWindowConfiguration().getAppBounds());
         if (bounds.width() >= bounds.height()) {
             bounds.inset(/* dx */ dividerSize / 2, /* dy */ 0);
             bounds.right = bounds.centerX();
@@ -862,6 +883,20 @@ final class LetterboxUiController {
         return mActivityRecord.mWmService.mContext.getResources();
     }
 
+    @LetterboxConfiguration.LetterboxVerticalReachabilityPosition
+    int getLetterboxPositionForVerticalReachability() {
+        final boolean isInFullScreenTabletopMode = isDisplayFullScreenAndSeparatingHinge();
+        return mLetterboxConfiguration.getLetterboxPositionForVerticalReachability(
+                isInFullScreenTabletopMode);
+    }
+
+    @LetterboxConfiguration.LetterboxHorizontalReachabilityPosition
+    int getLetterboxPositionForHorizontalReachability() {
+        final boolean isInFullScreenBookMode = isDisplayFullScreenAndSeparatingHinge();
+        return mLetterboxConfiguration.getLetterboxPositionForHorizontalReachability(
+                isInFullScreenBookMode);
+    }
+
     @VisibleForTesting
     void handleHorizontalDoubleTap(int x) {
         if (!isHorizontalReachabilityEnabled() || mActivityRecord.isInTransition()) {
@@ -873,7 +908,8 @@ final class LetterboxUiController {
             return;
         }
 
-        boolean isInFullScreenBookMode = isDisplayFullScreenAndSeparatingHinge();
+        boolean isInFullScreenBookMode = isDisplayFullScreenAndSeparatingHinge()
+                && mLetterboxConfiguration.getIsAutomaticReachabilityInBookModeEnabled();
         int letterboxPositionForHorizontalReachability = mLetterboxConfiguration
                 .getLetterboxPositionForHorizontalReachability(isInFullScreenBookMode);
         if (mLetterbox.getInnerFrame().left > x) {
@@ -953,6 +989,8 @@ final class LetterboxUiController {
      * </ul>
      */
     private boolean isHorizontalReachabilityEnabled(Configuration parentConfiguration) {
+        // Use screen resolved bounds which uses resolved bounds or size compat bounds
+        // as activity bounds can sometimes be empty
         return mLetterboxConfiguration.getIsHorizontalReachabilityEnabled()
                 && parentConfiguration.windowConfiguration.getWindowingMode()
                         == WINDOWING_MODE_FULLSCREEN
@@ -960,12 +998,16 @@ final class LetterboxUiController {
                         && mActivityRecord.getOrientationForReachability() == ORIENTATION_PORTRAIT)
                 // Check whether the activity fills the parent vertically.
                 && parentConfiguration.windowConfiguration.getAppBounds().height()
-                        <= mActivityRecord.getBounds().height();
+                        <= mActivityRecord.getScreenResolvedBounds().height();
     }
 
     @VisibleForTesting
     boolean isHorizontalReachabilityEnabled() {
         return isHorizontalReachabilityEnabled(mActivityRecord.getParent().getConfiguration());
+    }
+
+    boolean isLetterboxDoubleTapEducationEnabled() {
+        return isHorizontalReachabilityEnabled() || isVerticalReachabilityEnabled();
     }
 
     /**
@@ -980,6 +1022,8 @@ final class LetterboxUiController {
      * </ul>
      */
     private boolean isVerticalReachabilityEnabled(Configuration parentConfiguration) {
+        // Use screen resolved bounds which uses resolved bounds or size compat bounds
+        // as activity bounds can sometimes be empty
         return mLetterboxConfiguration.getIsVerticalReachabilityEnabled()
                 && parentConfiguration.windowConfiguration.getWindowingMode()
                         == WINDOWING_MODE_FULLSCREEN
@@ -987,7 +1031,7 @@ final class LetterboxUiController {
                         && mActivityRecord.getOrientationForReachability() == ORIENTATION_LANDSCAPE)
                 // Check whether the activity fills the parent horizontally.
                 && parentConfiguration.windowConfiguration.getBounds().width()
-                        == mActivityRecord.getBounds().width();
+                        == mActivityRecord.getScreenResolvedBounds().width();
     }
 
     @VisibleForTesting
@@ -997,7 +1041,8 @@ final class LetterboxUiController {
 
     @VisibleForTesting
     boolean shouldShowLetterboxUi(WindowState mainWindow) {
-        return isSurfaceVisible(mainWindow) && mainWindow.areAppWindowBoundsLetterboxed()
+        return (mActivityRecord.isInLetterboxAnimation() || isSurfaceVisible(mainWindow))
+                && mainWindow.areAppWindowBoundsLetterboxed()
                 // Check for FLAG_SHOW_WALLPAPER explicitly instead of using
                 // WindowContainer#showWallpaper because the later will return true when this
                 // activity is using blurred wallpaper for letterbox background.
@@ -1104,7 +1149,7 @@ final class LetterboxUiController {
     // for all corners for consistency and pick a minimal bottom one for consistency with a
     // taskbar rounded corners.
     int getRoundedCornersRadius(final WindowState mainWindow) {
-        if (!requiresRoundedCorners(mainWindow) || mActivityRecord.isInLetterboxAnimation()) {
+        if (!requiresRoundedCorners(mainWindow)) {
             return 0;
         }
 
@@ -1404,7 +1449,8 @@ final class LetterboxUiController {
         mLetterboxConfigListener = WindowContainer.overrideConfigurationPropagation(
                 mActivityRecord, firstOpaqueActivityBeneath,
                 (opaqueConfig, transparentConfig) -> {
-                    final Configuration mutatedConfiguration = new Configuration();
+                    final Configuration mutatedConfiguration =
+                            fromOriginalTranslucentConfig(transparentConfig);
                     final Rect parentBounds = parent.getWindowConfiguration().getBounds();
                     final Rect bounds = mutatedConfiguration.windowConfiguration.getBounds();
                     final Rect letterboxBounds = opaqueConfig.windowConfiguration.getBounds();
@@ -1466,6 +1512,10 @@ final class LetterboxUiController {
         return mInheritedCompatDisplayInsets;
     }
 
+    void clearInheritedCompatDisplayInsets() {
+        mInheritedCompatDisplayInsets = null;
+    }
+
     /**
      * In case of translucent activities, it consumes the {@link ActivityRecord} of the first opaque
      * activity beneath using the given consumer and returns {@code true}.
@@ -1492,8 +1542,24 @@ final class LetterboxUiController {
                 true /* traverseTopToBottom */));
     }
 
+    // When overriding translucent activities configuration we need to keep some of the
+    // original properties
+    private Configuration fromOriginalTranslucentConfig(Configuration translucentConfig) {
+        final Configuration configuration = new Configuration(translucentConfig);
+        // The values for the following properties will be defined during the configuration
+        // resolution in {@link ActivityRecord#resolveOverrideConfiguration} using the
+        // properties inherited from the first not finishing opaque activity beneath.
+        configuration.orientation = ORIENTATION_UNDEFINED;
+        configuration.screenWidthDp = configuration.compatScreenWidthDp = SCREEN_WIDTH_DP_UNDEFINED;
+        configuration.screenHeightDp =
+                configuration.compatScreenHeightDp = SCREEN_HEIGHT_DP_UNDEFINED;
+        configuration.smallestScreenWidthDp =
+                configuration.compatSmallestScreenWidthDp = SMALLEST_SCREEN_WIDTH_DP_UNDEFINED;
+        return configuration;
+    }
+
     private void inheritConfiguration(ActivityRecord firstOpaque) {
-        // To avoid wrong behaviour, we're not forcing a specific aspet ratio to activities
+        // To avoid wrong behaviour, we're not forcing a specific aspect ratio to activities
         // which are not already providing one (e.g. permission dialogs) and presumably also
         // not resizable.
         if (mActivityRecord.getMinAspectRatio() != UNDEFINED_ASPECT_RATIO) {
@@ -1511,7 +1577,7 @@ final class LetterboxUiController {
         mLetterboxConfigListener = null;
         mInheritedMinAspectRatio = UNDEFINED_ASPECT_RATIO;
         mInheritedMaxAspectRatio = UNDEFINED_ASPECT_RATIO;
-        mInheritedOrientation = Configuration.ORIENTATION_UNDEFINED;
+        mInheritedOrientation = ORIENTATION_UNDEFINED;
         mInheritedAppCompatState = APP_COMPAT_STATE_CHANGED__STATE__UNKNOWN;
         mInheritedCompatDisplayInsets = null;
     }

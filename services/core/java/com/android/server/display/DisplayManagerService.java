@@ -1525,14 +1525,17 @@ public final class DisplayManagerService extends SystemService {
                 }
             }
 
-            // When calling setContentRecordingSession into the WindowManagerService, the WMS
+            // When calling WindowManagerService#setContentRecordingSession, WindowManagerService
             // attempts to acquire a lock before executing its main body. Due to this, we need
             // to be sure that it isn't called while the DisplayManagerService is also holding
             // a lock, to avoid a deadlock scenario.
             final ContentRecordingSession session =
                     virtualDisplayConfig.getContentRecordingSession();
-
-            if (displayId != Display.INVALID_DISPLAY && session != null) {
+            // Ensure session details are only set when mirroring (through VirtualDisplay flags or
+            // MediaProjection).
+            final boolean shouldMirror =
+                    projection != null || (flags & VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR) != 0;
+            if (shouldMirror && displayId != Display.INVALID_DISPLAY && session != null) {
                 // Only attempt to set content recording session if there are details to set and a
                 // VirtualDisplay has been successfully constructed.
                 session.setDisplayId(displayId);
@@ -1540,8 +1543,8 @@ public final class DisplayManagerService extends SystemService {
                 // We set the content recording session here on the server side instead of using
                 // a second AIDL call in MediaProjection. By ensuring that a virtual display has
                 // been constructed before calling setContentRecordingSession, we avoid a race
-                // condition between the DMS & WMS which could lead to the MediaProjection
-                // being pre-emptively torn down.
+                // condition between the DisplayManagerService & WindowManagerService which could
+                // lead to the MediaProjection being pre-emptively torn down.
                 if (!mWindowManagerInternal.setContentRecordingSession(session)) {
                     // Unable to start mirroring, so tear down projection & release VirtualDisplay.
                     try {
@@ -2597,9 +2600,7 @@ public final class DisplayManagerService extends SystemService {
 
     void setDisplayModeDirectorLoggingEnabled(boolean enabled) {
         synchronized (mSyncRoot) {
-            if (mDisplayModeDirector != null) {
-                mDisplayModeDirector.setLoggingEnabled(enabled);
-            }
+            mDisplayModeDirector.setLoggingEnabled(enabled);
         }
     }
 
@@ -2868,8 +2869,11 @@ public final class DisplayManagerService extends SystemService {
         }
 
         pw.println("DISPLAY MANAGER (dumpsys display)");
+        BrightnessTracker brightnessTrackerLocal;
 
         synchronized (mSyncRoot) {
+            brightnessTrackerLocal = mBrightnessTracker;
+
             pw.println("  mSafeMode=" + mSafeMode);
             pw.println("  mPendingTraversal=" + mPendingTraversal);
             pw.println("  mViewports=" + mViewports);
@@ -2942,10 +2946,6 @@ public final class DisplayManagerService extends SystemService {
             for (int i = 0; i < displayPowerControllerCount; i++) {
                 mDisplayPowerControllers.valueAt(i).dump(pw);
             }
-            if (mBrightnessTracker != null) {
-                pw.println();
-                mBrightnessTracker.dump(pw);
-            }
             pw.println();
             mPersistentDataStore.dump(pw);
 
@@ -2957,6 +2957,10 @@ public final class DisplayManagerService extends SystemService {
                 pw.print("Display " + mDisplayWindowPolicyControllers.keyAt(i) + ":");
                 mDisplayWindowPolicyControllers.valueAt(i).second.dump("  ", pw);
             }
+        }
+        if (brightnessTrackerLocal != null) {
+            pw.println();
+            brightnessTrackerLocal.dump(pw);
         }
         pw.println();
         mDisplayModeDirector.dump(pw);

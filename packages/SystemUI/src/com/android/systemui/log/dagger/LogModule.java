@@ -136,6 +136,14 @@ public class LogModule {
         return factory.create("NotifSectionLog", 1000 /* maxSize */, false /* systrace */);
     }
 
+    /** Provides a logging buffer for all logs related to remote input controller. */
+    @Provides
+    @SysUISingleton
+    @NotificationRemoteInputLog
+    public static LogBuffer provideNotificationRemoteInputLogBuffer(LogBufferFactory factory) {
+        return factory.create("NotifRemoteInputLog", 50 /* maxSize */, false /* systrace */);
+    }
+
     /** Provides a logging buffer for all logs related to the data layer of notifications. */
     @Provides
     @SysUISingleton
@@ -150,6 +158,14 @@ public class LogModule {
     @QSLog
     public static LogBuffer provideQuickSettingsLogBuffer(LogBufferFactory factory) {
         return factory.create("QSLog", 700 /* maxSize */, false /* systrace */);
+    }
+
+    /** Provides a logging buffer for logs related to Quick Settings configuration. */
+    @Provides
+    @SysUISingleton
+    @QSConfigLog
+    public static LogBuffer provideQSConfigLogBuffer(LogBufferFactory factory) {
+        return factory.create("QSConfigLog", 100 /* maxSize */, true /* systrace */);
     }
 
     /** Provides a logging buffer for {@link com.android.systemui.broadcast.BroadcastDispatcher} */
