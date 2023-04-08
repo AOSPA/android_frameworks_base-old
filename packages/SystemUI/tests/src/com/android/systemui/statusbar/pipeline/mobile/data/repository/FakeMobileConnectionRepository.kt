@@ -23,6 +23,7 @@
 package com.android.systemui.statusbar.pipeline.mobile.data.repository
 
 import android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_NONE
+import android.telephony.TelephonyManager.UNKNOWN_CARRIER_ID
 import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.statusbar.pipeline.mobile.data.model.DataConnectionState
 import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameModel
@@ -37,6 +38,7 @@ class FakeMobileConnectionRepository(
     override val subId: Int,
     override val tableLogBuffer: TableLogBuffer,
 ) : MobileConnectionRepository {
+    override val carrierId = MutableStateFlow(UNKNOWN_CARRIER_ID)
     override val isEmergencyOnly = MutableStateFlow(false)
     override val isRoaming = MutableStateFlow(false)
     override val operatorAlphaShort: MutableStateFlow<String?> = MutableStateFlow(null)

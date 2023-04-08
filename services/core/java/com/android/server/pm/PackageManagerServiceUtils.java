@@ -32,6 +32,7 @@ import static com.android.server.pm.PackageManagerService.DEBUG_INTENT_MATCHING;
 import static com.android.server.pm.PackageManagerService.DEBUG_PREFERRED;
 import static com.android.server.pm.PackageManagerService.RANDOM_CODEPATH_PREFIX;
 import static com.android.server.pm.PackageManagerService.RANDOM_DIR_PREFIX;
+import static com.android.server.pm.PackageManagerService.SHELL_PACKAGE_NAME;
 import static com.android.server.pm.PackageManagerService.STUB_SUFFIX;
 import static com.android.server.pm.PackageManagerService.TAG;
 
@@ -41,7 +42,7 @@ import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.compat.annotation.ChangeId;
-import android.compat.annotation.EnabledSince;
+import android.compat.annotation.Disabled;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -188,7 +189,7 @@ public class PackageManagerServiceUtils {
      * allow 3P apps to trigger internal-only functionality.
      */
     @ChangeId
-    @EnabledSince(targetSdkVersion = Build.VERSION_CODES.TIRAMISU)
+    @Disabled  /* Revert enforcement: b/274147456 */
     private static final long ENFORCE_INTENTS_TO_MATCH_INTENT_FILTERS = 161252188;
 
     /**
@@ -1515,5 +1516,12 @@ public class PackageManagerServiceUtils {
                 }
             }
         }
+    }
+
+    /**
+     * Check if package name is com.android.shell or is null.
+     */
+    public static boolean isInstalledByAdb(String initiatingPackageName) {
+        return initiatingPackageName == null || SHELL_PACKAGE_NAME.equals(initiatingPackageName);
     }
 }

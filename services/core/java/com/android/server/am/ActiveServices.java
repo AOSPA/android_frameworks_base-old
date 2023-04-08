@@ -73,6 +73,7 @@ import static android.os.PowerExemptionManager.REASON_SYSTEM_MODULE;
 import static android.os.PowerExemptionManager.REASON_SYSTEM_UID;
 import static android.os.PowerExemptionManager.REASON_TEMP_ALLOWED_WHILE_IN_USE;
 import static android.os.PowerExemptionManager.REASON_UID_VISIBLE;
+import static android.os.PowerExemptionManager.REASON_UNKNOWN;
 import static android.os.PowerExemptionManager.TEMPORARY_ALLOW_LIST_TYPE_FOREGROUND_SERVICE_ALLOWED;
 import static android.os.PowerExemptionManager.getReasonCodeFromProcState;
 import static android.os.PowerExemptionManager.reasonCodeToString;
@@ -845,9 +846,9 @@ public final class ActiveServices {
         ServiceRecord r = res.record;
         // Note, when startService() or startForegroundService() is called on an already
         // running SHORT_SERVICE FGS, the call will succeed (i.e. we won't throw
-        // ForegroundServiceStartNotAllowedException), even when the service is alerady timed
-        // out. This is because these APIs will essnetially only change the "started" state
-        // of the service, and it won't afect "the foreground-ness" of the service, or the type
+        // ForegroundServiceStartNotAllowedException), even when the service is already timed
+        // out. This is because these APIs will essentially only change the "started" state
+        // of the service, and it won't affect "the foreground-ness" of the service, or the type
         // of the FGS.
         // However, this call will still _not_ extend the SHORT_SERVICE timeout either.
         // Also, if the app tries to change the type of the FGS later (using
@@ -7516,9 +7517,10 @@ public final class ActiveServices {
             r.mAllowWhileInUsePermissionInFgs = true;
         }
 
+        final @ReasonCode int allowWhileInUse;
         if (!r.mAllowWhileInUsePermissionInFgs
                 || (r.mAllowStartForeground == REASON_DENIED)) {
-            final @ReasonCode int allowWhileInUse = shouldAllowFgsWhileInUsePermissionLocked(
+            allowWhileInUse = shouldAllowFgsWhileInUsePermissionLocked(
                     callingPackage, callingPid, callingUid, r.app, backgroundStartPrivileges,
                     isBindService);
             if (!r.mAllowWhileInUsePermissionInFgs) {
@@ -7529,6 +7531,24 @@ public final class ActiveServices {
                         allowWhileInUse, callingPackage, callingPid, callingUid, intent, r,
                         backgroundStartPrivileges, isBindService);
             }
+        } else {
+            allowWhileInUse = REASON_UNKNOWN;
+        }
+        // We want to allow scheduling user-initiated jobs when the app is running a
+        // foreground service that was started in the same conditions that allows for scheduling
+        // UI jobs. More explicitly, we want to allow scheduling UI jobs when the app is running
+        // an FGS that started when the app was in the TOP or a BAL-approved state.
+        // As of Android UDC, the conditions required for the while-in-use permissions
+        // are the same conditions that we want, so we piggyback on that logic.
+        // We use that as a shortcut if possible so we don't have to recheck all the conditions.
+        final boolean isFgs = r.isForeground || r.fgRequired;
+        if (isFgs) {
+            r.updateAllowUiJobScheduling(ActivityManagerService
+                    .doesReasonCodeAllowSchedulingUserInitiatedJobs(allowWhileInUse)
+                    || mAm.canScheduleUserInitiatedJobs(
+                            callingUid, callingPid, callingPackage, true));
+        } else {
+            r.updateAllowUiJobScheduling(false);
         }
     }
 
@@ -7539,6 +7559,7 @@ public final class ActiveServices {
         r.mInfoTempFgsAllowListReason = null;
         r.mLoggedInfoAllowStartForeground = false;
         r.mLastSetFgsRestrictionTime = 0;
+        r.updateAllowUiJobScheduling(r.mAllowWhileInUsePermissionInFgs);
     }
 
     boolean canStartForegroundServiceLocked(int callingPid, int callingUid, String callingPackage) {

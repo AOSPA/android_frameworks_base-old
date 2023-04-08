@@ -265,6 +265,7 @@ import android.util.SparseBooleanArray;
 import android.util.StatsEvent;
 import android.util.Xml;
 import android.util.proto.ProtoOutputStream;
+import android.view.Display;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
 import android.widget.RemoteViews;
@@ -316,6 +317,7 @@ import com.android.server.pm.permission.PermissionManagerServiceInternal;
 import com.android.server.policy.PermissionPolicyInternal;
 import com.android.server.statusbar.StatusBarManagerInternal;
 import com.android.server.uri.UriGrantsManagerInternal;
+import com.android.server.utils.Slogf;
 import com.android.server.utils.quota.MultiRateLimiter;
 import com.android.server.wm.ActivityTaskManagerInternal;
 import com.android.server.wm.BackgroundActivityStartCallback;
@@ -654,7 +656,6 @@ public class NotificationManagerService extends SystemService {
     private ConditionProviders mConditionProviders;
     private NotificationUsageStats mUsageStats;
     private boolean mLockScreenAllowSecureNotifications = true;
-    boolean mAllowFgsDismissal = false;
     boolean mSystemExemptFromDismissal = false;
 
     private static final int MY_UID = Process.myUid();
@@ -2579,19 +2580,9 @@ public class NotificationManagerService extends SystemService {
             for (String name : properties.getKeyset()) {
                 if (SystemUiDeviceConfigFlags.NAS_DEFAULT_SERVICE.equals(name)) {
                     mAssistants.resetDefaultAssistantsIfNecessary();
-                } else if (SystemUiDeviceConfigFlags.TASK_MANAGER_ENABLED.equals(name)) {
-                    String value = properties.getString(name, null);
-                    if ("true".equals(value)) {
-                        mAllowFgsDismissal = true;
-                    } else if ("false".equals(value)) {
-                        mAllowFgsDismissal = false;
-                    }
                 }
             }
         };
-        mAllowFgsDismissal = DeviceConfig.getBoolean(
-                DeviceConfig.NAMESPACE_SYSTEMUI,
-                SystemUiDeviceConfigFlags.TASK_MANAGER_ENABLED, true);
         mSystemExemptFromDismissal = DeviceConfig.getBoolean(
                 DeviceConfig.NAMESPACE_DEVICE_POLICY_MANAGER,
                 /* name= */ "application_exemptions",
@@ -3288,22 +3279,25 @@ public class NotificationManagerService extends SystemService {
 
         @Override
         public void enqueueTextToast(String pkg, IBinder token, CharSequence text, int duration,
-                int displayId, @Nullable ITransientNotificationCallback callback) {
-            enqueueToast(pkg, token, text, null, duration, displayId, callback);
+                boolean isUiContext, int displayId,
+                @Nullable ITransientNotificationCallback textCallback) {
+            enqueueToast(pkg, token, text, /* callback= */ null, duration, isUiContext, displayId,
+                    textCallback);
         }
 
         @Override
         public void enqueueToast(String pkg, IBinder token, ITransientNotification callback,
-                int duration, int displayId) {
-            enqueueToast(pkg, token, null, callback, duration, displayId, null);
+                int duration, boolean isUiContext, int displayId) {
+            enqueueToast(pkg, token, /* text= */ null, callback, duration, isUiContext, displayId,
+                    /* textCallback= */ null);
         }
 
         private void enqueueToast(String pkg, IBinder token, @Nullable CharSequence text,
-                @Nullable ITransientNotification callback, int duration, int displayId,
-                @Nullable ITransientNotificationCallback textCallback) {
+                @Nullable ITransientNotification callback, int duration, boolean isUiContext,
+                int displayId, @Nullable ITransientNotificationCallback textCallback) {
             if (DBG) {
-                Slog.i(TAG, "enqueueToast pkg=" + pkg + " token=" + token
-                        + " duration=" + duration + " displayId=" + displayId);
+                Slog.i(TAG, "enqueueToast pkg=" + pkg + " token=" + token + " duration=" + duration
+                        + " isUiContext=" + isUiContext + " displayId=" + displayId);
             }
 
             if (pkg == null || (text == null && callback == null)
@@ -3314,11 +3308,28 @@ public class NotificationManagerService extends SystemService {
             }
 
             final int callingUid = Binder.getCallingUid();
+            if (!isUiContext && displayId == Display.DEFAULT_DISPLAY
+                    && mUm.isVisibleBackgroundUsersSupported()) {
+                // When the caller is a visible background user using a non-UI context (like the
+                // application context), the Toast must be displayed in the display the user was
+                // started visible on.
+                int userId = UserHandle.getUserId(callingUid);
+                int userDisplayId = mUmInternal.getMainDisplayAssignedToUser(userId);
+                if (displayId != userDisplayId) {
+                    if (DBG) {
+                        Slogf.d(TAG, "Changing display id from %d to %d on user %d", displayId,
+                                userDisplayId, userId);
+                    }
+                    displayId = userDisplayId;
+                }
+            }
+
             checkCallerIsSameApp(pkg);
             final boolean isSystemToast = isCallerSystemOrPhone()
                     || PackageManagerService.PLATFORM_PACKAGE_NAME.equals(pkg);
             boolean isAppRenderedToast = (callback != null);
-            if (!checkCanEnqueueToast(pkg, callingUid, isAppRenderedToast, isSystemToast)) {
+            if (!checkCanEnqueueToast(pkg, callingUid, displayId, isAppRenderedToast,
+                    isSystemToast)) {
                 return;
             }
 
@@ -3372,7 +3383,7 @@ public class NotificationManagerService extends SystemService {
             }
         }
 
-        private boolean checkCanEnqueueToast(String pkg, int callingUid,
+        private boolean checkCanEnqueueToast(String pkg, int callingUid, int displayId,
                 boolean isAppRenderedToast, boolean isSystemToast) {
             final boolean isPackageSuspended = isPackagePaused(pkg);
             final boolean notificationsDisabledForPackage = !areNotificationsEnabledForPackage(pkg,
@@ -3399,6 +3410,13 @@ public class NotificationManagerService extends SystemService {
                     isPackageInForegroundForToast(callingUid))) {
                 Slog.w(TAG, "Blocking custom toast from package " + pkg
                         + " due to package not in the foreground at time the toast was posted");
+                return false;
+            }
+
+            int userId = UserHandle.getUserId(callingUid);
+            if (!isSystemToast && !mUmInternal.isUserVisible(userId, displayId)) {
+                Slog.e(TAG, "Suppressing toast from package " + pkg + "/" + callingUid + " as user "
+                        + userId + " is not visible on display " + displayId);
                 return false;
             }
 
@@ -6607,20 +6625,15 @@ public class NotificationManagerService extends SystemService {
                             || r.getImportance() == IMPORTANCE_NONE)) {
                 // Increase the importance of foreground service notifications unless the user had
                 // an opinion otherwise (and the channel hasn't yet shown a fg service).
-                if (TextUtils.isEmpty(channelId)
-                        || NotificationChannel.DEFAULT_CHANNEL_ID.equals(channelId)) {
-                    r.setSystemImportance(IMPORTANCE_LOW);
-                } else {
-                    channel.setImportance(IMPORTANCE_LOW);
-                    r.setSystemImportance(IMPORTANCE_LOW);
-                    if (!fgServiceShown) {
-                        channel.unlockFields(NotificationChannel.USER_LOCKED_IMPORTANCE);
-                        channel.setFgServiceShown(true);
-                    }
-                    mPreferencesHelper.updateNotificationChannel(
-                            pkg, notificationUid, channel, false);
-                    r.updateNotificationChannel(channel);
+                channel.setImportance(IMPORTANCE_LOW);
+                r.setSystemImportance(IMPORTANCE_LOW);
+                if (!fgServiceShown) {
+                    channel.unlockFields(NotificationChannel.USER_LOCKED_IMPORTANCE);
+                    channel.setFgServiceShown(true);
                 }
+                mPreferencesHelper.updateNotificationChannel(
+                        pkg, notificationUid, channel, false);
+                r.updateNotificationChannel(channel);
             } else if (!fgServiceShown && !TextUtils.isEmpty(channelId)
                     && !NotificationChannel.DEFAULT_CHANNEL_ID.equals(channelId)) {
                 channel.setFgServiceShown(true);
@@ -6701,8 +6714,11 @@ public class NotificationManagerService extends SystemService {
         handleSavePolicyFile();
     }
 
-    private void makeStickyHun(Notification notification) {
-        notification.flags |= FLAG_FSI_REQUESTED_BUT_DENIED;
+    private void makeStickyHun(Notification notification, String pkg, @UserIdInt int userId) {
+        if (mPermissionHelper.hasRequestedPermission(
+                Manifest.permission.USE_FULL_SCREEN_INTENT, pkg, userId)) {
+            notification.flags |= FLAG_FSI_REQUESTED_BUT_DENIED;
+        }
         if (notification.contentIntent == null) {
             // On notification click, if contentIntent is null, SystemUI launches the
             // fullScreenIntent instead.
@@ -6766,10 +6782,9 @@ public class NotificationManagerService extends SystemService {
                     SystemUiSystemPropertiesFlags.NotificationFlags.SHOW_STICKY_HUN_FOR_DENIED_FSI);
 
             if (forceDemoteFsiToStickyHun) {
-                makeStickyHun(notification);
+                makeStickyHun(notification, pkg, userId);
 
             } else if (showStickyHunIfDenied) {
-
                 final AttributionSource source = new AttributionSource.Builder(notificationUid)
                         .setPackageName(pkg)
                         .build();
@@ -6778,7 +6793,7 @@ public class NotificationManagerService extends SystemService {
                         Manifest.permission.USE_FULL_SCREEN_INTENT, source, /* message= */ null);
 
                 if (permissionResult != PermissionManager.PERMISSION_GRANTED) {
-                    makeStickyHun(notification);
+                    makeStickyHun(notification, pkg, userId);
                 }
 
             } else {
@@ -7707,9 +7722,6 @@ public class NotificationManagerService extends SystemService {
                     // flags are set.
                     if ((notification.flags & FLAG_FOREGROUND_SERVICE) != 0) {
                         notification.flags |= FLAG_NO_CLEAR;
-                        if (!mAllowFgsDismissal) {
-                            notification.flags |= FLAG_ONGOING_EVENT;
-                        }
                     }
 
                     mRankingHelper.extractSignals(r);

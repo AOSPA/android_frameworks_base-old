@@ -241,6 +241,7 @@ import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 import java.net.InetAddress;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -360,9 +361,8 @@ public final class ActivityThread extends ClientTransactionHandler
     /** The activities to be truly destroyed (not include relaunch). */
     final Map<IBinder, ClientTransactionItem> mActivitiesToBeDestroyed =
             Collections.synchronizedMap(new ArrayMap<IBinder, ClientTransactionItem>());
-    // List of new activities (via ActivityRecord.nextIdle) that should
-    // be reported when next we idle.
-    ActivityClientRecord mNewActivities = null;
+    // List of new activities that should be reported when next we idle.
+    final ArrayList<ActivityClientRecord> mNewActivities = new ArrayList<>();
     // Number of activities that are currently visible on-screen.
     @UnsupportedAppUsage
     int mNumVisibleActivities = 0;
@@ -563,7 +563,6 @@ public final class ActivityThread extends ClientTransactionHandler
         private Configuration tmpConfig = new Configuration();
         // Callback used for updating activity override config and camera compat control state.
         ViewRootImpl.ActivityConfigCallback activityConfigCallback;
-        ActivityClientRecord nextIdle;
 
         // Indicates whether this activity is currently the topmost resumed one in the system.
         // This holds the last reported value from server.
@@ -657,7 +656,6 @@ public final class ActivityThread extends ClientTransactionHandler
             paused = false;
             stopped = false;
             hideForNow = false;
-            nextIdle = null;
             activityConfigCallback = new ViewRootImpl.ActivityConfigCallback() {
                 @Override
                 public void onConfigurationChanged(Configuration overrideConfig,
@@ -2483,29 +2481,22 @@ public final class ActivityThread extends ClientTransactionHandler
     private class Idler implements MessageQueue.IdleHandler {
         @Override
         public final boolean queueIdle() {
-            ActivityClientRecord a = mNewActivities;
             boolean stopProfiling = false;
             if (mBoundApplication != null && mProfiler.profileFd != null
                     && mProfiler.autoStopProfiler) {
                 stopProfiling = true;
             }
-            if (a != null) {
-                mNewActivities = null;
-                final ActivityClient ac = ActivityClient.getInstance();
-                ActivityClientRecord prev;
-                do {
-                    if (localLOGV) Slog.v(
-                        TAG, "Reporting idle of " + a +
-                        " finished=" +
-                        (a.activity != null && a.activity.mFinished));
-                    if (a.activity != null && !a.activity.mFinished) {
-                        ac.activityIdle(a.token, a.createdConfig, stopProfiling);
-                        a.createdConfig = null;
-                    }
-                    prev = a;
-                    a = a.nextIdle;
-                    prev.nextIdle = null;
-                } while (a != null);
+            final ActivityClient ac = ActivityClient.getInstance();
+            while (mNewActivities.size() > 0) {
+                final ActivityClientRecord a = mNewActivities.remove(0);
+                if (localLOGV) {
+                    Slog.v(TAG, "Reporting idle of " + a + " finished="
+                            + (a.activity != null && a.activity.mFinished));
+                }
+                if (a.activity != null && !a.activity.mFinished) {
+                    ac.activityIdle(a.token, a.createdConfig, stopProfiling);
+                    a.createdConfig = null;
+                }
             }
             if (stopProfiling) {
                 mProfiler.stopProfiling();
@@ -4353,18 +4344,20 @@ public final class ActivityThread extends ClientTransactionHandler
 
     static void handleAttachStartupAgents(String dataDir) {
         try {
-            Path code_cache = ContextImpl.getCodeCacheDirBeforeBind(new File(dataDir)).toPath();
-            if (!Files.exists(code_cache)) {
+            Path codeCache = ContextImpl.getCodeCacheDirBeforeBind(new File(dataDir)).toPath();
+            if (!Files.exists(codeCache)) {
                 return;
             }
-            Path startup_path = code_cache.resolve("startup_agents");
-            if (Files.exists(startup_path)) {
-                for (Path p : Files.newDirectoryStream(startup_path)) {
-                    handleAttachAgent(
-                            p.toAbsolutePath().toString()
-                            + "="
-                            + dataDir,
-                            null);
+            Path startupPath = codeCache.resolve("startup_agents");
+            if (Files.exists(startupPath)) {
+                try (DirectoryStream<Path> startupFiles = Files.newDirectoryStream(startupPath)) {
+                    for (Path p : startupFiles) {
+                        handleAttachAgent(
+                                p.toAbsolutePath().toString()
+                                        + "="
+                                        + dataDir,
+                                null);
+                    }
                 }
             }
         } catch (Exception e) {
@@ -5105,8 +5098,7 @@ public final class ActivityThread extends ClientTransactionHandler
             }
         }
 
-        r.nextIdle = mNewActivities;
-        mNewActivities = r;
+        mNewActivities.add(r);
         if (localLOGV) Slog.v(TAG, "Scheduling idle handler for " + r);
         Looper.myQueue().addIdleHandler(new Idler());
     }
@@ -5707,6 +5699,7 @@ public final class ActivityThread extends ClientTransactionHandler
         }
         if (finishing) {
             ActivityClient.getInstance().activityDestroyed(r.token);
+            mNewActivities.remove(r);
         }
         mSomeActivitiesChanged = true;
     }
@@ -5927,7 +5920,6 @@ public final class ActivityThread extends ClientTransactionHandler
         r.activity = null;
         r.window = null;
         r.hideForNow = false;
-        r.nextIdle = null;
         // Merge any pending results and pending intents; don't just replace them
         if (pendingResults != null) {
             if (r.pendingResults == null) {
