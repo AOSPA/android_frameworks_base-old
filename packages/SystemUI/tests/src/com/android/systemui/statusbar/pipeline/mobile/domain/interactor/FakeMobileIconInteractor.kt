@@ -23,12 +23,12 @@
 package com.android.systemui.statusbar.pipeline.mobile.domain.interactor
 
 import android.telephony.CellSignalStrength
-import com.android.settingslib.SignalIcon
 import com.android.settingslib.mobile.TelephonyIcons
 import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileIconCustomizationMode
 import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameModel
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionRepository.Companion.DEFAULT_NUM_LEVELS
+import com.android.systemui.statusbar.pipeline.mobile.domain.model.NetworkTypeIconModel
 import com.android.systemui.statusbar.pipeline.shared.data.model.DataActivityModel
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -47,10 +47,12 @@ class FakeMobileIconInteractor(
             )
         )
 
-    override val isConnected = MutableStateFlow(true)
+    override val mobileIsDefault = MutableStateFlow(true)
 
-    private val _iconGroup = MutableStateFlow<SignalIcon.MobileIconGroup>(TelephonyIcons.THREE_G)
-    override val networkTypeIconGroup = _iconGroup
+    override val networkTypeIconGroup =
+        MutableStateFlow<NetworkTypeIconModel>(
+            NetworkTypeIconModel.DefaultIcon(TelephonyIcons.THREE_G)
+        )
 
     override val networkName = MutableStateFlow(NetworkNameModel.IntentDerived("demo mode"))
 
@@ -100,10 +102,6 @@ class FakeMobileIconInteractor(
 
     private val _voWifiAvailable = MutableStateFlow(false)
     override val voWifiAvailable = _voWifiAvailable
-
-    fun setIconGroup(group: SignalIcon.MobileIconGroup) {
-        _iconGroup.value = group
-    }
 
     fun setIsEmergencyOnly(emergency: Boolean) {
         _isEmergencyOnly.value = emergency

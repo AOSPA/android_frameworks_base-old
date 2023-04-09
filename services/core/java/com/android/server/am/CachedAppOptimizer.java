@@ -18,20 +18,24 @@ package com.android.server.am;
 
 import static android.app.ActivityManager.UidFrozenStateChangedCallback.UID_FROZEN_STATE_FROZEN;
 import static android.app.ActivityManager.UidFrozenStateChangedCallback.UID_FROZEN_STATE_UNFROZEN;
+import static android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND;
 
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_COMPACTION;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_FREEZER;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 
+import android.annotation.IntDef;
 import android.app.ActivityManager;
 import android.app.ActivityThread;
 import android.app.ApplicationExitInfo;
+import android.app.IApplicationThread;
 import android.database.ContentObserver;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Message;
 import android.os.PowerManagerInternal;
 import android.os.Process;
+import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.Trace;
@@ -56,6 +60,8 @@ import com.android.server.ServiceThread;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumMap;
@@ -98,6 +104,70 @@ public final class CachedAppOptimizer {
     @VisibleForTesting static final String KEY_FREEZER_EXEMPT_INST_PKG =
             "freeze_exempt_inst_pkg";
 
+
+    static final int UNFREEZE_REASON_NONE =
+            FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON_V2__UFR_NONE;
+    static final int UNFREEZE_REASON_ACTIVITY =
+            FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON_V2__UFR_ACTIVITY;
+    static final int UNFREEZE_REASON_FINISH_RECEIVER =
+            FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON_V2__UFR_FINISH_RECEIVER;
+    static final int UNFREEZE_REASON_START_RECEIVER =
+            FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON_V2__UFR_START_RECEIVER;
+    static final int UNFREEZE_REASON_BIND_SERVICE =
+            FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON_V2__UFR_BIND_SERVICE;
+    static final int UNFREEZE_REASON_UNBIND_SERVICE =
+            FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON_V2__UFR_UNBIND_SERVICE;
+    static final int UNFREEZE_REASON_START_SERVICE =
+            FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON_V2__UFR_START_SERVICE;
+    static final int UNFREEZE_REASON_GET_PROVIDER =
+            FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON_V2__UFR_GET_PROVIDER;
+    static final int UNFREEZE_REASON_REMOVE_PROVIDER =
+            FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON_V2__UFR_REMOVE_PROVIDER;
+    static final int UNFREEZE_REASON_UI_VISIBILITY =
+            FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON_V2__UFR_UI_VISIBILITY;
+    static final int UNFREEZE_REASON_ALLOWLIST =
+            FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON_V2__UFR_ALLOWLIST;
+    static final int UNFREEZE_REASON_PROCESS_BEGIN =
+            FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON_V2__UFR_PROCESS_BEGIN;
+    static final int UNFREEZE_REASON_PROCESS_END =
+            FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON_V2__UFR_PROCESS_END;
+    static final int UNFREEZE_REASON_TRIM_MEMORY =
+            FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON_V2__UFR_TRIM_MEMORY;
+    static final int UNFREEZE_REASON_PING =
+            FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON_V2__UFR_PING;
+    static final int UNFREEZE_REASON_FILE_LOCKS =
+            FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON_V2__UFR_FILE_LOCKS;
+    static final int UNFREEZE_REASON_FILE_LOCK_CHECK_FAILURE =
+            FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON_V2__UFR_FILE_LOCK_CHECK_FAILURE;
+    static final int UNFREEZE_REASON_BINDER_TXNS =
+            FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON_V2__UFR_BINDER_TXNS;
+    static final int UNFREEZE_REASON_FEATURE_FLAGS =
+            FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON_V2__UFR_FEATURE_FLAGS;
+
+    @IntDef(prefix = {"UNFREEZE_REASON_"}, value = {
+        UNFREEZE_REASON_NONE,
+        UNFREEZE_REASON_ACTIVITY,
+        UNFREEZE_REASON_FINISH_RECEIVER,
+        UNFREEZE_REASON_START_RECEIVER,
+        UNFREEZE_REASON_BIND_SERVICE,
+        UNFREEZE_REASON_UNBIND_SERVICE,
+        UNFREEZE_REASON_START_SERVICE,
+        UNFREEZE_REASON_GET_PROVIDER,
+        UNFREEZE_REASON_REMOVE_PROVIDER,
+        UNFREEZE_REASON_UI_VISIBILITY,
+        UNFREEZE_REASON_ALLOWLIST,
+        UNFREEZE_REASON_PROCESS_BEGIN,
+        UNFREEZE_REASON_PROCESS_END,
+        UNFREEZE_REASON_TRIM_MEMORY,
+        UNFREEZE_REASON_PING,
+        UNFREEZE_REASON_FILE_LOCKS,
+        UNFREEZE_REASON_FILE_LOCK_CHECK_FAILURE,
+        UNFREEZE_REASON_BINDER_TXNS,
+        UNFREEZE_REASON_FEATURE_FLAGS,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface UnfreezeReason {}
+
     // RSS Indices
     private static final int RSS_TOTAL_INDEX = 0;
     private static final int RSS_FILE_INDEX = 1;
@@ -135,7 +205,7 @@ public final class CachedAppOptimizer {
     // Format of this string should be a comma separated list of integers.
     @VisibleForTesting static final String DEFAULT_COMPACT_PROC_STATE_THROTTLE =
             String.valueOf(ActivityManager.PROCESS_STATE_RECEIVER);
-    @VisibleForTesting static final long DEFAULT_FREEZER_DEBOUNCE_TIMEOUT = 600_000L;
+    @VisibleForTesting static final long DEFAULT_FREEZER_DEBOUNCE_TIMEOUT = 10_000L;
     @VisibleForTesting static final Boolean DEFAULT_FREEZER_EXEMPT_INST_PKG = true;
 
     @VisibleForTesting static final Uri CACHED_APP_FREEZER_ENABLED_URI = Settings.Global.getUriFor(
@@ -163,8 +233,8 @@ public final class CachedAppOptimizer {
         FULL // File+anon compaction
     }
 
-    // This indicates the process OOM memory state that initiated the compaction request
-    public enum CompactSource { APP, PERSISTENT, BFGS }
+    // This indicates who initiated the compaction request
+    public enum CompactSource { APP, SHELL }
 
     public enum CancelCompactReason {
         SCREEN_ON, // screen was turned on which cancels all compactions.
@@ -311,10 +381,6 @@ public final class CachedAppOptimizer {
     @VisibleForTesting volatile long mCompactThrottleFullSome = DEFAULT_COMPACT_THROTTLE_3;
     @GuardedBy("mPhenotypeFlagLock")
     @VisibleForTesting volatile long mCompactThrottleFullFull = DEFAULT_COMPACT_THROTTLE_4;
-    @GuardedBy("mPhenotypeFlagLock")
-    @VisibleForTesting volatile long mCompactThrottleBFGS = DEFAULT_COMPACT_THROTTLE_5;
-    @GuardedBy("mPhenotypeFlagLock")
-    @VisibleForTesting volatile long mCompactThrottlePersistent = DEFAULT_COMPACT_THROTTLE_6;
     @GuardedBy("mPhenotypeFlagLock")
     @VisibleForTesting volatile long mCompactThrottleMinOomAdj =
             DEFAULT_COMPACT_THROTTLE_MIN_OOM_ADJ;
@@ -661,8 +727,6 @@ public final class CachedAppOptimizer {
             pw.println("  " + KEY_COMPACT_THROTTLE_2 + "=" + mCompactThrottleSomeFull);
             pw.println("  " + KEY_COMPACT_THROTTLE_3 + "=" + mCompactThrottleFullSome);
             pw.println("  " + KEY_COMPACT_THROTTLE_4 + "=" + mCompactThrottleFullFull);
-            pw.println("  " + KEY_COMPACT_THROTTLE_5 + "=" + mCompactThrottleBFGS);
-            pw.println("  " + KEY_COMPACT_THROTTLE_6 + "=" + mCompactThrottlePersistent);
             pw.println("  " + KEY_COMPACT_THROTTLE_MIN_OOM_ADJ + "=" + mCompactThrottleMinOomAdj);
             pw.println("  " + KEY_COMPACT_THROTTLE_MAX_OOM_ADJ + "=" + mCompactThrottleMaxOomAdj);
             pw.println("  " + KEY_COMPACT_STATSD_SAMPLE_RATE + "=" + mCompactStatsdSampleRate);
@@ -754,32 +818,6 @@ public final class CachedAppOptimizer {
         }
     }
 
-    // This method returns true only if requirements are met. Note, that requirements are different
-    // from throttles applied at the time a compaction is trying to be executed in the sense that
-    // these are not subject to change dependent on time or memory as throttles usually do.
-    @GuardedBy("mProcLock")
-    boolean meetsCompactionRequirements(ProcessRecord proc) {
-        if (mAm.mInternal.isPendingTopUid(proc.uid)) {
-            // In case the OOM Adjust has not yet been propagated we see if this is
-            // pending on becoming top app in which case we should not compact.
-            if (mDebugCompaction) {
-                Slog.d(TAG_AM, "Skip compaction since UID is active for  " + proc.processName);
-            }
-            return false;
-        }
-
-        if (proc.mState.hasForegroundActivities()) {
-            if (mDebugCompaction) {
-                Slog.e(TAG_AM,
-                        "Skip compaction as process " + proc.processName
-                                + " has foreground activities");
-            }
-            return false;
-        }
-
-        return true;
-    }
-
     @GuardedBy("mProcLock")
     boolean compactApp(
             ProcessRecord app, CompactProfile compactProfile, CompactSource source, boolean force) {
@@ -803,7 +841,7 @@ public final class CachedAppOptimizer {
                 return false;
         }
 
-        if (!app.mOptRecord.hasPendingCompact() && (meetsCompactionRequirements(app) || force)) {
+        if (!app.mOptRecord.hasPendingCompact()) {
             final String processName = (app.processName != null ? app.processName : "");
             if (mDebugCompaction) {
                 Slog.d(TAG_AM,
@@ -821,8 +859,7 @@ public final class CachedAppOptimizer {
         if (mDebugCompaction) {
             Slog.d(TAG_AM,
                     " compactApp Skipped for " + app.processName + " pendingCompact= "
-                            + app.mOptRecord.hasPendingCompact() + " meetsCompactionRequirements="
-                            + meetsCompactionRequirements(app) + ". Requested compact profile: "
+                            + app.mOptRecord.hasPendingCompact() + ". Requested compact profile: "
                             + app.mOptRecord.getReqCompactProfile().name() + ". Compact source "
                             + app.mOptRecord.getReqCompactSource().name());
         }
@@ -855,18 +892,6 @@ public final class CachedAppOptimizer {
             mPerSourceCompactStats.put(source, stats);
         }
         return stats;
-    }
-
-    @GuardedBy("mProcLock")
-    boolean shouldCompactPersistent(ProcessRecord app, long now) {
-        return (app.mOptRecord.getLastCompactTime() == 0
-                || (now - app.mOptRecord.getLastCompactTime()) > mCompactThrottlePersistent);
-    }
-
-    @GuardedBy("mProcLock")
-    boolean shouldCompactBFGS(ProcessRecord app, long now) {
-        return (app.mOptRecord.getLastCompactTime() == 0
-                || (now - app.mOptRecord.getLastCompactTime()) > mCompactThrottleBFGS);
     }
 
     void compactAllSystem() {
@@ -993,7 +1018,7 @@ public final class CachedAppOptimizer {
                     }
 
                     if (!enable && opt.isFrozen()) {
-                        unfreezeAppLSP(process, OomAdjuster.OOM_ADJ_REASON_NONE);
+                        unfreezeAppLSP(process, UNFREEZE_REASON_FEATURE_FLAGS);
 
                         // Set freezerOverride *after* calling unfreezeAppLSP (it resets the flag)
                         opt.setFreezerOverride(true);
@@ -1046,11 +1071,14 @@ public final class CachedAppOptimizer {
         FileReader fr = null;
 
         try {
-            fr = new FileReader(getFreezerCheckPath());
+            String path = getFreezerCheckPath();
+            Slog.d(TAG_AM, "Checking cgroup freezer: " + path);
+            fr = new FileReader(path);
             char state = (char) fr.read();
 
             if (state == '1' || state == '0') {
                 // Also check freezer binder ioctl
+                Slog.d(TAG_AM, "Checking binder freezer ioctl");
                 getBinderFreezeInfo(Process.myPid());
                 supported = true;
             } else {
@@ -1072,6 +1100,7 @@ public final class CachedAppOptimizer {
             }
         }
 
+        Slog.d(TAG_AM, "Freezer supported: " + supported);
         return supported;
     }
 
@@ -1165,8 +1194,6 @@ public final class CachedAppOptimizer {
                 mCompactThrottleSomeFull = Integer.parseInt(throttleSomeFullFlag);
                 mCompactThrottleFullSome = Integer.parseInt(throttleFullSomeFlag);
                 mCompactThrottleFullFull = Integer.parseInt(throttleFullFullFlag);
-                mCompactThrottleBFGS = Integer.parseInt(throttleBFGSFlag);
-                mCompactThrottlePersistent = Integer.parseInt(throttlePersistentFlag);
                 mCompactThrottleMinOomAdj = Long.parseLong(throttleMinOomAdjFlag);
                 mCompactThrottleMaxOomAdj = Long.parseLong(throttleMaxOomAdjFlag);
             } catch (NumberFormatException e) {
@@ -1179,8 +1206,6 @@ public final class CachedAppOptimizer {
             mCompactThrottleSomeFull = DEFAULT_COMPACT_THROTTLE_2;
             mCompactThrottleFullSome = DEFAULT_COMPACT_THROTTLE_3;
             mCompactThrottleFullFull = DEFAULT_COMPACT_THROTTLE_4;
-            mCompactThrottleBFGS = DEFAULT_COMPACT_THROTTLE_5;
-            mCompactThrottlePersistent = DEFAULT_COMPACT_THROTTLE_6;
             mCompactThrottleMinOomAdj = DEFAULT_COMPACT_THROTTLE_MIN_OOM_ADJ;
             mCompactThrottleMaxOomAdj = DEFAULT_COMPACT_THROTTLE_MAX_OOM_ADJ;
         }
@@ -1296,7 +1321,7 @@ public final class CachedAppOptimizer {
 
     // This will ensure app will be out of the freezer for at least mFreezerDebounceTimeout.
     @GuardedBy("mAm")
-    void unfreezeTemporarily(ProcessRecord app, @OomAdjuster.OomAdjReason int reason) {
+    void unfreezeTemporarily(ProcessRecord app, @UnfreezeReason int reason) {
         if (mUseFreezer) {
             synchronized (mProcLock) {
                 if (app.mOptRecord.isFrozen() || app.mOptRecord.isPendingFreeze()) {
@@ -1315,6 +1340,17 @@ public final class CachedAppOptimizer {
             return;
         }
 
+        if (mAm.mConstants.USE_MODERN_TRIM
+                && app.mState.getSetAdj() >= ProcessList.CACHED_APP_MIN_ADJ) {
+            final IApplicationThread thread = app.getThread();
+            if (thread != null) {
+                try {
+                    thread.scheduleTrimMemory(TRIM_MEMORY_BACKGROUND);
+                } catch (RemoteException e) {
+                    // do nothing
+                }
+            }
+        }
         mFreezeHandler.sendMessageDelayed(
                 mFreezeHandler.obtainMessage(
                     SET_FROZEN_PROCESS_MSG, DO_FREEZE, 0, app),
@@ -1326,7 +1362,7 @@ public final class CachedAppOptimizer {
     }
 
     @GuardedBy({"mAm", "mProcLock", "mFreezerLock"})
-    void unfreezeAppInternalLSP(ProcessRecord app, @OomAdjuster.OomAdjReason int reason) {
+    void unfreezeAppInternalLSP(ProcessRecord app, @UnfreezeReason int reason) {
         final int pid = app.getPid();
         final ProcessCachedOptimizerRecord opt = app.mOptRecord;
         if (opt.isPendingFreeze()) {
@@ -1420,7 +1456,7 @@ public final class CachedAppOptimizer {
     }
 
     @GuardedBy({"mAm", "mProcLock"})
-    void unfreezeAppLSP(ProcessRecord app, @OomAdjuster.OomAdjReason int reason) {
+    void unfreezeAppLSP(ProcessRecord app, @UnfreezeReason int reason) {
         synchronized (mFreezerLock) {
             unfreezeAppInternalLSP(app, reason);
         }
@@ -1532,24 +1568,23 @@ public final class CachedAppOptimizer {
 
     @GuardedBy({"mService", "mProcLock"})
     void onOomAdjustChanged(int oldAdj, int newAdj, ProcessRecord app) {
-        // Cancel any currently executing compactions
-        // if the process moved out of cached state
-        if (newAdj < oldAdj && newAdj < ProcessList.CACHED_APP_MIN_ADJ) {
-            cancelCompactionForProcess(app, CancelCompactReason.OOM_IMPROVEMENT);
-        }
-
-        if (oldAdj <= ProcessList.PERCEPTIBLE_APP_ADJ
-                && (newAdj == ProcessList.PREVIOUS_APP_ADJ || newAdj == ProcessList.HOME_APP_ADJ)) {
-            if (ENABLE_FILE_COMPACT) {
-                // Perform a minor compaction when a perceptible app becomes the prev/home app
-                compactApp(app, CompactProfile.SOME, CompactSource.APP, false);
+        if (useCompaction()) {
+            // Cancel any currently executing compactions
+            // if the process moved out of cached state
+            if (newAdj < oldAdj && newAdj < ProcessList.CACHED_APP_MIN_ADJ) {
+                cancelCompactionForProcess(app, CancelCompactReason.OOM_IMPROVEMENT);
             }
-        } else if ((oldAdj < ProcessList.CACHED_APP_MIN_ADJ
-                || oldAdj > ProcessList.CACHED_APP_MAX_ADJ)
-                && newAdj >= ProcessList.CACHED_APP_MIN_ADJ
-                && newAdj <= ProcessList.CACHED_APP_MAX_ADJ) {
-            // Perform a major compaction when any app enters cached
-            compactApp(app, CompactProfile.FULL, CompactSource.APP, false);
+        }
+    }
+
+    /**
+     * Callback received after a process has been frozen.
+     */
+    void onProcessFrozen(ProcessRecord frozenProc) {
+        if (useCompaction()) {
+            synchronized (mProcLock) {
+                compactApp(frozenProc, CompactProfile.FULL, CompactSource.APP, false);
+            }
         }
     }
 
@@ -1722,26 +1757,6 @@ public final class CachedAppOptimizer {
                             }
                             return true;
                         }
-                    }
-                } else if (source == CompactSource.PERSISTENT) {
-                    if (start - lastCompactTime < mCompactThrottlePersistent) {
-                        if (mDebugCompaction) {
-                            Slog.d(TAG_AM,
-                                    "Skipping persistent compaction for " + name
-                                            + ": too soon. throttle=" + mCompactThrottlePersistent
-                                            + " last=" + (start - lastCompactTime) + "ms ago");
-                        }
-                        return true;
-                    }
-                } else if (source == CompactSource.BFGS) {
-                    if (start - lastCompactTime < mCompactThrottleBFGS) {
-                        if (mDebugCompaction) {
-                            Slog.d(TAG_AM,
-                                    "Skipping bfgs compaction for " + name
-                                            + ": too soon. throttle=" + mCompactThrottleBFGS
-                                            + " last=" + (start - lastCompactTime) + "ms ago");
-                        }
-                        return true;
                     }
                 }
             }
@@ -2053,9 +2068,12 @@ public final class CachedAppOptimizer {
                                 + name + "(" + pid + "): " + e);
                         synchronized (mAm) {
                             synchronized (mProcLock) {
-                                unfreezeAppLSP(proc, OomAdjuster.OOM_ADJ_REASON_NONE);
+                                unfreezeAppLSP(proc, UNFREEZE_REASON_FILE_LOCK_CHECK_FAILURE);
                             }
                         }
+                    }
+                    if (proc.mOptRecord.isFrozen()) {
+                        onProcessFrozen(proc);
                     }
                 }
                     break;
@@ -2078,13 +2096,18 @@ public final class CachedAppOptimizer {
         }
 
         @GuardedBy({"mAm", "mProcLock"})
-        private void rescheduleFreeze(final ProcessRecord proc, final String reason) {
+        private void rescheduleFreeze(final ProcessRecord proc, final String reason,
+                @UnfreezeReason int reasonCode) {
             Slog.d(TAG_AM, "Reschedule freeze for process " + proc.getPid()
                     + " " + proc.processName + " (" + reason + ")");
-            unfreezeAppLSP(proc, OomAdjuster.OOM_ADJ_REASON_NONE);
+            unfreezeAppLSP(proc, reasonCode);
             freezeAppAsyncLSP(proc);
         }
 
+        /**
+         * Freeze a process.
+         * @param proc process to be frozen
+         */
         @GuardedBy({"mAm"})
         private void freezeProcess(final ProcessRecord proc) {
             int pid = proc.getPid(); // Unlocked intentionally
@@ -2118,6 +2141,10 @@ public final class CachedAppOptimizer {
                 if (pid == 0 || opt.isFrozen()) {
                     // Already frozen or not a real process, either one being
                     // launched or one being killed
+                    if (DEBUG_FREEZER) {
+                        Slog.d(TAG_AM, "Skipping freeze for process " + pid
+                                + " " + name + ". Already frozen or not a real process");
+                    }
                     return;
                 }
 
@@ -2127,7 +2154,7 @@ public final class CachedAppOptimizer {
                 // transactions that might be pending.
                 try {
                     if (freezeBinder(pid, true, FREEZE_BINDER_TIMEOUT_MS) != 0) {
-                        rescheduleFreeze(proc, "outstanding txns");
+                        rescheduleFreeze(proc, "outstanding txns", UNFREEZE_REASON_BINDER_TXNS);
                         return;
                     }
                 } catch (RuntimeException e) {
@@ -2159,7 +2186,7 @@ public final class CachedAppOptimizer {
                 frozen = opt.isFrozen();
 
                 final UidRecord uidRec = proc.getUidRecord();
-                if (frozen && uidRec.areAllProcessesFrozen()) {
+                if (frozen && uidRec != null && uidRec.areAllProcessesFrozen()) {
                     uidRec.setFrozen(true);
                     mFreezeHandler.sendMessage(mFreezeHandler.obtainMessage(
                             UID_FROZEN_STATE_CHANGED_MSG, proc));
@@ -2179,7 +2206,8 @@ public final class CachedAppOptimizer {
                         pid,
                         name,
                         unfrozenDuration,
-                        FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON__NONE);
+                        FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON__NONE,
+                        UNFREEZE_REASON_NONE);
             }
 
             try {
@@ -2188,7 +2216,7 @@ public final class CachedAppOptimizer {
 
                 if ((freezeInfo & TXNS_PENDING_WHILE_FROZEN) != 0) {
                     synchronized (mProcLock) {
-                        rescheduleFreeze(proc, "new pending txns");
+                        rescheduleFreeze(proc, "new pending txns", UNFREEZE_REASON_BINDER_TXNS);
                     }
                     return;
                 }
@@ -2205,7 +2233,7 @@ public final class CachedAppOptimizer {
         }
 
         private void reportUnfreeze(int pid, int frozenDuration, String processName,
-                @OomAdjuster.OomAdjReason int reason) {
+                @UnfreezeReason int reason) {
 
             EventLog.writeEvent(EventLogTags.AM_UNFREEZE, pid, processName);
 
@@ -2217,38 +2245,8 @@ public final class CachedAppOptimizer {
                         pid,
                         processName,
                         frozenDuration,
-                        getUnfreezeReasonCode(reason));
-            }
-        }
-
-        private int getUnfreezeReasonCode(@OomAdjuster.OomAdjReason int oomAdjReason) {
-            switch (oomAdjReason) {
-                case OomAdjuster.OOM_ADJ_REASON_ACTIVITY:
-                    return FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON__ACTIVITY;
-                case OomAdjuster.OOM_ADJ_REASON_FINISH_RECEIVER:
-                    return FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON__FINISH_RECEIVER;
-                case OomAdjuster.OOM_ADJ_REASON_START_RECEIVER:
-                    return FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON__START_RECEIVER;
-                case OomAdjuster.OOM_ADJ_REASON_BIND_SERVICE:
-                    return FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON__BIND_SERVICE;
-                case OomAdjuster.OOM_ADJ_REASON_UNBIND_SERVICE:
-                    return FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON__UNBIND_SERVICE;
-                case OomAdjuster.OOM_ADJ_REASON_START_SERVICE:
-                    return FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON__START_SERVICE;
-                case OomAdjuster.OOM_ADJ_REASON_GET_PROVIDER:
-                    return FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON__GET_PROVIDER;
-                case OomAdjuster.OOM_ADJ_REASON_REMOVE_PROVIDER:
-                    return FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON__REMOVE_PROVIDER;
-                case OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY:
-                    return FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON__UI_VISIBILITY;
-                case OomAdjuster.OOM_ADJ_REASON_ALLOWLIST:
-                    return FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON__ALLOWLIST;
-                case OomAdjuster.OOM_ADJ_REASON_PROCESS_BEGIN:
-                    return FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON__PROCESS_BEGIN;
-                case OomAdjuster.OOM_ADJ_REASON_PROCESS_END:
-                    return FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON__PROCESS_END;
-                default:
-                    return FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON__NONE;
+                        FrameworkStatsLog.APP_FREEZE_CHANGED__UNFREEZE_REASON__NONE, // deprecated
+                        reason);
             }
         }
 
@@ -2274,7 +2272,7 @@ public final class CachedAppOptimizer {
                                 Slog.d(TAG_AM, app.processName + " (" + pid + ") blocks "
                                         + pr.processName + " (" + blocked + ")");
                                 // Found at least one blocked non-cached process
-                                unfreezeAppLSP(app, OomAdjuster.OOM_ADJ_REASON_NONE);
+                                unfreezeAppLSP(app, UNFREEZE_REASON_FILE_LOCKS);
                                 break;
                             }
                         }
@@ -2308,6 +2306,37 @@ public final class CachedAppOptimizer {
                 compactProcess(pid, COMPACT_ACTION_ANON_FLAG);
             }
             mPidCompacting = -1;
+        }
+    }
+
+    static int getUnfreezeReasonCodeFromOomAdjReason(@OomAdjuster.OomAdjReason int oomAdjReason) {
+        switch (oomAdjReason) {
+            case OomAdjuster.OOM_ADJ_REASON_ACTIVITY:
+                return UNFREEZE_REASON_ACTIVITY;
+            case OomAdjuster.OOM_ADJ_REASON_FINISH_RECEIVER:
+                return UNFREEZE_REASON_FINISH_RECEIVER;
+            case OomAdjuster.OOM_ADJ_REASON_START_RECEIVER:
+                return UNFREEZE_REASON_START_RECEIVER;
+            case OomAdjuster.OOM_ADJ_REASON_BIND_SERVICE:
+                return UNFREEZE_REASON_BIND_SERVICE;
+            case OomAdjuster.OOM_ADJ_REASON_UNBIND_SERVICE:
+                return UNFREEZE_REASON_UNBIND_SERVICE;
+            case OomAdjuster.OOM_ADJ_REASON_START_SERVICE:
+                return UNFREEZE_REASON_START_SERVICE;
+            case OomAdjuster.OOM_ADJ_REASON_GET_PROVIDER:
+                return UNFREEZE_REASON_GET_PROVIDER;
+            case OomAdjuster.OOM_ADJ_REASON_REMOVE_PROVIDER:
+                return UNFREEZE_REASON_REMOVE_PROVIDER;
+            case OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY:
+                return UNFREEZE_REASON_UI_VISIBILITY;
+            case OomAdjuster.OOM_ADJ_REASON_ALLOWLIST:
+                return UNFREEZE_REASON_ALLOWLIST;
+            case OomAdjuster.OOM_ADJ_REASON_PROCESS_BEGIN:
+                return UNFREEZE_REASON_PROCESS_BEGIN;
+            case OomAdjuster.OOM_ADJ_REASON_PROCESS_END:
+                return UNFREEZE_REASON_PROCESS_END;
+            default:
+                return UNFREEZE_REASON_NONE;
         }
     }
 }

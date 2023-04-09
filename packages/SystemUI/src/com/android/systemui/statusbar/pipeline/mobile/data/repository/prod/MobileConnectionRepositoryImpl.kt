@@ -23,7 +23,7 @@
 
 package com.android.systemui.statusbar.pipeline.mobile.data.repository.prod
 
-import android.content.Context
+import android.content.Intent
 import android.content.IntentFilter
 import android.database.ContentObserver
 import android.provider.Settings.Global
@@ -55,6 +55,7 @@ import android.telephony.TelephonyManager.ERI_FLASH
 import android.telephony.TelephonyManager.ERI_ON
 import android.telephony.TelephonyManager.EXTRA_SUBSCRIPTION_ID
 import android.telephony.TelephonyManager.NETWORK_TYPE_UNKNOWN
+import android.telephony.TelephonyManager.UNKNOWN_CARRIER_ID
 import android.util.Log
 import com.android.settingslib.Utils
 import com.android.systemui.broadcast.BroadcastDispatcher
@@ -98,6 +99,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.scan
 import kotlinx.coroutines.flow.stateIn
 
@@ -108,7 +110,6 @@ import kotlinx.coroutines.flow.stateIn
 @Suppress("EXPERIMENTAL_IS_NOT_ENABLED")
 @OptIn(ExperimentalCoroutinesApi::class)
 class MobileConnectionRepositoryImpl(
-    private val context: Context,
     override val subId: Int,
     defaultNetworkName: NetworkNameModel,
     networkNameSeparator: String,
@@ -212,7 +213,7 @@ class MobileConnectionRepositoryImpl(
                 fiveGServiceClient.registerListener(getSlotIndex(subId), callback)
                 try {
                     imsMmTelManager.registerImsStateCallback(
-                                context.getMainExecutor() , imsStateCallback)
+                                bgDispatcher.asExecutor(), imsStateCallback)
                 } catch (exception: ImsException) {
                     Log.e(tag, "failed to call registerImsStateCallback ", exception)
                 }
@@ -354,6 +355,23 @@ class MobileConnectionRepositoryImpl(
             }
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
+    override val carrierId =
+        broadcastDispatcher
+            .broadcastFlow(
+                filter =
+                    IntentFilter(TelephonyManager.ACTION_SUBSCRIPTION_CARRIER_IDENTITY_CHANGED),
+                map = { intent, _ -> intent },
+            )
+            .filter { intent ->
+                intent.getIntExtra(EXTRA_SUBSCRIPTION_ID, INVALID_SUBSCRIPTION_ID) == subId
+            }
+            .map { it.carrierId() }
+            .onStart {
+                // Make sure we get the initial carrierId
+                emit(telephonyManager.simCarrierId)
+            }
+            .stateIn(scope, SharingStarted.WhileSubscribed(), telephonyManager.simCarrierId)
+
     override val networkName: StateFlow<NetworkNameModel> =
         broadcastDispatcher
             .broadcastFlow(
@@ -421,13 +439,14 @@ class MobileConnectionRepositoryImpl(
                     trySend(Unit)
                 }
             }
-
+        /*
         context.contentResolver.registerContentObserver(
             Global.getUriFor("${Global.DATA_ROAMING}$subId"),
             true,
             observer)
 
         awaitClose { context.contentResolver.unregisterContentObserver(observer) }
+        */
     }
 
     override val dataRoamingEnabled: StateFlow<Boolean> = run {
@@ -455,9 +474,9 @@ class MobileConnectionRepositoryImpl(
             override fun onAvailable() {
                 try {
                     imsMmTelManager.registerImsRegistrationCallback(
-                        context.mainExecutor, registrationCallback)
+                        bgDispatcher.asExecutor(), registrationCallback)
                     imsMmTelManager.registerMmTelCapabilityCallback(
-                        context.mainExecutor, capabilityCallback)
+                        bgDispatcher.asExecutor(), capabilityCallback)
                 } catch (exception: ImsException) {
                     Log.e(tag, "onAvailable failed to call register ims callback ", exception)
                 }
@@ -516,6 +535,7 @@ class MobileConnectionRepositoryImpl(
         }
 
     private fun getSlotIndex(subId: Int): Int {
+       /*
         var subscriptionManager: SubscriptionManager =
                 context.getSystemService(SubscriptionManager::class.java)
         var list: List<SubscriptionInfo> = subscriptionManager.completeActiveSubscriptionInfoList
@@ -527,13 +547,14 @@ class MobileConnectionRepositoryImpl(
             }
         }
         return slotIndex
+        */
+        return 0
     }
 
     class Factory
     @Inject
     constructor(
         private val broadcastDispatcher: BroadcastDispatcher,
-        private val context: Context,
         private val telephonyManager: TelephonyManager,
         private val logger: MobileInputLogger,
         private val carrierConfigRepository: CarrierConfigRepository,
@@ -549,7 +570,6 @@ class MobileConnectionRepositoryImpl(
             networkNameSeparator: String,
         ): MobileConnectionRepository {
             return MobileConnectionRepositoryImpl(
-                context,
                 subId,
                 defaultNetworkName,
                 networkNameSeparator,
@@ -566,6 +586,9 @@ class MobileConnectionRepositoryImpl(
         }
     }
 }
+
+private fun Intent.carrierId(): Int =
+    getIntExtra(TelephonyManager.EXTRA_CARRIER_ID, UNKNOWN_CARRIER_ID)
 
 /**
  * Wrap every [TelephonyCallback] we care about in a data class so we can accept them in a single

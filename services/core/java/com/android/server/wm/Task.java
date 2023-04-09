@@ -378,6 +378,13 @@ class Task extends TaskFragment {
      *  determining the order when restoring. */
     long mLastTimeMoved;
 
+    /**
+     * If it is set, the processes belong to the task will be killed when one of its activity
+     * reports that Activity#onDestroy is done and the task no longer contains perceptible
+     * components. This should only be set on a leaf task.
+     */
+    boolean mKillProcessesOnDestroyed;
+
     /** If original intent did not allow relinquishing task identity, save that information */
     private boolean mNeverRelinquishIdentity = true;
 
@@ -1332,6 +1339,20 @@ class Task extends TaskFragment {
         return (topTask != this && topTask != null) ? topTask.getBaseIntent() : null;
     }
 
+    /**
+     * Returns the package name which stands for this task. It is empty string if no activities
+     * have been added to this task.
+     */
+    @NonNull
+    String getBasePackageName() {
+        final Intent intent = getBaseIntent();
+        if (intent == null) {
+            return "";
+        }
+        final ComponentName componentName = intent.getComponent();
+        return componentName != null ? componentName.getPackageName() : "";
+    }
+
     /** Returns the first non-finishing activity from the bottom. */
     ActivityRecord getRootActivity() {
         // TODO: Figure out why we historical ignore relinquish identity for this case...
@@ -1436,14 +1457,22 @@ class Task extends TaskFragment {
 
         // Only set this based on the first activity
         if (!hadActivity) {
-            if (r.getActivityType() == ACTIVITY_TYPE_UNDEFINED) {
+            int activityOverrideType =
+                    r.getRequestedOverrideConfiguration().windowConfiguration.getActivityType();
+            if (activityOverrideType == ACTIVITY_TYPE_UNDEFINED) {
                 // Normally non-standard activity type for the activity record will be set when the
                 // object is created, however we delay setting the standard application type until
                 // this point so that the task can set the type for additional activities added in
                 // the else condition below.
-                r.setActivityType(ACTIVITY_TYPE_STANDARD);
+                activityOverrideType = activityType != ACTIVITY_TYPE_UNDEFINED ? activityType
+                        : ACTIVITY_TYPE_STANDARD;
+                // Set the Activity's requestedOverrideConfiguration directly to reduce
+                // WC#onConfigurationChanged calls since it will be called while setting the
+                // Task's activity type below.
+                r.getRequestedOverrideConfiguration().windowConfiguration.setActivityType(
+                        activityOverrideType);
             }
-            setActivityType(r.getActivityType());
+            setActivityType(activityOverrideType);
             isPersistable = r.isPersistable();
             mCallingUid = r.launchedFromUid;
             mCallingPackage = r.launchedFromPackage;
@@ -3405,6 +3434,7 @@ class Task extends TaskFragment {
         info.topActivityLetterboxHorizontalPosition = TaskInfo.PROPERTY_VALUE_UNSET;
         info.topActivityLetterboxWidth = TaskInfo.PROPERTY_VALUE_UNSET;
         info.topActivityLetterboxHeight = TaskInfo.PROPERTY_VALUE_UNSET;
+        info.isFromLetterboxDoubleTap = top != null && top.mLetterboxUiController.isFromDoubleTap();
         if (info.isLetterboxDoubleTapEnabled) {
             info.topActivityLetterboxWidth = top.getBounds().width();
             info.topActivityLetterboxHeight = top.getBounds().height();
@@ -3685,6 +3715,9 @@ class Task extends TaskFragment {
         }
         if (mSharedStartingData != null) {
             pw.println(prefix + "mSharedStartingData=" + mSharedStartingData);
+        }
+        if (mKillProcessesOnDestroyed) {
+            pw.println(prefix + "mKillProcessesOnDestroyed=true");
         }
         pw.print(prefix); pw.print("taskId=" + mTaskId);
         pw.println(" rootTaskId=" + getRootTaskId());
@@ -4661,6 +4694,7 @@ class Task extends TaskFragment {
         if (!isAttached()) {
             return;
         }
+        mTransitionController.collect(this);
 
         final TaskDisplayArea taskDisplayArea = getDisplayArea();
 
@@ -5612,8 +5646,6 @@ class Task extends TaskFragment {
                 mWmService.mSyncEngine.queueSyncSet(
                         () -> mTransitionController.moveToCollecting(transition),
                         () -> {
-                            mTransitionController.requestStartTransition(transition, tr,
-                                    null /* remoteTransition */, null /* displayChange */);
                             // Need to check again since this happens later and the system might
                             // be in a different state.
                             if (!canMoveTaskToBack(tr)) {
@@ -5622,6 +5654,8 @@ class Task extends TaskFragment {
                                 transition.abort();
                                 return;
                             }
+                            mTransitionController.requestStartTransition(transition, tr,
+                                    null /* remoteTransition */, null /* displayChange */);
                             moveTaskToBackInner(tr);
                         });
             } else {
@@ -5784,8 +5818,6 @@ class Task extends TaskFragment {
             final int activityType = getActivityType();
             task = new Task.Builder(mAtmService)
                     .setTaskId(taskId)
-                    .setActivityType(activityType != ACTIVITY_TYPE_UNDEFINED ? activityType
-                            : ACTIVITY_TYPE_STANDARD)
                     .setActivityInfo(info)
                     .setActivityOptions(options)
                     .setIntent(intent)

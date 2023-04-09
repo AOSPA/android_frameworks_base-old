@@ -66,15 +66,8 @@ MakeCurrentResult SkiaVulkanPipeline::makeCurrent() {
 }
 
 Frame SkiaVulkanPipeline::getFrame() {
-    if (mHardwareBuffer) {
-        AHardwareBuffer_Desc description;
-        AHardwareBuffer_describe(mHardwareBuffer, &description);
-        return Frame(description.width, description.height, 0);
-    } else {
-        LOG_ALWAYS_FATAL_IF(mVkSurface == nullptr,
-                            "getFrame() called on a context with no surface!");
-        return vulkanManager().dequeueNextBuffer(mVkSurface);
-    }
+    LOG_ALWAYS_FATAL_IF(mVkSurface == nullptr, "getFrame() called on a context with no surface!");
+    return vulkanManager().dequeueNextBuffer(mVkSurface);
 }
 
 IRenderPipeline::DrawResult SkiaVulkanPipeline::draw(
@@ -208,6 +201,11 @@ sk_sp<Bitmap> SkiaVulkanPipeline::allocateHardwareBitmap(renderthread::RenderThr
                                                          SkBitmap& skBitmap) {
     LOG_ALWAYS_FATAL("Unimplemented");
     return nullptr;
+}
+
+bool SkiaVulkanPipeline::shouldForceDither() const {
+    if (mVkSurface && mVkSurface->isBeyond8Bit()) return false;
+    return SkiaPipeline::shouldForceDither();
 }
 
 void SkiaVulkanPipeline::onContextDestroyed() {

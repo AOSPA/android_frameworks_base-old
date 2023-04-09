@@ -5093,7 +5093,6 @@ public class AccountManagerService
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
-            mAuthenticator = null;
             IAccountManagerResponse response = getResponseAndClose();
             if (response != null) {
                 try {

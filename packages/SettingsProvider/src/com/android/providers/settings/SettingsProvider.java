@@ -900,6 +900,7 @@ public class SettingsProvider extends ContentProvider {
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }
+            mSettingsRegistry.mGenerationRegistry.dump(pw);
         }
     }
 
@@ -2311,7 +2312,7 @@ public class SettingsProvider extends ContentProvider {
             @NonNull Set<String> flags) {
         boolean hasAllowlistPermission =
                 context.checkCallingOrSelfPermission(
-                Manifest.permission.ALLOWLISTED_WRITE_DEVICE_CONFIG)
+                Manifest.permission.WRITE_ALLOWLISTED_DEVICE_CONFIG)
                 == PackageManager.PERMISSION_GRANTED;
         boolean hasWritePermission =
                 context.checkCallingOrSelfPermission(
@@ -2323,7 +2324,15 @@ public class SettingsProvider extends ContentProvider {
             return;
         } else if (hasAllowlistPermission) {
             for (String flag : flags) {
-                if (!DeviceConfig.getAdbWritableFlags().contains(flag)) {
+                boolean namespaceAllowed = false;
+                for (String allowlistedPrefix : WritableNamespacePrefixes.ALLOWLIST) {
+                    if (flag.startsWith(allowlistedPrefix)) {
+                        namespaceAllowed = true;
+                        break;
+                    }
+                }
+
+                if (!namespaceAllowed && !DeviceConfig.getAdbWritableFlags().contains(flag)) {
                     throw new SecurityException("Permission denial for flag '"
                         + flag
                         + "'; allowlist permission granted, but must add flag to the allowlist.");
@@ -2331,7 +2340,7 @@ public class SettingsProvider extends ContentProvider {
             }
         } else {
             throw new SecurityException("Permission denial to mutate flag, must have root, "
-                + "WRITE_DEVICE_CONFIG, or ALLOWLISTED_WRITE_DEVICE_CONFIG");
+                + "WRITE_DEVICE_CONFIG, or WRITE_ALLOWLISTED_DEVICE_CONFIG");
         }
     }
 
@@ -3739,7 +3748,7 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private final class UpgradeController {
-            private static final int SETTINGS_VERSION = 215;
+            private static final int SETTINGS_VERSION = 217;
 
             private final int mUserId;
 
@@ -5712,7 +5721,7 @@ public class SettingsProvider extends ContentProvider {
                             .getSettingLocked(Settings.Secure.CREDENTIAL_SERVICE);
                     if (currentSetting.isNull()) {
                         final int resourceId =
-                            com.android.internal.R.string.config_defaultCredentialProviderService;
+                            com.android.internal.R.array.config_defaultCredentialProviderService;
                         final Resources resources = getContext().getResources();
                         // If the config has not be defined we might get an exception. We also get
                         // values from both the string array type and the single string in case the
@@ -5745,6 +5754,64 @@ public class SettingsProvider extends ContentProvider {
                     }
 
                     currentVersion = 215;
+                }
+
+                if (currentVersion == 215) {
+                    // Version 215: default |def_airplane_mode_radios| and
+                    // |airplane_mode_toggleable_radios| changed to remove NFC & add UWB.
+                    final SettingsState globalSettings = getGlobalSettingsLocked();
+                    final String oldApmRadiosValue = globalSettings.getSettingLocked(
+                            Settings.Global.AIRPLANE_MODE_RADIOS).getValue();
+                    if (TextUtils.equals("cell,bluetooth,wifi,nfc,wimax", oldApmRadiosValue)) {
+                        globalSettings.insertSettingOverrideableByRestoreLocked(
+                                Settings.Global.AIRPLANE_MODE_RADIOS,
+                                getContext().getResources().getString(
+                                        R.string.def_airplane_mode_radios),
+                                null, true, SettingsState.SYSTEM_PACKAGE_NAME);
+                    }
+                    final String oldApmToggleableRadiosValue = globalSettings.getSettingLocked(
+                            Settings.Global.AIRPLANE_MODE_TOGGLEABLE_RADIOS).getValue();
+                    if (TextUtils.equals("bluetooth,wifi,nfc", oldApmToggleableRadiosValue)) {
+                        globalSettings.insertSettingOverrideableByRestoreLocked(
+                                Settings.Global.AIRPLANE_MODE_TOGGLEABLE_RADIOS,
+                                getContext().getResources().getString(
+                                        R.string.airplane_mode_toggleable_radios),
+                                null, true, SettingsState.SYSTEM_PACKAGE_NAME);
+                    }
+                    currentVersion = 216;
+                }
+
+                if (currentVersion == 216) {
+                    // Version 216: Set a default value for Credential Manager service.
+                    // We are doing this migration again because of an incorrect setting.
+
+                    final SettingsState secureSettings = getSecureSettingsLocked(userId);
+                    final Setting currentSetting = secureSettings
+                            .getSettingLocked(Settings.Secure.CREDENTIAL_SERVICE);
+                    if (currentSetting.isNull()) {
+                        final int resourceId =
+                            com.android.internal.R.array.config_defaultCredentialProviderService;
+                        final Resources resources = getContext().getResources();
+                        // If the config has not be defined we might get an exception.
+                        final List<String> providers = new ArrayList<>();
+                        try {
+                            providers.addAll(Arrays.asList(resources.getStringArray(resourceId)));
+                        } catch (Resources.NotFoundException e) {
+                            Slog.w(LOG_TAG,
+                                "Get default array Cred Provider not found: " + e.toString());
+                        }
+
+                        if (!providers.isEmpty()) {
+                            final String defaultValue = String.join(":", providers);
+                            Slog.d(LOG_TAG, "Setting [" + defaultValue + "] as CredMan Service "
+                                    + "for user " + userId);
+                            secureSettings.insertSettingOverrideableByRestoreLocked(
+                                    Settings.Secure.CREDENTIAL_SERVICE, defaultValue, null, true,
+                                    SettingsState.SYSTEM_PACKAGE_NAME);
+                        }
+                    }
+
+                    currentVersion = 217;
                 }
 
                 // vXXX: Add new settings above this point.
@@ -6000,6 +6067,11 @@ public class SettingsProvider extends ContentProvider {
 
             return !a11yButtonTargetsSettings.isNull()
                     && !TextUtils.isEmpty(a11yButtonTargetsSettings.getValue());
+        }
+
+        @NonNull
+        public GenerationRegistry getGenerationRegistry() {
+            return mGenerationRegistry;
         }
     }
 }
