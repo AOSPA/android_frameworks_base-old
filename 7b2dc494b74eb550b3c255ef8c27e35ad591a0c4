@@ -70,6 +70,23 @@
       "parentUuid": "12ef328d_4ea54f0d",
       "revId": "7b2dc494b74eb550b3c255ef8c27e35ad591a0c4",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "98447b4d_1eb4be08",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000448
+      },
+      "writtenOn": "2023-04-10T04:38:48Z",
+      "side": 1,
+      "message": "https://gerrit.aospa.co/c/AOSPA/android_frameworks_base/+/29045",
+      "revId": "7b2dc494b74eb550b3c255ef8c27e35ad591a0c4",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
