@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "df92eb1a_86bf8710",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2023-04-10T03:22:21Z",
+      "side": 1,
+      "message": "this fixed dark mode but not light mode for me, weird",
+      "revId": "7b2dc494b74eb550b3c255ef8c27e35ad591a0c4",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
