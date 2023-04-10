@@ -55,6 +55,7 @@ public class WifiSignalController extends SignalController<WifiState, IconGroup>
     private final IconGroup mWifi4IconGroup;
     private final IconGroup mWifi5IconGroup;
     private final IconGroup mWifi6IconGroup;
+    private final IconGroup mWifi7IconGroup;
 
     private static final String KEY_WIFI_STANDARD = "wifi_standard";
     private boolean mShowWifiStandard = true;
@@ -119,6 +120,18 @@ public class WifiSignalController extends SignalController<WifiState, IconGroup>
                 "Wi-Fi 6 Icons",
                 WifiIcons.WIFI_6_SIGNAL_STRENGTH,
                 WifiIcons.QS_WIFI_6_SIGNAL_STRENGTH,
+                AccessibilityContentDescriptions.WIFI_CONNECTION_STRENGTH,
+                WifiIcons.WIFI_NO_NETWORK,
+                WifiIcons.QS_WIFI_NO_NETWORK,
+                WifiIcons.WIFI_NO_NETWORK,
+                WifiIcons.QS_WIFI_NO_NETWORK,
+                AccessibilityContentDescriptions.WIFI_NO_CONNECTION
+                );
+
+        mWifi7IconGroup = new IconGroup(
+                "Wi-Fi 7 Icons",
+                WifiIcons.WIFI_7_SIGNAL_STRENGTH,
+                WifiIcons.QS_WIFI_7_SIGNAL_STRENGTH,
                 AccessibilityContentDescriptions.WIFI_CONNECTION_STRENGTH,
                 WifiIcons.WIFI_NO_NETWORK,
                 WifiIcons.QS_WIFI_NO_NETWORK,
