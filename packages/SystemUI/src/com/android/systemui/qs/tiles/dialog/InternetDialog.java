@@ -12,14 +12,16 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Changes from Qualcomm Innovation Center are provided under the following license:
- *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+
+/* Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 package com.android.systemui.qs.tiles.dialog;
 
+import static android.telephony.AccessNetworkConstants.TRANSPORT_TYPE_WWAN;
+import static android.telephony.NetworkRegistrationInfo.DOMAIN_PS;
 import static android.telephony.ims.feature.ImsFeature.FEATURE_MMTEL;
 import static android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_CROSS_SIM;
 
@@ -36,6 +38,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.RemoteException;
 import android.telephony.ims.aidl.IImsRegistration;
+import android.telephony.NetworkRegistrationInfo;
 import android.telephony.ServiceState;
 import android.telephony.SignalStrength;
 import android.telephony.SubscriptionManager;
@@ -182,6 +185,8 @@ public class InternetDialog extends SystemUIDialog implements
 
     private boolean mIsCallIdle = true;
     private boolean mIsImsRegisteredOverCiwlan = false;
+    private boolean isCiwlanModeSupported = false;
+    private boolean mIsInCiwlanOnlyMode = false;
     private ExtTelephonyManager mExtTelephonyManager;
     private boolean mExtTelServiceConnected = false;
     private CiwlanConfig mCiwlanConfig = null;
@@ -756,8 +761,10 @@ public class InternetDialog extends SystemUIDialog implements
     private boolean shouldShowMobileDialog() {
         mIsCallIdle = mTelephonyManager.getCallState() == TelephonyManager.CALL_STATE_IDLE;
         mIsImsRegisteredOverCiwlan = isImsRegisteredOverCiwlan();
+        isCiwlanModeSupported = isCiwlanModeSupported();
+        mIsInCiwlanOnlyMode = isInCiwlanOnlyMode();
         if (mInternetDialogController.isMobileDataEnabled() && !mIsCallIdle &&
-                mIsImsRegisteredOverCiwlan) {
+                mIsImsRegisteredOverCiwlan && (!isCiwlanModeSupported || mIsInCiwlanOnlyMode)) {
             return true;
         }
         boolean flag = Prefs.getBoolean(mContext, QS_HAS_TURNED_OFF_MOBILE_DATA,
@@ -774,15 +781,20 @@ public class InternetDialog extends SystemUIDialog implements
         if (TextUtils.isEmpty(carrierName) || !isInService) {
             carrierName = mContext.getString(R.string.mobile_data_disable_message_default_carrier);
         }
+        String mobileDataDisableDialogMessage =
+                mContext.getString(R.string.mobile_data_disable_message, carrierName);
         // Check if call is ongoing, IMS is registered on C_IWLAN type, and UE is in C_IWLAN-only
         // mode and adjust the dialog message
-        boolean isInCiwlanOnlyMode = isInCiwlanOnlyMode();
         Log.d(TAG, "isCallIdle = " + mIsCallIdle + ", isImsRegisteredOverCiwlan = " +
-                mIsImsRegisteredOverCiwlan + ", isInCiwlanOnlyMode = " + isInCiwlanOnlyMode);
-        String mobileDataDisableDialogMessage =
-                (!mIsCallIdle && mIsImsRegisteredOverCiwlan && isInCiwlanOnlyMode) ?
-                mContext.getString(R.string.mobile_data_disable_ciwlan_call_message) :
-                mContext.getString(R.string.mobile_data_disable_message, carrierName);
+                mIsImsRegisteredOverCiwlan + ", isInCiwlanOnlyMode = " + mIsInCiwlanOnlyMode +
+                ", isCiwlanModeSupported = " + isCiwlanModeSupported);
+        // Adjust the dialog message
+        if (!mIsCallIdle && mIsImsRegisteredOverCiwlan &&
+                (!isCiwlanModeSupported || mIsInCiwlanOnlyMode)) {
+            mobileDataDisableDialogMessage = isCiwlanModeSupported ?
+                    mContext.getString(R.string.data_disable_ciwlan_call_will_drop_message) :
+                    mContext.getString(R.string.data_disable_ciwlan_call_might_drop_message);
+        }
         mAlertDialog = new Builder(mContext)
                 .setTitle(R.string.mobile_data_disable_title)
                 .setMessage(mobileDataDisableDialogMessage)
@@ -848,13 +860,42 @@ public class InternetDialog extends SystemUIDialog implements
 
     private boolean isInCiwlanOnlyMode() {
         if (mCiwlanConfig == null) {
-            Log.d(TAG, "C_IWLAN config null");
+            Log.d(TAG, "isInCiwlanOnlyMode: C_IWLAN config null");
             return false;
         }
-        if (mTelephonyManager.isNetworkRoaming(mDefaultDataSubId)) {
+        if (isRoaming()) {
             return mCiwlanConfig.isCiwlanOnlyInRoam();
         }
         return mCiwlanConfig.isCiwlanOnlyInHome();
+    }
+
+    private boolean isCiwlanModeSupported() {
+        if (mCiwlanConfig == null) {
+            Log.d(TAG, "isCiwlanModeSupported: C_IWLAN config null");
+            return false;
+        }
+        return mCiwlanConfig.isCiwlanModeSupported();
+    }
+
+    private boolean isRoaming() {
+        if (mTelephonyManager == null) {
+            Log.d(TAG, "isRoaming: TelephonyManager null");
+            return false;
+        }
+        boolean nriRoaming = false;
+        ServiceState serviceState = mTelephonyManager.getServiceState();
+        if (serviceState != null) {
+            NetworkRegistrationInfo nri =
+                    serviceState.getNetworkRegistrationInfo(DOMAIN_PS, TRANSPORT_TYPE_WWAN);
+            if (nri != null) {
+                nriRoaming = nri.isNetworkRoaming();
+            } else {
+                Log.d(TAG, "isRoaming: network registration info null");
+            }
+        } else {
+            Log.d(TAG, "isRoaming: service state null");
+        }
+        return nriRoaming;
     }
 
     @Override
