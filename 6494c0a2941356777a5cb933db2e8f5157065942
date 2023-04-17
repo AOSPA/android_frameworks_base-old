@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "3ce00c05_054e329c",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2023-04-17T06:00:32Z",
+      "side": 1,
+      "message": "this should probably be config_* configurable by the maintainer, and in some way be mentioned in settings?",
+      "revId": "6494c0a2941356777a5cb933db2e8f5157065942",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
