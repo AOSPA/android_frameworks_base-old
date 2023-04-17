@@ -69,10 +69,6 @@
     <string name="kg_too_many_failed_pattern_attempts_dialog_message" msgid="4252405904570284368">"你已畫出錯誤的解鎖圖案 <xliff:g id="NUMBER_0">%1$d</xliff:g> 次。\n\n請在 <xliff:g id="NUMBER_1">%2$d</xliff:g> 秒後再試一次。"</string>
     <string name="kg_password_wrong_pin_code_pukked" msgid="8047350661459040581">"SIM 卡的 PIN 碼輸入錯誤，你現在必須請電信業者為裝置解鎖。"</string>
     <string name="kg_password_wrong_pin_code" msgid="5629415765976820357">"{count,plural, =1{SIM 卡 PIN 碼輸入錯誤，您還可以再試 # 次。如果仍然失敗，就必須聯絡電信業者為裝置解鎖。}other{SIM 卡 PIN 碼輸入錯誤，您還可以再試 # 次。}}"</string>
-    <plurals name="kg_password_wrong_pin_code" formatted="false" msgid="7030584350995485026">
-      <item quantity="other">SIM 卡的 PIN 碼輸入錯誤，你還可以再試 <xliff:g id="NUMBER_1">%d</xliff:g> 次。</item>
-      <item quantity="one">SIM 卡的 PIN 碼輸入錯誤，你還可以再試 <xliff:g id="NUMBER_0">%d</xliff:g> 次。如果仍然失敗，就必須請電信業者為裝置解鎖。</item>
-    </plurals>
     <plurals name="kg_password_wrong_pin_code_multi_sim" formatted="false">
         <item quantity="other">SIM 卡<xliff:g id="slotid">%d</xliff:g>的 PIN 碼輸入錯誤，你還可以再試 <xliff:g id="NUMBER_1">%d</xliff:g> 次。</item>
         <item quantity="one">SIM 卡<xliff:g id="slotid">%d</xliff:g>的 PIN 碼輸入錯誤，你還可以再試 <xliff:g id="NUMBER_0">%d</xliff:g> 次。如果仍然失敗，就必須請電信業者為裝置解鎖。</item>
@@ -95,10 +91,6 @@
     <string name="kg_face_sensor_privacy_enabled" msgid="939511161763558512">"如要使用人臉解鎖功能，請在「設定」中開啟相機存取權。"</string>
     <string name="kg_password_default_pin_message" msgid="1434544655827987873">"{count,plural, =1{請輸入 SIM 卡 PIN 碼，您還可以再試 # 次，如果仍然失敗，就必須聯絡電信業者為裝置解鎖。}other{輸入 SIM 卡 PIN 碼您還可以再試 # 次}}"</string>
     <string name="kg_password_default_puk_message" msgid="1025139786449741950">"{count,plural, =1{SIM 卡現在已遭停用。請輸入 PUK 碼以繼續。您還可以再試 # 次，如果仍然失敗，SIM 卡將永久無法使用。詳情請洽詢電信業者。}other{SIM 卡現在已遭停用。請輸入 PUK 碼以繼續。您還可以再試 # 次，如果仍然失敗，SIM 卡將永久無法使用。詳情請洽詢電信業者。}}"</string>
-    <plurals name="kg_password_default_pin_message" formatted="false" msgid="7730152526369857818">
-      <item quantity="other">請輸入 SIM 卡的 PIN 碼，你還可以再試 <xliff:g id="NUMBER_1">%d</xliff:g> 次。</item>
-      <item quantity="one">請輸入 SIM 卡的 PIN 碼，你還可以再試 <xliff:g id="NUMBER_0">%d</xliff:g> 次。如果仍然失敗，就必須請電信業者為裝置解鎖。</item>
-    </plurals>
     <plurals name="kg_password_default_pin_message_multi_sim" formatted="false">
         <item quantity="other">請輸入 SIM 卡<xliff:g id="slotid">%d</xliff:g>的 PIN 碼，你還可以再試 <xliff:g id="NUMBER_1">%d</xliff:g> 次。</item>
         <item quantity="one">請輸入 SIM 卡的<xliff:g id="slotid">%d</xliff:g> PIN 碼，你還可以再試 <xliff:g id="NUMBER_0">%d</xliff:g> 次。如果仍然失敗，就必須請電信業者為裝置解鎖。</item>

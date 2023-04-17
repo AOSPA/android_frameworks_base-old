@@ -169,10 +169,6 @@
         =1 {Incorrect SIM PIN code, you have # remaining attempt before you must contact your carrier to unlock your device.}
         other {Incorrect SIM PIN code, you have # remaining attempts. }
     }</string>
-    <plurals name="kg_password_wrong_pin_code">
-        <item quantity="one">Incorrect SIM PIN code, you have <xliff:g id="number">%d</xliff:g> remaining attempt before you must contact your carrier to unlock your device.</item>
-        <item quantity="other">Incorrect SIM PIN code, you have <xliff:g id="number">%d</xliff:g> remaining attempts.</item>
-    </plurals>
     <plurals name="kg_password_wrong_pin_code_multi_sim">
         <item quantity="one">Incorrect SIM<xliff:g id="slotid">%d</xliff:g> PIN code, you have <xliff:g id="number">%d</xliff:g> remaining attempt before you must contact your carrier to unlock your device.</item>
         <item quantity="other">Incorrect SIM<xliff:g id="slotid">%d</xliff:g> PIN code, you have <xliff:g id="number">%d</xliff:g> remaining attempts.</item>
@@ -236,13 +232,7 @@
         =1 {Enter SIM PIN. You have # remaining attempt before you must contact your carrier to unlock your device.}
         other {Enter SIM PIN. You have # remaining attempts.}
     }</string>
-    <!-- Instructions telling the user remaining times when enter SIM PIN view.  -->
-    <plurals name="kg_password_default_pin_message">
-        <item quantity="one">Enter SIM PIN. You have <xliff:g id="number">%d</xliff:g> remaining
-attempt before you must contact your carrier to unlock your device.</item>
-        <item quantity="other">Enter SIM PIN. You have <xliff:g id="number">%d</xliff:g> remaining
-attempts.</item>
-    </plurals>
+
     <plurals name="kg_password_default_pin_message_multi_sim">
         <item quantity="one">Enter SIM<xliff:g id="slotid">%d</xliff:g> PIN, you have <xliff:g id="number">%d</xliff:g> remaining attempt before you must contact your carrier to unlock your device.</item>
         <item quantity="other">Enter SIM<xliff:g id="slotid">%d</xliff:g> PIN, you have <xliff:g id="number">%d</xliff:g> remaining attempts.</item>

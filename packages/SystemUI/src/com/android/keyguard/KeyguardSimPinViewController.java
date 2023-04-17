@@ -252,8 +252,8 @@ public class KeyguardSimPinViewController
                 displayMessage = mView.getContext().getResources()
                         .getQuantityString(msgId, attemptsRemaining, mSlotId, attemptsRemaining);
             }else {
-                msgId = isDefault ? R.plurals.kg_password_default_pin_message :
-                        R.plurals.kg_password_wrong_pin_code;
+                msgId = isDefault ? R.string.kg_password_default_pin_message :
+                        R.string.kg_password_wrong_pin_code;
                 displayMessage = icuMessageFormat(mView.getResources(), msgId, attemptsRemaining);
             }
         } else {
