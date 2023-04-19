@@ -594,6 +594,7 @@ class FullMobileConnectionRepositoryTest : SysuiTestCase() {
 
         val realRepo =
             MobileConnectionRepositoryImpl(
+                mContext,
                 SUB_ID,
                 defaultNetworkName = NetworkNameModel.Default("default"),
                 networkNameSeparator = SEP,
