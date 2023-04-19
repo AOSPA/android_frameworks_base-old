@@ -23,6 +23,7 @@
 
 package com.android.systemui.statusbar.pipeline.mobile.data.repository.prod
 
+import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.database.ContentObserver
@@ -110,6 +111,7 @@ import kotlinx.coroutines.flow.stateIn
 @Suppress("EXPERIMENTAL_IS_NOT_ENABLED")
 @OptIn(ExperimentalCoroutinesApi::class)
 class MobileConnectionRepositoryImpl(
+    private val context: Context,
     override val subId: Int,
     defaultNetworkName: NetworkNameModel,
     networkNameSeparator: String,
@@ -439,14 +441,12 @@ class MobileConnectionRepositoryImpl(
                     trySend(Unit)
                 }
             }
-        /*
         context.contentResolver.registerContentObserver(
             Global.getUriFor("${Global.DATA_ROAMING}$subId"),
             true,
             observer)
 
         awaitClose { context.contentResolver.unregisterContentObserver(observer) }
-        */
     }
 
     override val dataRoamingEnabled: StateFlow<Boolean> = run {
@@ -535,7 +535,6 @@ class MobileConnectionRepositoryImpl(
         }
 
     private fun getSlotIndex(subId: Int): Int {
-       /*
         var subscriptionManager: SubscriptionManager =
                 context.getSystemService(SubscriptionManager::class.java)
         var list: List<SubscriptionInfo> = subscriptionManager.completeActiveSubscriptionInfoList
@@ -547,14 +546,13 @@ class MobileConnectionRepositoryImpl(
             }
         }
         return slotIndex
-        */
-        return 0
     }
 
     class Factory
     @Inject
     constructor(
         private val broadcastDispatcher: BroadcastDispatcher,
+        private val context: Context,
         private val telephonyManager: TelephonyManager,
         private val logger: MobileInputLogger,
         private val carrierConfigRepository: CarrierConfigRepository,
@@ -570,6 +568,7 @@ class MobileConnectionRepositoryImpl(
             networkNameSeparator: String,
         ): MobileConnectionRepository {
             return MobileConnectionRepositoryImpl(
+                context,
                 subId,
                 defaultNetworkName,
                 networkNameSeparator,
