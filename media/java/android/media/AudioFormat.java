@@ -400,6 +400,21 @@ public final class AudioFormat implements Parcelable {
      * @hide
      * */
     public static final int ENCODING_EVRCNW = 105;
+    /** Audio data format: AAC ADTS LC compressed
+     * @hide
+    */
+    public static final int ENCODING_AAC_ADTS_LC = 106;
+    /** Audio data format: AAC ADTS HE V1 compressed
+     * @hide
+    */
+    public static final int ENCODING_AAC_ADTS_HE_V1 = 107;
+    /** Audio data format: AAC ADTS HE V2 compressed
+     * @hide
+    */
+    public static final int ENCODING_AAC_ADTS_HE_V2 = 108;
+    /** Audio data format: FLAC compressed
+     * @hide
+    */
 
     /** @hide */
     public static String toLogFriendlyEncoding(int enc) {
@@ -466,6 +481,12 @@ public final class AudioFormat implements Parcelable {
                 return "ENCODING_DTS_UHD_P2";
             case ENCODING_DSD:
                 return "ENCODING_DSD";
+            case ENCODING_AAC_ADTS_LC:
+                return "ENCODING_AAC_ADTS_LC";
+            case ENCODING_AAC_ADTS_HE_V1:
+                return "ENCODING_AAC_ADTS_HE_V1";
+            case ENCODING_AAC_ADTS_HE_V2:
+                return "ENCODING_AAC_ADTS_HE_V2";
             default :
                 return "invalid encoding " + enc;
         }
@@ -879,6 +900,9 @@ public final class AudioFormat implements Parcelable {
             case ENCODING_DTS_HD_MA:
             case ENCODING_DTS_UHD_P2:
             case ENCODING_DSD:
+            case ENCODING_AAC_ADTS_LC:
+            case ENCODING_AAC_ADTS_HE_V1:
+            case ENCODING_AAC_ADTS_HE_V2:
                 return true;
             default:
                 return false;
@@ -967,6 +991,9 @@ public final class AudioFormat implements Parcelable {
             case ENCODING_DRA:
             case ENCODING_DTS_HD_MA:
             case ENCODING_DTS_UHD_P2:
+            case ENCODING_AAC_ADTS_LC:
+            case ENCODING_AAC_ADTS_HE_V1:
+            case ENCODING_AAC_ADTS_HE_V2:
                 return false;
             case ENCODING_INVALID:
             default:
@@ -1009,6 +1036,9 @@ public final class AudioFormat implements Parcelable {
             case ENCODING_DRA:
             case ENCODING_DTS_HD_MA:
             case ENCODING_DTS_UHD_P2:
+            case ENCODING_AAC_ADTS_LC:
+            case ENCODING_AAC_ADTS_HE_V1:
+            case ENCODING_AAC_ADTS_HE_V2:
                 return false;
             case ENCODING_INVALID:
             default:
@@ -1306,6 +1336,9 @@ public final class AudioFormat implements Parcelable {
                 case ENCODING_DTS_HD_MA:
                 case ENCODING_DTS_UHD_P2:
                 case ENCODING_DSD:
+                case ENCODING_AAC_ADTS_LC:
+                case ENCODING_AAC_ADTS_HE_V1:
+                case ENCODING_AAC_ADTS_HE_V2:
                     mEncoding = encoding;
                     break;
                 case ENCODING_INVALID:
@@ -1543,7 +1576,10 @@ public final class AudioFormat implements Parcelable {
         ENCODING_DRA,
         ENCODING_DTS_HD_MA,
         ENCODING_DTS_UHD_P2,
-        ENCODING_DSD }
+        ENCODING_DSD,
+        ENCODING_AAC_ADTS_LC,
+        ENCODING_AAC_ADTS_HE_V1,
+        ENCODING_AAC_ADTS_HE_V2 }
     )
     @Retention(RetentionPolicy.SOURCE)
     public @interface Encoding {}

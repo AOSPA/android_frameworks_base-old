@@ -22,7 +22,6 @@ import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
-import android.annotation.StringDef;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
@@ -134,22 +133,60 @@ public final class TvInputManager {
     public @interface VideoUnavailableReason {}
 
     /** Indicates that this TV message contains watermarking data */
-    public static final String TV_MESSAGE_TYPE_WATERMARK = "Watermark";
+    public static final int TV_MESSAGE_TYPE_WATERMARK = 1;
 
     /** Indicates that this TV message contains Closed Captioning data */
-    public static final String TV_MESSAGE_TYPE_CLOSED_CAPTION = "CC";
+    public static final int TV_MESSAGE_TYPE_CLOSED_CAPTION = 2;
+
+    /** Indicates that this TV message contains other data */
+    public static final int TV_MESSAGE_TYPE_OTHER = 1000;
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
-    @StringDef({TV_MESSAGE_TYPE_WATERMARK, TV_MESSAGE_TYPE_CLOSED_CAPTION})
+    @IntDef({TV_MESSAGE_TYPE_WATERMARK, TV_MESSAGE_TYPE_CLOSED_CAPTION, TV_MESSAGE_TYPE_OTHER})
     public @interface TvMessageType {}
 
     /**
      * This constant is used as a {@link Bundle} key for TV messages. The value of the key
      * identifies the stream on the TV input source for which the watermark event is relevant to.
+     *
+     * <p> Type: String
      */
     public static final String TV_MESSAGE_KEY_STREAM_ID =
             "android.media.tv.TvInputManager.stream_id";
+
+    /**
+     * This constant is used as a {@link Bundle} key for TV messages. The value of the key
+     * identifies the subtype of the data, such as the format of the CC data. The format
+     * found at this key can then be used to identify how to parse the data at
+     * {@link #TV_MESSAGE_KEY_RAW_DATA}.
+     *
+     * To parse the raw data bsed on the subtype, please refer to the official documentation of the
+     * concerning subtype. For example, for the subtype "ATSC A/335" for watermarking, the
+     * document for A/335 from the ATSC standard details how this data is formatted.
+     *
+     * Some other examples of common formats include:
+     * <ul>
+     *     <li>Watermarking - ATSC A/336</li>
+     *     <li>Closed Captioning - CTA 608-E</li>
+     * </ul>
+     *
+     * <p> Type: String
+     */
+    public static final String TV_MESSAGE_KEY_SUBTYPE =
+            "android.media.tv.TvInputManager.subtype";
+
+    /**
+     * This constant is used as a {@link Bundle} key for TV messages. The value of the key
+     * stores the raw data contained in this TV Message. The format of this data is determined
+     * by the format defined by the subtype, found using the key at
+     * {@link #TV_MESSAGE_KEY_SUBTYPE}. See {@link #TV_MESSAGE_KEY_SUBTYPE} for more
+     * information on how to parse this data.
+     *
+     * <p> Type: byte[]
+     */
+    public static final String TV_MESSAGE_KEY_RAW_DATA =
+            "android.media.tv.TvInputManager.raw_data";
 
     static final int VIDEO_UNAVAILABLE_REASON_START = 0;
     static final int VIDEO_UNAVAILABLE_REASON_END = 18;
@@ -800,9 +837,15 @@ public final class TvInputManager {
          *
          * @param session A {@link TvInputManager.Session} associated with this callback.
          * @param type The type of message received, such as {@link #TV_MESSAGE_TYPE_WATERMARK}
-         * @param data The raw data of the message
+         * @param data The raw data of the message. The bundle keys are:
+         *             {@link TvInputManager#TV_MESSAGE_KEY_STREAM_ID},
+         *             {@link TvInputManager#TV_MESSAGE_KEY_SUBTYPE},
+         *             {@link TvInputManager#TV_MESSAGE_KEY_RAW_DATA}.
+         *             See {@link TvInputManager#TV_MESSAGE_KEY_SUBTYPE} for more information on
+         *             how to parse this data.
+         *
          */
-        public void onTvMessage(Session session, @TvInputManager.TvMessageType String type,
+        public void onTvMessage(Session session, @TvInputManager.TvMessageType int type,
                 Bundle data) {
         }
 
@@ -1081,7 +1124,7 @@ public final class TvInputManager {
             });
         }
 
-        void postTvMessage(String type, Bundle data) {
+        void postTvMessage(int type, Bundle data) {
             mHandler.post(new Runnable() {
                 @Override
                 public void run() {
@@ -1620,7 +1663,7 @@ public final class TvInputManager {
             }
 
             @Override
-            public void onTvMessage(String type, Bundle data, int seq) {
+            public void onTvMessage(int type, Bundle data, int seq) {
                 synchronized (mSessionCallbackRecordMap) {
                     SessionCallbackRecord record = mSessionCallbackRecordMap.get(seq);
                     if (record == null) {
@@ -3230,7 +3273,7 @@ public final class TvInputManager {
         /**
          * Sends TV messages to the service for testing purposes
          */
-        public void notifyTvMessage(@NonNull @TvMessageType String type, @NonNull Bundle data) {
+        public void notifyTvMessage(@NonNull @TvMessageType int type, @NonNull Bundle data) {
             try {
                 mService.notifyTvMessage(mToken, type, data, mUserId);
             } catch (RemoteException e) {
@@ -3642,13 +3685,13 @@ public final class TvInputManager {
         /**
          * Notifies when the advertisement buffer is filled and ready to be read.
          */
-        public void notifyAdBuffer(AdBuffer buffer) {
+        public void notifyAdBufferReady(AdBuffer buffer) {
             if (mToken == null) {
                 Log.w(TAG, "The session has been already released");
                 return;
             }
             try {
-                mService.notifyAdBuffer(mToken, buffer, mUserId);
+                mService.notifyAdBufferReady(mToken, buffer, mUserId);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }

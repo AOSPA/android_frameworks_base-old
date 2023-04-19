@@ -809,8 +809,10 @@ final class DisplayPowerController2 implements AutomaticBrightnessController.Cal
                 mDisplayDeviceConfig.getHighBrightnessModeData(),
                 new HighBrightnessModeController.HdrBrightnessDeviceConfig() {
                     @Override
-                    public float getHdrBrightnessFromSdr(float sdrBrightness) {
-                        return mDisplayDeviceConfig.getHdrBrightnessFromSdr(sdrBrightness);
+                    public float getHdrBrightnessFromSdr(
+                            float sdrBrightness, float maxDesiredHdrSdrRatio) {
+                        return mDisplayDeviceConfig.getHdrBrightnessFromSdr(
+                                sdrBrightness, maxDesiredHdrSdrRatio);
                     }
                 });
         mBrightnessThrottler.resetThrottlingData(
@@ -1595,6 +1597,7 @@ final class DisplayPowerController2 implements AutomaticBrightnessController.Cal
         mTempBrightnessEvent.setWasShortTermModelActive(wasShortTermModelActive);
         mTempBrightnessEvent.setDisplayBrightnessStrategyName(displayBrightnessState
                 .getDisplayBrightnessStrategyName());
+        mTempBrightnessEvent.setAutomaticBrightnessEnabled(mUseAutoBrightness);
         // Temporary is what we use during slider interactions. We avoid logging those so that
         // we don't spam logcat when the slider is being used.
         boolean tempToTempTransition =
@@ -1603,9 +1606,7 @@ final class DisplayPowerController2 implements AutomaticBrightnessController.Cal
                         == BrightnessReason.REASON_TEMPORARY;
         if ((!mTempBrightnessEvent.equalsMainData(mLastBrightnessEvent) && !tempToTempTransition)
                 || brightnessAdjustmentFlags != 0) {
-            float lastBrightness = mLastBrightnessEvent.getBrightness();
-            mTempBrightnessEvent.setInitialBrightness(lastBrightness);
-            mTempBrightnessEvent.setAutomaticBrightnessEnabled(mUseAutoBrightness);
+            mTempBrightnessEvent.setInitialBrightness(mLastBrightnessEvent.getBrightness());
             mLastBrightnessEvent.copyFrom(mTempBrightnessEvent);
             BrightnessEvent newEvent = new BrightnessEvent(mTempBrightnessEvent);
             // Adjustment flags (and user-set flag) only get added after the equality checks since
@@ -1796,8 +1797,10 @@ final class DisplayPowerController2 implements AutomaticBrightnessController.Cal
                 displayUniqueId, PowerManager.BRIGHTNESS_MIN, PowerManager.BRIGHTNESS_MAX, hbmData,
                 new HighBrightnessModeController.HdrBrightnessDeviceConfig() {
                     @Override
-                    public float getHdrBrightnessFromSdr(float sdrBrightness) {
-                        return mDisplayDeviceConfig.getHdrBrightnessFromSdr(sdrBrightness);
+                    public float getHdrBrightnessFromSdr(
+                            float sdrBrightness, float maxDesiredHdrSdrRatio) {
+                        return mDisplayDeviceConfig.getHdrBrightnessFromSdr(
+                                sdrBrightness, maxDesiredHdrSdrRatio);
                     }
                 },
                 () -> {

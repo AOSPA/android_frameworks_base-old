@@ -395,9 +395,13 @@ public class InternetDialog extends SystemUIDialog implements
 
     private void setOnClickListener() {
         mMobileNetworkLayout.setOnClickListener(v -> {
-            int autoSwitchNonDdsSubId = mInternetDialogController.getActiveAutoSwitchNonDdsSubId();
-            if (autoSwitchNonDdsSubId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
-                showTurnOffAutoDataSwitchDialog(autoSwitchNonDdsSubId);
+            // Do not show auto data switch dialog if Smart DDS Switch feature is available
+            if (!mInternetDialogController.isSmartDdsSwitchFeatureAvailable()) {
+                int autoSwitchNonDdsSubId =
+                        mInternetDialogController.getActiveAutoSwitchNonDdsSubId();
+                if (autoSwitchNonDdsSubId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                    showTurnOffAutoDataSwitchDialog(autoSwitchNonDdsSubId);
+                }
             }
             mInternetDialogController.connectCarrierNetwork();
         });
@@ -438,7 +442,7 @@ public class InternetDialog extends SystemUIDialog implements
      * Whether device works under DSDA or DSDS mode, if temp DDS switch has happened,
      * disabling mobile data won't be allowed.
      */
-    private boolean shouldDisallowUserToDisableMobileData() {
+    private boolean shouldDisallowUserToDisableDdsMobileData() {
         return mInternetDialogController.isMobileDataEnabled()
                 && !mInternetDialogController.isNonDdsCallStateIdle()
                 && mInternetDialogController.isTempDdsHappened();
@@ -462,7 +466,7 @@ public class InternetDialog extends SystemUIDialog implements
                 mSecondaryMobileNetworkLayout.setVisibility(View.GONE);
             }
         } else {
-            if (shouldDisallowUserToDisableMobileData()) {
+            if (shouldDisallowUserToDisableDdsMobileData()) {
                 Log.d(TAG, "Do not allow mobile data switch to be turned off");
                 mMobileDataToggle.setEnabled(false);
             } else {
@@ -718,7 +722,7 @@ public class InternetDialog extends SystemUIDialog implements
     }
 
     String getMobileNetworkSummary(int subId) {
-        if (shouldDisallowUserToDisableMobileData()) {
+        if (subId == mDefaultDataSubId && shouldDisallowUserToDisableDdsMobileData()) {
             return mContext.getString(R.string.mobile_data_summary_not_allowed_to_disable_data);
         }
         return mInternetDialogController.getMobileNetworkSummary(subId);

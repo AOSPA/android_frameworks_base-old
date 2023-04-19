@@ -24,8 +24,9 @@ import android.util.Log;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.credentials.metrics.ApiName;
 import com.android.server.credentials.metrics.ApiStatus;
-import com.android.server.credentials.metrics.CandidateProviderMetric;
-import com.android.server.credentials.metrics.ChosenProviderMetric;
+import com.android.server.credentials.metrics.CandidatePhaseMetric;
+import com.android.server.credentials.metrics.ChosenProviderFinalPhaseMetric;
+import com.android.server.credentials.metrics.InitialPhaseMetric;
 
 import java.util.Map;
 
@@ -39,7 +40,10 @@ public class MetricUtilities {
 
     public static final int DEFAULT_INT_32 = -1;
     public static final int[] DEFAULT_REPEATED_INT_32 = new int[0];
-
+    // Used for single count metric emits, such as singular amounts of various types
+    public static final int UNIT = 1;
+    // Used for zero count metric emits, such as zero amounts of various types
+    public static final int ZERO = 0;
 
     /**
      * This retrieves the uid of any package name, given a context and a component name for the
@@ -85,38 +89,43 @@ public class MetricUtilities {
      * @param apiStatus            the api status to log
      * @param providers            a map with known providers
      * @param callingUid           the calling UID of the client app
-     * @param chosenProviderMetric the metric data type of the final chosen provider
+     * @param chosenProviderFinalPhaseMetric the metric data type of the final chosen provider
      */
     protected static void logApiCalled(ApiName apiName, ApiStatus apiStatus,
             Map<String, ProviderSession> providers, int callingUid,
-            ChosenProviderMetric chosenProviderMetric) {
-        var providerSessions = providers.values();
-        int providerSize = providerSessions.size();
-        int[] candidateUidList = new int[providerSize];
-        int[] candidateQueryRoundTripTimeList = new int[providerSize];
-        int[] candidateStatusList = new int[providerSize];
-        int index = 0;
-        for (var session : providerSessions) {
-            CandidateProviderMetric metric = session.mCandidateProviderMetric;
-            candidateUidList[index] = metric.getCandidateUid();
-            candidateQueryRoundTripTimeList[index] = metric.getQueryLatencyMicroseconds();
-            candidateStatusList[index] = metric.getProviderQueryStatus();
-            index++;
+            ChosenProviderFinalPhaseMetric chosenProviderFinalPhaseMetric) {
+        try {
+            var providerSessions = providers.values();
+            int providerSize = providerSessions.size();
+            int[] candidateUidList = new int[providerSize];
+            int[] candidateQueryRoundTripTimeList = new int[providerSize];
+            int[] candidateStatusList = new int[providerSize];
+            int index = 0;
+            for (var session : providerSessions) {
+                CandidatePhaseMetric metric = session.mCandidatePhasePerProviderMetric;
+                candidateUidList[index] = metric.getCandidateUid();
+                candidateQueryRoundTripTimeList[index] = metric.getQueryLatencyMicroseconds();
+                candidateStatusList[index] = metric.getProviderQueryStatus();
+                index++;
+            }
+            FrameworkStatsLog.write(FrameworkStatsLog.CREDENTIAL_MANAGER_API_CALLED,
+                    /* api_name */apiName.getMetricCode(),
+                    /* caller_uid */ callingUid,
+                    /* api_status */ apiStatus.getMetricCode(),
+                    /* repeated_candidate_provider_uid */ candidateUidList,
+                    /* repeated_candidate_provider_round_trip_time_query_microseconds */
+                    candidateQueryRoundTripTimeList,
+                    /* repeated_candidate_provider_status */ candidateStatusList,
+                    /* chosen_provider_uid */ chosenProviderFinalPhaseMetric.getChosenUid(),
+                    /* chosen_provider_round_trip_time_overall_microseconds */
+                    chosenProviderFinalPhaseMetric.getEntireProviderLatencyMicroseconds(),
+                    /* chosen_provider_final_phase_microseconds (backwards compat only) */
+                    DEFAULT_INT_32,
+                    /* chosen_provider_status */ chosenProviderFinalPhaseMetric
+                            .getChosenProviderStatus());
+        } catch (Exception e) {
+            Log.w(TAG, "Unexpected error during metric logging: " + e);
         }
-        FrameworkStatsLog.write(FrameworkStatsLog.CREDENTIAL_MANAGER_API_CALLED,
-                /* api_name */apiName.getMetricCode(),
-                /* caller_uid */ callingUid,
-                /* api_status */ apiStatus.getMetricCode(),
-                /* repeated_candidate_provider_uid */ candidateUidList,
-                /* repeated_candidate_provider_round_trip_time_query_microseconds */
-                candidateQueryRoundTripTimeList,
-                /* repeated_candidate_provider_status */ candidateStatusList,
-                /* chosen_provider_uid */ chosenProviderMetric.getChosenUid(),
-                /* chosen_provider_round_trip_time_overall_microseconds */
-                chosenProviderMetric.getEntireProviderLatencyMicroseconds(),
-                /* chosen_provider_final_phase_microseconds (backwards compat only) */
-                DEFAULT_INT_32,
-                /* chosen_provider_status */ chosenProviderMetric.getChosenProviderStatus());
     }
 
     /**
@@ -131,20 +140,38 @@ public class MetricUtilities {
      */
     protected static void logApiCalled(ApiName apiName, ApiStatus apiStatus,
             int callingUid) {
-        FrameworkStatsLog.write(FrameworkStatsLog.CREDENTIAL_MANAGER_API_CALLED,
-                /* api_name */apiName.getMetricCode(),
-                /* caller_uid */ callingUid,
-                /* api_status */ apiStatus.getMetricCode(),
-                /* repeated_candidate_provider_uid */  DEFAULT_REPEATED_INT_32,
-                /* repeated_candidate_provider_round_trip_time_query_microseconds */
-                DEFAULT_REPEATED_INT_32,
-                /* repeated_candidate_provider_status */ DEFAULT_REPEATED_INT_32,
-                /* chosen_provider_uid */ DEFAULT_INT_32,
-                /* chosen_provider_round_trip_time_overall_microseconds */
-                DEFAULT_INT_32,
-                /* chosen_provider_final_phase_microseconds */
-                DEFAULT_INT_32,
-                /* chosen_provider_status */ DEFAULT_INT_32);
+        try {
+            FrameworkStatsLog.write(FrameworkStatsLog.CREDENTIAL_MANAGER_API_CALLED,
+                    /* api_name */apiName.getMetricCode(),
+                    /* caller_uid */ callingUid,
+                    /* api_status */ apiStatus.getMetricCode(),
+                    /* repeated_candidate_provider_uid */  DEFAULT_REPEATED_INT_32,
+                    /* repeated_candidate_provider_round_trip_time_query_microseconds */
+                    DEFAULT_REPEATED_INT_32,
+                    /* repeated_candidate_provider_status */ DEFAULT_REPEATED_INT_32,
+                    /* chosen_provider_uid */ DEFAULT_INT_32,
+                    /* chosen_provider_round_trip_time_overall_microseconds */
+                    DEFAULT_INT_32,
+                    /* chosen_provider_final_phase_microseconds */
+                    DEFAULT_INT_32,
+                    /* chosen_provider_status */ DEFAULT_INT_32);
+        } catch (Exception e) {
+            Log.w(TAG, "Unexpected error during metric logging: " + e);
+        }
+    }
+
+    /**
+     * Handles the metric emit for the initial phase.
+     *
+     * @param initialPhaseMetric contains all the data for this emit
+     */
+    protected static void logApiCalled(InitialPhaseMetric initialPhaseMetric) {
+        /*
+        FrameworkStatsLog.write(FrameworkStatsLog.INITIAL_PHASE,
+        .. session_id .. initialPhaseMetric.getSessionId(),
+        ...
+        TODO Immediately - Fill in asap now that the split atom is checked in.
+         */
     }
 
 }

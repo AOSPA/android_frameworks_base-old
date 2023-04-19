@@ -12,6 +12,11 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ *
  */
 
 package com.android.server.audio;
@@ -3968,8 +3973,10 @@ public class AudioService extends IAudioService.Stub
     }
 
     @Override
-    @android.annotation.EnforcePermission(anyOf =
-            {"MODIFY_AUDIO_ROUTING", "MODIFY_AUDIO_SETTINGS_PRIVILEGED"})
+    @android.annotation.EnforcePermission(anyOf = {
+            android.Manifest.permission.MODIFY_AUDIO_ROUTING,
+            android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED
+    })
     /** @see AudioDeviceVolumeManager#setDeviceVolume(VolumeInfo, AudioDeviceAttributes)
      * Part of service interface, check permissions and parameters here
      * Note calling package is for logging purposes only, not to be trusted
@@ -4206,7 +4213,7 @@ public class AudioService extends IAudioService.Stub
                 // other conditions will influence the stream type choice, read on...
                 break;
         }
-        if (mVoicePlaybackActive.get()) {
+        if (mVoicePlaybackActive.get() && mode != AudioSystem.MODE_NORMAL) {
             return AudioSystem.STREAM_VOICE_CALL;
         }
         return AudioSystem.STREAM_MUSIC;
@@ -4986,8 +4993,10 @@ public class AudioService extends IAudioService.Stub
     }
 
     @Override
-    @android.annotation.EnforcePermission(anyOf =
-            {"MODIFY_AUDIO_ROUTING", "MODIFY_AUDIO_SETTINGS_PRIVILEGED"})
+    @android.annotation.EnforcePermission(anyOf = {
+            android.Manifest.permission.MODIFY_AUDIO_ROUTING,
+            android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED
+    })
     /**
      * @see AudioDeviceVolumeManager#getDeviceVolume(VolumeInfo, AudioDeviceAttributes)
      */
@@ -7274,8 +7283,10 @@ public class AudioService extends IAudioService.Stub
      * @param device the audio device to be affected
      * @param deviceVolumeBehavior one of the device behaviors
      */
-    @android.annotation.EnforcePermission(anyOf =
-            {"MODIFY_AUDIO_ROUTING", "MODIFY_AUDIO_SETTINGS_PRIVILEGED"})
+    @android.annotation.EnforcePermission(anyOf = {
+            android.Manifest.permission.MODIFY_AUDIO_ROUTING,
+            android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED
+    })
     public void setDeviceVolumeBehavior(@NonNull AudioDeviceAttributes device,
             @AudioManager.DeviceVolumeBehavior int deviceVolumeBehavior, @Nullable String pkgName) {
         // verify permissions
@@ -7355,8 +7366,11 @@ public class AudioService extends IAudioService.Stub
      * @param device the audio output device type
      * @return the volume behavior for the device
      */
-    @android.annotation.EnforcePermission(anyOf =
-            {"MODIFY_AUDIO_ROUTING", "QUERY_AUDIO_STATE", "MODIFY_AUDIO_SETTINGS_PRIVILEGED"})
+    @android.annotation.EnforcePermission(anyOf = {
+            android.Manifest.permission.MODIFY_AUDIO_ROUTING,
+            android.Manifest.permission.QUERY_AUDIO_STATE,
+            android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED
+    })
     public @AudioManager.DeviceVolumeBehavior
     int getDeviceVolumeBehavior(@NonNull AudioDeviceAttributes device) {
         // verify permissions

@@ -424,7 +424,7 @@
                  android:permission="com.android.systemui.permission.SELF"
                  android:exported="false" />
 
-        <activity android:name=".screenshot.AppClipsTrampolineActivity"
+        <activity android:name=".screenshot.appclips.AppClipsTrampolineActivity"
             android:theme="@style/AppClipsTrampolineActivity"
             android:label="@string/screenshot_preview_description"
             android:permission="android.permission.LAUNCH_CAPTURE_CONTENT_ACTIVITY_FOR_NOTE"
@@ -435,7 +435,7 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".screenshot.AppClipsActivity"
+        <activity android:name=".screenshot.appclips.AppClipsActivity"
             android:theme="@style/AppClipsActivity"
             android:process=":appclips.screenshot"
             android:label="@string/screenshot_preview_description"
@@ -970,6 +970,7 @@
             android:enabled="false"
             android:exported="true"
             android:excludeFromRecents="true"
+            android:resizeableActivity="false"
             android:theme="@android:style/Theme.NoDisplay"
             android:label="@string/note_task_button_label"
             android:icon="@drawable/ic_note_task_shortcut_widget">
@@ -984,6 +985,7 @@
             android:name=".notetask.shortcut.LaunchNoteTaskActivity"
             android:exported="true"
             android:excludeFromRecents="true"
+            android:resizeableActivity="false"
             android:theme="@android:style/Theme.NoDisplay" />
         <!-- endregion -->
 

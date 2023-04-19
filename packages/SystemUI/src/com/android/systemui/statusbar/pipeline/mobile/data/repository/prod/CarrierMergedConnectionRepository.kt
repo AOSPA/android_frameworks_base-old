@@ -14,9 +14,16 @@
  * limitations under the License.
  */
 
+/*
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 package com.android.systemui.statusbar.pipeline.mobile.data.repository.prod
 
 import android.telephony.CellSignalStrength.SIGNAL_STRENGTH_NONE_OR_UNKNOWN
+import android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_NONE
 import android.telephony.TelephonyManager
 import android.util.Log
 import com.android.systemui.dagger.SysUISingleton
@@ -29,6 +36,7 @@ import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConn
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionRepository.Companion.DEFAULT_NUM_LEVELS
 import com.android.systemui.statusbar.pipeline.wifi.data.repository.WifiRepository
 import com.android.systemui.statusbar.pipeline.wifi.shared.model.WifiNetworkModel
+import com.qti.extphone.NrIconType
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -164,6 +172,17 @@ class CarrierMergedConnectionRepository(
     override val carrierNetworkChangeActive = MutableStateFlow(false).asStateFlow()
 
     override val dataEnabled: StateFlow<Boolean> = wifiRepository.isWifiEnabled
+
+    override val lteRsrpLevel = MutableStateFlow(SIGNAL_STRENGTH_NONE_OR_UNKNOWN)
+    override val voiceNetworkType = MutableStateFlow(TelephonyManager.NETWORK_TYPE_UNKNOWN)
+    override val dataNetworkType = MutableStateFlow(TelephonyManager.NETWORK_TYPE_UNKNOWN)
+    override val nrIconType = MutableStateFlow(NrIconType.TYPE_NONE)
+    override val dataRoamingEnabled = MutableStateFlow(true).asStateFlow()
+    override val originNetworkType = MutableStateFlow(TelephonyManager.NETWORK_TYPE_UNKNOWN)
+    override val voiceCapable = MutableStateFlow(false)
+    override val videoCapable = MutableStateFlow(false)
+    override val imsRegistered = MutableStateFlow(false)
+    override val imsRegistrationTech = MutableStateFlow(REGISTRATION_TECH_NONE)
 
     companion object {
         // Carrier merged is never roaming

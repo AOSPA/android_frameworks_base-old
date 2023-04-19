@@ -25,6 +25,7 @@ import static com.android.server.am.BroadcastConstants.DEFER_BOOT_COMPLETED_BROA
 
 import android.annotation.NonNull;
 import android.app.ActivityThread;
+import android.app.ForegroundServiceTypePolicy;
 import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -1208,6 +1209,7 @@ final class ActivityManagerConstants extends ContentObserver {
                                 updateUseTieredCachedAdj();
                                 break;
                             default:
+                                updateFGSPermissionEnforcementFlagsIfNecessary(name);
                                 break;
                         }
                     }
@@ -2006,6 +2008,11 @@ final class ActivityManagerConstants extends ContentObserver {
             DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
             KEY_TIERED_CACHED_ADJ_DECAY_TIME,
             DEFAULT_TIERED_CACHED_ADJ_DECAY_TIME);
+    }
+
+    private void updateFGSPermissionEnforcementFlagsIfNecessary(@NonNull String name) {
+        ForegroundServiceTypePolicy.getDefaultPolicy()
+                .updatePermissionEnforcementFlagIfNecessary(name);
     }
 
     @NeverCompile // Avoid size overhead of debugging code.

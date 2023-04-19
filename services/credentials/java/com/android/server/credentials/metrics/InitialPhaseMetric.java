@@ -24,16 +24,14 @@ package com.android.server.credentials.metrics;
  * TODO(b/270403549) - iterate on this in V3+
  */
 public class InitialPhaseMetric {
-    private static final String TAG = "PreCandidateMetric";
+    private static final String TAG = "InitialPhaseMetric";
 
     // The api being called, default set to unknown
     private int mApiName = ApiName.UNKNOWN.getMetricCode();
     // The caller uid of the calling application, default to -1
     private int mCallerUid = -1;
     // The session id to unite multiple atom emits, default to -1
-    private long mSessionId = -1;
-    // A sequence id to order united emits, default to -1
-    private int mSequenceId = -1;
+    private int mSessionId = -1;
     private int mCountRequestClassType = -1;
 
     // Raw timestamps in nanoseconds, *the only* one logged as such (i.e. 64 bits) since it is a
@@ -50,7 +48,7 @@ public class InitialPhaseMetric {
 
     /* ---------- Latencies ---------- */
 
-    /* -- Direct Latencies -- */
+    /* -- Direct Latency Utility -- */
 
     public int getServiceStartToQueryLatencyMicroseconds() {
         return (int) ((this.mCredentialServiceStartedTimeNanoseconds
@@ -100,22 +98,12 @@ public class InitialPhaseMetric {
 
     /* ------ SessionId ------ */
 
-    public void setSessionId(long sessionId) {
+    public void setSessionId(int sessionId) {
         mSessionId = sessionId;
     }
 
-    public long getSessionId() {
+    public int getSessionId() {
         return mSessionId;
-    }
-
-    /* ------ SequenceId ------ */
-
-    public void setSequenceId(int sequenceId) {
-        mSequenceId = sequenceId;
-    }
-
-    public int getSequenceId() {
-        return mSequenceId;
     }
 
     /* ------ Count Request Class Types ------ */

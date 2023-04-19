@@ -106,6 +106,9 @@ class AnrHelper {
          ApplicationInfo aInfo, String parentShortComponentName,
          WindowProcessController parentProcess, boolean aboveSystem,
          ExecutorService auxiliaryTaskExecutor, TimeoutRecord timeoutRecord, boolean isContinuousAnr) {
+         if (auxiliaryTaskExecutor == null){
+             auxiliaryTaskExecutor = mAuxiliaryTaskExecutor;
+         }
          appNotResponding(new AnrRecord(anrProcess, activityShortComponentName, aInfo,
                    parentShortComponentName, parentProcess, aboveSystem, auxiliaryTaskExecutor, timeoutRecord,
                    isContinuousAnr));
@@ -116,6 +119,9 @@ class AnrHelper {
         WindowProcessController parentProcess, boolean aboveSystem,
         ExecutorService auxiliaryTaskExecutor, TimeoutRecord timeoutRecord, long delayInMillis,
         boolean isContinuousAnr) {
+        if (auxiliaryTaskExecutor == null){
+            auxiliaryTaskExecutor = mAuxiliaryTaskExecutor;
+        }
         AnrRecord anrRecord = new AnrRecord(anrProcess, activityShortComponentName, aInfo,
                 parentShortComponentName, parentProcess, aboveSystem, auxiliaryTaskExecutor, timeoutRecord,
                 isContinuousAnr);
@@ -156,8 +162,8 @@ class AnrHelper {
                     }
                     anrRecord.mTimeoutRecord.mLatencyTracker.
                       anrRecordPlacingOnQueueWithSize(mAnrRecords.size());
-                    mAnrRecords.add(anrRecord);
                 }
+                mAnrRecords.add(anrRecord);
             }
             startAnrConsumerIfNeeded();
         } finally {

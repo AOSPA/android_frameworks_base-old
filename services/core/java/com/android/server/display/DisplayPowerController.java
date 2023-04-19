@@ -975,8 +975,10 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
                 mDisplayDeviceConfig.getHighBrightnessModeData(),
                 new HighBrightnessModeController.HdrBrightnessDeviceConfig() {
                     @Override
-                    public float getHdrBrightnessFromSdr(float sdrBrightness) {
-                        return mDisplayDeviceConfig.getHdrBrightnessFromSdr(sdrBrightness);
+                    public float getHdrBrightnessFromSdr(
+                            float sdrBrightness, float maxDesiredHdrSdrRatio) {
+                        return mDisplayDeviceConfig.getHdrBrightnessFromSdr(
+                                sdrBrightness, maxDesiredHdrSdrRatio);
                     }
                 });
         mBrightnessThrottler.resetThrottlingData(
@@ -1449,8 +1451,17 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
                 sendOnProximityNegativeWithWakelock();
             }
         } else {
+            setProximitySensorEnabled(false);
             mWaitingForNegativeProximity = false;
             mIgnoreProximityUntilChanged = false;
+
+            if (mScreenOffBecauseOfProximity) {
+                // The screen *was* off due to prox being near, but now there's no prox sensor, so
+                // let's turn the screen back on.
+                mScreenOffBecauseOfProximity = false;
+                skipRampBecauseOfProximityChangeToNegative = true;
+                sendOnProximityNegativeWithWakelock();
+            }
         }
 
         if (!mIsEnabled
@@ -1877,6 +1888,7 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
                 ? mCdsi.getReduceBrightColorsStrength() : -1);
         mTempBrightnessEvent.setPowerFactor(mPowerRequest.screenLowPowerBrightnessFactor);
         mTempBrightnessEvent.setWasShortTermModelActive(wasShortTermModelActive);
+        mTempBrightnessEvent.setAutomaticBrightnessEnabled(mUseAutoBrightness);
         // Temporary is what we use during slider interactions. We avoid logging those so that
         // we don't spam logcat when the slider is being used.
         boolean tempToTempTransition =
@@ -1885,9 +1897,7 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
                         == BrightnessReason.REASON_TEMPORARY;
         if ((!mTempBrightnessEvent.equalsMainData(mLastBrightnessEvent) && !tempToTempTransition)
                 || brightnessAdjustmentFlags != 0) {
-            float lastBrightness = mLastBrightnessEvent.getBrightness();
-            mTempBrightnessEvent.setInitialBrightness(lastBrightness);
-            mTempBrightnessEvent.setAutomaticBrightnessEnabled(mUseAutoBrightness);
+            mTempBrightnessEvent.setInitialBrightness(mLastBrightnessEvent.getBrightness());
             mLastBrightnessEvent.copyFrom(mTempBrightnessEvent);
             BrightnessEvent newEvent = new BrightnessEvent(mTempBrightnessEvent);
             // Adjustment flags (and user-set flag) only get added after the equality checks since
@@ -2080,8 +2090,10 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
                 displayUniqueId, PowerManager.BRIGHTNESS_MIN, PowerManager.BRIGHTNESS_MAX, hbmData,
                 new HighBrightnessModeController.HdrBrightnessDeviceConfig() {
                     @Override
-                    public float getHdrBrightnessFromSdr(float sdrBrightness) {
-                        return mDisplayDeviceConfig.getHdrBrightnessFromSdr(sdrBrightness);
+                    public float getHdrBrightnessFromSdr(
+                            float sdrBrightness, float maxDesiredHdrSdrRatio) {
+                        return mDisplayDeviceConfig.getHdrBrightnessFromSdr(
+                                sdrBrightness, maxDesiredHdrSdrRatio);
                     }
                 },
                 () -> {

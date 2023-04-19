@@ -170,6 +170,9 @@ public class HandwritingInitiator {
                             findBestCandidateView(mState.mStylusDownX, mState.mStylusDownY);
                     if (candidateView != null) {
                         if (candidateView == getConnectedView()) {
+                            if (!candidateView.hasFocus()) {
+                                requestFocusWithoutReveal(candidateView);
+                            }
                             startHandwriting(candidateView);
                         } else if (candidateView.getHandwritingDelegatorCallback() != null) {
                             String delegatePackageName =
@@ -181,13 +184,7 @@ public class HandwritingInitiator {
                                     candidateView, delegatePackageName);
                             candidateView.getHandwritingDelegatorCallback().run();
                         } else {
-                            if (candidateView.getRevealOnFocusHint()) {
-                                candidateView.setRevealOnFocusHint(false);
-                                candidateView.requestFocus();
-                                candidateView.setRevealOnFocusHint(true);
-                            } else {
-                                candidateView.requestFocus();
-                            }
+                            requestFocusWithoutReveal(candidateView);
                         }
                     }
                 }
@@ -205,6 +202,16 @@ public class HandwritingInitiator {
     private void clearConnectedView() {
         mConnectedView = null;
         mConnectionCount = 0;
+    }
+
+    /**
+     * Notify HandwritingInitiator that a delegate view (see {@link View#isHandwritingDelegate})
+     * gained focus.
+     */
+    public void onDelegateViewFocused(@NonNull View view) {
+        if (view == getConnectedView()) {
+            tryAcceptStylusHandwritingDelegation(view);
+        }
     }
 
     /**
@@ -380,6 +387,16 @@ public class HandwritingInitiator {
         return false;
     }
 
+    private static void requestFocusWithoutReveal(View view) {
+        if (view.getRevealOnFocusHint()) {
+            view.setRevealOnFocusHint(false);
+            view.requestFocus();
+            view.setRevealOnFocusHint(true);
+        } else {
+            view.requestFocus();
+        }
+    }
+
     /**
      * Given the location of the stylus event, return the best candidate view to initialize
      * handwriting mode.
@@ -389,9 +406,6 @@ public class HandwritingInitiator {
      */
     @Nullable
     private View findBestCandidateView(float x, float y) {
-        float minDistance = Float.MAX_VALUE;
-        View bestCandidate = null;
-
         // If the connectedView is not null and do not set any handwriting area, it will check
         // whether the connectedView's boundary contains the initial stylus position. If true,
         // directly return the connectedView.
@@ -400,14 +414,12 @@ public class HandwritingInitiator {
             Rect handwritingArea = getViewHandwritingArea(connectedView);
             if (isInHandwritingArea(handwritingArea, x, y, connectedView)
                     && shouldTriggerStylusHandwritingForView(connectedView)) {
-                final float distance = distance(handwritingArea, x, y);
-                if (distance == 0f) return connectedView;
-
-                bestCandidate = connectedView;
-                minDistance = distance;
+                return connectedView;
             }
         }
 
+        float minDistance = Float.MAX_VALUE;
+        View bestCandidate = null;
         // Check the registered handwriting areas.
         final List<HandwritableViewInfo> handwritableViewInfos =
                 mHandwritingAreasTracker.computeViewInfos();

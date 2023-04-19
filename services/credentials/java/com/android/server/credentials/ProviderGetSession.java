@@ -61,13 +61,13 @@ public final class ProviderGetSession extends ProviderSession<BeginGetCredential
         RemoteCredentialService.ProviderCallbacks<BeginGetCredentialResponse> {
     private static final String TAG = "ProviderGetSession";
     // Key to be used as the entry key for an action entry
-    private static final String ACTION_ENTRY_KEY = "action_key";
+    public static final String ACTION_ENTRY_KEY = "action_key";
     // Key to be used as the entry key for the authentication entry
-    private static final String AUTHENTICATION_ACTION_ENTRY_KEY = "authentication_action_key";
+    public static final String AUTHENTICATION_ACTION_ENTRY_KEY = "authentication_action_key";
     // Key to be used as an entry key for a remote entry
-    private static final String REMOTE_ENTRY_KEY = "remote_entry_key";
+    public static final String REMOTE_ENTRY_KEY = "remote_entry_key";
     // Key to be used as an entry key for a credential entry
-    private static final String CREDENTIAL_ENTRY_KEY = "credential_key";
+    public static final String CREDENTIAL_ENTRY_KEY = "credential_key";
 
     @NonNull
     private final Map<String, CredentialOption> mBeginGetOptionToCredentialOptionMap;
@@ -169,7 +169,8 @@ public final class ProviderGetSession extends ProviderSession<BeginGetCredential
             CallingAppInfo callingAppInfo,
             Map<String, CredentialOption> beginGetOptionToCredentialOptionMap,
             String hybridService) {
-        super(context, info, beginGetRequest, callbacks, userId, remoteCredentialService);
+        super(context, beginGetRequest, callbacks, info.getComponentName() ,
+                userId, remoteCredentialService);
         mCompleteRequest = completeGetRequest;
         mCallingAppInfo = callingAppInfo;
         setStatus(Status.PENDING);
@@ -196,7 +197,7 @@ public final class ProviderGetSession extends ProviderSession<BeginGetCredential
     /** Called when provider service dies. */
     @Override // Callback from the remote provider
     public void onProviderServiceDied(RemoteCredentialService service) {
-        if (service.getComponentName().equals(mProviderInfo.getServiceInfo().getComponentName())) {
+        if (service.getComponentName().equals(mComponentName)) {
             updateStatusAndInvokeCallback(Status.SERVICE_DEAD);
         } else {
             Slog.i(TAG, "Component names different in onProviderServiceDied - "
@@ -268,7 +269,14 @@ public final class ProviderGetSession extends ProviderSession<BeginGetCredential
     @Override
     protected void invokeSession() {
         if (mRemoteCredentialService != null) {
-            mCandidateProviderMetric.setStartQueryTimeNanoseconds(System.nanoTime());
+            /*
+            InitialPhaseMetric initMetric = ((RequestSession)mCallbacks).initMetric;
+            TODO immediately once the other change patched through
+            mCandidateProviderMetric.setSessionId(initMetric
+            .mInitialPhaseMetric.getSessionId());
+            mCandidateProviderMetric.setStartTime(initMetric.getStartTime())
+             */
+            mCandidatePhasePerProviderMetric.setStartQueryTimeNanoseconds(System.nanoTime());
             mRemoteCredentialService.onBeginGetCredential(mProviderRequest, this);
         }
     }
@@ -426,10 +434,13 @@ public final class ProviderGetSession extends ProviderSession<BeginGetCredential
     private void onSetInitialRemoteResponse(BeginGetCredentialResponse response) {
         mProviderResponse = response;
         addToInitialRemoteResponse(response, /*isInitialResponse=*/true);
+        // Log the data.
         if (mProviderResponseDataHandler.isEmptyResponse(response)) {
             updateStatusAndInvokeCallback(Status.EMPTY_RESPONSE);
             return;
         }
+        // TODO immediately, add to Candidate Phase counts, repeat across all sessions
+        // Use sets to dedup type counts
         updateStatusAndInvokeCallback(Status.CREDENTIALS_RECEIVED);
     }
 
@@ -544,7 +555,7 @@ public final class ProviderGetSession extends ProviderSession<BeginGetCredential
             String id = generateUniqueId();
             Entry entry = new Entry(REMOTE_ENTRY_KEY,
                     id, remoteEntry.getSlice(), setUpFillInIntentForRemoteEntry());
-            mUiRemoteEntry = new Pair<>(generateUniqueId(), new Pair<>(remoteEntry, entry));
+            mUiRemoteEntry = new Pair<>(id, new Pair<>(remoteEntry, entry));
         }
 
 

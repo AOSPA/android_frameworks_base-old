@@ -57,6 +57,9 @@
 #define ENCODING_EVRC_B     103
 #define ENCODING_EVRC_WB    104
 #define ENCODING_EVRC_NW    105
+#define ENCODING_AAC_ADTS_LC 106
+#define ENCODING_AAC_ADTS_HE_V1 107
+#define ENCODING_AAC_ADTS_HE_V2 108
 
 #define ENCODING_INVALID    0
 #define ENCODING_DEFAULT    1
@@ -146,6 +149,12 @@ static inline audio_format_t audioFormatToNative(int audioFormat)
         return AUDIO_FORMAT_DTS_UHD_P2;
     case ENCODING_DSD:
         return AUDIO_FORMAT_DSD;
+    case ENCODING_AAC_ADTS_LC:
+        return AUDIO_FORMAT_AAC_ADTS_LC;
+    case ENCODING_AAC_ADTS_HE_V1:
+        return AUDIO_FORMAT_AAC_ADTS_HE_V1;
+    case ENCODING_AAC_ADTS_HE_V2:
+        return AUDIO_FORMAT_AAC_ADTS_HE_V2;
     default:
         return AUDIO_FORMAT_INVALID;
     }
@@ -241,6 +250,12 @@ static inline int audioFormatFromNative(audio_format_t nativeFormat)
         return ENCODING_DEFAULT;
     case AUDIO_FORMAT_DSD:
         return ENCODING_DSD;
+    case AUDIO_FORMAT_AAC_ADTS_LC:
+        return ENCODING_AAC_ADTS_LC;
+    case AUDIO_FORMAT_AAC_ADTS_HE_V1:
+        return ENCODING_AAC_ADTS_HE_V1;
+    case AUDIO_FORMAT_AAC_ADTS_HE_V2:
+        return ENCODING_AAC_ADTS_HE_V2;
     default:
         return ENCODING_INVALID;
     }

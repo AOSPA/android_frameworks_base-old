@@ -46,9 +46,11 @@ public final class ClearRequestSession extends RequestSession<ClearCredentialSta
 
     public ClearRequestSession(Context context, int userId, int callingUid,
             IClearCredentialStateCallback callback, ClearCredentialStateRequest request,
-            CallingAppInfo callingAppInfo, CancellationSignal cancellationSignal) {
+            CallingAppInfo callingAppInfo, CancellationSignal cancellationSignal,
+            long startedTimestamp) {
         super(context, userId, callingUid, request, callback, RequestInfo.TYPE_UNDEFINED,
-                callingAppInfo, cancellationSignal);
+                callingAppInfo, cancellationSignal, startedTimestamp);
+        setupInitialPhaseMetric(ApiName.CLEAR_CREDENTIAL.getMetricCode(), MetricUtilities.ZERO);
     }
 
     /**
@@ -120,7 +122,7 @@ public final class ClearRequestSession extends RequestSession<ClearCredentialSta
     private void respondToClientWithResponseAndFinish() {
         Log.i(TAG, "respondToClientWithResponseAndFinish");
         if (isSessionCancelled()) {
-            mChosenProviderMetric.setChosenProviderStatus(
+            mChosenProviderFinalPhaseMetric.setChosenProviderStatus(
                     ProviderStatusForMetrics.FINAL_SUCCESS.getMetricCode());
             logApiCall(ApiName.CLEAR_CREDENTIAL, /* apiStatus */
                     ApiStatus.CLIENT_CANCELED);
@@ -132,7 +134,7 @@ public final class ClearRequestSession extends RequestSession<ClearCredentialSta
             logApiCall(ApiName.CLEAR_CREDENTIAL, /* apiStatus */
                     ApiStatus.SUCCESS);
         } catch (RemoteException e) {
-            mChosenProviderMetric.setChosenProviderStatus(
+            mChosenProviderFinalPhaseMetric.setChosenProviderStatus(
                     ProviderStatusForMetrics.FINAL_FAILURE.getMetricCode());
             Log.i(TAG, "Issue while propagating the response to the client");
             logApiCall(ApiName.CLEAR_CREDENTIAL, /* apiStatus */
