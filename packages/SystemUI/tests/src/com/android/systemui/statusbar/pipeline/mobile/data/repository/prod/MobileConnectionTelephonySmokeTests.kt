@@ -120,6 +120,7 @@ class MobileConnectionTelephonySmokeTests : SysuiTestCase() {
 
         underTest =
             MobileConnectionRepositoryImpl(
+                mContext,
                 SUB_1_ID,
                 DEFAULT_NAME,
                 SEP,
