@@ -7410,7 +7410,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         if (mQspaEnabled) {
             mPackagesPathToBeDisabledForQSPA.add("/system_ext/priv-app/SystemUI");
-            mPackagesPathToBeDisabledForQSPA.add("/system_ext/priv-app/Launcher3QuickStep");
+            mPackagesPathToBeDisabledForQSPA.add("/system_ext/priv-app/Launcher3QuickStepGo");
             mPackagesPathToBeDisabledForQSPA.add("/system_ext/priv-app/Launcher3Go");
             mPackagesPathToBeDisabledForQSPA.add("/system/app/PrintSpooler");
             mPackagesPathToBeDisabledForQSPA.add("/system/priv-app/StatementService");
