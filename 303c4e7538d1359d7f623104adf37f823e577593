@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "3168d960_58584e27",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000737
+      },
+      "writtenOn": "2023-04-23T14:27:47Z",
+      "side": 1,
+      "message": "Works fine and doesn\u0027t cause lag, but it breaks this commit :https://gerrit.aospa.co/c/AOSPA/android_frameworks_base/+/27714",
+      "revId": "303c4e7538d1359d7f623104adf37f823e577593",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
