@@ -16,6 +16,24 @@
       "message": "Works fine and doesn\u0027t cause lag, but it breaks this commit :https://gerrit.aospa.co/c/AOSPA/android_frameworks_base/+/27714",
       "revId": "303c4e7538d1359d7f623104adf37f823e577593",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "27894724_968836e2",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2023-04-23T15:19:25Z",
+      "side": 1,
+      "message": "I\u0027d argue this should be a CR-2 on your commit - you\u0027re breaking AOSP behavior",
+      "parentUuid": "3168d960_58584e27",
+      "revId": "303c4e7538d1359d7f623104adf37f823e577593",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
