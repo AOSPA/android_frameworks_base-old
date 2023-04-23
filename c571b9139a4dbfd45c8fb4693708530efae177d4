@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "5f660a99_f2359d92",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000429
+      },
+      "writtenOn": "2023-04-23T08:19:46Z",
+      "side": 1,
+      "message": "NOTE: fix the empty space when this is disabled.",
+      "revId": "c571b9139a4dbfd45c8fb4693708530efae177d4",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
