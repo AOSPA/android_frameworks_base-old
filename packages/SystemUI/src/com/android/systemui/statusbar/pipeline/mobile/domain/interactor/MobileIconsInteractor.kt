@@ -358,6 +358,7 @@ constructor(
             showVolteIcon,
             showVowifiIcon,
             context,
+            mobileConnectionsRepo.defaultDataSubId,
         )
 
     companion object {
