@@ -64,6 +64,7 @@ interface MobileIconViewModelCommon {
     val activityOutVisible: Flow<Boolean>
     val activityContainerVisible: Flow<Boolean>
     val volteId: Flow<Int>
+    val showSignalStrengthIcon: Flow<Boolean>
 }
 
 /**
@@ -105,8 +106,9 @@ constructor(
                 combine(
                     airplaneModeInteractor.isAirplaneMode,
                     iconInteractor.isForceHidden,
-                ) { isAirplaneMode, isForceHidden ->
-                    !isAirplaneMode && !isForceHidden
+                    iconInteractor.voWifiAvailable,
+                ) { isAirplaneMode, isForceHidden, voWifiAvailable ->
+                    (!isAirplaneMode && !isForceHidden) || voWifiAvailable
                 }
             }
             .distinctUntilChanged()
@@ -196,6 +198,7 @@ constructor(
                         else null
                     }
                 return@combine when {
+                    voWifiAvailable -> icon
                     networkTypeIconCustomization.isRatCustomization -> {
                         if (shouldShowNetworkTypeIcon(networkTypeIconCustomization)) {
                             icon
@@ -243,6 +246,16 @@ constructor(
         }
         .distinctUntilChanged()
         .stateIn(scope, SharingStarted.WhileSubscribed(), 0)
+
+    override val showSignalStrengthIcon =
+        combine(
+            airplaneModeInteractor.isAirplaneMode,
+            iconInteractor.isForceHidden,
+        ) { isAirplaneMode, isForceHidden ->
+            !isAirplaneMode && !isForceHidden
+        }
+        .distinctUntilChanged()
+        .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
     private val activity: Flow<DataActivityModel?> =
         if (!constants.shouldShowActivityConfig) {
