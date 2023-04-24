@@ -795,7 +795,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
 
     public void unregisterFiveGStateListener(FiveGServiceClient client) {
         int phoneId = mSubscriptionInfo.getSimSlotIndex();
-        client.unregisterListener(phoneId);
+        client.unregisterListener(phoneId, mFiveGStateListener);
     }
 
     private MobileIconGroup getNetworkTypeIconGroup() {

@@ -500,9 +500,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
         for (int i = 0; i < mMobileSignalControllers.size(); i++) {
             MobileSignalController mobileSignalController = mMobileSignalControllers.valueAt(i);
             mobileSignalController.registerListener();
-            if (!mStatusBarPipelineFlags.useNewMobileIcons()) {
-                mobileSignalController.registerFiveGStateListener(mFiveGServiceClient);
-            }
+            mobileSignalController.registerFiveGStateListener(mFiveGServiceClient);
         }
         if (mSubscriptionListener == null) {
             mSubscriptionListener = new SubListener(mBgLooper);
@@ -557,9 +555,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
         for (int i = 0; i < mMobileSignalControllers.size(); i++) {
             MobileSignalController mobileSignalController = mMobileSignalControllers.valueAt(i);
             mobileSignalController.unregisterListener();
-            if (!mStatusBarPipelineFlags.useNewMobileIcons()) {
-                mobileSignalController.unregisterFiveGStateListener(mFiveGServiceClient);
-            }
+            mobileSignalController.unregisterFiveGStateListener(mFiveGServiceClient);
         }
         mSubscriptionManager.removeOnSubscriptionsChangedListener(mSubscriptionListener);
         mBroadcastDispatcher.unregisterReceiver(this);
@@ -1016,9 +1012,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 }
                 if (mListening) {
                     controller.registerListener();
-                    if (!mStatusBarPipelineFlags.useNewMobileIcons()) {
-                        controller.registerFiveGStateListener(mFiveGServiceClient);
-                    }
+                    controller.registerFiveGStateListener(mFiveGServiceClient);
                 }
             }
         }
@@ -1029,9 +1023,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
                     mDefaultSignalController = null;
                 }
                 cachedControllers.get(key).unregisterListener();
-                if (!mStatusBarPipelineFlags.useNewMobileIcons()) {
-                    cachedControllers.get(key).unregisterFiveGStateListener(mFiveGServiceClient);
-                }
+                cachedControllers.get(key).unregisterFiveGStateListener(mFiveGServiceClient);
             }
         }
         mCallbackHandler.setSubs(subscriptions);
