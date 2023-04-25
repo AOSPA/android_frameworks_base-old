@@ -54,6 +54,7 @@ import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
 import android.app.AppOpsManager;
 import android.app.compat.CompatChanges;
+import android.app.ICrossDeviceService;
 import android.companion.virtual.IVirtualDevice;
 import android.companion.virtual.VirtualDeviceManager;
 import android.compat.annotation.ChangeId;
@@ -99,6 +100,7 @@ import android.media.projection.IMediaProjection;
 import android.media.projection.IMediaProjectionManager;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.DeviceIntegrationUtils;
 import android.os.Handler;
 import android.os.HandlerExecutor;
 import android.os.IBinder;
@@ -1475,7 +1477,19 @@ public final class DisplayManagerService extends SystemService {
         }
 
         if (callingUid != Process.SYSTEM_UID && (flags & VIRTUAL_DISPLAY_FLAG_TRUSTED) != 0) {
-            if (!checkCallingPermission(ADD_TRUSTED_DISPLAY, "createVirtualDisplay()")) {
+            //Check cross device service white list
+            boolean isFromWhiteList = false;
+            if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
+                IBinder b = ServiceManager.getService(Context.CROSS_DEVICE_SERVICE);
+                if (b != null) {
+                    ICrossDeviceService crossDeviceService = ICrossDeviceService.Stub.asInterface(b);
+                    try {
+                        isFromWhiteList = crossDeviceService.isFromBackgroundWhiteListByUid(Binder.getCallingUid());
+                    }  catch (RemoteException ex) {}
+                }
+            }
+
+            if (!isFromWhiteList && !checkCallingPermission(ADD_TRUSTED_DISPLAY, "createVirtualDisplay()")) {
                 EventLog.writeEvent(0x534e4554, "162627132", callingUid,
                         "Attempt to create a trusted display without holding permission!");
                 throw new SecurityException("Requires ADD_TRUSTED_DISPLAY permission to "

@@ -38,6 +38,7 @@ import android.content.res.Resources;
 import android.graphics.Point;
 import android.media.projection.MediaProjection;
 import android.os.Build;
+import android.os.DeviceIntegrationUtils;
 import android.os.Handler;
 import android.os.HandlerExecutor;
 import android.os.Looper;
@@ -1135,8 +1136,17 @@ public final class DisplayManager {
             executor = new HandlerExecutor(
                     Handler.createAsync(handler != null ? handler.getLooper() : Looper.myLooper()));
         }
-        return mGlobal.createVirtualDisplay(mContext, projection, virtualDisplayConfig, callback,
-                executor);
+        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
+            VirtualDisplay virtualDisplay =  mGlobal.createVirtualDisplay(mContext, projection,
+                    virtualDisplayConfig, callback, executor);
+            if (virtualDisplay != null && RemoteTaskHelper.isFromRemoteTaskWhiteList()) {
+                virtualDisplay.setDisplayState(true);
+            }
+            return virtualDisplay;
+        } else {
+            return mGlobal.createVirtualDisplay(mContext, projection, virtualDisplayConfig, callback,
+                    executor);
+        }
     }
 
     /**
