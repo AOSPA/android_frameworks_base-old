@@ -46,6 +46,7 @@ import com.android.systemui.util.mockito.whenever
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.runBlocking
@@ -531,6 +532,7 @@ class MobileIconInteractorTest : SysuiTestCase() {
             mobileIconsInteractor.showVolteIcon,
             mobileIconsInteractor.showVowifiIcon,
             context,
+            MutableStateFlow(0),
             overrides,
         )
 
