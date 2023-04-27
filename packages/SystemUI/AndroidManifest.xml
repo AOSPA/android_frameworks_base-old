@@ -1028,6 +1028,7 @@
                 <action android:name="com.android.systemui.action.DISMISS_VOLUME_PANEL_DIALOG" />
             </intent-filter>
         </receiver>
+        <uses-library android:name="com.qti.extphone.extphonelib"/>
 
         <provider
             android:authorities="com.android.systemui.customization"
@@ -1035,8 +1036,5 @@
             android:exported="true"
             android:permission="android.permission.CUSTOMIZE_SYSTEM_UI"
             />
-
-        <uses-library android:name="com.qti.extphone.extphonelib"/>
-
     </application>
 </manifest>

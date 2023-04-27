@@ -198,6 +198,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     protected ActivityStarter mActivityStarter;
     @VisibleForTesting
     protected SubscriptionManager.OnSubscriptionsChangedListener mOnSubscriptionsChangedListener;
+    @VisibleForTesting
     protected Map<Integer, NonDdsCallStateCallback> mNonDdsCallStateCallbacksMap;
     @VisibleForTesting
     protected WifiUtils.InternetIconInjector mWifiIconInjector;
@@ -242,7 +243,8 @@ public class InternetDialogController implements AccessPointController.AccessPoi
             LocationController locationController,
             DialogLaunchAnimator dialogLaunchAnimator,
             WifiStateWorker wifiStateWorker,
-            FeatureFlags featureFlags, CarrierNameCustomization carrierNameCustomization
+            FeatureFlags featureFlags,
+            CarrierNameCustomization carrierNameCustomization
     ) {
         if (DEBUG) {
             Log.d(TAG, "Init InternetDialogController");
@@ -277,8 +279,8 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         mConnectedWifiInternetMonitor = new ConnectedWifiInternetMonitor();
         mWifiStateWorker = wifiStateWorker;
         mNonDdsCallStateCallbacksMap = new HashMap<Integer, NonDdsCallStateCallback>();
-        mFeatureFlags = featureFlags;
         mCarrierNameCustomization = carrierNameCustomization;
+        mFeatureFlags = featureFlags;
     }
 
     void onStart(@NonNull InternetDialogCallback callback, boolean canConfigWifi) {
@@ -301,10 +303,10 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         mConfig = MobileMappings.Config.readConfig(mContext);
         mTelephonyManager = mTelephonyManager.createForSubscriptionId(mDefaultDataSubId);
         mSubIdTelephonyManagerMap.put(mDefaultDataSubId, mTelephonyManager);
-        InternetTelephonyCallback telephonyCallback =
-                new InternetTelephonyCallback(mDefaultDataSubId);
-        mSubIdTelephonyCallbackMap.put(mDefaultDataSubId, telephonyCallback);
-        mTelephonyManager.registerTelephonyCallback(mExecutor, telephonyCallback);
+        InternetTelephonyCallback mInternetTelephonyCallback =
+            new InternetTelephonyCallback(mDefaultDataSubId);
+        mSubIdTelephonyCallbackMap.put(mDefaultDataSubId, mInternetTelephonyCallback);
+        mTelephonyManager.registerTelephonyCallback(mExecutor, mInternetTelephonyCallback);
 
         // Listen to non-DDS call state changes
         List<SubscriptionInfo> subInfos =
@@ -646,15 +648,6 @@ public class InternetDialogController implements AccessPointController.AccessPoi
                 info -> info.uniqueName));
     }
 
-    CharSequence getMobileNetworkTitle() {
-        if (mCarrierNameCustomization.isRoamingCustomizationEnabled()
-                && mCarrierNameCustomization.isRoaming(mDefaultDataSubId)) {
-            return mCarrierNameCustomization.getRoamingCarrierName(mDefaultDataSubId);
-        } else {
-            return getUniqueSubscriptionDisplayName(mDefaultDataSubId, mContext);
-        }
-    }
-
     /**
      * @return the subId of the visible non-DDS if it's actively being used for data, otherwise
      * return {@link SubscriptionManager#INVALID_SUBSCRIPTION_ID}.
@@ -683,7 +676,12 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     }
 
     CharSequence getMobileNetworkTitle(int subId) {
-        return getUniqueSubscriptionDisplayName(subId, mContext);
+        if (mCarrierNameCustomization.isRoamingCustomizationEnabled()
+                && mCarrierNameCustomization.isRoaming(subId)) {
+            return mCarrierNameCustomization.getRoamingCarrierName(subId);
+        } else {
+            return getUniqueSubscriptionDisplayName(subId, mContext);
+        }
     }
 
     String getMobileNetworkSummary(int subId) {

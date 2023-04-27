@@ -278,10 +278,6 @@ public class DisplayRotation {
             mOrientationListener.setCurrentRotation(mRotation);
             mSettingsObserver = new SettingsObserver(uiHandler);
             mSettingsObserver.observe();
-            if (mSupportAutoRotation && mContext.getResources().getBoolean(
-                    R.bool.config_windowManagerHalfFoldAutoRotateOverride)) {
-                mFoldController = new FoldController();
-            }
 
             /* Register for WIFI Display Intents in a separate thread
              * to avoid possible deadlock between ActivityManager and
@@ -325,6 +321,10 @@ public class DisplayRotation {
                 }
             };
             t.start();
+            if (mSupportAutoRotation && mContext.getResources().getBoolean(
+                    R.bool.config_windowManagerHalfFoldAutoRotateOverride)) {
+                mFoldController = new FoldController();
+            }
         }
     }
 

@@ -134,6 +134,8 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
     private NotificationShadeWindowController mNotificationShadeWindowController;
     private @Mock DreamOverlayStateController mDreamOverlayStateController;
     private @Mock ActivityLaunchAnimator mActivityLaunchAnimator;
+    private @Mock FoldAodAnimationController mFoldAodAnimationController;
+    private @Mock UnfoldLightRevealOverlayAnimation mUnfoldAnimation;
     private @Mock ScrimController mScrimController;
     private @Mock SysuiColorExtractor mColorExtractor;
     private @Mock AuthController mAuthController;
@@ -245,25 +247,10 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
         assertFalse(mViewMediator.isAnimatingScreenOff());
     }
 
-    @Test
-    @TestableLooper.RunWithLooper(setAsMainLooper = true)
-    public void restoreBouncerWhenSimLockedAndKeyguardIsGoingAway() {
-        // When showing and provisioned
-        mViewMediator.onSystemReady();
-        when(mUpdateMonitor.isDeviceProvisioned()).thenReturn(true);
-        mViewMediator.setShowingLocked(true);
-
-        // and a SIM becomes locked and requires a PIN
-        mViewMediator.mUpdateCallback.onSimStateChanged(
-                1 /* subId */,
-                0 /* slotId */,
-                TelephonyManager.SIM_STATE_PIN_REQUIRED);
-
-        // and the keyguard goes away
-        mViewMediator.setShowingLocked(false);
-        when(mKeyguardStateController.isShowing()).thenReturn(false);
-        mViewMediator.mUpdateCallback.onKeyguardVisibilityChanged(false);
-
+    private void onUnfoldOverlayReady() {
+        ArgumentCaptor<Runnable> overlayReadyCaptor = ArgumentCaptor.forClass(Runnable.class);
+        verify(mUnfoldAnimation).onScreenTurningOn(overlayReadyCaptor.capture());
+        overlayReadyCaptor.getValue().run();
         TestableLooper.get(this).processAllMessages();
     }
 

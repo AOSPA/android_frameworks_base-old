@@ -253,11 +253,11 @@ public class AudioService extends IAudioService.Stub
     /** Debug communication route */
     protected static final boolean DEBUG_COMM_RTE = false;
 
-    /** Debug log sound fx (touchsounds...) in dumpsys */
-    protected static final boolean DEBUG_LOG_SOUND_FX = false;
-
     /** debug SCO modes */
     protected static final boolean DEBUG_SCO = true;
+
+    /** Debug log sound fx (touchsounds...) in dumpsys */
+    protected static final boolean DEBUG_LOG_SOUND_FX = false;
 
     /** How long to delay before persisting a change in volume/ringer mode. */
     private static final int PERSIST_DELAY = 500;

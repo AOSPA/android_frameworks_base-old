@@ -148,6 +148,14 @@ internal class MobileState(
         return serviceState != null && serviceState!!.roaming
     }
 
+    fun getVoiceNetworkType(): Int {
+        return serviceState?.getVoiceNetworkType() ?: TelephonyManager.NETWORK_TYPE_UNKNOWN;
+    }
+
+    fun getDataNetworkType(): Int {
+        return serviceState?.getDataNetworkType() ?: TelephonyManager.NETWORK_TYPE_UNKNOWN;
+    }
+
     /**
      *
      * Load the (potentially customized) icon resource id for the current network type. Note that
@@ -161,14 +169,6 @@ internal class MobileState(
     fun getNetworkTypeIcon(context: Context): Int {
         val icon = (iconGroup as MobileIconGroup)
         return networkTypeResIdCache.get(icon, carrierId, context)
-    }
-
-    fun getVoiceNetworkType(): Int {
-        return serviceState?.getVoiceNetworkType() ?: TelephonyManager.NETWORK_TYPE_UNKNOWN;
-    }
-
-    fun getDataNetworkType(): Int {
-        return serviceState?.getDataNetworkType() ?: TelephonyManager.NETWORK_TYPE_UNKNOWN;
     }
 
     fun setFromMobileStatus(mobileStatus: MobileStatus) {
