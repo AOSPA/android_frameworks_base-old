@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "969847d1_10376469",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 4
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000488
+      },
+      "writtenOn": "2023-04-27T11:01:59Z",
+      "side": 1,
+      "message": "what if you try persist.wm.enable_remote_keyguard_animation\u003d0",
+      "revId": "45e705955d85651fbe68cdfda3a5ae6ba98e7341",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
