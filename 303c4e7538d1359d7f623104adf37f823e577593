@@ -34,6 +34,24 @@
       "parentUuid": "3168d960_58584e27",
       "revId": "303c4e7538d1359d7f623104adf37f823e577593",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "d8465542_213b9d20",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000463
+      },
+      "writtenOn": "2023-04-27T10:00:56Z",
+      "side": 1,
+      "message": "we can go ahead and merge it.\nin the linked commit you can disable it by checking for the bool.",
+      "parentUuid": "27894724_968836e2",
+      "revId": "303c4e7538d1359d7f623104adf37f823e577593",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
