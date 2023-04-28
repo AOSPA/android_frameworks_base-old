@@ -73,6 +73,7 @@ import com.android.systemui.statusbar.LockscreenShadeTransitionController;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager.UserChangedListener;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
+import com.android.systemui.statusbar.NotificationShelf;
 import com.android.systemui.statusbar.NotificationShelfController;
 import com.android.systemui.statusbar.RemoteInputController;
 import com.android.systemui.statusbar.StatusBarState;
@@ -179,7 +180,6 @@ public class NotificationStackScrollLayoutController {
     private final SeenNotificationsProvider mSeenNotificationsProvider;
 
     private NotificationStackScrollLayout mView;
-    private boolean mFadeNotificationsOnDismiss;
     private NotificationSwipeHelper mSwipeHelper;
     @Nullable
     private Boolean mHistoryEnabled;
@@ -547,7 +547,7 @@ public class NotificationStackScrollLayoutController {
                 public boolean updateSwipeProgress(View animView, boolean dismissable,
                                                    float swipeProgress) {
                     // Returning true prevents alpha fading.
-                    return !mFadeNotificationsOnDismiss;
+                    return false;
                 }
 
                 @Override
@@ -772,7 +772,6 @@ public class NotificationStackScrollLayoutController {
 
         mLockscreenUserManager.addUserChangedListener(mLockscreenUserChangeListener);
 
-        mFadeNotificationsOnDismiss = mFeatureFlags.isEnabled(Flags.NOTIFICATION_DISMISSAL_FADE);
         if (!mUseRoundnessSourceTypes) {
             mNotificationRoundnessManager.setOnRoundingChangedCallback(mView::invalidate);
             mView.addOnExpandedHeightChangedListener(mNotificationRoundnessManager::setExpanded);
@@ -1369,19 +1368,12 @@ public class NotificationStackScrollLayoutController {
         mView.onUpdateRowStates();
     }
 
-    public ActivatableNotificationView getActivatedChild() {
-        return mView.getActivatedChild();
-    }
-
-    public void setActivatedChild(ActivatableNotificationView view) {
-        mView.setActivatedChild(view);
-    }
-
     public void runAfterAnimationFinished(Runnable r) {
         mView.runAfterAnimationFinished(r);
     }
 
     public void setShelfController(NotificationShelfController notificationShelfController) {
+        NotificationShelfController.assertRefactorFlagDisabled(mFeatureFlags);
         mView.setShelfController(notificationShelfController);
     }
 
@@ -1591,6 +1583,19 @@ public class NotificationStackScrollLayoutController {
     public void setOnNotificationRemovedListener(
             NotificationStackScrollLayout.OnNotificationRemovedListener listener) {
         mView.setOnNotificationRemovedListener(listener);
+    }
+
+    public void setShelf(NotificationShelf shelf) {
+        if (!NotificationShelfController.checkRefactorFlagEnabled(mFeatureFlags)) return;
+        mView.setShelf(shelf);
+    }
+
+    public int getShelfHeight() {
+        if (!NotificationShelfController.checkRefactorFlagEnabled(mFeatureFlags)) {
+            return 0;
+        }
+        ExpandableView shelf = mView.getShelf();
+        return shelf == null ? 0 : shelf.getIntrinsicHeight();
     }
 
     /**
@@ -1935,8 +1940,7 @@ public class NotificationStackScrollLayoutController {
         public void setNotifStats(@NonNull NotifStats notifStats) {
             mNotifStats = notifStats;
             mView.setHasFilteredOutSeenNotifications(
-                    mNotifPipelineFlags.getShouldFilterUnseenNotifsOnKeyguard()
-                            && mSeenNotificationsProvider.getHasFilteredOutSeenNotifications());
+                    mSeenNotificationsProvider.getHasFilteredOutSeenNotifications());
             updateFooter();
             updateShowEmptyShadeView();
         }

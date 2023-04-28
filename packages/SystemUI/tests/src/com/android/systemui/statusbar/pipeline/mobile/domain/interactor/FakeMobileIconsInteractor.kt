@@ -56,6 +56,8 @@ class FakeMobileIconsInteractor(
             FIVE_G_OVERRIDE_KEY to TelephonyIcons.NR_5G,
         )
 
+    private val interactorCache: MutableMap<Int, FakeMobileIconInteractor> = mutableMapOf()
+
     override val isDefaultConnectionFailed = MutableStateFlow(false)
 
     override val filteredSubscriptions = MutableStateFlow<List<SubscriptionModel>>(listOf())
@@ -96,7 +98,15 @@ class FakeMobileIconsInteractor(
     override val showVowifiIcon = _showVowifiIcon
     /** Always returns a new fake interactor */
     override fun createMobileConnectionInteractorForSubId(subId: Int): MobileIconInteractor {
-        return FakeMobileIconInteractor(tableLogBuffer)
+        return FakeMobileIconInteractor(tableLogBuffer).also { interactorCache[subId] = it }
+    }
+
+    /**
+     * Returns the most recently created interactor for the given subId, or null if an interactor
+     * has never been created for that sub.
+     */
+    fun getInteractorForSubId(subId: Int): FakeMobileIconInteractor? {
+        return interactorCache[subId]
     }
 
     companion object {

@@ -16,6 +16,8 @@
 
 package com.android.server.am;
 
+import static android.app.ActivityManagerInternal.OOM_ADJ_REASON_ACTIVITY;
+
 import static com.android.internal.util.Preconditions.checkArgument;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
@@ -46,6 +48,7 @@ import android.os.SystemClock;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.server.ServerProtoEnums;
+import android.system.OsConstants;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.DebugUtils;
@@ -579,7 +582,9 @@ class ProcessRecord implements WindowProcessListener {
         processName = _processName;
         sdkSandboxClientAppPackage = _sdkSandboxClientAppPackage;
         if (isSdkSandbox) {
-            sdkSandboxClientAppVolumeUuid = getClientInfoForSdkSandbox().volumeUuid;
+            final ApplicationInfo clientInfo = getClientInfoForSdkSandbox();
+            sdkSandboxClientAppVolumeUuid = clientInfo != null
+                    ? clientInfo.volumeUuid : null;
         } else {
             sdkSandboxClientAppVolumeUuid = null;
         }
@@ -1215,8 +1220,8 @@ class ProcessRecord implements WindowProcessListener {
                 EventLog.writeEvent(EventLogTags.AM_KILL,
                         userId, mPid, processName, mState.getSetAdj(), reason);
                 Process.killProcessQuiet(mPid);
-                if (asyncKPG) ProcessList.killProcessGroup(uid, mPid);
-                else Process.killProcessGroup(uid, mPid);
+                if (!asyncKPG) Process.sendSignalToProcessGroup(uid, mPid, OsConstants.SIGKILL);
+                ProcessList.killProcessGroup(uid, mPid);
             } else {
                 mPendingStart = false;
             }
@@ -1498,7 +1503,7 @@ class ProcessRecord implements WindowProcessListener {
             }
             mService.updateLruProcessLocked(this, activityChange, null /* client */);
             if (updateOomAdj) {
-                mService.updateOomAdjLocked(this, OomAdjuster.OOM_ADJ_REASON_ACTIVITY);
+                mService.updateOomAdjLocked(this, OOM_ADJ_REASON_ACTIVITY);
             }
         }
     }

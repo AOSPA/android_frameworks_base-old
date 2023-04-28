@@ -694,7 +694,7 @@ public class BtHelper {
         mScoAudioState = SCO_STATE_INACTIVE;
         broadcastScoConnectionState(AudioManager.SCO_AUDIO_STATE_DISCONNECTED);
         mScoClientDevices.clear();
-        AudioSystem.setParameters("LeAudioSuspended=false");
+        mDeviceBroker.clearLeAudioSuspended();
         mDeviceBroker.setBluetoothScoOn(false, "resetBluetoothSco");
     }
 
@@ -870,12 +870,6 @@ public class BtHelper {
         int inDevice = AudioSystem.DEVICE_IN_BLUETOOTH_SCO_HEADSET;
         AudioDeviceAttributes audioDevice =  btHeadsetDeviceToAudioDevice(btDevice);
         String btDeviceName =  getName(btDevice);
-        if (btDeviceName == null) {
-            Log.i(TAG, "handleBtScoActiveDeviceChange: btDeviceName is null," +
-                       " sending empty string");
-            btDeviceName = "";
-        }
-
         boolean result = false;
         if (isActive) {
             result |= mDeviceBroker.handleDeviceConnection(new AudioDeviceAttributes(

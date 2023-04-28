@@ -38,7 +38,6 @@ import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.app.ActivityTaskManager.RESIZE_MODE_PRESERVE_WINDOW;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_DREAM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
-import static android.app.sdksandbox.SdkSandboxManager.ACTION_START_SANDBOXED_ACTIVITY;
 import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
@@ -253,7 +252,6 @@ import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.TransferPipe;
 import com.android.internal.policy.AttributeCache;
 import com.android.internal.policy.KeyguardDismissCallback;
-import com.android.internal.protolog.ProtoLogGroup;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.FastPrintWriter;
@@ -836,7 +834,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     private final Runnable mUpdateOomAdjRunnable = new Runnable() {
         @Override
         public void run() {
-            mAmInternal.updateOomAdj();
+            mAmInternal.updateOomAdj(ActivityManagerInternal.OOM_ADJ_REASON_ACTIVITY);
         }
     };
 
@@ -1263,9 +1261,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         assertPackageMatchesCallingUid(callingPackage);
         enforceNotIsolatedCaller("startActivityAsUser");
 
-        boolean isSandboxedActivity = (intent != null && intent.getAction() != null
-                && intent.getAction().equals(ACTION_START_SANDBOXED_ACTIVITY));
-        if (isSandboxedActivity) {
+        if (intent != null && intent.isSandboxActivity(mContext)) {
             SdkSandboxManagerLocal sdkSandboxManagerLocal = LocalManagerRegistry.getManager(
                     SdkSandboxManagerLocal.class);
             sdkSandboxManagerLocal.enforceAllowedToHostSandboxedActivity(
@@ -1522,7 +1518,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                         .setCallingPid(callingPid)
                         .setCallingPackage(intent.getPackage())
                         .setActivityInfo(a)
-                        .setActivityOptions(options.toBundle())
+                        .setActivityOptions(createSafeActivityOptionsWithBalAllowed(options))
                         // To start the dream from background, we need to start it from a persistent
                         // system process. Here we set the real calling uid to the system server uid
                         .setRealCallingUid(Binder.getCallingUid())
@@ -1670,7 +1666,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     .setResultWho(resultWho)
                     .setRequestCode(requestCode)
                     .setStartFlags(startFlags)
-                    .setActivityOptions(bOptions)
+                    .setActivityOptions(createSafeActivityOptionsWithBalAllowed(bOptions))
                     .setUserId(userId)
                     .setIgnoreTargetSecurity(ignoreTargetSecurity)
                     .setFilterCallingUid(isResolver ? 0 /* system */ : targetUid)
@@ -1720,7 +1716,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 .setVoiceInteractor(interactor)
                 .setStartFlags(startFlags)
                 .setProfilerInfo(profilerInfo)
-                .setActivityOptions(bOptions)
+                .setActivityOptions(createSafeActivityOptionsWithBalAllowed(bOptions))
                 .setUserId(userId)
                 .setBackgroundStartPrivileges(BackgroundStartPrivileges.ALLOW_BAL)
                 .execute();
@@ -1747,7 +1743,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     .setCallingPackage(callingPackage)
                     .setCallingFeatureId(callingFeatureId)
                     .setResolvedType(resolvedType)
-                    .setActivityOptions(bOptions)
+                    .setActivityOptions(createSafeActivityOptionsWithBalAllowed(bOptions))
                     .setUserId(userId)
                     .setBackgroundStartPrivileges(BackgroundStartPrivileges.ALLOW_BAL)
                     .execute();
@@ -2891,29 +2887,19 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
                 final Transition transition = new Transition(TRANSIT_CHANGE, 0 /* flags */,
                         getTransitionController(), mWindowManager.mSyncEngine);
-                if (mWindowManager.mSyncEngine.hasActiveSync()) {
-                    mWindowManager.mSyncEngine.queueSyncSet(
-                            () -> getTransitionController().moveToCollecting(transition),
-                            () -> {
-                                if (!task.getWindowConfiguration().canResizeTask()) {
-                                    Slog.w(TAG, "resizeTask not allowed on task=" + task);
-                                    transition.abort();
-                                    return;
-                                }
-                                getTransitionController().requestStartTransition(transition, task,
-                                        null /* remoteTransition */, null /* displayChange */);
-                                getTransitionController().collect(task);
-                                task.resize(bounds, resizeMode, preserveWindow);
-                                transition.setReady(task, true);
-                            });
-                } else {
-                    getTransitionController().moveToCollecting(transition);
-                    getTransitionController().requestStartTransition(transition, task,
-                            null /* remoteTransition */, null /* displayChange */);
-                    getTransitionController().collect(task);
-                    task.resize(bounds, resizeMode, preserveWindow);
-                    transition.setReady(task, true);
-                }
+                getTransitionController().startCollectOrQueue(transition,
+                        (deferred) -> {
+                            if (deferred && !task.getWindowConfiguration().canResizeTask()) {
+                                Slog.w(TAG, "resizeTask not allowed on task=" + task);
+                                transition.abort();
+                                return;
+                            }
+                            getTransitionController().requestStartTransition(transition, task,
+                                    null /* remoteTransition */, null /* displayChange */);
+                            getTransitionController().collect(task);
+                            task.resize(bounds, resizeMode, preserveWindow);
+                            transition.setReady(task, true);
+                        });
             }
         } finally {
             Binder.restoreCallingIdentity(ident);
@@ -3653,34 +3639,25 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             mActivityClientController.dismissKeyguard(r.token, new KeyguardDismissCallback() {
                 @Override
                 public void onDismissSucceeded() {
-                    if (transition != null && mWindowManager.mSyncEngine.hasActiveSync()) {
-                        ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS,
-                                "Creating Pending Pip-Enter: %s", transition);
-                        mWindowManager.mSyncEngine.queueSyncSet(
-                                () -> getTransitionController().moveToCollecting(transition),
-                                enterPipRunnable);
-                    } else {
-                        // Move to collecting immediately to "claim" the sync-engine for this
-                        // transition.
-                        if (transition != null) {
-                            getTransitionController().moveToCollecting(transition);
-                        }
+                    if (transition == null) {
                         mH.post(enterPipRunnable);
+                        return;
                     }
+                    getTransitionController().startCollectOrQueue(transition, (deferred) -> {
+                        if (deferred) {
+                            enterPipRunnable.run();
+                        } else {
+                            mH.post(enterPipRunnable);
+                        }
+                    });
                 }
             }, null /* message */);
         } else {
             // Enter picture in picture immediately otherwise
-            if (transition != null && mWindowManager.mSyncEngine.hasActiveSync()) {
-                ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS,
-                        "Creating Pending Pip-Enter: %s", transition);
-                mWindowManager.mSyncEngine.queueSyncSet(
-                        () -> getTransitionController().moveToCollecting(transition),
-                        enterPipRunnable);
+            if (transition != null) {
+                getTransitionController().startCollectOrQueue(transition,
+                        (deferred) -> enterPipRunnable.run());
             } else {
-                if (transition != null) {
-                    getTransitionController().moveToCollecting(transition);
-                }
                 enterPipRunnable.run();
             }
         }
@@ -5403,7 +5380,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             if (app != null && app.getPid() > 0) {
                 ArrayList<Integer> firstPids = new ArrayList<Integer>();
                 firstPids.add(app.getPid());
-                dumpStackTraces(tracesFile.getAbsolutePath(), firstPids, null, null, null);
+                dumpStackTraces(tracesFile.getAbsolutePath(), firstPids, null, null, null, null);
             }
 
             File lastTracesFile = null;
@@ -5552,6 +5529,31 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
         final int sourceUid = process.getInstrumentationSourceUid();
         return checkPermission(permission, -1, sourceUid) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    /**
+     * Wrap the {@link ActivityOptions} in {@link SafeActivityOptions} and attach caller options
+     * that allow using the callers permissions to start background activities.
+     */
+    private SafeActivityOptions createSafeActivityOptionsWithBalAllowed(
+            @Nullable ActivityOptions options) {
+        if (options == null) {
+            options = ActivityOptions.makeBasic().setPendingIntentBackgroundActivityStartMode(
+                ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+        } else if (options.getPendingIntentBackgroundActivityStartMode()
+                == ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_SYSTEM_DEFINED) {
+            options.setPendingIntentBackgroundActivityStartMode(
+                    ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+        }
+        return new SafeActivityOptions(options);
+    }
+
+    /**
+     * Wrap the options {@link Bundle} in {@link SafeActivityOptions} and attach caller options
+     * that allow using the callers permissions to start background activities.
+     */
+    private SafeActivityOptions createSafeActivityOptionsWithBalAllowed(@Nullable Bundle bOptions) {
+        return createSafeActivityOptionsWithBalAllowed(ActivityOptions.fromBundle(bOptions));
     }
 
     final class H extends Handler {

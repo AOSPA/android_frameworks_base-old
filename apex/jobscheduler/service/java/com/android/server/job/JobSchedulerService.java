@@ -1588,12 +1588,12 @@ public class JobSchedulerService extends com.android.server.SystemService
         final ArrayMap<String, List<JobInfo>> outMap = new ArrayMap<>();
         synchronized (mLock) {
             ArraySet<JobStatus> jobs = mJobs.getJobsByUid(uid);
-            // Write out for loop to avoid addAll() creating an Iterator.
+            // Write out for loop to avoid creating an Iterator.
             for (int i = jobs.size() - 1; i >= 0; i--) {
                 final JobStatus job = jobs.valueAt(i);
                 List<JobInfo> outList = outMap.get(job.getNamespace());
                 if (outList == null) {
-                    outList = new ArrayList<JobInfo>(jobs.size());
+                    outList = new ArrayList<>();
                     outMap.put(job.getNamespace(), outList);
                 }
 
@@ -1606,7 +1606,7 @@ public class JobSchedulerService extends com.android.server.SystemService
     private List<JobInfo> getPendingJobsInNamespace(int uid, @Nullable String namespace) {
         synchronized (mLock) {
             ArraySet<JobStatus> jobs = mJobs.getJobsByUid(uid);
-            ArrayList<JobInfo> outList = new ArrayList<JobInfo>(jobs.size());
+            ArrayList<JobInfo> outList = new ArrayList<>();
             // Write out for loop to avoid addAll() creating an Iterator.
             for (int i = jobs.size() - 1; i >= 0; i--) {
                 final JobStatus job = jobs.valueAt(i);
@@ -3713,26 +3713,22 @@ public class JobSchedulerService extends com.android.server.SystemService
 
         @Override
         public boolean isNotificationAssociatedWithAnyUserInitiatedJobs(int notificationId,
-                int userId, String packageName) {
+                int userId, @NonNull String packageName) {
             if (packageName == null) {
                 return false;
             }
-            synchronized (mLock) {
-                return mConcurrencyManager.isNotificationAssociatedWithAnyUserInitiatedJobs(
-                        notificationId, userId, packageName);
-            }
+            return mConcurrencyManager.isNotificationAssociatedWithAnyUserInitiatedJobs(
+                    notificationId, userId, packageName);
         }
 
         @Override
         public boolean isNotificationChannelAssociatedWithAnyUserInitiatedJobs(
-                String notificationChannel, int userId, String packageName) {
+                @NonNull String notificationChannel, int userId, @NonNull String packageName) {
             if (packageName == null || notificationChannel == null) {
                 return false;
             }
-            synchronized (mLock) {
-                return mConcurrencyManager.isNotificationChannelAssociatedWithAnyUserInitiatedJobs(
-                        notificationChannel, userId, packageName);
-            }
+            return mConcurrencyManager.isNotificationChannelAssociatedWithAnyUserInitiatedJobs(
+                    notificationChannel, userId, packageName);
         }
 
         @Override

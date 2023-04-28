@@ -1404,19 +1404,17 @@ public class TransitionTests extends WindowTestsBase {
         // We are now going to simulate closing task1 to return back to (open) task2.
         final Transition closeTransition = controller.createTransition(TRANSIT_CLOSE);
 
-        closeTransition.collectExistenceChange(task1);
-        closeTransition.collectExistenceChange(activity1);
         closeTransition.collectExistenceChange(task2);
         closeTransition.collectExistenceChange(activity2);
         closeTransition.setTransientLaunch(activity2, task1);
         final Transition.ChangeInfo task1ChangeInfo = closeTransition.mChanges.get(task1);
         assertNotNull(task1ChangeInfo);
         assertTrue(task1ChangeInfo.hasChanged());
+        // Make sure the unrelated activity is NOT collected.
         final Transition.ChangeInfo activity1ChangeInfo = closeTransition.mChanges.get(activity1);
-        assertNotNull(activity1ChangeInfo);
-        assertTrue(activity1ChangeInfo.hasChanged());
+        assertNull(activity1ChangeInfo);
         // No need to wait for the activity in transient hide task.
-        assertTrue(activity1.isSyncFinished());
+        assertEquals(WindowContainer.SYNC_STATE_NONE, activity1.mSyncState);
 
         activity1.setVisibleRequested(false);
         activity2.setVisibleRequested(true);
@@ -1444,6 +1442,7 @@ public class TransitionTests extends WindowTestsBase {
                 }
             }
         });
+        assertTrue(activity1.isVisible());
         controller.finishTransition(closeTransition);
         assertTrue(wasInFinishingTransition[0]);
         assertNull(controller.mFinishingTransition);
@@ -1452,6 +1451,7 @@ public class TransitionTests extends WindowTestsBase {
         assertEquals(ActivityTaskManagerService.APP_SWITCH_DISALLOW, mAtm.getBalAppSwitchesState());
         // Because task1 is occluded by task2, finishTransition should make activity1 invisible.
         assertFalse(activity1.isVisibleRequested());
+        // Make sure activity1 visibility was committed
         assertFalse(activity1.isVisible());
         assertFalse(activity1.app.hasActivityInVisibleTask());
 

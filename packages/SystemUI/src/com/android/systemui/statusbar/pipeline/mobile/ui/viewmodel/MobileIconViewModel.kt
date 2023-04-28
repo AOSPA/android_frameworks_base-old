@@ -47,7 +47,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 
 /** Common interface for all of the location-based mobile icon view models. */
@@ -94,9 +93,9 @@ constructor(
     private val showExclamationMark: Flow<Boolean> =
         combine(
             iconInteractor.isDefaultDataEnabled,
-            iconInteractor.hideNoInternetState
-        ){ isDefaultDataEnabled, hideNoInternetState ->
-            !isDefaultDataEnabled && !hideNoInternetState
+            iconInteractor.isDefaultConnectionFailed,
+        ) { isDefaultDataEnabled, isDefaultConnectionFailed ->
+            !isDefaultDataEnabled || isDefaultConnectionFailed
         }
 
     override val isVisible: StateFlow<Boolean> =

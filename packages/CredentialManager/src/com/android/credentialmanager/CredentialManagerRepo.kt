@@ -65,8 +65,8 @@ class CredentialManagerRepo(
         )
 
         val originName: String? = when (requestInfo?.type) {
-            RequestInfo.TYPE_CREATE -> requestInfo?.createCredentialRequest?.origin
-            RequestInfo.TYPE_GET -> requestInfo?.getCredentialRequest?.origin
+            RequestInfo.TYPE_CREATE -> requestInfo.createCredentialRequest?.origin
+            RequestInfo.TYPE_GET -> requestInfo.getCredentialRequest?.origin
             else -> null
         }
 
@@ -107,7 +107,7 @@ class CredentialManagerRepo(
 
         initialUiState = when (requestInfo?.type) {
             RequestInfo.TYPE_CREATE -> {
-                val defaultProviderId = userConfigRepo.getDefaultProviderId()
+                val defaultProviderIdSetByUser = userConfigRepo.getDefaultProviderId()
                 val isPasskeyFirstUse = userConfigRepo.getIsPasskeyFirstUse()
                 val providerEnableListUiState = getCreateProviderEnableListInitialUiState()
                 val providerDisableListUiState = getCreateProviderDisableListInitialUiState()
@@ -115,12 +115,14 @@ class CredentialManagerRepo(
                     getCreateRequestDisplayInfoInitialUiState(originName)!!
                 UiState(
                     createCredentialUiState = CreateFlowUtils.toCreateCredentialUiState(
-                        providerEnableListUiState,
-                        providerDisableListUiState,
-                        defaultProviderId,
-                        requestDisplayInfoUiState,
+                        enabledProviders = providerEnableListUiState,
+                        disabledProviders = providerDisableListUiState,
+                        defaultProviderIdPreferredByApp =
+                        requestDisplayInfoUiState.appPreferredDefaultProviderId,
+                        defaultProviderIdSetByUser = defaultProviderIdSetByUser,
+                        requestDisplayInfo = requestDisplayInfoUiState,
                         isOnPasskeyIntroStateAlready = false,
-                        isPasskeyFirstUse
+                        isPasskeyFirstUse = isPasskeyFirstUse,
                     )!!,
                     getCredentialUiState = null,
                     cancelRequestState = cancelUiRequestState
