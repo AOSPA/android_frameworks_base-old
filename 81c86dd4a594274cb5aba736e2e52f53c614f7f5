@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "062d45d0_c263b7b8",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2023-05-01T21:58:39Z",
+      "side": 1,
+      "message": "while im running this for daily, this causes the back gesture to sometimes not work",
+      "revId": "81c86dd4a594274cb5aba736e2e52f53c614f7f5",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
