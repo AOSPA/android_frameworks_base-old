@@ -52,7 +52,7 @@ import android.util.SparseBooleanArray;
 import com.android.internal.annotations.CompositeRWLock;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.expresslog.Counter;
+import com.android.modules.expresslog.Counter;
 import com.android.internal.os.ProcessCpuTracker;
 import com.android.internal.os.TimeoutRecord;
 import com.android.internal.os.anr.AnrLatencyTracker;
@@ -305,7 +305,7 @@ class ProcessErrorStateRecord {
             String parentShortComponentName, WindowProcessController parentProcess,
             boolean aboveSystem, TimeoutRecord timeoutRecord,
             ExecutorService auxiliaryTaskExecutor, boolean onlyDumpSelf,
-            boolean isContinuousAnr) {
+            boolean isContinuousAnr, Future<File> firstPidFilePromise) {
         String annotation = timeoutRecord.mReason;
         AnrLatencyTracker latencyTracker = timeoutRecord.mLatencyTracker;
         Future<?> updateCpuStatsNowFirstCall = null;
@@ -350,7 +350,6 @@ class ProcessErrorStateRecord {
                 Counter.logIncrement("stability_anr.value_skipped_anrs");
                 return;
             }
-
             // In case we come through here for the same app before completing
             // this one, mark as anring now so we will bail out.
             latencyTracker.waitingOnProcLockStarted();
@@ -384,6 +383,9 @@ class ProcessErrorStateRecord {
             firstPids.add(pid);
 
             // Don't dump other PIDs if it's a background ANR or is requested to only dump self.
+            // Note that the primary pid is added here just in case, as it should normally be
+            // dumped on the early dump thread, and would only be dumped on the Anr consumer thread
+            // as a fallback.
             isSilentAnr = isSilentAnr();
             if (!isSilentAnr && !onlyDumpSelf) {
                 int parentPid = pid;
@@ -520,7 +522,8 @@ class ProcessErrorStateRecord {
         File tracesFile = StackTracesDumpHelper.dumpStackTraces(firstPids,
                 isSilentAnr ? null : processCpuTracker, isSilentAnr ? null : lastPids,
                 nativePidsFuture, tracesFileException, firstPidEndOffset, annotation,
-                criticalEventLog, memoryHeaders, auxiliaryTaskExecutor, latencyTracker);
+                criticalEventLog, memoryHeaders, auxiliaryTaskExecutor, firstPidFilePromise,
+                latencyTracker);
 
         long dueTime = SystemClock.uptimeMillis()
                     + AnrHelper.APP_NOT_RESPONDING_DEFER_TIMEOUT_MILLIS;

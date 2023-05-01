@@ -6427,6 +6427,26 @@ public class AudioService extends IAudioService.Stub
         mDeviceBroker.setBluetoothScoOn(on, eventSource);
     }
 
+    /** @see AudioManager#setA2dpSuspended(boolean) */
+    @android.annotation.EnforcePermission(android.Manifest.permission.BLUETOOTH_STACK)
+    public void setA2dpSuspended(boolean enable) {
+        super.setA2dpSuspended_enforcePermission();
+        final String eventSource = new StringBuilder("setA2dpSuspended(").append(enable)
+                .append(") from u/pid:").append(Binder.getCallingUid()).append("/")
+                .append(Binder.getCallingPid()).toString();
+        mDeviceBroker.setA2dpSuspended(enable, false /*internal*/, eventSource);
+    }
+
+    /** @see AudioManager#setA2dpSuspended(boolean) */
+    @android.annotation.EnforcePermission(android.Manifest.permission.BLUETOOTH_STACK)
+    public void setLeAudioSuspended(boolean enable) {
+        super.setLeAudioSuspended_enforcePermission();
+        final String eventSource = new StringBuilder("setLeAudioSuspended(").append(enable)
+                .append(") from u/pid:").append(Binder.getCallingUid()).append("/")
+                .append(Binder.getCallingPid()).toString();
+        mDeviceBroker.setLeAudioSuspended(enable, false /*internal*/, eventSource);
+    }
+
     /** @see AudioManager#isBluetoothScoOn()
      * Note that it doesn't report internal state, but state seen by apps (which may have
      * called setBluetoothScoOn() */
@@ -7118,13 +7138,16 @@ public class AudioService extends IAudioService.Stub
             return deviceSet.iterator().next();
         } else {
             // Multiple device selection is either:
+            //  - dock + one other device: give priority to dock in this case.
             //  - speaker + one other device: give priority to speaker in this case.
             //  - one A2DP device + another device: happens with duplicated output. In this case
             // retain the device on the A2DP output as the other must not correspond to an active
             // selection if not the speaker.
             //  - HDMI-CEC system audio mode only output: give priority to available item in order.
 
-            if (deviceSet.contains(AudioSystem.DEVICE_OUT_SPEAKER)) {
+            if (deviceSet.contains(AudioSystem.DEVICE_OUT_DGTL_DOCK_HEADSET)) {
+                return AudioSystem.DEVICE_OUT_DGTL_DOCK_HEADSET;
+            } else if (deviceSet.contains(AudioSystem.DEVICE_OUT_SPEAKER)) {
                 return AudioSystem.DEVICE_OUT_SPEAKER;
             } else if (deviceSet.contains(AudioSystem.DEVICE_OUT_SPEAKER_SAFE)) {
                 // Note: DEVICE_OUT_SPEAKER_SAFE not present in getDeviceSetForStreamDirect

@@ -57,6 +57,7 @@ import com.android.systemui.plugins.qs.QSTile.SignalState;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.AlphaControlledSignalTileView;
 import com.android.systemui.qs.QSHost;
+import com.android.systemui.qs.QsEventLogger;
 import com.android.systemui.qs.logging.QSLogger;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
 import com.android.systemui.qs.tiles.dialog.InternetDialogFactory;
@@ -98,6 +99,7 @@ public class InternetTile extends QSTileImpl<SignalState> {
     @Inject
     public InternetTile(
             QSHost host,
+            QsEventLogger uiEventLogger,
             @Background Looper backgroundLooper,
             @Main Handler mainHandler,
             FalsingManager falsingManager,
@@ -110,7 +112,7 @@ public class InternetTile extends QSTileImpl<SignalState> {
             InternetDialogFactory internetDialogFactory,
             CarrierNameCustomization carrierNameCustomization
     ) {
-        super(host, backgroundLooper, mainHandler, falsingManager, metricsLogger,
+        super(host, uiEventLogger, backgroundLooper, mainHandler, falsingManager, metricsLogger,
                 statusBarStateController, activityStarter, qsLogger);
         mInternetDialogFactory = internetDialogFactory;
         mHandler = mainHandler;

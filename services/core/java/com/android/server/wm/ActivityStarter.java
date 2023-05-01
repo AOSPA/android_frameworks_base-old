@@ -1617,6 +1617,8 @@ class ActivityStarter {
             transitionController.requestStartTransition(newTransition,
                     mTargetTask == null ? started.getTask() : mTargetTask,
                     remoteTransition, null /* displayChange */);
+        } else if (result == START_SUCCESS && mStartActivity.isState(RESUMED)) {
+            // Do nothing if the activity is started and is resumed directly.
         } else if (isStarted) {
             // Make the collecting transition wait until this request is ready.
             transitionController.setReady(started, false);
@@ -2597,6 +2599,7 @@ class ActivityStarter {
         mAvoidMoveToFront = false;
         mFrozeTaskList = false;
         mTransientLaunch = false;
+        mPriorAboveTask = null;
         mDisplayLockAndOccluded = false;
 
         mVoiceSession = null;

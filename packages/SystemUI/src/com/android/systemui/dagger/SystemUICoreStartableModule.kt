@@ -17,7 +17,6 @@
 package com.android.systemui.dagger
 
 import com.android.keyguard.KeyguardBiometricLockoutLogger
-import com.android.systemui.ChooserPinMigration
 import com.android.systemui.ChooserSelector
 import com.android.systemui.CoreStartable
 import com.android.systemui.LatencyTester
@@ -49,6 +48,7 @@ import com.android.systemui.settings.dagger.MultiUserUtilsModule
 import com.android.systemui.shortcut.ShortcutKeyDispatcher
 import com.android.systemui.statusbar.notification.InstantAppNotifier
 import com.android.systemui.statusbar.phone.KeyguardLiftController
+import com.android.systemui.statusbar.phone.LetterboxModule
 import com.android.systemui.stylus.StylusUsiPowerStartable
 import com.android.systemui.temporarydisplay.chipbar.ChipbarCoordinator
 import com.android.systemui.theme.ThemeOverlayController
@@ -67,7 +67,8 @@ import dagger.multibindings.IntoMap
  */
 @Module(includes = [
     MultiUserUtilsModule::class,
-    StartControlsStartableModule::class
+    StartControlsStartableModule::class,
+    LetterboxModule::class,
 ])
 abstract class SystemUICoreStartableModule {
     /** Inject into AuthController.  */
@@ -75,13 +76,6 @@ abstract class SystemUICoreStartableModule {
     @IntoMap
     @ClassKey(AuthController::class)
     abstract fun bindAuthController(service: AuthController): CoreStartable
-
-    /** Inject into ChooserPinMigration. */
-    @Binds
-    @IntoMap
-    @ClassKey(ChooserPinMigration::class)
-    @PerUser
-    abstract fun bindChooserPinMigration(sysui: ChooserPinMigration): CoreStartable
 
     /** Inject into ChooserCoreStartable. */
     @Binds

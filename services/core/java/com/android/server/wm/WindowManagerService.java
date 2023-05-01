@@ -6738,9 +6738,8 @@ public class WindowManagerService extends IWindowManager.Stub
 
         mInputManagerCallback.dump(pw, "  ");
         mSnapshotController.dump(pw, " ");
-        if (mAccessibilityController.hasCallbacks()) {
-            mAccessibilityController.dump(pw, "  ");
-        }
+
+        dumpAccessibilityController(pw, /* force= */ false);
 
         if (dumpAll) {
             final WindowState imeWindow = mRoot.getCurrentInputMethodWindow();
@@ -6775,6 +6774,23 @@ public class WindowManagerService extends IWindowManager.Stub
                 mRecentsAnimationController.dump(pw, "    ");
             }
         }
+    }
+
+    private void dumpAccessibilityController(PrintWriter pw, boolean force) {
+        boolean hasCallbacks = mAccessibilityController.hasCallbacks();
+        if (!hasCallbacks && !force) {
+            return;
+        }
+        if (!hasCallbacks) {
+            pw.println("AccessibilityController doesn't have callbacks, but printing it anways:");
+        } else {
+            pw.println("AccessibilityController:");
+        }
+        mAccessibilityController.dump(pw, "  ");
+    }
+
+    private void dumpAccessibilityLocked(PrintWriter pw) {
+        dumpAccessibilityController(pw, /* force= */ true);
     }
 
     private boolean dumpWindows(PrintWriter pw, String name, boolean dumpAll) {
@@ -6896,6 +6912,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 pw.println("    d[isplays]: active display contents");
                 pw.println("    t[okens]: token list");
                 pw.println("    w[indows]: window list");
+                pw.println("    a11y[accessibility]: accessibility-related state");
                 pw.println("    package-config: installed packages having app-specific config");
                 pw.println("    trace: print trace status and write Winscope trace to file");
                 pw.println("  cmd may also be a NAME to dump windows.  NAME may");
@@ -6957,6 +6974,11 @@ public class WindowManagerService extends IWindowManager.Stub
             } else if ("windows".equals(cmd) || "w".equals(cmd)) {
                 synchronized (mGlobalLock) {
                     dumpWindowsLocked(pw, true, null);
+                }
+                return;
+            } else if ("accessibility".equals(cmd) || "a11y".equals(cmd)) {
+                synchronized (mGlobalLock) {
+                    dumpAccessibilityLocked(pw);
                 }
                 return;
             } else if ("all".equals(cmd)) {
@@ -8544,6 +8566,14 @@ public class WindowManagerService extends IWindowManager.Stub
             // TODO(b/186770026): We should remove this once we support multiple resumed activities
             //                    while in overview
             return;
+        }
+        final WindowState w = t.getWindowState();
+        if (w != null) {
+            final Task task = w.getTask();
+            if (task != null && w.mTransitionController.isTransientHide(task)) {
+                // Don't disturb transient animation by accident touch.
+                return;
+            }
         }
 
         ProtoLog.i(WM_DEBUG_FOCUS_LIGHT, "onPointerDownOutsideFocusLocked called on %s",

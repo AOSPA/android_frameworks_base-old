@@ -60,8 +60,8 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -502,7 +502,18 @@ public class AudioDeviceInventory {
                             AudioSystem.audioFormatToString(a2dpCodec))
                     .set(MediaMetrics.Property.INDEX, a2dpVolume)
                     .set(MediaMetrics.Property.NAME, di.mDeviceName);
+            }
 
+            if (event == BtHelper.EVENT_ACTIVE_DEVICE_CHANGE) {
+                // Device is connected
+                if (a2dpVolume != -1) {
+                    mDeviceBroker.postSetVolumeIndexOnDevice(AudioSystem.STREAM_MUSIC,
+                            // convert index to internal representation in VolumeStreamState
+                            a2dpVolume * 10,
+                            AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP,
+                            "onBluetoothA2dpDeviceConfigChange");
+                }
+            } else if (event == BtHelper.EVENT_DEVICE_CONFIG_CHANGE) {
                 if (di.mDeviceCodecFormat != a2dpCodec) {
                     di.mDeviceCodecFormat = a2dpCodec;
                     mConnectedDevices.replace(key, di);
@@ -1330,7 +1341,8 @@ public class AudioDeviceInventory {
     private void makeA2dpDeviceUnavailableLater(String address, int delayMs) {
         // prevent any activity on the A2DP audio output to avoid unwanted
         // reconnection of the sink.
-        mAudioSystem.setParameters("A2dpSuspended=true");
+        mDeviceBroker.setA2dpSuspended(
+                true /*enable*/, true /*internal*/, "makeA2dpDeviceUnavailableLater");
         // retrieve DeviceInfo before removing device
         final String deviceKey =
                 DeviceInfo.makeDeviceListKey(AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP, address);
@@ -1362,7 +1374,7 @@ public class AudioDeviceInventory {
         mConnectedDevices.put(
                 DeviceInfo.makeDeviceListKey(AudioSystem.DEVICE_IN_BLUETOOTH_A2DP, address),
                 new DeviceInfo(AudioSystem.DEVICE_IN_BLUETOOTH_A2DP, "",
-                        address, a2dpCodec));
+                        address, AudioSystem.AUDIO_FORMAT_DEFAULT));
     }
 
     @GuardedBy("mDevicesLock")
@@ -1467,7 +1479,7 @@ public class AudioDeviceInventory {
             }
 
             // Reset LEA suspend state each time a new sink is connected
-            mAudioSystem.setParameters("LeAudioSuspended=false");
+            mDeviceBroker.clearLeAudioSuspended();
 
             mConnectedDevices.put(DeviceInfo.makeDeviceListKey(device, address),
                     new DeviceInfo(device, name, address, AudioSystem.AUDIO_FORMAT_DEFAULT));
@@ -1516,7 +1528,8 @@ public class AudioDeviceInventory {
     private void makeLeAudioDeviceUnavailableLater(String address, int device, int delayMs) {
         // prevent any activity on the LEA output to avoid unwanted
         // reconnection of the sink.
-        mAudioSystem.setParameters("LeAudioSuspended=true");
+        mDeviceBroker.setLeAudioSuspended(
+                true /*enable*/, true /*internal*/, "makeLeAudioDeviceUnavailableLater");
         // the device will be made unavailable later, so consider it disconnected right away
         mConnectedDevices.remove(DeviceInfo.makeDeviceListKey(device, address));
         // send the delayed message to make the device unavailable later

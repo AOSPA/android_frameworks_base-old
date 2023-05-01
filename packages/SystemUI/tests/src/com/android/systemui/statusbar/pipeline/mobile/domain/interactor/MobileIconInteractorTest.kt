@@ -362,7 +362,7 @@ class MobileIconInteractorTest : SysuiTestCase() {
         }
 
     @Test
-    fun `isInService - uses repository value`() =
+    fun isInService_usesRepositoryValue() =
         testScope.runTest {
             var latest: Boolean? = null
             val job = underTest.isInService.onEach { latest = it }.launchIn(this)
@@ -379,7 +379,7 @@ class MobileIconInteractorTest : SysuiTestCase() {
         }
 
     @Test
-    fun `roaming - is gsm - uses connection model`() =
+    fun roaming_isGsm_usesConnectionModel() =
         testScope.runTest {
             var latest: Boolean? = null
             val job = underTest.isRoaming.onEach { latest = it }.launchIn(this)
@@ -398,7 +398,7 @@ class MobileIconInteractorTest : SysuiTestCase() {
         }
 
     @Test
-    fun `roaming - is cdma - uses cdma roaming bit`() =
+    fun roaming_isCdma_usesCdmaRoamingBit() =
         testScope.runTest {
             var latest: Boolean? = null
             val job = underTest.isRoaming.onEach { latest = it }.launchIn(this)
@@ -419,7 +419,7 @@ class MobileIconInteractorTest : SysuiTestCase() {
         }
 
     @Test
-    fun `roaming - false while carrierNetworkChangeActive`() =
+    fun roaming_falseWhileCarrierNetworkChangeActive() =
         testScope.runTest {
             var latest: Boolean? = null
             val job = underTest.isRoaming.onEach { latest = it }.launchIn(this)
@@ -440,7 +440,7 @@ class MobileIconInteractorTest : SysuiTestCase() {
         }
 
     @Test
-    fun `network name - uses operatorAlphaShot when non null and repo is default`() =
+    fun networkName_usesOperatorAlphaShotWhenNonNullAndRepoIsDefault() =
         testScope.runTest {
             var latest: NetworkNameModel? = null
             val job = underTest.networkName.onEach { latest = it }.launchIn(this)

@@ -21,6 +21,7 @@ import static android.app.AppOpsManager.OP_FLAG_TRUSTED_PROXIED;
 import static android.content.pm.PackageInfo.REQUESTED_PERMISSION_GRANTED;
 import static android.content.pm.PermissionInfo.PROTECTION_DANGEROUS;
 import static android.hardware.display.HdrConversionMode.HDR_CONVERSION_PASSTHROUGH;
+import static android.hardware.display.HdrConversionMode.HDR_CONVERSION_UNSUPPORTED;
 import static android.hardware.graphics.common.Hdr.DOLBY_VISION;
 import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
 import static android.net.NetworkCapabilities.TRANSPORT_ETHERNET;
@@ -750,6 +751,8 @@ public class StatsPullAtomService extends SystemService {
                         return pullPendingIntentsPerPackage(atomTag, data);
                     case FrameworkStatsLog.HDR_CAPABILITIES:
                         return pullHdrCapabilities(atomTag, data);
+                    case FrameworkStatsLog.CACHED_APPS_HIGH_WATERMARK:
+                        return pullCachedAppsHighWatermark(atomTag, data);
                     default:
                         throw new UnsupportedOperationException("Unknown tagId=" + atomTag);
                 }
@@ -950,6 +953,7 @@ public class StatsPullAtomService extends SystemService {
         registerPendingIntentsPerPackagePuller();
         registerPinnerServiceStats();
         registerHdrCapabilitiesPuller();
+        registerCachedAppsHighWatermarkPuller();
     }
 
     private void initAndRegisterNetworkStatsPullers() {
@@ -4721,10 +4725,19 @@ public class StatsPullAtomService extends SystemService {
         boolean userDisabledHdrConversion = hdrConversionMode == HDR_CONVERSION_PASSTHROUGH;
         int forceHdrFormat = preferredHdrType == HDR_TYPE_INVALID ? 0 : preferredHdrType;
         boolean hasDolbyVisionIssue = hasDolbyVisionIssue(display);
+        byte[] hdrOutputTypes = toBytes(displayManager.getSupportedHdrOutputTypes());
+        boolean hdrOutputControlSupported = hdrConversionMode != HDR_CONVERSION_UNSUPPORTED;
 
-        pulledData.add(FrameworkStatsLog.buildStatsEvent(atomTag,
-                new byte[0], userDisabledHdrConversion, forceHdrFormat, hasDolbyVisionIssue));
+        pulledData.add(FrameworkStatsLog.buildStatsEvent(atomTag, hdrOutputTypes,
+                userDisabledHdrConversion, forceHdrFormat, hasDolbyVisionIssue,
+                hdrOutputControlSupported));
 
+        return StatsManager.PULL_SUCCESS;
+    }
+
+    private int pullCachedAppsHighWatermark(int atomTag, List<StatsEvent> pulledData) {
+        pulledData.add(LocalServices.getService(ActivityManagerInternal.class)
+                .getCachedAppsHighWatermarkStats(atomTag, true));
         return StatsManager.PULL_SUCCESS;
     }
 
@@ -4765,6 +4778,16 @@ public class StatsPullAtomService extends SystemService {
 
     private void registerHdrCapabilitiesPuller() {
         int tagId = FrameworkStatsLog.HDR_CAPABILITIES;
+        mStatsManager.setPullAtomCallback(
+                tagId,
+                null, // use default PullAtomMetadata values
+                DIRECT_EXECUTOR,
+                mStatsCallbackImpl
+        );
+    }
+
+    private void registerCachedAppsHighWatermarkPuller() {
+        final int tagId = FrameworkStatsLog.CACHED_APPS_HIGH_WATERMARK;
         mStatsManager.setPullAtomCallback(
                 tagId,
                 null, // use default PullAtomMetadata values

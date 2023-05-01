@@ -308,7 +308,6 @@ import android.os.Debug;
 import android.os.DeviceIntegrationUtils;
 import android.os.IBinder;
 import android.os.IRemoteCallback;
-import android.os.LocaleList;
 import android.os.PersistableBundle;
 import android.os.Process;
 import android.os.RemoteCallbackList;
@@ -2889,11 +2888,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             return;
         }
 
-        if (animate && mTransitionController.inCollectingTransition(startingWindow)
-                && startingWindow.cancelAndRedraw()) {
+        if (animate && mTransitionController.inCollectingTransition(startingWindow)) {
             // Defer remove starting window after transition start.
-            // If splash screen window was in collecting, the client side is unable to draw because
-            // of Session#cancelDraw, which will blocking the remove animation.
+            // The surface of app window could really show after the transition finish.
             startingWindow.mSyncTransaction.addTransactionCommittedListener(Runnable::run, () -> {
                 synchronized (mAtmService.mGlobalLock) {
                     surface.remove(true);
@@ -3546,7 +3543,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
             final boolean endTask = task.getTopNonFinishingActivity() == null
                     && !task.isClearingToReuseTask();
-            mTransitionController.requestCloseTransitionIfNeeded(endTask ? task : this);
+            final Transition newTransition =
+                    mTransitionController.requestCloseTransitionIfNeeded(endTask ? task : this);
             if (isState(RESUMED)) {
                 if (endTask) {
                     mAtmService.getTaskChangeNotificationController().notifyTaskRemovalStarted(
@@ -3567,8 +3565,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 // the best capture timing (e.g. IME window capture),
                 // No need additional task capture while task is controlled by RecentsAnimation.
                 if (mAtmService.mWindowManager.mTaskSnapshotController != null
-                        && !(task.isAnimatingByRecents()
-                                || mTransitionController.inRecentsTransition(task))) {
+                        && !task.isAnimatingByRecents()) {
                     final ArraySet<Task> tasks = Sets.newArraySet(task);
                     mAtmService.mWindowManager.mTaskSnapshotController.snapshotTasks(tasks);
                     mAtmService.mWindowManager.mTaskSnapshotController
@@ -3600,7 +3597,16 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             } else if (!isState(PAUSING)) {
                 if (mVisibleRequested) {
                     // Prepare and execute close transition.
-                    prepareActivityHideTransitionAnimation();
+                    if (mTransitionController.isShellTransitionsEnabled()) {
+                        setVisibility(false);
+                        if (newTransition != null) {
+                            // This is a transition specifically for this close operation, so set
+                            // ready now.
+                            newTransition.setReady(mDisplayContent, true);
+                        }
+                    } else {
+                        prepareActivityHideTransitionAnimation();
+                    }
                 }
 
                 final boolean removedActivity = completeFinishing("finishIfPossible") == null;
@@ -4171,7 +4177,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      */
     void handleAppDied() {
         final boolean remove;
-        if ((mRelaunchReason == RELAUNCH_REASON_WINDOWING_MODE_RESIZE
+        if (Process.isSdkSandboxUid(getUid())) {
+            // Sandbox activities are created for SDKs run in the sandbox process, when the sandbox
+            // process dies, the SDKs are unloaded and can not handle the activity, so sandbox
+            // activity records should be removed.
+            remove = true;
+        } else if ((mRelaunchReason == RELAUNCH_REASON_WINDOWING_MODE_RESIZE
                 || mRelaunchReason == RELAUNCH_REASON_FREE_RESIZE)
                 && launchCount < 3 && !finishing) {
             // If the process crashed during a resize, always try to relaunch it, unless it has
@@ -5336,6 +5347,13 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             // keep the user waiting for the next transition to start.
             if (finishing || isState(STOPPED)) {
                 displayContent.mUnknownAppVisibilityController.appRemovedOrHidden(this);
+            }
+            // Because starting window was transferred, this activity may be a trampoline which has
+            // been occluded by next activity. If it has added windows, set client visibility
+            // immediately to avoid the client getting RELAYOUT_RES_FIRST_TIME from relayout and
+            // drawing an unnecessary frame.
+            if (startingMoved && !firstWindowDrawn && hasChild()) {
+                setClientVisible(false);
             }
         } else {
             if (!appTransition.isTransitionSet()
@@ -8055,6 +8073,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         mAtmService.getTaskChangeNotificationController().notifyActivityRequestedOrientationChanged(
                 task.mTaskId, requestedOrientation);
+
+        mDisplayContent.getDisplayRotation().onSetRequestedOrientation();
     }
 
     /*
@@ -9905,6 +9925,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * directly with keeping its record.
      */
     void restartProcessIfVisible() {
+        if (finishing) return;
         Slog.i(TAG, "Request to restart process of " + this);
 
         // Reset the existing override configuration so it can be updated according to the latest
@@ -9940,7 +9961,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (mTransitionController.isShellTransitionsEnabled()) {
             final Transition transition = new Transition(TRANSIT_RELAUNCH, 0 /* flags */,
                     mTransitionController, mWmService.mSyncEngine);
-            final Runnable executeRestart = () -> {
+            mTransitionController.startCollectOrQueue(transition, (deferred) -> {
                 if (mState != RESTARTING_PROCESS || !attachedToProcess()) {
                     transition.abort();
                     return;
@@ -9952,14 +9973,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 mTransitionController.requestStartTransition(transition, task,
                         null /* remoteTransition */, null /* displayChange */);
                 scheduleStopForRestartProcess();
-            };
-            if (mWmService.mSyncEngine.hasActiveSync()) {
-                mWmService.mSyncEngine.queueSyncSet(
-                        () -> mTransitionController.moveToCollecting(transition), executeRestart);
-            } else {
-                mTransitionController.moveToCollecting(transition);
-                executeRestart.run();
-            }
+            });
         } else {
             startFreezingScreen();
             scheduleStopForRestartProcess();
@@ -10668,11 +10682,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     @Override
     boolean isSyncFinished() {
-        if (task != null && mTransitionController.isTransientHide(task)) {
-            // The activity keeps visibleRequested but may be hidden later, so no need to wait for
-            // it to be drawn.
-            return true;
-        }
         if (!super.isSyncFinished()) return false;
         if (mDisplayContent != null && mDisplayContent.mUnknownAppVisibilityController
                 .isVisibilityUnknown(this)) {
@@ -10737,17 +10746,14 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             return;
         }
 
-        LocaleList locale;
         final ActivityTaskManagerInternal.PackageConfig appConfig =
                 mAtmService.mPackageConfigPersister.findPackageConfiguration(
                         task.realActivity.getPackageName(), mUserId);
-        // if there is no app locale for the package, clear the target activity's locale.
-        if (appConfig == null || appConfig.mLocales == null || appConfig.mLocales.isEmpty()) {
-            locale = LocaleList.getEmptyLocaleList();
-        } else {
-            locale = appConfig.mLocales;
+        // If package lookup yields locales, set the target activity's locales to match,
+        // otherwise leave target activity as-is.
+        if (appConfig != null && appConfig.mLocales != null && !appConfig.mLocales.isEmpty()) {
+            resolvedConfig.setLocales(appConfig.mLocales);
         }
-        resolvedConfig.setLocales(locale);
     }
 
     /**

@@ -29,6 +29,7 @@ import com.android.keyguard.dagger.KeyguardBouncerComponent;
 import com.android.systemui.BootCompleteCache;
 import com.android.systemui.BootCompleteCacheImpl;
 import com.android.systemui.accessibility.AccessibilityModule;
+import com.android.systemui.accessibility.data.repository.AccessibilityRepositoryModule;
 import com.android.systemui.appops.dagger.AppOpsModule;
 import com.android.systemui.assist.AssistModule;
 import com.android.systemui.biometrics.AlternateUdfpsTouchProvider;
@@ -38,16 +39,15 @@ import com.android.systemui.biometrics.dagger.BiometricsModule;
 import com.android.systemui.biometrics.dagger.UdfpsModule;
 import com.android.systemui.classifier.FalsingModule;
 import com.android.systemui.clipboardoverlay.dagger.ClipboardOverlayModule;
+import com.android.systemui.complication.dagger.ComplicationComponent;
 import com.android.systemui.controls.dagger.ControlsModule;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.demomode.dagger.DemoModeModule;
 import com.android.systemui.doze.dagger.DozeComponent;
-import com.android.systemui.dreams.complication.dagger.ComplicationComponent;
 import com.android.systemui.dreams.dagger.DreamModule;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.flags.FlagsModule;
-import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.keyboard.KeyboardModule;
 import com.android.systemui.keyguard.data.BouncerViewModule;
 import com.android.systemui.log.dagger.LogModule;
@@ -63,6 +63,7 @@ import com.android.systemui.privacy.PrivacyModule;
 import com.android.systemui.qrcodescanner.dagger.QRCodeScannerModule;
 import com.android.systemui.qs.FgsManagerController;
 import com.android.systemui.qs.FgsManagerControllerImpl;
+import com.android.systemui.qs.QSFragmentStartableModule;
 import com.android.systemui.qs.footer.dagger.FooterActionsModule;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.screenrecord.ScreenRecordModule;
@@ -140,6 +141,7 @@ import javax.inject.Named;
  */
 @Module(includes = {
             AccessibilityModule.class,
+            AccessibilityRepositoryModule.class,
             AppOpsModule.class,
             AssistModule.class,
             BiometricsModule.class,
@@ -167,6 +169,7 @@ import javax.inject.Named;
             PolicyModule.class,
             PrivacyModule.class,
             QRCodeScannerModule.class,
+            QSFragmentStartableModule.class,
             ScreenshotModule.class,
             SensorModule.class,
             SecurityRepositoryModule.class,
@@ -196,8 +199,7 @@ import javax.inject.Named;
             DozeComponent.class,
             ExpandableNotificationRowComponent.class,
             KeyguardBouncerComponent.class,
-            NotificationShelfComponent.class,
-            FragmentService.FragmentCreator.class
+            NotificationShelfComponent.class
         })
 public abstract class SystemUIModule {
 
