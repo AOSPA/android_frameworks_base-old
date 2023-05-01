@@ -14,26 +14,35 @@
  * limitations under the License.
  */
 
+@file:OptIn(InternalNoteTaskApi::class)
+
 package com.android.systemui.notetask
 
+import android.app.ActivityManager
 import android.app.KeyguardManager
 import android.app.admin.DevicePolicyManager
+import android.app.role.OnRoleHoldersChangedListener
+import android.app.role.RoleManager
+import android.app.role.RoleManager.ROLE_NOTES
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.Intent.FLAG_ACTIVITY_MULTIPLE_TASK
-import android.content.Intent.FLAG_ACTIVITY_NEW_DOCUMENT
-import android.content.Intent.FLAG_ACTIVITY_NEW_TASK
 import android.content.pm.PackageManager
+import android.content.pm.ShortcutManager
 import android.os.Build
+import android.os.UserHandle
 import android.os.UserManager
 import android.util.Log
 import androidx.annotation.VisibleForTesting
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.devicepolicy.areKeyguardShortcutsDisabled
+import com.android.systemui.notetask.NoteTaskRoleManagerExt.createNoteShortcutInfoAsUser
+import com.android.systemui.notetask.NoteTaskRoleManagerExt.getDefaultRoleHolderAsUser
 import com.android.systemui.notetask.shortcut.CreateNoteTaskShortcutActivity
+import com.android.systemui.notetask.shortcut.LaunchNoteTaskManagedProfileProxyActivity
 import com.android.systemui.settings.UserTracker
+import com.android.systemui.shared.system.ActivityManagerKt.isInForeground
 import com.android.systemui.util.kotlin.getOrNull
 import com.android.wm.shell.bubbles.Bubble
 import com.android.wm.shell.bubbles.Bubbles
@@ -54,11 +63,14 @@ class NoteTaskController
 @Inject
 constructor(
     private val context: Context,
+    private val roleManager: RoleManager,
+    private val shortcutManager: ShortcutManager,
     private val resolver: NoteTaskInfoResolver,
     private val eventLogger: NoteTaskEventLogger,
     private val optionalBubbles: Optional<Bubbles>,
     private val userManager: UserManager,
     private val keyguardManager: KeyguardManager,
+    private val activityManager: ActivityManager,
     @NoteTaskEnabledKey private val isEnabled: Boolean,
     private val devicePolicyManager: DevicePolicyManager,
     private val userTracker: UserTracker,
@@ -86,6 +98,18 @@ constructor(
         }
     }
 
+    /** Starts [LaunchNoteTaskProxyActivity] on the given [user]. */
+    fun startNoteTaskProxyActivityForUser(user: UserHandle) {
+        context.startActivityAsUser(
+            Intent().apply {
+                component =
+                    ComponentName(context, LaunchNoteTaskManagedProfileProxyActivity::class.java)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            },
+            user
+        )
+    }
+
     /**
      * Shows a note task. How the task is shown will depend on when the method is invoked.
      *
@@ -96,9 +120,36 @@ constructor(
      * bubble is already opened.
      *
      * That will let users open other apps in full screen, and take contextual notes.
+     *
+     * On company owned personally enabled (COPE) devices, if the given [entryPoint] is in the
+     * [FORCE_WORK_NOTE_APPS_ENTRY_POINTS_ON_COPE_DEVICES] list, the default notes app in the work
+     * profile user will always be launched.
      */
     fun showNoteTask(
         entryPoint: NoteTaskEntryPoint,
+    ) {
+        if (!isEnabled) return
+
+        val user: UserHandle =
+            if (
+                entryPoint in FORCE_WORK_NOTE_APPS_ENTRY_POINTS_ON_COPE_DEVICES &&
+                    devicePolicyManager.isOrganizationOwnedDeviceWithManagedProfile
+            ) {
+                userTracker.userProfiles
+                    .firstOrNull { userManager.isManagedProfile(it.id) }
+                    ?.userHandle
+                    ?: userTracker.userHandle
+            } else {
+                userTracker.userHandle
+            }
+
+        showNoteTaskAsUser(entryPoint, user)
+    }
+
+    /** A variant of [showNoteTask] which launches note task in the given [user]. */
+    fun showNoteTaskAsUser(
+        entryPoint: NoteTaskEntryPoint,
+        user: UserHandle,
     ) {
         if (!isEnabled) return
 
@@ -113,7 +164,7 @@ constructor(
         // note task when the screen is locked.
         if (
             isKeyguardLocked &&
-                devicePolicyManager.areKeyguardShortcutsDisabled(userId = userTracker.userId)
+                devicePolicyManager.areKeyguardShortcutsDisabled(userId = user.identifier)
         ) {
             logDebug { "Enterprise policy disallows launching note app when the screen is locked." }
             return
@@ -123,28 +174,37 @@ constructor(
 
         infoReference.set(info)
 
-        // TODO(b/266686199): We should handle when app not available. For now, we log.
-        val intent = createNoteIntent(info)
         try {
-            logDebug { "onShowNoteTask - start: $info" }
+            // TODO(b/266686199): We should handle when app not available. For now, we log.
+            logDebug { "onShowNoteTask - start: $info on user#${user.identifier}" }
             when (info.launchMode) {
                 is NoteTaskLaunchMode.AppBubble -> {
-                    // TODO(b/267634412, b/268351693): Should use `showOrHideAppBubbleAsUser`
-                    bubbles.showOrHideAppBubble(intent)
+                    // TODO: provide app bubble icon
+                    val intent = createNoteTaskIntent(info)
+                    bubbles.showOrHideAppBubble(intent, user, null /* icon */)
                     // App bubble logging happens on `onBubbleExpandChanged`.
                     logDebug { "onShowNoteTask - opened as app bubble: $info" }
                 }
                 is NoteTaskLaunchMode.Activity -> {
-                    context.startActivityAsUser(intent, userTracker.userHandle)
-                    eventLogger.logNoteTaskOpened(info)
-                    logDebug { "onShowNoteTask - opened as activity: $info" }
+                    if (activityManager.isInForeground(info.packageName)) {
+                        // Force note task into background by calling home.
+                        val intent = createHomeIntent()
+                        context.startActivityAsUser(intent, user)
+                        eventLogger.logNoteTaskClosed(info)
+                        logDebug { "onShowNoteTask - closed as activity: $info" }
+                    } else {
+                        val intent = createNoteTaskIntent(info)
+                        context.startActivityAsUser(intent, user)
+                        eventLogger.logNoteTaskOpened(info)
+                        logDebug { "onShowNoteTask - opened as activity: $info" }
+                    }
                 }
             }
             logDebug { "onShowNoteTask - success: $info" }
         } catch (e: ActivityNotFoundException) {
             logDebug { "onShowNoteTask - failed: $info" }
         }
-        logDebug { "onShowNoteTask - compoleted: $info" }
+        logDebug { "onShowNoteTask - completed: $info" }
     }
 
     /**
@@ -173,30 +233,89 @@ constructor(
         logDebug { "setNoteTaskShortcutEnabled - completed: $isEnabled" }
     }
 
+    /**
+     * Updates all [NoteTaskController] related information, including but not exclusively the
+     * widget shortcut created by the [user] - by default it will use the current user.
+     *
+     * Keep in mind the shortcut API has a
+     * [rate limiting](https://developer.android.com/develop/ui/views/launch/shortcuts/managing-shortcuts#rate-limiting)
+     * and may not be updated in real-time. To reduce the chance of stale shortcuts, we run the
+     * function during System UI initialization.
+     */
+    fun updateNoteTaskAsUser(user: UserHandle) {
+        val packageName = roleManager.getDefaultRoleHolderAsUser(ROLE_NOTES, user)
+        val hasNotesRoleHolder = isEnabled && !packageName.isNullOrEmpty()
+
+        setNoteTaskShortcutEnabled(hasNotesRoleHolder)
+
+        if (hasNotesRoleHolder) {
+            shortcutManager.enableShortcuts(listOf(SHORTCUT_ID))
+            val updatedShortcut = roleManager.createNoteShortcutInfoAsUser(context, user)
+            shortcutManager.updateShortcuts(listOf(updatedShortcut))
+        } else {
+            shortcutManager.disableShortcuts(listOf(SHORTCUT_ID))
+        }
+    }
+
+    /** @see OnRoleHoldersChangedListener */
+    fun onRoleHoldersChanged(roleName: String, user: UserHandle) {
+        if (roleName == ROLE_NOTES) updateNoteTaskAsUser(user)
+    }
+
     companion object {
         val TAG = NoteTaskController::class.simpleName.orEmpty()
+
+        const val SHORTCUT_ID = "note_task_shortcut_id"
+
+        /**
+         * Shortcut extra which can point to a package name and can be used to indicate an alternate
+         * badge info. Launcher only reads this if the shortcut comes from a system app.
+         *
+         * Duplicated from [com.android.launcher3.icons.IconCache].
+         *
+         * @see com.android.launcher3.icons.IconCache.EXTRA_SHORTCUT_BADGE_OVERRIDE_PACKAGE
+         */
+        const val EXTRA_SHORTCUT_BADGE_OVERRIDE_PACKAGE = "extra_shortcut_badge_override_package"
+
+        /**
+         * A list of entry points which should be redirected to the work profile default notes app
+         * on company owned personally enabled (COPE) devices.
+         *
+         * Entry points in this list don't let users / admin to select the work or personal default
+         * notes app to be launched.
+         */
+        val FORCE_WORK_NOTE_APPS_ENTRY_POINTS_ON_COPE_DEVICES =
+            listOf(NoteTaskEntryPoint.TAIL_BUTTON, NoteTaskEntryPoint.QUICK_AFFORDANCE)
     }
 }
 
-private fun createNoteIntent(info: NoteTaskInfo): Intent =
+/** Creates an [Intent] for [ROLE_NOTES]. */
+private fun createNoteTaskIntent(info: NoteTaskInfo): Intent =
     Intent(Intent.ACTION_CREATE_NOTE).apply {
         setPackage(info.packageName)
 
         // EXTRA_USE_STYLUS_MODE does not mean a stylus is in-use, but a stylus entrypoint
-        // was used to start it.
-        putExtra(Intent.EXTRA_USE_STYLUS_MODE, true)
+        // was used to start the note task.
+        val useStylusMode = info.entryPoint != NoteTaskEntryPoint.KEYBOARD_SHORTCUT
+        putExtra(Intent.EXTRA_USE_STYLUS_MODE, useStylusMode)
 
-        addFlags(FLAG_ACTIVITY_NEW_TASK)
-        // We should ensure the note experience can be open both as a full screen (lock screen)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        // We should ensure the note experience can be opened both as a full screen (lockscreen)
         // and inside the app bubble (contextual). These additional flags will do that.
         if (info.launchMode == NoteTaskLaunchMode.Activity) {
-            addFlags(FLAG_ACTIVITY_MULTIPLE_TASK)
-            addFlags(FLAG_ACTIVITY_NEW_DOCUMENT)
+            addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
         }
     }
 
-private inline fun logDebug(message: () -> String) {
-    if (Build.IS_DEBUGGABLE) {
-        Log.d(NoteTaskController.TAG, message())
-    }
+/** [Log.println] a [Log.DEBUG] message, only when [Build.IS_DEBUGGABLE]. */
+private inline fun Any.logDebug(message: () -> String) {
+    if (Build.IS_DEBUGGABLE) Log.d(this::class.java.simpleName.orEmpty(), message())
 }
+
+/** Creates an [Intent] which forces the current app to background by calling home. */
+private fun createHomeIntent(): Intent =
+    Intent(Intent.ACTION_MAIN).apply {
+        addCategory(Intent.CATEGORY_HOME)
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+    }

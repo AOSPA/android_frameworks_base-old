@@ -40,9 +40,11 @@ import static android.window.TransitionInfo.FLAG_SHOW_WALLPAPER;
 import static android.window.TransitionInfo.FLAG_TRANSLUCENT;
 import static android.window.TransitionInfo.isIndependent;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doCallRealMethod;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
+import static com.android.server.wm.SnapshotController.TASK_CLOSE;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
 
 import static org.junit.Assert.assertEquals;
@@ -54,6 +56,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeFalse;
 import static org.junit.Assume.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -1349,6 +1352,9 @@ public class TransitionTests extends WindowTestsBase {
 
     @Test
     public void testTransientLaunch() {
+        spyOn(mWm.mSnapshotController.mTaskSnapshotController);
+        mWm.mSnapshotController.registerTransitionStateConsumer(TASK_CLOSE,
+                mWm.mSnapshotController.mTaskSnapshotController::handleTaskClose);
         final ArrayList<ActivityRecord> enteringAnimReports = new ArrayList<>();
         final TransitionController controller = new TestTransitionController(mAtm) {
             @Override
@@ -1359,7 +1365,9 @@ public class TransitionTests extends WindowTestsBase {
                 super.dispatchLegacyAppTransitionFinished(ar);
             }
         };
-        final TaskSnapshotController snapshotController = controller.mTaskSnapshotController;
+        controller.mSnapshotController = mWm.mSnapshotController;
+        final TaskSnapshotController taskSnapshotController = controller.mSnapshotController
+                .mTaskSnapshotController;
         final ITransitionPlayer player = new ITransitionPlayer.Default();
         controller.registerTransitionPlayer(player, null /* playerProc */);
         final Transition openTransition = controller.createTransition(TRANSIT_OPEN);
@@ -1389,9 +1397,9 @@ public class TransitionTests extends WindowTestsBase {
         // normally.
         mWm.mSyncEngine.abort(openTransition.getSyncId());
 
-        verify(snapshotController, times(1)).recordSnapshot(eq(task2), eq(false));
+        verify(taskSnapshotController, times(1)).recordSnapshot(eq(task2), eq(false));
 
-        openTransition.finishTransition();
+        controller.finishTransition(openTransition);
 
         // We are now going to simulate closing task1 to return back to (open) task2.
         final Transition closeTransition = controller.createTransition(TRANSIT_CLOSE);
@@ -1400,7 +1408,15 @@ public class TransitionTests extends WindowTestsBase {
         closeTransition.collectExistenceChange(activity1);
         closeTransition.collectExistenceChange(task2);
         closeTransition.collectExistenceChange(activity2);
-        closeTransition.setTransientLaunch(activity2, null /* restoreBelow */);
+        closeTransition.setTransientLaunch(activity2, task1);
+        final Transition.ChangeInfo task1ChangeInfo = closeTransition.mChanges.get(task1);
+        assertNotNull(task1ChangeInfo);
+        assertTrue(task1ChangeInfo.hasChanged());
+        final Transition.ChangeInfo activity1ChangeInfo = closeTransition.mChanges.get(activity1);
+        assertNotNull(activity1ChangeInfo);
+        assertTrue(activity1ChangeInfo.hasChanged());
+        // No need to wait for the activity in transient hide task.
+        assertTrue(activity1.isSyncFinished());
 
         activity1.setVisibleRequested(false);
         activity2.setVisibleRequested(true);
@@ -1413,15 +1429,33 @@ public class TransitionTests extends WindowTestsBase {
 
         // Make sure we haven't called recordSnapshot (since we are transient, it shouldn't be
         // called until finish).
-        verify(snapshotController, times(0)).recordSnapshot(eq(task1), eq(false));
+        verify(taskSnapshotController, times(0)).recordSnapshot(eq(task1), eq(false));
 
         enteringAnimReports.clear();
-        closeTransition.finishTransition();
+        doCallRealMethod().when(mWm.mRoot).ensureActivitiesVisible(any(),
+                anyInt(), anyBoolean(), anyBoolean());
+        final boolean[] wasInFinishingTransition = { false };
+        controller.registerLegacyListener(new WindowManagerInternal.AppTransitionListener() {
+            @Override
+            public void onAppTransitionFinishedLocked(IBinder token) {
+                final ActivityRecord r = ActivityRecord.forToken(token);
+                if (r != null) {
+                    wasInFinishingTransition[0] = controller.inFinishingTransition(r);
+                }
+            }
+        });
+        controller.finishTransition(closeTransition);
+        assertTrue(wasInFinishingTransition[0]);
+        assertNull(controller.mFinishingTransition);
 
+        assertTrue(activity2.isVisible());
         assertEquals(ActivityTaskManagerService.APP_SWITCH_DISALLOW, mAtm.getBalAppSwitchesState());
+        // Because task1 is occluded by task2, finishTransition should make activity1 invisible.
+        assertFalse(activity1.isVisibleRequested());
+        assertFalse(activity1.isVisible());
         assertFalse(activity1.app.hasActivityInVisibleTask());
 
-        verify(snapshotController, times(1)).recordSnapshot(eq(task1), eq(false));
+        verify(taskSnapshotController, times(1)).recordSnapshot(eq(task1), eq(false));
         assertTrue(enteringAnimReports.contains(activity2));
     }
 
@@ -1849,6 +1883,39 @@ public class TransitionTests extends WindowTestsBase {
         // ChangeInfo#mCommonAncestor should be set after reparent.
         final Transition.ChangeInfo change = transition.mChanges.get(activity);
         assertEquals(newParent.getDisplayArea(), change.mCommonAncestor);
+    }
+
+    @Test
+    public void testMoveToTopWhileVisible() {
+        final Transition transition = createTestTransition(TRANSIT_OPEN);
+        final ArrayMap<WindowContainer, Transition.ChangeInfo> changes = transition.mChanges;
+        final ArraySet<WindowContainer> participants = transition.mParticipants;
+
+        // Start with taskB on top and taskA on bottom but both visible.
+        final Task rootTaskA = createTask(mDisplayContent);
+        final Task leafTaskA = createTaskInRootTask(rootTaskA, 0 /* userId */);
+        final Task taskB = createTask(mDisplayContent);
+        leafTaskA.setVisibleRequested(true);
+        taskB.setVisibleRequested(true);
+        // manually collect since this is a test transition and not known by transitionController.
+        transition.collect(leafTaskA);
+        rootTaskA.moveToFront("test", leafTaskA);
+
+        // All the tasks were already visible, so there shouldn't be any changes
+        ArrayList<Transition.ChangeInfo> targets = Transition.calculateTargets(
+                participants, changes);
+        assertTrue(targets.isEmpty());
+
+        // After collecting order changes, it should recognize that a task moved to top.
+        transition.collectOrderChanges();
+        targets = Transition.calculateTargets(participants, changes);
+        assertEquals(1, targets.size());
+
+        // Make sure the flag is set
+        final TransitionInfo info = Transition.calculateTransitionInfo(
+                transition.mType, 0 /* flags */, targets, mMockT);
+        assertTrue((info.getChanges().get(0).getFlags() & TransitionInfo.FLAG_MOVED_TO_TOP) != 0);
+        assertEquals(TRANSIT_CHANGE, info.getChanges().get(0).getMode());
     }
 
     private static void makeTaskOrganized(Task... tasks) {

@@ -253,8 +253,6 @@ public class BackAnimationControllerTest extends ShellTestCase {
 
         triggerBackGesture();
 
-        verify(mAppCallback, never()).onBackStarted(any());
-        verify(mAppCallback, never()).onBackProgressed(backEventCaptor.capture());
         verify(mAppCallback, times(1)).onBackInvoked();
 
         verify(mAnimatorCallback, never()).onBackStarted(any());
@@ -409,6 +407,53 @@ public class BackAnimationControllerTest extends ShellTestCase {
         verify(mAnimatorCallback, never()).onBackStarted(any());
         verify(mAnimatorCallback, never()).onBackProgressed(any());
         verify(mAnimatorCallback, never()).onBackInvoked();
+    }
+
+    @Test
+    public void testBackToActivity() throws RemoteException {
+        final CrossActivityAnimation animation = new CrossActivityAnimation(mContext,
+                mAnimationBackground);
+        verifySystemBackBehavior(
+                BackNavigationInfo.TYPE_CROSS_ACTIVITY, animation.mBackAnimationRunner);
+    }
+
+    @Test
+    public void testBackToTask() throws RemoteException {
+        final CrossTaskBackAnimation animation = new CrossTaskBackAnimation(mContext,
+                mAnimationBackground);
+        verifySystemBackBehavior(
+                BackNavigationInfo.TYPE_CROSS_TASK, animation.mBackAnimationRunner);
+    }
+
+    private void verifySystemBackBehavior(int type, BackAnimationRunner animation)
+            throws RemoteException {
+        final BackAnimationRunner animationRunner = spy(animation);
+        final IRemoteAnimationRunner runner = spy(animationRunner.getRunner());
+        final IOnBackInvokedCallback callback = spy(animationRunner.getCallback());
+
+        // Set up the monitoring objects.
+        doNothing().when(runner).onAnimationStart(anyInt(), any(), any(), any(), any());
+        doReturn(runner).when(animationRunner).getRunner();
+        doReturn(callback).when(animationRunner).getCallback();
+
+        mController.registerAnimation(type, animationRunner);
+
+        createNavigationInfo(type, true);
+
+        doMotionEvent(MotionEvent.ACTION_DOWN, 0);
+
+        // Check that back start and progress is dispatched when first move.
+        doMotionEvent(MotionEvent.ACTION_MOVE, 100);
+
+        simulateRemoteAnimationStart(type);
+
+        verify(callback).onBackStarted(any(BackMotionEvent.class));
+        verify(animationRunner).startAnimation(any(), any(), any(), any());
+
+        // Check that back invocation is dispatched.
+        mController.setTriggerBack(true);   // Fake trigger back
+        doMotionEvent(MotionEvent.ACTION_UP, 0);
+        verify(callback).onBackInvoked();
     }
 
     private void doMotionEvent(int actionDown, int coordinate) {

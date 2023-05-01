@@ -90,6 +90,7 @@ final class BroadcastRecord extends Binder {
     final boolean prioritized; // contains more than one priority tranche
     final boolean deferUntilActive; // infinitely deferrable broadcast
     final boolean shareIdentity;  // whether the broadcaster's identity should be shared
+    final boolean urgent;    // has been classified as "urgent"
     final int userId;       // user id this broadcast was for
     final @Nullable String resolvedType; // the resolved data type
     final @Nullable String[] requiredPermissions; // permissions the caller has required
@@ -145,6 +146,13 @@ final class BroadcastRecord extends Binder {
 
     private @Nullable String mCachedToString;
     private @Nullable String mCachedToShortString;
+
+    /**
+     * When enabled, assume that {@link UserHandle#isCore(int)} apps should
+     * treat {@link BroadcastOptions#DEFERRAL_POLICY_DEFAULT} as
+     * {@link BroadcastOptions#DEFERRAL_POLICY_UNTIL_ACTIVE}.
+     */
+    static boolean CORE_DEFER_UNTIL_ACTIVE = false;
 
     /** Empty immutable list of receivers */
     static final List<Object> EMPTY_RECEIVERS = List.of();
@@ -400,7 +408,9 @@ final class BroadcastRecord extends Binder {
         receivers = (_receivers != null) ? _receivers : EMPTY_RECEIVERS;
         delivery = new int[_receivers != null ? _receivers.size() : 0];
         deliveryReasons = new String[delivery.length];
-        deferUntilActive = options != null ? options.isDeferUntilActive() : false;
+        urgent = calculateUrgent(_intent, _options);
+        deferUntilActive = calculateDeferUntilActive(_callingUid,
+                _options, _resultTo, _serialized, urgent);
         deferredUntilActive = new boolean[deferUntilActive ? delivery.length : 0];
         blockedUntilTerminalCount = calculateBlockedUntilTerminalCount(receivers, _serialized);
         scheduledTime = new long[delivery.length];
@@ -488,6 +498,7 @@ final class BroadcastRecord extends Binder {
         pushMessageOverQuota = from.pushMessageOverQuota;
         interactive = from.interactive;
         shareIdentity = from.shareIdentity;
+        urgent = from.urgent;
         filterExtrasForReceiver = from.filterExtrasForReceiver;
     }
 
@@ -681,15 +692,8 @@ final class BroadcastRecord extends Binder {
         return deferUntilActive;
     }
 
-    /**
-     * Core policy determination about this broadcast's delivery prioritization
-     */
     boolean isUrgent() {
-        // TODO: flags for controlling policy
-        // TODO: migrate alarm-prioritization flag to BroadcastConstants
-        return (isForeground()
-                || interactive
-                || alarm);
+        return urgent;
     }
 
     @NonNull String getHostingRecordTriggerType() {
@@ -828,6 +832,14 @@ final class BroadcastRecord extends Binder {
         }
     }
 
+    static @Nullable String getReceiverClassName(@NonNull Object receiver) {
+        if (receiver instanceof BroadcastFilter) {
+            return ((BroadcastFilter) receiver).getReceiverClassName();
+        } else /* if (receiver instanceof ResolveInfo) */ {
+            return ((ResolveInfo) receiver).activityInfo.name;
+        }
+    }
+
     static int getReceiverPriority(@NonNull Object receiver) {
         if (receiver instanceof BroadcastFilter) {
             return ((BroadcastFilter) receiver).getPriority();
@@ -844,6 +856,69 @@ final class BroadcastRecord extends Binder {
             final ResolveInfo infoB = (ResolveInfo) b;
             return Objects.equals(infoA.activityInfo.packageName, infoB.activityInfo.packageName)
                     && Objects.equals(infoA.activityInfo.name, infoB.activityInfo.name);
+        } else {
+            return false;
+        }
+    }
+
+    /**
+     * Core policy determination about this broadcast's delivery prioritization
+     */
+    @VisibleForTesting
+    static boolean calculateUrgent(@NonNull Intent intent, @Nullable BroadcastOptions options) {
+        // TODO: flags for controlling policy
+        // TODO: migrate alarm-prioritization flag to BroadcastConstants
+        if ((intent.getFlags() & Intent.FLAG_RECEIVER_FOREGROUND) != 0) {
+            return true;
+        }
+        if (options != null) {
+            if (options.isInteractive()) {
+                return true;
+            }
+            if (options.isAlarmBroadcast()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Resolve the requested {@link BroadcastOptions#setDeferralPolicy(int)}
+     * against this broadcast state to determine if it should be marked as
+     * "defer until active".
+     */
+    @VisibleForTesting
+    static boolean calculateDeferUntilActive(int callingUid, @Nullable BroadcastOptions options,
+            @Nullable IIntentReceiver resultTo, boolean ordered, boolean urgent) {
+        // Ordered broadcasts can never be deferred until active
+        if (ordered) {
+            return false;
+        }
+
+        // Unordered resultTo broadcasts are always deferred until active
+        if (!ordered && resultTo != null) {
+            return true;
+        }
+
+        // Determine if a strong preference in either direction was expressed;
+        // a preference here overrides all remaining policies
+        if (options != null) {
+            switch (options.getDeferralPolicy()) {
+                case BroadcastOptions.DEFERRAL_POLICY_UNTIL_ACTIVE:
+                    return true;
+                case BroadcastOptions.DEFERRAL_POLICY_NONE:
+                    return false;
+            }
+        }
+
+        // Urgent broadcasts aren't deferred until active
+        if (urgent) {
+            return false;
+        }
+
+        // Otherwise, choose a reasonable default
+        if (CORE_DEFER_UNTIL_ACTIVE && UserHandle.isCore(callingUid)) {
+            return true;
         } else {
             return false;
         }
@@ -932,23 +1007,50 @@ final class BroadcastRecord extends Binder {
 
     private static boolean matchesDeliveryGroup(@NonNull BroadcastRecord newRecord,
             @NonNull BroadcastRecord oldRecord) {
-        final String newMatchingKey = getDeliveryGroupMatchingKey(newRecord);
-        final String oldMatchingKey = getDeliveryGroupMatchingKey(oldRecord);
         final IntentFilter newMatchingFilter = getDeliveryGroupMatchingFilter(newRecord);
         // If neither delivery group key nor matching filter is specified, then use
         // Intent.filterEquals() to identify the delivery group.
-        if (newMatchingKey == null && oldMatchingKey == null && newMatchingFilter == null) {
+        if (isMatchingKeyNull(newRecord) && isMatchingKeyNull(oldRecord)
+                && newMatchingFilter == null) {
             return newRecord.intent.filterEquals(oldRecord.intent);
         }
         if (newMatchingFilter != null && !newMatchingFilter.asPredicate().test(oldRecord.intent)) {
             return false;
         }
-        return Objects.equals(newMatchingKey, oldMatchingKey);
+        return areMatchingKeysEqual(newRecord, oldRecord);
+    }
+
+    private static boolean isMatchingKeyNull(@NonNull BroadcastRecord record) {
+        final String namespace = getDeliveryGroupMatchingNamespaceFragment(record);
+        final String key = getDeliveryGroupMatchingKeyFragment(record);
+        // If either namespace or key part is null, then treat the entire matching key as null.
+        return namespace == null || key == null;
+    }
+
+    private static boolean areMatchingKeysEqual(@NonNull BroadcastRecord newRecord,
+            @NonNull BroadcastRecord oldRecord) {
+        final String newNamespaceFragment = getDeliveryGroupMatchingNamespaceFragment(newRecord);
+        final String oldNamespaceFragment = getDeliveryGroupMatchingNamespaceFragment(oldRecord);
+        if (!Objects.equals(newNamespaceFragment, oldNamespaceFragment)) {
+            return false;
+        }
+
+        final String newKeyFragment = getDeliveryGroupMatchingKeyFragment(newRecord);
+        final String oldKeyFragment = getDeliveryGroupMatchingKeyFragment(oldRecord);
+        return Objects.equals(newKeyFragment, oldKeyFragment);
     }
 
     @Nullable
-    private static String getDeliveryGroupMatchingKey(@NonNull BroadcastRecord record) {
-        return record.options == null ? null : record.options.getDeliveryGroupMatchingKey();
+    private static String getDeliveryGroupMatchingNamespaceFragment(
+            @NonNull BroadcastRecord record) {
+        return record.options == null
+                ? null : record.options.getDeliveryGroupMatchingNamespaceFragment();
+    }
+
+    @Nullable
+    private static String getDeliveryGroupMatchingKeyFragment(@NonNull BroadcastRecord record) {
+        return record.options == null
+                ? null : record.options.getDeliveryGroupMatchingKeyFragment();
     }
 
     @Nullable
@@ -974,9 +1076,7 @@ final class BroadcastRecord extends Binder {
             if (label == null) {
                 label = intent.toString();
             }
-            mCachedToString = "BroadcastRecord{"
-                + Integer.toHexString(System.identityHashCode(this))
-                + " u" + userId + " " + label + "}";
+            mCachedToString = "BroadcastRecord{" + toShortString() + "}";
         }
         return mCachedToString;
     }
@@ -988,7 +1088,7 @@ final class BroadcastRecord extends Binder {
                 label = intent.toString();
             }
             mCachedToShortString = Integer.toHexString(System.identityHashCode(this))
-                    + ":" + label + "/u" + userId;
+                    + " " + label + "/u" + userId;
         }
         return mCachedToShortString;
     }

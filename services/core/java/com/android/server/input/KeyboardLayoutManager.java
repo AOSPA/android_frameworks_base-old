@@ -65,6 +65,7 @@ import com.android.internal.inputmethod.InputMethodSubtypeHandle;
 import com.android.internal.messages.nano.SystemMessageProto;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.util.XmlUtils;
+import com.android.server.inputmethod.InputMethodManagerInternal;
 
 import libcore.io.Streams;
 
@@ -1226,9 +1227,15 @@ final class KeyboardLayoutManager implements InputManager.InputDeviceListener {
                 mContext.getSystemService(UserManager.class));
         InputMethodManager inputMethodManager = Objects.requireNonNull(
                 mContext.getSystemService(InputMethodManager.class));
+        // Need to use InputMethodManagerInternal to call getEnabledInputMethodListAsUser()
+        // instead of using InputMethodManager which uses enforceCallingPermissions() that
+        // breaks when we are calling the method for work profile user ID since it doesn't check
+        // self permissions.
+        InputMethodManagerInternal inputMethodManagerInternal = InputMethodManagerInternal.get();
         for (UserHandle userHandle : userManager.getUserHandles(true /* excludeDying */)) {
             int userId = userHandle.getIdentifier();
-            for (InputMethodInfo imeInfo : inputMethodManager.getEnabledInputMethodListAsUser(
+            for (InputMethodInfo imeInfo :
+                    inputMethodManagerInternal.getEnabledInputMethodListAsUser(
                     userId)) {
                 for (InputMethodSubtype imeSubtype :
                         inputMethodManager.getEnabledInputMethodSubtypeList(
@@ -1254,28 +1261,43 @@ final class KeyboardLayoutManager implements InputManager.InputDeviceListener {
 
     private static boolean isLayoutCompatibleWithLanguageTag(KeyboardLayout layout,
             @NonNull String languageTag) {
-        final int[] scriptsFromLanguageTag = UScript.getCode(Locale.forLanguageTag(languageTag));
-        if (scriptsFromLanguageTag.length == 0) {
-            // If no scripts inferred from languageTag then allowing the layout
-            return true;
-        }
-        LocaleList locales = layout.getLocales();
-        if (locales.isEmpty()) {
+        LocaleList layoutLocales = layout.getLocales();
+        if (layoutLocales.isEmpty()) {
             // KCM file doesn't have an associated language tag. This can be from
             // a 3rd party app so need to include it as a potential layout.
             return true;
         }
-        for (int i = 0; i < locales.size(); i++) {
-            final Locale locale = locales.get(i);
-            if (locale == null) {
-                continue;
-            }
-            int[] scripts = UScript.getCode(locale);
-            if (scripts != null && haveCommonValue(scripts, scriptsFromLanguageTag)) {
+        // Match derived Script codes
+        final int[] scriptsFromLanguageTag = getScriptCodes(Locale.forLanguageTag(languageTag));
+        if (scriptsFromLanguageTag.length == 0) {
+            // If no scripts inferred from languageTag then allowing the layout
+            return true;
+        }
+        for (int i = 0; i < layoutLocales.size(); i++) {
+            final Locale locale = layoutLocales.get(i);
+            int[] scripts = getScriptCodes(locale);
+            if (haveCommonValue(scripts, scriptsFromLanguageTag)) {
                 return true;
             }
         }
         return false;
+    }
+
+    private static int[] getScriptCodes(@Nullable Locale locale) {
+        if (locale == null) {
+            return new int[0];
+        }
+        if (!TextUtils.isEmpty(locale.getScript())) {
+            int scriptCode = UScript.getCodeFromName(locale.getScript());
+            if (scriptCode != UScript.INVALID_CODE) {
+                return new int[]{scriptCode};
+            }
+        }
+        int[] scripts = UScript.getCode(locale);
+        if (scripts != null) {
+            return scripts;
+        }
+        return new int[0];
     }
 
     private static boolean haveCommonValue(int[] arr1, int[] arr2) {

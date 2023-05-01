@@ -119,6 +119,7 @@ import com.android.systemui.CoreStartable;
 import com.android.systemui.DejankUtils;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
+import com.android.systemui.EventLogTags;
 import com.android.systemui.R;
 import com.android.systemui.animation.ActivityLaunchAnimator;
 import com.android.systemui.animation.Interpolators;
@@ -956,10 +957,15 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
 
                 @Override
                 public void onAnimationCancelled(boolean isKeyguardOccluded) {
-                    if (mOccludeByDreamAnimator != null) {
-                        mOccludeByDreamAnimator.cancel();
-                    }
-                    setOccluded(isKeyguardOccluded /* isOccluded */, false /* animate */);
+                    mContext.getMainExecutor().execute(() -> {
+                        if (mOccludeByDreamAnimator != null) {
+                            mOccludeByDreamAnimator.cancel();
+                        }
+                    });
+                    // The value of isKeyguardOccluded here may come from mergeAnimation, which
+                    // isn't reliable. In all cases, after running or cancelling this animation,
+                    // keyguard should be occluded.
+                    setOccluded(true /* isOccluded */, false /* animate */);
                     if (DEBUG) {
                         Log.d(TAG, "Occlude by Dream animation cancelled. Occluded state is now: "
                                 + mOccluded);
@@ -1854,6 +1860,8 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
     private void handleSetOccluded(boolean isOccluded, boolean animate) {
         Trace.beginSection("KeyguardViewMediator#handleSetOccluded");
         Log.d(TAG, "handleSetOccluded(" + isOccluded + ")");
+        EventLogTags.writeSysuiKeyguard(isOccluded ? 1 : 0, animate ? 1 : 0);
+
         mInteractionJankMonitor.cancel(CUJ_LOCKSCREEN_TRANSITION_FROM_AOD);
 
         synchronized (KeyguardViewMediator.this) {
@@ -2693,6 +2701,17 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
                         mInteractionJankMonitor.end(CUJ_LOCKSCREEN_UNLOCK_ANIMATION);
                         return;
                     }
+                    if (apps == null || apps.length == 0) {
+                        Slog.e(TAG, "Keyguard exit without a corresponding app to show.");
+                        try {
+                            finishedCallback.onAnimationFinished();
+                        } catch (RemoteException e) {
+                            Slog.e(TAG, "RemoteException");
+                        } finally {
+                            mInteractionJankMonitor.end(CUJ_LOCKSCREEN_UNLOCK_ANIMATION);
+                        }
+                        return;
+                    }
 
                     // TODO(bc-unlock): Sample animation, just to apply alpha animation on the app.
                     final SyncRtSurfaceTransactionApplier applier =
@@ -2843,14 +2862,14 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
                         + " wasShowing=" + wasShowing);
             }
 
+            mKeyguardUnlockAnimationControllerLazy.get()
+                    .notifyFinishedKeyguardExitAnimation(cancelled);
             finishSurfaceBehindRemoteAnimation(cancelled);
 
             // Dispatch the callback on animation finishes.
             mUpdateMonitor.dispatchKeyguardDismissAnimationFinished();
         });
 
-        mKeyguardUnlockAnimationControllerLazy.get().notifyFinishedKeyguardExitAnimation(
-                cancelled);
     }
 
     /**

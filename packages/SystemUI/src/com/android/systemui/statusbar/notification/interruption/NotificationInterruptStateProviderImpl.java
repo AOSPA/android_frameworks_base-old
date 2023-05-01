@@ -18,6 +18,7 @@ package com.android.systemui.statusbar.notification.interruption;
 
 import static com.android.systemui.statusbar.StatusBarState.SHADE;
 import static com.android.systemui.statusbar.notification.interruption.NotificationInterruptStateProviderImpl.NotificationInterruptEvent.FSI_SUPPRESSED_NO_HUN_OR_KEYGUARD;
+import static com.android.systemui.statusbar.notification.interruption.NotificationInterruptStateProviderImpl.NotificationInterruptEvent.FSI_SUPPRESSED_SUPPRESSIVE_BUBBLE_METADATA;
 import static com.android.systemui.statusbar.notification.interruption.NotificationInterruptStateProviderImpl.NotificationInterruptEvent.FSI_SUPPRESSED_SUPPRESSIVE_GROUP_ALERT_BEHAVIOR;
 import static com.android.systemui.statusbar.notification.interruption.NotificationInterruptStateProviderImpl.NotificationInterruptEvent.HUN_SNOOZE_BYPASSED_POTENTIALLY_SUPPRESSED_FSI;
 
@@ -28,12 +29,8 @@ import android.database.ContentObserver;
 import android.hardware.display.AmbientDisplayConfiguration;
 import android.os.Handler;
 import android.os.PowerManager;
-import android.os.RemoteException;
-import android.os.SystemProperties;
 import android.provider.Settings;
-import android.service.dreams.IDreamManager;
 import android.service.notification.StatusBarNotification;
-import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -70,7 +67,6 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
     private final KeyguardStateController mKeyguardStateController;
     private final ContentResolver mContentResolver;
     private final PowerManager mPowerManager;
-    private final IDreamManager mDreamManager;
     private final AmbientDisplayConfiguration mAmbientDisplayConfiguration;
     private final BatteryController mBatteryController;
     private final HeadsUpManager mHeadsUpManager;
@@ -86,6 +82,9 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
     public enum NotificationInterruptEvent implements UiEventLogger.UiEventEnum {
         @UiEvent(doc = "FSI suppressed for suppressive GroupAlertBehavior")
         FSI_SUPPRESSED_SUPPRESSIVE_GROUP_ALERT_BEHAVIOR(1235),
+
+        @UiEvent(doc = "FSI suppressed for suppressive BubbleMetadata")
+        FSI_SUPPRESSED_SUPPRESSIVE_BUBBLE_METADATA(1353),
 
         @UiEvent(doc = "FSI suppressed for requiring neither HUN nor keyguard")
         FSI_SUPPRESSED_NO_HUN_OR_KEYGUARD(1236),
@@ -112,7 +111,6 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
     public NotificationInterruptStateProviderImpl(
             ContentResolver contentResolver,
             PowerManager powerManager,
-            IDreamManager dreamManager,
             AmbientDisplayConfiguration ambientDisplayConfiguration,
             BatteryController batteryController,
             StatusBarStateController statusBarStateController,
@@ -126,7 +124,6 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
             UserTracker userTracker) {
         mContentResolver = contentResolver;
         mPowerManager = powerManager;
-        mDreamManager = dreamManager;
         mBatteryController = batteryController;
         mAmbientDisplayConfiguration = ambientDisplayConfiguration;
         mStatusBarStateController = statusBarStateController;
@@ -280,6 +277,22 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
                     suppressedByDND);
         }
 
+        // If the notification has suppressive BubbleMetadata, block FSI and warn.
+        Notification.BubbleMetadata bubbleMetadata = sbn.getNotification().getBubbleMetadata();
+        if (bubbleMetadata != null && bubbleMetadata.isNotificationSuppressed()) {
+            // b/274759612: Detect and report an event when a notification has both an FSI and a
+            // suppressive BubbleMetadata, and now correctly block the FSI from firing.
+            return getDecisionGivenSuppression(
+                    FullScreenIntentDecision.NO_FSI_SUPPRESSIVE_BUBBLE_METADATA,
+                    suppressedByDND);
+        }
+
+        // Notification is coming from a suspended package, block FSI
+        if (entry.getRanking().isSuspended()) {
+            return getDecisionGivenSuppression(FullScreenIntentDecision.NO_FSI_SUSPENDED,
+                    suppressedByDND);
+        }
+
         // If the screen is off, then launch the FullScreenIntent
         if (!mPowerManager.isInteractive()) {
             return getDecisionGivenSuppression(FullScreenIntentDecision.FSI_DEVICE_NOT_INTERACTIVE,
@@ -287,7 +300,9 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
         }
 
         // If the device is currently dreaming, then launch the FullScreenIntent
-        if (isDreaming()) {
+        // We avoid using IDreamManager#isDreaming here as that method will return false during
+        // the dream's wake-up phase.
+        if (mStatusBarStateController.isDreaming()) {
             return getDecisionGivenSuppression(FullScreenIntentDecision.FSI_DEVICE_IS_DREAMING,
                     suppressedByDND);
         }
@@ -350,6 +365,14 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
                 mLogger.logNoFullscreenWarning(entry,
                         decision + ": GroupAlertBehavior will prevent HUN");
                 return;
+            case NO_FSI_SUPPRESSIVE_BUBBLE_METADATA:
+                android.util.EventLog.writeEvent(0x534e4554, "274759612", uid,
+                        "bubbleMetadata");
+                mUiEventLogger.log(FSI_SUPPRESSED_SUPPRESSIVE_BUBBLE_METADATA, uid,
+                        packageName);
+                mLogger.logNoFullscreenWarning(entry,
+                        decision + ": BubbleMetadata may prevent HUN");
+                return;
             case NO_FSI_NO_HUN_OR_KEYGUARD:
                 android.util.EventLog.writeEvent(0x534e4554, "231322873", uid,
                         "no hun or keyguard");
@@ -365,16 +388,6 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
                 }
         }
     }
-
-    private boolean isDreaming() {
-        try {
-            return mDreamManager.isDreaming();
-        } catch (RemoteException e) {
-            Log.e(TAG, "Failed to query dream manager.", e);
-            return false;
-        }
-    }
-
     private boolean shouldHeadsUpWhenAwake(NotificationEntry entry, boolean log) {
         StatusBarNotification sbn = entry.getSbn();
 
@@ -424,7 +437,7 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
             return false;
         }
 
-        boolean inUse = mPowerManager.isScreenOn() && !isDreaming();
+        boolean inUse = mPowerManager.isScreenOn() && !mStatusBarStateController.isDreaming();
 
         if (!inUse) {
             if (log) mLogger.logNoHeadsUpNotInUse(entry);
@@ -488,6 +501,12 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
 
         if (entry.shouldSuppressAmbient()) {
             if (log) mLogger.logNoPulsingNoAmbientEffect(entry);
+            return false;
+        }
+
+        if (entry.getRanking().getLockscreenVisibilityOverride()
+                == Notification.VISIBILITY_PRIVATE) {
+            if (log) mLogger.logNoPulsingNotificationHidden(entry);
             return false;
         }
 
@@ -608,6 +627,11 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
 
         if (notification.isForegroundService()) {
             if (log) mLogger.logMaybeHeadsUpDespiteOldWhen(entry, when, age, "foreground service");
+            return false;
+        }
+
+        if (notification.isUserInitiatedJob()) {
+            if (log) mLogger.logMaybeHeadsUpDespiteOldWhen(entry, when, age, "user initiated job");
             return false;
         }
 

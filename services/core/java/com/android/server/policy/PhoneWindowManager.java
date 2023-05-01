@@ -590,7 +590,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private int mDoubleTapOnHomeBehavior;
 
     // Whether to lock the device after the next app transition has finished.
-    private boolean mLockAfterAppTransitionFinished;
+    boolean mLockAfterAppTransitionFinished;
 
     // Allowed theater mode wake actions
     private boolean mAllowTheaterModeWakeFromKey;
@@ -729,7 +729,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     mAutofillManagerInternal.onBackKeyPressed();
                     break;
                 case MSG_SYSTEM_KEY_PRESS:
-                    sendSystemKeyToStatusBar(msg.arg1);
+                    sendSystemKeyToStatusBar((KeyEvent) msg.obj);
                     break;
                 case MSG_HANDLE_ALL_APPS:
                     launchAllAppsAction();
@@ -965,7 +965,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         final boolean handledByPowerManager = mPowerManagerInternal.interceptPowerKeyDown(event);
 
         // Inform the StatusBar; but do not allow it to consume the event.
-        sendSystemKeyToStatusBarAsync(event.getKeyCode());
+        sendSystemKeyToStatusBarAsync(event);
 
         // If the power key has still not yet been handled, then detect short
         // press, long press, or multi press and decide what to do.
@@ -1553,7 +1553,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     private void interceptScreenshotChord(int source, long pressDelay) {
         mHandler.removeMessages(MSG_SCREENSHOT_CHORD);
-        mHandler.sendMessageDelayed(mHandler.obtainMessage(MSG_SCREENSHOT_CHORD, source),
+        // arg2 is unused, but necessary to insure we call the correct method signature
+        // since the screenshot source is read from message.arg1
+        mHandler.sendMessageDelayed(mHandler.obtainMessage(MSG_SCREENSHOT_CHORD, source, 0),
                 pressDelay);
     }
 
@@ -3015,7 +3017,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 break;
             case KeyEvent.KEYCODE_N:
                 if (down && event.isMetaPressed()) {
-                    toggleNotificationPanel();
+                    if (event.isCtrlPressed()) {
+                        sendSystemKeyToStatusBarAsync(event);
+                    } else {
+                        toggleNotificationPanel();
+                    }
                     return key_consumed;
                 }
                 break;
@@ -3199,6 +3205,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     }
                 }
                 break;
+            case KeyEvent.KEYCODE_LANGUAGE_SWITCH:
+                if (down && repeatCount == 0) {
+                    int direction = (metaState & KeyEvent.META_SHIFT_MASK) != 0 ? -1 : 1;
+                    sendSwitchKeyboardLayout(event, direction);
+                    return key_consumed;
+                }
+                break;
             case KeyEvent.KEYCODE_SPACE:
                 // Handle keyboard layout switching. (META + SPACE)
                 if ((metaState & KeyEvent.META_META_MASK) == 0) {
@@ -3265,6 +3278,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             case KeyEvent.KEYCODE_STYLUS_BUTTON_TAIL:
                 Slog.wtf(TAG, "KEYCODE_STYLUS_BUTTON_* should be handled in"
                         + " interceptKeyBeforeQueueing");
+                return key_consumed;
+            case KeyEvent.KEYCODE_MACRO_1:
+            case KeyEvent.KEYCODE_MACRO_2:
+            case KeyEvent.KEYCODE_MACRO_3:
+            case KeyEvent.KEYCODE_MACRO_4:
+                Slog.wtf(TAG, "KEYCODE_MACRO_x should be handled in interceptKeyBeforeQueueing");
                 return key_consumed;
         }
 
@@ -3564,20 +3583,22 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mPendingKeyguardOccluded = occluded;
             mKeyguardOccludedChanged = true;
         } else {
-            setKeyguardOccludedLw(occluded, true /* notify */);
+            setKeyguardOccludedLw(occluded);
         }
     }
 
     @Override
-    public int applyKeyguardOcclusionChange(boolean notify) {
-        if (mKeyguardOccludedChanged) {
-            if (DEBUG_KEYGUARD) Slog.d(TAG, "transition/occluded changed occluded="
-                    + mPendingKeyguardOccluded);
-            if (setKeyguardOccludedLw(mPendingKeyguardOccluded, notify)) {
-                return FINISH_LAYOUT_REDO_LAYOUT | FINISH_LAYOUT_REDO_WALLPAPER;
-            }
+    public int applyKeyguardOcclusionChange() {
+        if (DEBUG_KEYGUARD) Slog.d(TAG, "transition/occluded commit occluded="
+                + mPendingKeyguardOccluded);
+
+        // TODO(b/276433230): Explicitly save before/after for occlude state in each
+        // Transition so we don't need to update SysUI every time.
+        if (setKeyguardOccludedLw(mPendingKeyguardOccluded)) {
+            return FINISH_LAYOUT_REDO_LAYOUT | FINISH_LAYOUT_REDO_WALLPAPER;
+        } else {
+            return 0;
         }
-        return 0;
     }
 
     /**
@@ -3592,8 +3613,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
      */
     private int handleTransitionForKeyguardLw(boolean startKeyguardExitAnimation,
             boolean notifyOccluded) {
-        final int redoLayout = applyKeyguardOcclusionChange(notifyOccluded);
-        if (redoLayout != 0) return redoLayout;
+        if (notifyOccluded) {
+            final int redoLayout = applyKeyguardOcclusionChange();
+            if (redoLayout != 0) return redoLayout;
+        }
         if (startKeyguardExitAnimation) {
             if (DEBUG_KEYGUARD) Slog.d(TAG, "Starting keyguard exit animation");
             startKeyguardExitAnimation(SystemClock.uptimeMillis());
@@ -3844,20 +3867,17 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     /**
-     * Updates the occluded state of the Keyguard.
+     * Updates the occluded state of the Keyguard immediately via
+     * {@link com.android.internal.policy.IKeyguardService}.
      *
      * @param isOccluded Whether the Keyguard is occluded by another window.
-     * @param notify Notify keyguard occlude status change immediately via
-     *       {@link com.android.internal.policy.IKeyguardService}.
      * @return Whether the flags have changed and we have to redo the layout.
      */
-    private boolean setKeyguardOccludedLw(boolean isOccluded, boolean notify) {
+    private boolean setKeyguardOccludedLw(boolean isOccluded) {
         if (DEBUG_KEYGUARD) Slog.d(TAG, "setKeyguardOccluded occluded=" + isOccluded);
         mKeyguardOccludedChanged = false;
-        if (isKeyguardOccluded() == isOccluded) {
-            return false;
-        }
-        mKeyguardDelegate.setOccluded(isOccluded, notify);
+        mPendingKeyguardOccluded = isOccluded;
+        mKeyguardDelegate.setOccluded(isOccluded, true /* notify */);
         return mKeyguardDelegate.isShowing();
     }
 
@@ -4124,7 +4144,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             case KeyEvent.KEYCODE_VOLUME_UP:
             case KeyEvent.KEYCODE_VOLUME_MUTE: {
                 if (down) {
-                    sendSystemKeyToStatusBarAsync(event.getKeyCode());
+                    sendSystemKeyToStatusBarAsync(event);
 
                     NotificationManager nm = getNotificationService();
                     if (nm != null && !mHandleVolumeKeysInWM) {
@@ -4402,11 +4422,18 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             case KeyEvent.KEYCODE_STYLUS_BUTTON_TERTIARY:
             case KeyEvent.KEYCODE_STYLUS_BUTTON_TAIL: {
                 if (down && mStylusButtonsEnabled) {
-                    sendSystemKeyToStatusBarAsync(keyCode);
+                    sendSystemKeyToStatusBarAsync(event);
                 }
                 result &= ~ACTION_PASS_TO_USER;
                 break;
             }
+            case KeyEvent.KEYCODE_MACRO_1:
+            case KeyEvent.KEYCODE_MACRO_2:
+            case KeyEvent.KEYCODE_MACRO_3:
+            case KeyEvent.KEYCODE_MACRO_4:
+                // TODO(b/266098478): Add logic to handle KEYCODE_MACROx feature
+                result &= ~ACTION_PASS_TO_USER;
+                break;
         }
 
         if (useHapticFeedback) {
@@ -4492,7 +4519,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             if (!mAccessibilityManager.isEnabled()
                     || !mAccessibilityManager.sendFingerprintGesture(event.getKeyCode())) {
                 if (mSystemNavigationKeysEnabled) {
-                    sendSystemKeyToStatusBarAsync(event.getKeyCode());
+                    sendSystemKeyToStatusBarAsync(event);
                 }
             }
         }
@@ -4501,11 +4528,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     /**
      * Notify the StatusBar that a system key was pressed.
      */
-    private void sendSystemKeyToStatusBar(int keyCode) {
+    private void sendSystemKeyToStatusBar(KeyEvent key) {
         IStatusBarService statusBar = getStatusBarService();
         if (statusBar != null) {
             try {
-                statusBar.handleSystemKey(keyCode);
+                statusBar.handleSystemKey(key);
             } catch (RemoteException e) {
                 // Oh well.
             }
@@ -4515,8 +4542,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     /**
      * Notify the StatusBar that a system key was pressed without blocking the current thread.
      */
-    private void sendSystemKeyToStatusBarAsync(int keyCode) {
-        Message message = mHandler.obtainMessage(MSG_SYSTEM_KEY_PRESS, keyCode, 0);
+    private void sendSystemKeyToStatusBarAsync(KeyEvent keyEvent) {
+        Message message = mHandler.obtainMessage(MSG_SYSTEM_KEY_PRESS, keyEvent);
         message.setAsynchronous(true);
         mHandler.sendMessage(message);
     }

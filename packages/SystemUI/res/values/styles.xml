@@ -385,6 +385,10 @@
         <item name="android:windowBackground">@android:color/transparent</item>
     </style>
 
+    <style name="Theme.SystemUI.ContrastDialog" parent="@android:style/Theme.DeviceDefault.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+    </style>
+
     <style name="Theme.SystemUI.QuickSettings.Dialog" parent="@android:style/Theme.DeviceDefault.Dialog">
         <item name="android:dialogCornerRadius">@dimen/notification_corner_radius</item>
     </style>
@@ -703,6 +707,8 @@
 
     <style name="MediaPlayer.Recommendation.AlbumContainer.Updated">
         <item name="android:layout_width">@dimen/qs_media_rec_album_width</item>
+        <item name="android:minWidth">@dimen/qs_media_rec_album_width</item>
+        <item name="android:minHeight">@dimen/qs_media_rec_album_height_collapsed</item>
         <item name="android:background">@drawable/qs_media_light_source</item>
         <item name="android:layout_marginTop">@dimen/qs_media_info_spacing</item>
     </style>
@@ -850,12 +856,10 @@
         <item name="wallpaperTextColor">@*android:color/primary_text_material_dark</item>
     </style>
 
-    <style name="Theme.UserSwitcherActivity" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+    <style name="Theme.UserSwitcherFullscreenDialog" parent="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
         <item name="android:statusBarColor">@color/user_switcher_fullscreen_bg</item>
         <item name="android:windowBackground">@color/user_switcher_fullscreen_bg</item>
         <item name="android:navigationBarColor">@color/user_switcher_fullscreen_bg</item>
-        <!-- Setting a placeholder will avoid using the SystemUI icon on the splash screen -->
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_blank</item>
     </style>
 
     <style name="Theme.CreateUser" parent="@android:style/Theme.DeviceDefault.NoActionBar">
@@ -1049,7 +1053,7 @@
 
     <style name="TextAppearance.Dialog.Title" parent="@android:style/TextAppearance.DeviceDefault.Large">
         <item name="android:textColor">?android:attr/textColorPrimary</item>
-        <item name="android:textSize">24sp</item>
+        <item name="android:textSize">@dimen/dialog_title_text_size</item>
         <item name="android:fontFamily">@*android:string/config_headlineFontFamily</item>
         <item name="android:lineHeight">32sp</item>
         <item name="android:gravity">center</item>

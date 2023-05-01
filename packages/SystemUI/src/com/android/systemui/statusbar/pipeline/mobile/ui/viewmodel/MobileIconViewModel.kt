@@ -162,11 +162,10 @@ constructor(
         combine(
                 iconInteractor.isDataConnected,
                 iconInteractor.isDataEnabled,
-                iconInteractor.isDefaultConnectionFailed,
                 iconInteractor.alwaysShowDataRatIcon,
-                iconInteractor.isConnected,
-            ) { dataConnected, dataEnabled, failedConnection, alwaysShow, connected ->
-                alwaysShow || (dataConnected && dataEnabled && !failedConnection && connected)
+                iconInteractor.mobileIsDefault,
+            ) { dataConnected, dataEnabled, alwaysShow, mobileIsDefault ->
+                alwaysShow || (dataEnabled && dataConnected && mobileIsDefault)
             }
             .distinctUntilChanged()
             .logDiffsForTable(
@@ -185,14 +184,16 @@ constructor(
                 iconInteractor.voWifiAvailable,
             ) { networkTypeIconGroup, shouldShow, networkTypeIconCustomization, voWifiAvailable ->
                 val desc =
-                    if (networkTypeIconGroup.dataContentDescription != 0)
-                        ContentDescription.Resource(networkTypeIconGroup.dataContentDescription)
+                    if (networkTypeIconGroup.contentDescription != 0)
+                        ContentDescription.Resource(networkTypeIconGroup.contentDescription)
                     else null
                 val icon =
                     if (voWifiAvailable) {
                         Icon.Resource(TelephonyIcons.VOWIFI.dataType, desc)
                     } else {
-                        Icon.Resource(networkTypeIconGroup.dataType, desc)
+                        if (networkTypeIconGroup.iconId != 0)
+                            Icon.Resource(networkTypeIconGroup.iconId, desc)
+                        else null
                     }
                 return@combine when {
                     networkTypeIconCustomization.isRatCustomization -> {

@@ -41,7 +41,6 @@ import android.os.RemoteException;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.ArraySet;
-import android.util.Pair;
 import android.view.SurfaceControl;
 import android.view.WindowManager;
 import android.window.DisplayAreaInfo;
@@ -313,6 +312,20 @@ public class DesktopModeController implements RemoteCallable<DesktopModeControll
     }
 
     /**
+     * Moves a specifc task to the front.
+     * @param taskInfo the task to show in front.
+     */
+    public void moveTaskToFront(RunningTaskInfo taskInfo) {
+        WindowContainerTransaction wct = new WindowContainerTransaction();
+        wct.reorder(taskInfo.token, true /* onTop */);
+        if (Transitions.ENABLE_SHELL_TRANSITIONS) {
+            mTransitions.startTransition(TRANSIT_TO_FRONT, wct, null);
+        } else {
+            mShellTaskOrganizer.applyTransaction(wct);
+        }
+    }
+
+    /**
      * Turn desktop mode on or off
      * @param active the desired state for desktop mode setting
      */
@@ -364,10 +377,7 @@ public class DesktopModeController implements RemoteCallable<DesktopModeControll
         }
         ProtoLog.d(WM_SHELL_DESKTOP_MODE, "handle shell transition request: %s", request);
 
-        Pair<Transitions.TransitionHandler, WindowContainerTransaction> subHandler =
-                mTransitions.dispatchRequest(transition, request, this);
-        WindowContainerTransaction wct = subHandler != null
-                ? subHandler.second : new WindowContainerTransaction();
+        WindowContainerTransaction wct = new WindowContainerTransaction();
         bringDesktopAppsToFront(wct);
         wct.reorder(request.getTriggerTask().token, true /* onTop */);
 

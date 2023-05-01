@@ -21,6 +21,7 @@ import static com.android.wm.shell.pip.PipUtils.dpToPx;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.graphics.Point;
 import android.graphics.PointF;
@@ -212,24 +213,25 @@ public class PipSizeSpecHandler {
          */
         @Override
         public Size getSizeForAspectRatio(Size size, float aspectRatio) {
-            // getting the percentage of the max size that current size takes
             float currAspectRatio = (float) size.getWidth() / size.getHeight();
+
+            // getting the percentage of the max size that current size takes
             Size currentMaxSize = getMaxSize(currAspectRatio);
             float currentPercent = (float) size.getWidth() / currentMaxSize.getWidth();
 
             // getting the max size for the target aspect ratio
             Size updatedMaxSize = getMaxSize(aspectRatio);
 
-            int width = (int) (updatedMaxSize.getWidth() * currentPercent);
-            int height = (int) (updatedMaxSize.getHeight() * currentPercent);
+            int width = Math.round(updatedMaxSize.getWidth() * currentPercent);
+            int height = Math.round(updatedMaxSize.getHeight() * currentPercent);
 
             // adjust the dimensions if below allowed min edge size
             if (width < getMinEdgeSize() && aspectRatio <= 1) {
                 width = getMinEdgeSize();
-                height = (int) (width / aspectRatio);
+                height = Math.round(width / aspectRatio);
             } else if (height < getMinEdgeSize() && aspectRatio > 1) {
                 height = getMinEdgeSize();
-                width = (int) (height * aspectRatio);
+                width = Math.round(height * aspectRatio);
             }
 
             // reduce the dimensions of the updated size to the calculated percentage
@@ -365,11 +367,8 @@ public class PipSizeSpecHandler {
         mContext = context;
         mPipDisplayLayoutState = pipDisplayLayoutState;
 
-        boolean enablePipSizeLargeScreen = SystemProperties
-                .getBoolean("persist.wm.debug.enable_pip_size_large_screen", false);
-
         // choose between two implementations of size spec logic
-        if (enablePipSizeLargeScreen) {
+        if (supportsPipSizeLargeScreen()) {
             mSizeSpecSourceImpl = new SizeSpecLargeScreenOptimizedImpl();
         } else {
             mSizeSpecSourceImpl = new SizeSpecDefaultImpl();
@@ -512,6 +511,18 @@ public class PipSizeSpecHandler {
             // Size is taller, fix the height and adjust the width.
             return new Size((int) (size.getHeight() * aspectRatio), size.getHeight());
         }
+    }
+
+    @VisibleForTesting
+    boolean supportsPipSizeLargeScreen() {
+        // TODO(b/271468706): switch Tv to having a dedicated SizeSpecSource once the SizeSpecSource
+        // can be injected
+        return SystemProperties
+                .getBoolean("persist.wm.debug.enable_pip_size_large_screen", true) && !isTv();
+    }
+
+    private boolean isTv() {
+        return mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
     }
 
     /** Dumps internal state. */

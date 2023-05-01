@@ -45,6 +45,8 @@ import static com.android.server.wm.ActivityTaskManagerService.RELAUNCH_REASON_N
 import static com.android.server.wm.BackgroundActivityStartController.BAL_BLOCK;
 import static com.android.server.wm.WindowManagerService.MY_PID;
 
+import static java.util.Objects.requireNonNull;
+
 import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -69,6 +71,7 @@ import android.os.Message;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.UserHandle;
+import android.util.ArrayMap;
 import android.util.Log;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
@@ -228,8 +231,17 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
      * in another process. This is used to check if the process is currently showing anything
      * visible to the user.
      */
+    private static final int REMOTE_ACTIVITY_FLAG_HOST_ACTIVITY = 1;
+    /** The activity in a different process is embedded in a task created by this process. */
+    private static final int REMOTE_ACTIVITY_FLAG_EMBEDDED_ACTIVITY = 1 << 1;
+
+    /**
+     * Activities that run on different processes while this process shows something in these
+     * activities or the appearance of the activities are controlled by this process. The value of
+     * map is an array of size 1 to store the kinds of remote.
+     */
     @Nullable
-    private final ArrayList<ActivityRecord> mHostActivities = new ArrayList<>();
+    private ArrayMap<ActivityRecord, int[]> mRemoteActivities;
 
     /** Whether our process is currently running a {@link RecentsAnimation} */
     private boolean mRunningRecentsAnimation;
@@ -368,8 +380,9 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
     }
 
     void handleAppCrash() {
-        for (int i = mActivities.size() - 1; i >= 0; --i) {
-            final ActivityRecord r = mActivities.get(i);
+        ArrayList<ActivityRecord> activities = new ArrayList<>(mActivities);
+        for (int i = activities.size() - 1; i >= 0; --i) {
+            final ActivityRecord r = activities.get(i);
             Slog.w(TAG, "  Force finishing activity "
                     + r.mActivityComponent.flattenToShortString());
             r.detachFromProcess();
@@ -548,14 +561,19 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
      * @see BackgroundLaunchProcessController#addOrUpdateAllowBackgroundStartPrivileges(Binder,
      * BackgroundStartPrivileges)
      */
-    public void addOrUpdateBackgroundStartPrivileges(Binder entity,
-            BackgroundStartPrivileges backgroundStartPrivileges) {
+    public void addOrUpdateBackgroundStartPrivileges(@NonNull Binder entity,
+            @NonNull BackgroundStartPrivileges backgroundStartPrivileges) {
+        requireNonNull(entity, "entity");
+        requireNonNull(backgroundStartPrivileges, "backgroundStartPrivileges");
+        checkArgument(backgroundStartPrivileges.allowsAny(),
+                "backgroundStartPrivileges does not allow anything");
         mBgLaunchController.addOrUpdateAllowBackgroundStartPrivileges(entity,
                 backgroundStartPrivileges);
     }
 
     /** @see BackgroundLaunchProcessController#removeAllowBackgroundStartPrivileges(Binder) */
-    public void removeBackgroundStartPrivileges(Binder entity) {
+    public void removeBackgroundStartPrivileges(@NonNull Binder entity) {
+        requireNonNull(entity, "entity");
         mBgLaunchController.removeAllowBackgroundStartPrivileges(entity);
     }
 
@@ -857,7 +875,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
                     return true;
                 }
             }
-            if (isEmbedded()) {
+            if (hasEmbeddedWindow()) {
                 return true;
             }
         }
@@ -868,9 +886,13 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
      * @return {@code true} if this process is rendering content on to a window shown by
      * another process.
      */
-    private boolean isEmbedded() {
-        for (int i = mHostActivities.size() - 1; i >= 0; --i) {
-            final ActivityRecord r = mHostActivities.get(i);
+    private boolean hasEmbeddedWindow() {
+        if (mRemoteActivities == null) return false;
+        for (int i = mRemoteActivities.size() - 1; i >= 0; --i) {
+            if ((mRemoteActivities.valueAt(i)[0] & REMOTE_ACTIVITY_FLAG_HOST_ACTIVITY) == 0) {
+                continue;
+            }
+            final ActivityRecord r = mRemoteActivities.keyAt(i);
             if (r.isInterestingToUserLocked()) {
                 return true;
             }
@@ -1038,15 +1060,46 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
 
     /** Adds an activity that hosts UI drawn by the current process. */
     void addHostActivity(ActivityRecord r) {
-        if (mHostActivities.contains(r)) {
-            return;
-        }
-        mHostActivities.add(r);
+        final int[] flags = getRemoteActivityFlags(r);
+        flags[0] |= REMOTE_ACTIVITY_FLAG_HOST_ACTIVITY;
     }
 
     /** Removes an activity that hosts UI drawn by the current process. */
     void removeHostActivity(ActivityRecord r) {
-        mHostActivities.remove(r);
+        removeRemoteActivityFlags(r, REMOTE_ACTIVITY_FLAG_HOST_ACTIVITY);
+    }
+
+    /** Adds an embedded activity in a different process to this process that organizes it. */
+    void addEmbeddedActivity(ActivityRecord r) {
+        final int[] flags = getRemoteActivityFlags(r);
+        flags[0] |= REMOTE_ACTIVITY_FLAG_EMBEDDED_ACTIVITY;
+    }
+
+    /** Removes an embedded activity which was added by {@link #addEmbeddedActivity}. */
+    void removeEmbeddedActivity(ActivityRecord r) {
+        removeRemoteActivityFlags(r, REMOTE_ACTIVITY_FLAG_EMBEDDED_ACTIVITY);
+    }
+
+    private int[] getRemoteActivityFlags(ActivityRecord r) {
+        if (mRemoteActivities == null) {
+            mRemoteActivities = new ArrayMap<>();
+        }
+        int[] flags = mRemoteActivities.get(r);
+        if (flags == null) {
+            mRemoteActivities.put(r, flags = new int[1]);
+        }
+        return flags;
+    }
+
+    private void removeRemoteActivityFlags(ActivityRecord r, int flags) {
+        if (mRemoteActivities == null) return;
+        final int index = mRemoteActivities.indexOfKey(r);
+        if (index < 0) return;
+        final int[] currentFlags = mRemoteActivities.valueAt(index);
+        currentFlags[0] &= ~flags;
+        if (currentFlags[0] == 0) {
+            mRemoteActivities.removeAt(index);
+        }
     }
 
     public interface ComputeOomAdjCallback {
@@ -1118,6 +1171,16 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
                     bestInvisibleState = STOPPING;
                     // Not "finishing" if any of activity isn't finishing.
                     allStoppingFinishing &= r.finishing;
+                }
+            }
+        }
+        if (mRemoteActivities != null) {
+            // Make this process have visible state if its organizer embeds visible activities of
+            // other process, so this process can be responsive for the organizer events.
+            for (int i = mRemoteActivities.size() - 1; i >= 0; i--) {
+                if ((mRemoteActivities.valueAt(i)[0] & REMOTE_ACTIVITY_FLAG_EMBEDDED_ACTIVITY) != 0
+                        && mRemoteActivities.keyAt(i).isVisibleRequested()) {
+                    stateFlags |= ACTIVITY_STATE_FLAG_IS_VISIBLE;
                 }
             }
         }
@@ -1795,7 +1858,21 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
                     pw.print(prefix); pw.print("  - "); pw.println(mActivities.get(i));
                 }
             }
-
+            if (mRemoteActivities != null && !mRemoteActivities.isEmpty()) {
+                pw.print(prefix); pw.println("Remote Activities:");
+                for (int i = mRemoteActivities.size() - 1; i >= 0; i--) {
+                    pw.print(prefix); pw.print("  - ");
+                    pw.print(mRemoteActivities.keyAt(i)); pw.print(" flags=");
+                    final int flags = mRemoteActivities.valueAt(i)[0];
+                    if ((flags & REMOTE_ACTIVITY_FLAG_HOST_ACTIVITY) != 0) {
+                        pw.print("host ");
+                    }
+                    if ((flags & REMOTE_ACTIVITY_FLAG_EMBEDDED_ACTIVITY) != 0) {
+                        pw.print("embedded");
+                    }
+                    pw.println();
+                }
+            }
             if (mRecentTasks.size() > 0) {
                 pw.println(prefix + "Recent Tasks:");
                 for (int i = 0; i < mRecentTasks.size(); i++) {

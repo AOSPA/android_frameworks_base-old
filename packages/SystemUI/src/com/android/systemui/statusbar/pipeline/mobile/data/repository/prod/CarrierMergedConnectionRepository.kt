@@ -24,6 +24,7 @@ package com.android.systemui.statusbar.pipeline.mobile.data.repository.prod
 
 import android.telephony.CellSignalStrength.SIGNAL_STRENGTH_NONE_OR_UNKNOWN
 import android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_NONE
+import android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID
 import android.telephony.TelephonyManager
 import android.util.Log
 import com.android.systemui.dagger.SysUISingleton
@@ -165,6 +166,7 @@ class CarrierMergedConnectionRepository(
             .stateIn(scope, SharingStarted.WhileSubscribed(), DataConnectionState.Disconnected)
 
     override val isRoaming = MutableStateFlow(false).asStateFlow()
+    override val carrierId = MutableStateFlow(INVALID_SUBSCRIPTION_ID).asStateFlow()
     override val isEmergencyOnly = MutableStateFlow(false).asStateFlow()
     override val operatorAlphaShort = MutableStateFlow(null).asStateFlow()
     override val isInService = MutableStateFlow(true).asStateFlow()

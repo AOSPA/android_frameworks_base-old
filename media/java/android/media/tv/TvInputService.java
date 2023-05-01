@@ -1032,6 +1032,7 @@ public abstract class TvInputService extends Service {
          * {@link TvInputManager#TV_MESSAGE_TYPE_WATERMARK}
          * @param data The raw data of the message. The bundle keys are:
          *             {@link TvInputManager#TV_MESSAGE_KEY_STREAM_ID},
+         *             {@link TvInputManager#TV_MESSAGE_KEY_GROUP_ID},
          *             {@link TvInputManager#TV_MESSAGE_KEY_SUBTYPE},
          *             {@link TvInputManager#TV_MESSAGE_KEY_RAW_DATA}.
          *             See {@link TvInputManager#TV_MESSAGE_KEY_SUBTYPE} for more information on
@@ -1507,12 +1508,13 @@ public abstract class TvInputService extends Service {
          * {@link TvInputManager#TV_MESSAGE_TYPE_WATERMARK}
          * @param data The raw data of the message. The bundle keys are:
          *             {@link TvInputManager#TV_MESSAGE_KEY_STREAM_ID},
+         *             {@link TvInputManager#TV_MESSAGE_KEY_GROUP_ID},
          *             {@link TvInputManager#TV_MESSAGE_KEY_SUBTYPE},
          *             {@link TvInputManager#TV_MESSAGE_KEY_RAW_DATA}.
          *             See {@link TvInputManager#TV_MESSAGE_KEY_SUBTYPE} for more information on
          *             how to parse this data.
          */
-        public void onTvMessage(@NonNull @TvInputManager.TvMessageType String type,
+        public void onTvMessage(@TvInputManager.TvMessageType int type,
                 @NonNull Bundle data) {
         }
 
@@ -2065,7 +2067,7 @@ public abstract class TvInputService extends Service {
             onAdBufferReady(buffer);
         }
 
-        void onTvMessageReceived(String type, Bundle data) {
+        void onTvMessageReceived(int type, Bundle data) {
             onTvMessage(type, data);
         }
 

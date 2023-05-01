@@ -176,6 +176,8 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
     boolean mAllowWhileInUsePermissionInFgs;
     // A copy of mAllowWhileInUsePermissionInFgs's value when the service is entering FGS state.
     boolean mAllowWhileInUsePermissionInFgsAtEntering;
+    /** Allow scheduling user-initiated jobs from the background. */
+    boolean mAllowUiJobScheduling;
 
     // the most recent package that start/bind this service.
     String mRecentCallingPackage;
@@ -249,6 +251,7 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
         final String mCallingProcessName;
         final Intent intent;
         final NeededUriGrants neededGrants;
+        final @Nullable String mCallingPackageName;
         long deliveredTime;
         int deliveryCount;
         int doneExecutingCount;
@@ -258,7 +261,7 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
 
         StartItem(ServiceRecord _sr, boolean _taskRemoved, int _id,
                 Intent _intent, NeededUriGrants _neededGrants, int _callingId,
-                String callingProcessName) {
+                String callingProcessName, @Nullable String callingPackageName) {
             sr = _sr;
             taskRemoved = _taskRemoved;
             id = _id;
@@ -266,6 +269,7 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
             neededGrants = _neededGrants;
             callingId = _callingId;
             mCallingProcessName = callingProcessName;
+            mCallingPackageName = callingPackageName;
         }
 
         UriPermissionOwner getUriPermissionsLocked() {
@@ -605,6 +609,7 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
         }
         pw.print(prefix); pw.print("allowWhileInUsePermissionInFgs=");
                 pw.println(mAllowWhileInUsePermissionInFgs);
+        pw.print(prefix); pw.print("allowUiJobScheduling="); pw.println(mAllowUiJobScheduling);
         pw.print(prefix); pw.print("recentCallingPackage=");
                 pw.println(mRecentCallingPackage);
         pw.print(prefix); pw.print("recentCallingUid=");
@@ -845,10 +850,11 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
             mAppForAllowingBgActivityStartsByStart =
                     mBackgroundStartPrivilegesByStartMerged.allowsAny()
                     ? proc : null;
-            if (mBackgroundStartPrivilegesByStartMerged.allowsAny()
-                    || mIsAllowedBgActivityStartsByBinding) {
+            BackgroundStartPrivileges backgroundStartPrivileges =
+                    getBackgroundStartPrivilegesWithExclusiveToken();
+            if (backgroundStartPrivileges.allowsAny()) {
                 proc.addOrUpdateBackgroundStartPrivileges(this,
-                        getBackgroundStartPrivilegesWithExclusiveToken());
+                        backgroundStartPrivileges);
             } else {
                 proc.removeBackgroundStartPrivileges(this);
             }
@@ -1022,7 +1028,17 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
                 ams.mConstants.SERVICE_BG_ACTIVITY_START_TIMEOUT);
     }
 
+    void updateAllowUiJobScheduling(boolean allowUiJobScheduling) {
+        if (mAllowUiJobScheduling == allowUiJobScheduling) {
+            return;
+        }
+        mAllowUiJobScheduling = allowUiJobScheduling;
+    }
+
     private void setAllowedBgActivityStartsByStart(BackgroundStartPrivileges newValue) {
+        if (mBackgroundStartPrivilegesByStartMerged == newValue) {
+            return;
+        }
         mBackgroundStartPrivilegesByStartMerged = newValue;
         updateParentProcessBgActivityStartsToken();
     }

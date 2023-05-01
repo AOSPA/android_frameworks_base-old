@@ -104,6 +104,7 @@ import android.app.ProfilerInfo;
 import android.app.WaitResult;
 import android.app.WindowConfiguration;
 import android.compat.annotation.ChangeId;
+import android.compat.annotation.Disabled;
 import android.compat.annotation.EnabledSince;
 import android.content.IIntentSender;
 import android.content.Intent;
@@ -189,7 +190,7 @@ class ActivityStarter {
      * Feature flag for go/activity-security rules
      */
     @ChangeId
-    @EnabledSince(targetSdkVersion = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    @Disabled
     static final long ASM_RESTRICTIONS = 230590090L;
 
     private final ActivityTaskManagerService mService;
@@ -1586,19 +1587,19 @@ class ActivityStarter {
             }
         }
         if (isTransientLaunch) {
-            if (forceTransientTransition && newTransition != null) {
-                newTransition.collect(mLastStartActivityRecord);
-                newTransition.collect(mPriorAboveTask);
+            if (forceTransientTransition) {
+                transitionController.collect(mLastStartActivityRecord);
+                transitionController.collect(mPriorAboveTask);
             }
             // `started` isn't guaranteed to be the actual relevant activity, so we must wait
             // until after we launched to identify the relevant activity.
             transitionController.setTransientLaunch(mLastStartActivityRecord, mPriorAboveTask);
-            if (forceTransientTransition && newTransition != null) {
+            if (forceTransientTransition) {
                 final DisplayContent dc = mLastStartActivityRecord.getDisplayContent();
                 // update wallpaper target to TransientHide
                 dc.mWallpaperController.adjustWallpaperWindows();
                 // execute transition because there is no change
-                newTransition.setReady(dc, true /* ready */);
+                transitionController.setReady(dc, true /* ready */);
             }
         }
         if (!userLeaving) {
@@ -1683,6 +1684,11 @@ class ActivityStarter {
                         + " from uid=" + mCallingUid);
                 targetTask.removeImmediately("bulky-task");
                 return START_ABORTED;
+            }
+            // When running transient transition, the transient launch target should keep on top.
+            // So disallow the transient hide activity to move itself to front, e.g. trampoline.
+            if (!mAvoidMoveToFront && r.mTransitionController.isTransientHide(targetTask)) {
+                mAvoidMoveToFront = true;
             }
             mPriorAboveTask = TaskDisplayArea.getRootTaskAbove(targetTask.getRootTask());
         }
@@ -1800,7 +1806,7 @@ class ActivityStarter {
                 // root-task to the will not update the focused root-task.  If starting the new
                 // activity now allows the task root-task to be focusable, then ensure that we
                 // now update the focused root-task accordingly.
-                if (mTargetRootTask.isTopActivityFocusable()
+                if (!mAvoidMoveToFront && mTargetRootTask.isTopActivityFocusable()
                         && !mRootWindowContainer.isTopDisplayFocusedRootTask(mTargetRootTask)) {
                     mTargetRootTask.moveToFront("startActivityInner");
                 }
@@ -2946,8 +2952,6 @@ class ActivityStarter {
 
         if (differentTopTask && !mAvoidMoveToFront) {
             mStartActivity.intent.addFlags(Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT);
-            // TODO(b/264487981): Consider using BackgroundActivityStartController to determine
-            //  whether to bring the launching activity to the front.
             if (mSourceRecord == null || inTopNonFinishingTask(mSourceRecord)) {
                 // We really do want to push this one into the user's face, right now.
                 if (mLaunchTaskBehind && mSourceRecord != null) {

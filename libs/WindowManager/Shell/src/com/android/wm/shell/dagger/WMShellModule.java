@@ -30,7 +30,6 @@ import com.android.internal.statusbar.IStatusBarService;
 import com.android.launcher3.icons.IconProvider;
 import com.android.wm.shell.RootTaskDisplayAreaOrganizer;
 import com.android.wm.shell.ShellTaskOrganizer;
-import com.android.wm.shell.TaskViewTransitions;
 import com.android.wm.shell.WindowManagerShellWrapper;
 import com.android.wm.shell.bubbles.BubbleController;
 import com.android.wm.shell.bubbles.BubbleData;
@@ -54,6 +53,8 @@ import com.android.wm.shell.desktopmode.DesktopModeController;
 import com.android.wm.shell.desktopmode.DesktopModeStatus;
 import com.android.wm.shell.desktopmode.DesktopModeTaskRepository;
 import com.android.wm.shell.desktopmode.DesktopTasksController;
+import com.android.wm.shell.desktopmode.EnterDesktopTaskTransitionHandler;
+import com.android.wm.shell.desktopmode.ExitDesktopTaskTransitionHandler;
 import com.android.wm.shell.draganddrop.DragAndDropController;
 import com.android.wm.shell.freeform.FreeformComponents;
 import com.android.wm.shell.freeform.FreeformTaskListener;
@@ -83,10 +84,12 @@ import com.android.wm.shell.pip.phone.PipMotionHelper;
 import com.android.wm.shell.pip.phone.PipSizeSpecHandler;
 import com.android.wm.shell.pip.phone.PipTouchHandler;
 import com.android.wm.shell.recents.RecentTasksController;
+import com.android.wm.shell.recents.RecentsTransitionHandler;
 import com.android.wm.shell.splitscreen.SplitScreenController;
 import com.android.wm.shell.sysui.ShellCommandHandler;
 import com.android.wm.shell.sysui.ShellController;
 import com.android.wm.shell.sysui.ShellInit;
+import com.android.wm.shell.taskview.TaskViewTransitions;
 import com.android.wm.shell.transition.DefaultMixedHandler;
 import com.android.wm.shell.transition.Transitions;
 import com.android.wm.shell.unfold.ShellUnfoldProgressProvider;
@@ -528,9 +531,20 @@ public abstract class WMShellModule {
             ShellInit shellInit,
             Optional<SplitScreenController> splitScreenOptional,
             Optional<PipTouchHandler> pipTouchHandlerOptional,
+            Optional<RecentsTransitionHandler> recentsTransitionHandler,
             Transitions transitions) {
         return new DefaultMixedHandler(shellInit, transitions, splitScreenOptional,
-                pipTouchHandlerOptional);
+                pipTouchHandlerOptional, recentsTransitionHandler);
+    }
+
+    @WMSingleton
+    @Provides
+    static RecentsTransitionHandler provideRecentsTransitionHandler(
+            ShellInit shellInit,
+            Transitions transitions,
+            Optional<RecentTasksController> recentTasksController) {
+        return new RecentsTransitionHandler(shellInit, transitions,
+                recentTasksController.orElse(null));
     }
 
     //
@@ -659,13 +673,36 @@ public abstract class WMShellModule {
             Context context,
             ShellInit shellInit,
             ShellController shellController,
+            DisplayController displayController,
             ShellTaskOrganizer shellTaskOrganizer,
+            SyncTransactionQueue syncQueue,
+            RootTaskDisplayAreaOrganizer rootTaskDisplayAreaOrganizer,
             Transitions transitions,
+            EnterDesktopTaskTransitionHandler enterDesktopTransitionHandler,
+            ExitDesktopTaskTransitionHandler exitDesktopTransitionHandler,
             @DynamicOverride DesktopModeTaskRepository desktopModeTaskRepository,
             @ShellMainThread ShellExecutor mainExecutor
     ) {
-        return new DesktopTasksController(context, shellInit, shellController, shellTaskOrganizer,
-                transitions, desktopModeTaskRepository, mainExecutor);
+        return new DesktopTasksController(context, shellInit, shellController, displayController,
+                shellTaskOrganizer, syncQueue, rootTaskDisplayAreaOrganizer, transitions,
+                enterDesktopTransitionHandler, exitDesktopTransitionHandler,
+                desktopModeTaskRepository, mainExecutor);
+    }
+
+    @WMSingleton
+    @Provides
+    static EnterDesktopTaskTransitionHandler provideEnterDesktopModeTaskTransitionHandler(
+            Transitions transitions) {
+        return new EnterDesktopTaskTransitionHandler(transitions);
+    }
+
+    @WMSingleton
+    @Provides
+    static ExitDesktopTaskTransitionHandler provideExitDesktopTaskTransitionHandler(
+            Transitions transitions,
+            Context context
+    ) {
+        return new ExitDesktopTaskTransitionHandler(transitions, context);
     }
 
     @WMSingleton

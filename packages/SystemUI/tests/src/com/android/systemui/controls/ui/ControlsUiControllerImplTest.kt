@@ -59,8 +59,8 @@ import com.android.systemui.util.mockito.eq
 import com.android.systemui.util.mockito.mock
 import com.android.systemui.util.mockito.whenever
 import com.android.systemui.util.time.FakeSystemClock
-import com.android.wm.shell.TaskView
-import com.android.wm.shell.TaskViewFactory
+import com.android.wm.shell.taskview.TaskView
+import com.android.wm.shell.taskview.TaskViewFactory
 import com.google.common.truth.Truth.assertThat
 import java.util.Optional
 import java.util.function.Consumer
@@ -198,6 +198,56 @@ class ControlsUiControllerImplTest : SysuiTestCase() {
         FakeExecutor.exhaustExecutors(uiExecutor, bgExecutor)
 
         verify(taskViewFactory).create(eq(context), eq(uiExecutor), any())
+    }
+
+    @Test
+    fun testSingleAppHeaderIsNotClickable() {
+        mockLayoutInflater()
+        val packageName = "pkg"
+        `when`(authorizedPanelsRepository.getAuthorizedPanels()).thenReturn(setOf(packageName))
+        val panel = SelectedItem.PanelItem("App name", ComponentName(packageName, "cls"))
+        val serviceInfo = setUpPanel(panel)
+
+        underTest.show(parent, {}, context)
+
+        val captor = argumentCaptor<ControlsListingController.ControlsListingCallback>()
+
+        verify(controlsListingController).addCallback(capture(captor))
+
+        captor.value.onServicesUpdated(listOf(serviceInfo))
+        FakeExecutor.exhaustExecutors(uiExecutor, bgExecutor)
+
+        val header: View = parent.requireViewById(R.id.controls_header)
+        assertThat(header.isClickable).isFalse()
+        assertThat(header.hasOnClickListeners()).isFalse()
+    }
+
+    @Test
+    fun testMultipleAppHeaderIsClickable() {
+        mockLayoutInflater()
+        val packageName1 = "pkg"
+        val panel1 = SelectedItem.PanelItem("App name 1", ComponentName(packageName1, "cls"))
+        val serviceInfo1 = setUpPanel(panel1)
+
+        val packageName2 = "pkg"
+        val panel2 = SelectedItem.PanelItem("App name 2", ComponentName(packageName2, "cls"))
+        val serviceInfo2 = setUpPanel(panel2)
+
+        `when`(authorizedPanelsRepository.getAuthorizedPanels())
+            .thenReturn(setOf(packageName1, packageName2))
+
+        underTest.show(parent, {}, context)
+
+        val captor = argumentCaptor<ControlsListingController.ControlsListingCallback>()
+
+        verify(controlsListingController).addCallback(capture(captor))
+
+        captor.value.onServicesUpdated(listOf(serviceInfo1, serviceInfo2))
+        FakeExecutor.exhaustExecutors(uiExecutor, bgExecutor)
+
+        val header: View = parent.requireViewById(R.id.app_or_structure_spinner)
+        assertThat(header.isClickable).isTrue()
+        assertThat(header.hasOnClickListeners()).isTrue()
     }
 
     @Test
@@ -347,7 +397,7 @@ class ControlsUiControllerImplTest : SysuiTestCase() {
         whenever(controlsController.removeFavorites(eq(componentName))).thenReturn(true)
         val panel = SelectedItem.PanelItem("App name", componentName)
         preferredPanelRepository.setSelectedComponent(
-                SelectedComponentRepository.SelectedComponent(panel)
+            SelectedComponentRepository.SelectedComponent(panel)
         )
         underTest.show(parent, {}, context)
         underTest.startRemovingApp(componentName, "Test App")
@@ -362,6 +412,26 @@ class ControlsUiControllerImplTest : SysuiTestCase() {
     }
 
     @Test
+    fun testCancelRemovingAppsDoesntRemoveFavorite() {
+        val componentName = ComponentName(context, "cls")
+        whenever(controlsController.removeFavorites(eq(componentName))).thenReturn(true)
+        val panel = SelectedItem.PanelItem("App name", componentName)
+        preferredPanelRepository.setSelectedComponent(
+            SelectedComponentRepository.SelectedComponent(panel)
+        )
+        underTest.show(parent, {}, context)
+        underTest.startRemovingApp(componentName, "Test App")
+
+        fakeDialogController.clickNeutral()
+
+        verify(controlsController, never()).removeFavorites(eq(componentName))
+        assertThat(underTest.getPreferredSelectedItem(emptyList())).isEqualTo(panel)
+        assertThat(preferredPanelRepository.shouldAddDefaultComponent()).isTrue()
+        assertThat(preferredPanelRepository.getSelectedComponent())
+            .isEqualTo(SelectedComponentRepository.SelectedComponent(panel))
+    }
+
+    @Test
     fun testHideCancelsTheRemoveAppDialog() {
         val componentName = ComponentName(context, "cls")
         underTest.show(parent, {}, context)
@@ -372,10 +442,42 @@ class ControlsUiControllerImplTest : SysuiTestCase() {
         verify(fakeDialogController.dialog).cancel()
     }
 
+    @Test
+    fun testOnRotationWithPanelUpdateBoundsCalled() {
+        mockLayoutInflater()
+        val packageName = "pkg"
+        `when`(authorizedPanelsRepository.getAuthorizedPanels()).thenReturn(setOf(packageName))
+        val panel = SelectedItem.PanelItem("App name", ComponentName(packageName, "cls"))
+        val serviceInfo = setUpPanel(panel)
+
+        underTest.show(parent, {}, context)
+
+        val captor = argumentCaptor<ControlsListingController.ControlsListingCallback>()
+
+        verify(controlsListingController).addCallback(capture(captor))
+        captor.value.onServicesUpdated(listOf(serviceInfo))
+        FakeExecutor.exhaustExecutors(uiExecutor, bgExecutor)
+
+        val taskViewConsumerCaptor = argumentCaptor<Consumer<TaskView>>()
+        verify(taskViewFactory).create(eq(context), eq(uiExecutor), capture(taskViewConsumerCaptor))
+
+        val taskView: TaskView = mock {
+            `when`(this.post(any())).thenAnswer {
+                uiExecutor.execute(it.arguments[0] as Runnable)
+                true
+            }
+        }
+
+        taskViewConsumerCaptor.value.accept(taskView)
+
+        underTest.onSizeChange()
+        verify(taskView).onLocationChanged()
+    }
+
     private fun setUpPanel(panel: SelectedItem.PanelItem): ControlsServiceInfo {
         val activity = ComponentName(context, "activity")
         preferredPanelRepository.setSelectedComponent(
-                SelectedComponentRepository.SelectedComponent(panel)
+            SelectedComponentRepository.SelectedComponent(panel)
         )
         return ControlsServiceInfo(panel.componentName, panel.appName, activity)
     }

@@ -27,6 +27,7 @@
 
     <!-- Used to read wallpaper -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_WALLPAPER_INTERNAL" />
 
     <!-- Used to read storage for all users -->
     <uses-permission android:name="android.permission.WRITE_MEDIA_STORAGE" />
@@ -234,7 +235,10 @@
     <uses-permission android:name="android.permission.MANAGE_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.GET_RUNTIME_PERMISSIONS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- role holder APIs -->
     <uses-permission android:name="android.permission.MANAGE_ROLE_HOLDERS" />
+    <uses-permission android:name="android.permission.OBSERVE_ROLE_HOLDERS" />
 
     <!-- It's like, reality, but, you know, virtual -->
     <uses-permission android:name="android.permission.ACCESS_VR_MANAGER" />
@@ -346,9 +350,19 @@
 
     <uses-permission android:name="android.permission.MONITOR_KEYBOARD_BACKLIGHT" />
 
+    <!-- Intent Chooser -->
+    <permission
+        android:name="android.permission.ADD_CHOOSER_PINS"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="android.permission.ADD_CHOOSER_PINS" />
+    <permission
+        android:name="android.permission.RECEIVE_CHOOSER_PIN_MIGRATION"
+        android:protectionLevel="signature" />
+
     <protected-broadcast android:name="com.android.settingslib.action.REGISTER_SLICE_RECEIVER" />
     <protected-broadcast android:name="com.android.settingslib.action.UNREGISTER_SLICE_RECEIVER" />
     <protected-broadcast android:name="com.android.settings.flashlight.action.FLASHLIGHT_CHANGED" />
+    <protected-broadcast android:name="com.android.systemui.action.ACTION_LAUNCH_MEDIA_OUTPUT_BROADCAST_DIALOG" />
     <protected-broadcast android:name="com.android.systemui.STARTED" />
 
     <application
@@ -634,12 +648,6 @@
             android:finishOnCloseSystemDialogs="true"
             android:excludeFromRecents="true">
         </activity>
-        <activity-alias
-            android:name=".UsbDebuggingActivityAlias"
-            android:permission="android.permission.DUMP"
-            android:targetActivity=".usb.UsbDebuggingActivity"
-            android:exported="true">
-        </activity-alias>
         <activity android:name=".usb.UsbDebuggingSecondaryUserActivity"
             android:theme="@style/Theme.SystemUI.Dialog.Alert"
             android:finishOnCloseSystemDialogs="true"
@@ -867,6 +875,20 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".contrast.ContrastDialogActivity"
+            android:label="@string/quick_settings_contrast_label"
+            android:theme="@style/Theme.SystemUI.ContrastDialog"
+            android:finishOnCloseSystemDialogs="true"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.android.intent.action.SHOW_CONTRAST_DIALOG" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <activity android:name=".ForegroundServicesDialog"
             android:process=":fgservices"
             android:excludeFromRecents="true"
@@ -927,7 +949,7 @@
                   android:showForAllUsers="true"
                   android:finishOnTaskLaunch="true"
                   android:launchMode="singleInstance"
-                  android:configChanges="screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden"
+                  android:configChanges="screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|orientation"
                   android:visibleToInstantApps="true">
         </activity>
 
@@ -938,18 +960,6 @@
                   android:showWhenLocked="true"
                   android:showForAllUsers="true"
                   android:launchMode="singleInstance"
-                  android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden"
-                  android:visibleToInstantApps="true">
-        </activity>
-
-        <activity android:name=".user.UserSwitcherActivity"
-                  android:label="@string/accessibility_multi_user_switch_switcher"
-                  android:theme="@style/Theme.UserSwitcherActivity"
-                  android:excludeFromRecents="true"
-                  android:showWhenLocked="true"
-                  android:showForAllUsers="true"
-                  android:finishOnTaskLaunch="true"
-                  android:lockTaskMode="if_whitelisted"
                   android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden"
                   android:visibleToInstantApps="true">
         </activity>
@@ -984,6 +994,16 @@
         <activity
             android:name=".notetask.shortcut.LaunchNoteTaskActivity"
             android:exported="true"
+            android:excludeFromRecents="true"
+            android:resizeableActivity="false"
+            android:theme="@android:style/Theme.NoDisplay" />
+
+        <!-- LaunchNoteTaskManagedProfileProxyActivity MUST NOT be exported because it allows caller
+             to specify an Android user when launching the default notes app. -->
+        <activity
+            android:name=".notetask.shortcut.LaunchNoteTaskManagedProfileProxyActivity"
+            android:exported="false"
+            android:enabled="true"
             android:excludeFromRecents="true"
             android:resizeableActivity="false"
             android:theme="@android:style/Theme.NoDisplay" />

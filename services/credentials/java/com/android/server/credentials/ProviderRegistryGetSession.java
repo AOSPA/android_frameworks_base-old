@@ -29,6 +29,7 @@ import android.credentials.ui.Entry;
 import android.credentials.ui.GetCredentialProviderData;
 import android.credentials.ui.ProviderData;
 import android.credentials.ui.ProviderPendingIntentResponse;
+import android.os.ICancellationSignal;
 import android.service.credentials.CallingAppInfo;
 import android.service.credentials.CredentialEntry;
 import android.service.credentials.CredentialProviderService;
@@ -38,6 +39,7 @@ import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -76,6 +78,24 @@ public class ProviderRegistryGetSession extends ProviderSession<CredentialOption
                 requestOption);
     }
 
+    /** Creates a new provider session to be used by the request session. */
+    @Nullable
+    public static ProviderRegistryGetSession createNewSession(
+            @NonNull Context context,
+            @UserIdInt int userId,
+            @NonNull PrepareGetRequestSession getRequestSession,
+            @NonNull CallingAppInfo callingAppInfo,
+            @NonNull String credentialProviderPackageName,
+            @NonNull CredentialOption requestOption) {
+        return new ProviderRegistryGetSession(
+                context,
+                userId,
+                getRequestSession,
+                callingAppInfo,
+                credentialProviderPackageName,
+                requestOption);
+    }
+
     @NonNull
     private final Map<String, CredentialEntry> mUiCredentialEntries = new HashMap<>();
     @NonNull
@@ -85,7 +105,7 @@ public class ProviderRegistryGetSession extends ProviderSession<CredentialOption
     @NonNull
     private final String mCredentialProviderPackageName;
     @NonNull
-    private final String mFlattenedRequestOptionString;
+    private final Set<String> mElementKeys;
     @VisibleForTesting
     List<CredentialEntry> mCredentialEntries;
 
@@ -96,14 +116,31 @@ public class ProviderRegistryGetSession extends ProviderSession<CredentialOption
             @NonNull String servicePackageName,
             @NonNull CredentialOption requestOption) {
         super(context, requestOption, session,
-                new ComponentName(servicePackageName, servicePackageName) ,
+                new ComponentName(servicePackageName, servicePackageName),
                 userId, null);
         mCredentialDescriptionRegistry = CredentialDescriptionRegistry.forUser(userId);
         mCallingAppInfo = callingAppInfo;
         mCredentialProviderPackageName = servicePackageName;
-        mFlattenedRequestOptionString = requestOption
+        mElementKeys = new HashSet<>(requestOption
                 .getCredentialRetrievalData()
-                .getString(CredentialOption.FLATTENED_REQUEST);
+                .getStringArrayList(CredentialOption.SUPPORTED_ELEMENT_KEYS));
+    }
+
+    protected ProviderRegistryGetSession(@NonNull Context context,
+            @NonNull int userId,
+            @NonNull PrepareGetRequestSession session,
+            @NonNull CallingAppInfo callingAppInfo,
+            @NonNull String servicePackageName,
+            @NonNull CredentialOption requestOption) {
+        super(context, requestOption, session,
+                new ComponentName(servicePackageName, servicePackageName),
+                userId, null);
+        mCredentialDescriptionRegistry = CredentialDescriptionRegistry.forUser(userId);
+        mCallingAppInfo = callingAppInfo;
+        mCredentialProviderPackageName = servicePackageName;
+        mElementKeys = new HashSet<>(requestOption
+                .getCredentialRetrievalData()
+                .getStringArrayList(CredentialOption.SUPPORTED_ELEMENT_KEYS));
     }
 
     private List<Entry> prepareUiCredentialEntries(
@@ -219,16 +256,22 @@ public class ProviderRegistryGetSession extends ProviderSession<CredentialOption
     }
 
     @Override
+    public void onProviderCancellable(ICancellationSignal cancellation) {
+        // No need to do anything since this class does not rely on a remote service.
+    }
+
+    @Override
     protected void invokeSession() {
         mProviderResponse = mCredentialDescriptionRegistry
                 .getFilteredResultForProvider(mCredentialProviderPackageName,
-                        mFlattenedRequestOptionString);
+                        mElementKeys);
         mCredentialEntries = mProviderResponse.stream().flatMap(
-                        (Function<CredentialDescriptionRegistry.FilterResult,
-                                Stream<CredentialEntry>>) filterResult
+                (Function<CredentialDescriptionRegistry.FilterResult,
+                        Stream<CredentialEntry>>) filterResult
                         -> filterResult.mCredentialEntries.stream())
                 .collect(Collectors.toList());
-        updateStatusAndInvokeCallback(Status.CREDENTIALS_RECEIVED);
+        updateStatusAndInvokeCallback(Status.CREDENTIALS_RECEIVED,
+                /*source=*/ CredentialsSource.REGISTRY);
         // TODO(use metric later)
     }
 

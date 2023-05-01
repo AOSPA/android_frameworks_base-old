@@ -16,9 +16,14 @@
 
 package com.android.server.credentials.metrics;
 
+import android.util.IntArray;
 import android.util.Log;
 
 import com.android.server.credentials.MetricUtilities;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * The central candidate provider metric object that mimics our defined metric setup.
@@ -66,6 +71,8 @@ public class CandidatePhaseMetric {
     private int mRemoteEntryCount = -1;
     // The count of authentication entries from this provider, defaults to -1
     private int mAuthenticationEntryCount = -1;
+    // Gathered to pass on to chosen provider when required
+    private final IntArray mAvailableEntries = new IntArray();
 
     public CandidatePhaseMetric() {
     }
@@ -235,5 +242,29 @@ public class CandidatePhaseMetric {
 
     public int getAuthenticationEntryCount() {
         return mAuthenticationEntryCount;
+    }
+
+    /* -------------- The Entries Gathered ---------------- */
+
+    /**
+     * Allows adding an entry record to this metric collector, which can then be propagated to
+     * the final phase to retain information on the data available to the candidate.
+     *
+     * @param e the entry enum collected by the candidate provider associated with this metric
+     *          collector
+     */
+    public void addEntry(EntryEnum e) {
+        this.mAvailableEntries.add(e.getMetricCode());
+    }
+
+    /**
+     * Returns a safely copied list of the entries captured by this metric collector associated
+     * with a particular candidate provider.
+     *
+     * @return the full collection of entries encountered by the candidate provider associated with
+     * this metric
+     */
+    public List<Integer> getAvailableEntries() {
+        return Arrays.stream(mAvailableEntries.toArray()).boxed().collect(Collectors.toList());
     }
 }

@@ -474,6 +474,12 @@ public abstract class ActivityManagerInternal {
     public abstract BackgroundStartPrivileges getBackgroundStartPrivileges(int uid);
     public abstract void reportCurKeyguardUsageEvent(boolean keyguardShowing);
 
+    /**
+     * Returns whether the app is in a state where it is allowed to schedule a
+     * {@link android.app.job.JobInfo.Builder#setUserInitiated(boolean) user-initiated job}.
+     */
+    public abstract boolean canScheduleUserInitiatedJobs(int uid, int pid, String pkgName);
+
     /** @see com.android.server.am.ActivityManagerService#monitor */
     public abstract void monitor();
 
@@ -996,6 +1002,16 @@ public abstract class ActivityManagerInternal {
      * @hide
      */
     public abstract void logFgsApiEnd(int apiType, int uid, int pid);
+
+     /**
+     * Temporarily allow foreground service started by an uid to have while-in-use permission
+     * for durationMs.
+     *
+     * @param uid The UID of the app that starts the foreground service.
+     * @param durationMs elapsedRealTime duration in milliseconds.
+     * @hide
+     */
+    public abstract void tempAllowWhileInUsePermissionInFgs(int uid, long durationMs);
 
     /**
      * The list of the events about the {@link android.media.projection.IMediaProjection} itself.

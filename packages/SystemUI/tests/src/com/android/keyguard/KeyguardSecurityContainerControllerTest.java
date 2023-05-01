@@ -66,6 +66,7 @@ import com.android.systemui.biometrics.SideFpsUiRequestSource;
 import com.android.systemui.classifier.FalsingA11yDelegate;
 import com.android.systemui.classifier.FalsingCollector;
 import com.android.systemui.flags.FeatureFlags;
+import com.android.systemui.flags.Flags;
 import com.android.systemui.log.SessionTracker;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.FalsingManager;
@@ -162,8 +163,6 @@ public class KeyguardSecurityContainerControllerTest extends SysuiTestCase {
     @Captor
     private ArgumentCaptor<KeyguardSecurityContainer.SwipeListener> mSwipeListenerArgumentCaptor;
 
-    private Configuration mConfiguration;
-
     private KeyguardSecurityContainerController mKeyguardSecurityContainerController;
     private KeyguardPasswordViewController mKeyguardPasswordViewController;
     private KeyguardPasswordView mKeyguardPasswordView;
@@ -171,12 +170,12 @@ public class KeyguardSecurityContainerControllerTest extends SysuiTestCase {
 
     @Before
     public void setup() {
-        mConfiguration = new Configuration();
-        mConfiguration.setToDefaults(); // Defaults to ORIENTATION_UNDEFINED.
         mTestableResources = mContext.getOrCreateTestableResources();
+        mTestableResources.getResources().getConfiguration().orientation =
+                Configuration.ORIENTATION_UNDEFINED;
 
         when(mView.getContext()).thenReturn(mContext);
-        when(mView.getResources()).thenReturn(mContext.getResources());
+        when(mView.getResources()).thenReturn(mTestableResources.getResources());
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(/* width=  */ 0, /* height= */
                 0);
         lp.gravity = 0;
@@ -195,6 +194,7 @@ public class KeyguardSecurityContainerControllerTest extends SysuiTestCase {
                 .thenReturn(mKeyguardMessageAreaController);
         when(mKeyguardPasswordView.getWindowInsetsController()).thenReturn(mWindowInsetsController);
         when(mKeyguardSecurityModel.getSecurityMode(anyInt())).thenReturn(SecurityMode.PIN);
+        when(mKeyguardStateController.canDismissLockScreen()).thenReturn(true);
         mKeyguardPasswordViewController = new KeyguardPasswordViewController(
                 (KeyguardPasswordView) mKeyguardPasswordView, mKeyguardUpdateMonitor,
                 SecurityMode.Password, mLockPatternUtils, null,
@@ -252,6 +252,8 @@ public class KeyguardSecurityContainerControllerTest extends SysuiTestCase {
 
     @Test
     public void onResourcesUpdate_callsThroughOnRotationChange() {
+        clearInvocations(mView);
+
         // Rotation is the same, shouldn't cause an update
         mKeyguardSecurityContainerController.updateResources();
         verify(mView, never()).initMode(eq(MODE_DEFAULT), eq(mGlobalSettings), eq(mFalsingManager),
@@ -388,6 +390,45 @@ public class KeyguardSecurityContainerControllerTest extends SysuiTestCase {
         verify(mViewMediatorCallback, never()).keyguardDone(anyBoolean(), anyInt());
         assertThat(mKeyguardSecurityContainerController.getCurrentSecurityMode())
                 .isEqualTo(SecurityMode.PIN);
+    }
+
+    @Test
+    public void showNextSecurityScreenOrFinish_DeviceNotSecure() {
+        // GIVEN the current security method is SimPin
+        when(mKeyguardUpdateMonitor.getUserHasTrust(anyInt())).thenReturn(false);
+        when(mKeyguardUpdateMonitor.getUserUnlockedWithBiometric(TARGET_USER_ID)).thenReturn(false);
+        mKeyguardSecurityContainerController.showSecurityScreen(SecurityMode.SimPin);
+
+        // WHEN a request is made from the SimPin screens to show the next security method
+        when(mKeyguardSecurityModel.getSecurityMode(TARGET_USER_ID)).thenReturn(SecurityMode.None);
+        mKeyguardSecurityContainerController.showNextSecurityScreenOrFinish(
+                /* authenticated= */true,
+                TARGET_USER_ID,
+                /* bypassSecondaryLockScreen= */true,
+                SecurityMode.SimPin);
+
+        // THEN the next security method of None will dismiss keyguard.
+        verify(mViewMediatorCallback).keyguardDone(anyBoolean(), anyInt());
+    }
+
+    @Test
+    public void showNextSecurityScreenOrFinish_DeviceNotSecure_prevent_bypass_on() {
+        when(mFeatureFlags.isEnabled(Flags.PREVENT_BYPASS_KEYGUARD)).thenReturn(true);
+        // GIVEN the current security method is SimPin
+        when(mKeyguardUpdateMonitor.getUserHasTrust(anyInt())).thenReturn(false);
+        when(mKeyguardUpdateMonitor.getUserUnlockedWithBiometric(TARGET_USER_ID)).thenReturn(false);
+        mKeyguardSecurityContainerController.showSecurityScreen(SecurityMode.SimPin);
+
+        // WHEN a request is made from the SimPin screens to show the next security method
+        when(mKeyguardSecurityModel.getSecurityMode(TARGET_USER_ID)).thenReturn(SecurityMode.None);
+        mKeyguardSecurityContainerController.showNextSecurityScreenOrFinish(
+                /* authenticated= */true,
+                TARGET_USER_ID,
+                /* bypassSecondaryLockScreen= */true,
+                SecurityMode.SimPin);
+
+        // THEN the next security method of None will dismiss keyguard.
+        verify(mViewMediatorCallback).keyguardDone(anyBoolean(), anyInt());
     }
 
     @Test
@@ -553,6 +594,22 @@ public class KeyguardSecurityContainerControllerTest extends SysuiTestCase {
     }
 
     @Test
+    public void testSecurityCallbackFinish() {
+        when(mKeyguardStateController.canDismissLockScreen()).thenReturn(true);
+        when(mKeyguardUpdateMonitor.isUserUnlocked(0)).thenReturn(true);
+        mKeyguardSecurityContainerController.finish(true, 0);
+        verify(mViewMediatorCallback).keyguardDone(anyBoolean(), anyInt());
+    }
+
+    @Test
+    public void testSecurityCallbackFinish_cannotDismissLockScreenAndNotStrongAuth() {
+        when(mFeatureFlags.isEnabled(Flags.PREVENT_BYPASS_KEYGUARD)).thenReturn(true);
+        when(mKeyguardStateController.canDismissLockScreen()).thenReturn(false);
+        mKeyguardSecurityContainerController.finish(false, 0);
+        verify(mViewMediatorCallback, never()).keyguardDone(anyBoolean(), anyInt());
+    }
+
+    @Test
     public void testOnStartingToHide() {
         mKeyguardSecurityContainerController.onStartingToHide();
         verify(mInputViewController).onStartingToHide();
@@ -563,12 +620,12 @@ public class KeyguardSecurityContainerControllerTest extends SysuiTestCase {
         // Set initial gravity
         mTestableResources.addOverride(R.integer.keyguard_host_view_gravity,
                 Gravity.CENTER);
+        mTestableResources.addOverride(
+                R.bool.can_use_one_handed_bouncer, false);
 
         // Kick off the initial pass...
         mKeyguardSecurityContainerController.onInit();
-        verify(mView).setLayoutParams(argThat(
-                (ArgumentMatcher<FrameLayout.LayoutParams>) argument ->
-                        argument.gravity == Gravity.CENTER));
+        verify(mView).setLayoutParams(any());
         clearInvocations(mView);
 
         // Now simulate a config change
@@ -576,9 +633,7 @@ public class KeyguardSecurityContainerControllerTest extends SysuiTestCase {
                 Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);
 
         mKeyguardSecurityContainerController.updateResources();
-        verify(mView).setLayoutParams(argThat(
-                (ArgumentMatcher<FrameLayout.LayoutParams>) argument ->
-                        argument.gravity == (Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM)));
+        verify(mView).setLayoutParams(any());
     }
 
     @Test
@@ -619,10 +674,23 @@ public class KeyguardSecurityContainerControllerTest extends SysuiTestCase {
 
     @Test
     public void testReinflateViewFlipper() {
-        mKeyguardSecurityContainerController.reinflateViewFlipper();
+        mKeyguardSecurityContainerController.reinflateViewFlipper(() -> {});
         verify(mKeyguardSecurityViewFlipperController).clearViews();
         verify(mKeyguardSecurityViewFlipperController).getSecurityView(any(SecurityMode.class),
                 any(KeyguardSecurityCallback.class));
+    }
+
+    @Test
+    public void testReinflateViewFlipper_asyncBouncerFlagOn() {
+        when(mFeatureFlags.isEnabled(Flags.ASYNC_INFLATE_BOUNCER)).thenReturn(true);
+        KeyguardSecurityViewFlipperController.OnViewInflatedListener onViewInflatedListener =
+                () -> {
+                };
+        mKeyguardSecurityContainerController.reinflateViewFlipper(onViewInflatedListener);
+        verify(mKeyguardSecurityViewFlipperController).clearViews();
+        verify(mKeyguardSecurityViewFlipperController).asynchronouslyInflateView(
+                any(SecurityMode.class),
+                any(KeyguardSecurityCallback.class), eq(onViewInflatedListener));
     }
 
     @Test

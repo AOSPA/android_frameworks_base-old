@@ -56,6 +56,7 @@ import com.android.internal.os.ProcessCpuTracker;
 import com.android.internal.os.ZygoteConnectionConstants;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.am.ActivityManagerService;
+import com.android.server.am.StackTracesDumpHelper;
 import com.android.server.am.TraceErrorLogger;
 import com.android.server.am.trace.SmartTraceUtils;
 import com.android.server.criticalevents.CriticalEventLog;
@@ -901,7 +902,8 @@ public class Watchdog implements Dumpable {
                 CriticalEventLog.getInstance().logLinesForSystemServerTraceFile();
         final UUID errorId = mTraceErrorLogger.generateErrorId();
         if (mTraceErrorLogger.isAddErrorIdEnabled()) {
-            mTraceErrorLogger.addErrorIdToTrace("system_server", errorId);
+            mTraceErrorLogger.addProcessInfoAndErrorIdToTrace("system_server", Process.myPid(),
+                    errorId);
             mTraceErrorLogger.addSubjectToTrace(subject, errorId);
         }
 
@@ -911,7 +913,7 @@ public class Watchdog implements Dumpable {
             CriticalEventLog.getInstance().logHalfWatchdog(subject);
             // We've waited half the deadlock-detection interval.  Pull a stack
             // trace and wait another half.
-            initialStack = ActivityManagerService.dumpStackTraces(pids, null, null,
+            initialStack = StackTracesDumpHelper.dumpStackTraces(pids, null, null,
                     CompletableFuture.completedFuture(nativePids), null, subject,
                     criticalEvents, Runnable::run,/* latencyTracker= */null);
             if (initialStack != null){
@@ -934,7 +936,7 @@ public class Watchdog implements Dumpable {
         report.append(ResourcePressureUtil.currentPsiState());
         ProcessCpuTracker processCpuTracker = new ProcessCpuTracker(false);
         StringWriter tracesFileException = new StringWriter();
-        final File finalStack = ActivityManagerService.dumpStackTraces(
+        final File finalStack = StackTracesDumpHelper.dumpStackTraces(
                 pids, processCpuTracker, new SparseBooleanArray(),
                 CompletableFuture.completedFuture(getInterestingNativePids()), tracesFileException,
                 subject, criticalEvents, Runnable::run, /* latencyTracker= */null);
@@ -956,7 +958,7 @@ public class Watchdog implements Dumpable {
         String newTracesPath = "traces_SystemServer_WDT"
                 + mTraceDateFormat.format(new Date()) + "_pid"
                 + String.valueOf(Process.myPid());
-        File tracesDir = new File(ActivityManagerService.ANR_TRACE_DIR);
+        File tracesDir = new File(StackTracesDumpHelper.ANR_TRACE_DIR);
         watchdogTraces = new File(tracesDir, newTracesPath);
         try {
             if (watchdogTraces.createNewFile()) {

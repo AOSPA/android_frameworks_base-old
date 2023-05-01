@@ -121,6 +121,8 @@ final class ActivityManagerConstants extends ContentObserver {
     static final String KEY_PROCESS_CRASH_COUNT_LIMIT = "process_crash_count_limit";
     static final String KEY_BOOT_TIME_TEMP_ALLOWLIST_DURATION = "boot_time_temp_allowlist_duration";
     static final String KEY_FG_TO_BG_FGS_GRACE_DURATION = "fg_to_bg_fgs_grace_duration";
+    static final String KEY_VISIBLE_TO_INVISIBLE_UIJ_SCHEDULE_GRACE_DURATION =
+            "vis_to_invis_uij_schedule_grace_duration";
     static final String KEY_FGS_START_FOREGROUND_TIMEOUT = "fgs_start_foreground_timeout";
     static final String KEY_FGS_ATOM_SAMPLE_RATE = "fgs_atom_sample_rate";
     static final String KEY_FGS_START_ALLOWED_LOG_SAMPLE_RATE = "fgs_start_allowed_log_sample_rate";
@@ -152,8 +154,9 @@ final class ActivityManagerConstants extends ContentObserver {
 
     static final String KEY_USE_TIERED_CACHED_ADJ = "use_tiered_cached_adj";
     static final String KEY_TIERED_CACHED_ADJ_DECAY_TIME = "tiered_cached_adj_decay_time";
+    static final String KEY_USE_MODERN_TRIM = "use_modern_trim";
 
-    private static int DEFAULT_MAX_CACHED_PROCESSES = 32;
+    private static int DEFAULT_MAX_CACHED_PROCESSES = 1024;
     private static final boolean DEFAULT_PRIORITIZE_ALARM_BROADCASTS = true;
     private static final long DEFAULT_FGSERVICE_MIN_SHOWN_TIME = 2*1000;
     private static final long DEFAULT_FGSERVICE_MIN_REPORT_TIME = 3*1000;
@@ -194,6 +197,8 @@ final class ActivityManagerConstants extends ContentObserver {
     private static final int DEFAULT_PROCESS_CRASH_COUNT_LIMIT = 12;
     private static final int DEFAULT_BOOT_TIME_TEMP_ALLOWLIST_DURATION = 20 * 1000;
     private static final long DEFAULT_FG_TO_BG_FGS_GRACE_DURATION = 5 * 1000;
+    private static final long DEFAULT_VISIBLE_TO_INVISIBLE_UIJ_SCHEDULE_GRACE_DURATION =
+            DEFAULT_FG_TO_BG_FGS_GRACE_DURATION;
     private static final int DEFAULT_FGS_START_FOREGROUND_TIMEOUT_MS = 10 * 1000;
     private static final float DEFAULT_FGS_ATOM_SAMPLE_RATE = 1; // 100 %
     private static final float DEFAULT_FGS_START_ALLOWED_LOG_SAMPLE_RATE = 0.25f; // 25%
@@ -210,6 +215,8 @@ final class ActivityManagerConstants extends ContentObserver {
 
     private static final boolean DEFAULT_USE_TIERED_CACHED_ADJ = false;
     private static final long DEFAULT_TIERED_CACHED_ADJ_DECAY_TIME = 60 * 1000;
+
+    private static final boolean DEFAULT_USE_MODERN_TRIM = false;
 
     /**
      * Same as {@link TEMPORARY_ALLOW_LIST_TYPE_FOREGROUND_SERVICE_NOT_ALLOWED}
@@ -251,7 +258,16 @@ final class ActivityManagerConstants extends ContentObserver {
 
     private static final long DEFAULT_SERVICE_BIND_ALMOST_PERCEPTIBLE_TIMEOUT_MS = 15 * 1000;
 
-    // Flag stored in the DeviceConfig API.
+    /**
+     * Default value to {@link #SERVICE_TIMEOUT}.
+     */
+    private static final long DEFAULT_SERVICE_TIMEOUT = 20 * 1000 * Build.HW_TIMEOUT_MULTIPLIER;
+
+    /**
+     * Default value to {@link #SERVICE_BACKGROUND_TIMEOUT}.
+     */
+    private static final long DEFAULT_SERVICE_BACKGROUND_TIMEOUT = DEFAULT_SERVICE_TIMEOUT * 10;
+
     /**
      * Maximum number of cached processes.
      */
@@ -509,6 +525,12 @@ final class ActivityManagerConstants extends ContentObserver {
     // to restart less than this amount of time from the last one.
     public long SERVICE_MIN_RESTART_TIME_BETWEEN = DEFAULT_SERVICE_MIN_RESTART_TIME_BETWEEN;
 
+    // How long we wait for a service to finish executing.
+    long SERVICE_TIMEOUT = DEFAULT_SERVICE_TIMEOUT;
+
+    // How long we wait for a service to finish executing.
+    long SERVICE_BACKGROUND_TIMEOUT = DEFAULT_SERVICE_BACKGROUND_TIMEOUT;
+
     // Maximum amount of time for there to be no activity on a service before
     // we consider it non-essential and allow its process to go on the
     // LRU background list.
@@ -666,6 +688,15 @@ final class ActivityManagerConstants extends ContentObserver {
      * switching from foreground to background; currently it's only applicable to its activities.
      */
     volatile long mFgToBgFgsGraceDuration = DEFAULT_FG_TO_BG_FGS_GRACE_DURATION;
+
+    /**
+     * The grace period in milliseconds to allow a process to schedule a
+     * {@link android.app.job.JobInfo.Builder#setUserInitiated(boolean) user-initiated job}
+     * after switching from visible to a non-visible state.
+     * Currently it's only applicable to its activities.
+     */
+    volatile long mVisibleToInvisibleUijScheduleGraceDurationMs =
+            DEFAULT_VISIBLE_TO_INVISIBLE_UIJ_SCHEDULE_GRACE_DURATION;
 
     /**
      * When service started from background, before the timeout it can be promoted to FGS by calling
@@ -860,7 +891,7 @@ final class ActivityManagerConstants extends ContentObserver {
     private static final String KEY_MAX_EMPTY_TIME_MILLIS =
             "max_empty_time_millis";
 
-    private static final long DEFAULT_MAX_EMPTY_TIME_MILLIS = 30 * 60 * 1000;
+    private static final long DEFAULT_MAX_EMPTY_TIME_MILLIS = 1000L * 60L * 60L * 1000L;
 
     volatile long mMaxEmptyTimeMillis = DEFAULT_MAX_EMPTY_TIME_MILLIS;
 
@@ -1036,6 +1067,9 @@ final class ActivityManagerConstants extends ContentObserver {
     /** @see #KEY_TIERED_CACHED_ADJ_DECAY_TIME */
     public long TIERED_CACHED_ADJ_DECAY_TIME = DEFAULT_TIERED_CACHED_ADJ_DECAY_TIME;
 
+    /** @see #KEY_USE_MODERN_TRIM */
+    public boolean USE_MODERN_TRIM = DEFAULT_USE_MODERN_TRIM;
+
     private final OnPropertiesChangedListener mOnDeviceConfigChangedListener =
             new OnPropertiesChangedListener() {
                 @Override
@@ -1118,6 +1152,9 @@ final class ActivityManagerConstants extends ContentObserver {
                                 updateBootTimeTempAllowListDuration();
                                 break;
                             case KEY_FG_TO_BG_FGS_GRACE_DURATION:
+                                updateFgToBgFgsGraceDuration();
+                                break;
+                            case KEY_VISIBLE_TO_INVISIBLE_UIJ_SCHEDULE_GRACE_DURATION:
                                 updateFgToBgFgsGraceDuration();
                                 break;
                             case KEY_FGS_START_FOREGROUND_TIMEOUT:
@@ -1208,6 +1245,9 @@ final class ActivityManagerConstants extends ContentObserver {
                             case KEY_TIERED_CACHED_ADJ_DECAY_TIME:
                                 updateUseTieredCachedAdj();
                                 break;
+                            case KEY_USE_MODERN_TRIM:
+                                updateUseModernTrim();
+                                break;
                             default:
                                 updateFGSPermissionEnforcementFlagsIfNecessary(name);
                                 break;
@@ -1283,6 +1323,13 @@ final class ActivityManagerConstants extends ContentObserver {
                 com.android.internal.R.integer.config_customizedMaxCachedProcesses);
         CUR_MAX_CACHED_PROCESSES = mCustomizedMaxCachedProcesses;
         CUR_MAX_EMPTY_PROCESSES = computeEmptyProcessLimit(CUR_MAX_CACHED_PROCESSES);
+
+        final int rawMaxEmptyProcesses = computeEmptyProcessLimit(
+                Integer.min(CUR_MAX_CACHED_PROCESSES, MAX_CACHED_PROCESSES));
+        CUR_TRIM_EMPTY_PROCESSES = rawMaxEmptyProcesses / 2;
+        CUR_TRIM_CACHED_PROCESSES = (Integer.min(CUR_MAX_CACHED_PROCESSES, MAX_CACHED_PROCESSES)
+                    - rawMaxEmptyProcesses) / 3;
+
     }
 
     private void updatePerfConfigConstants() {
@@ -1639,6 +1686,13 @@ final class ActivityManagerConstants extends ContentObserver {
                 DEFAULT_FG_TO_BG_FGS_GRACE_DURATION);
     }
 
+    private void updateVisibleToInvisibleUijScheduleGraceDuration() {
+        mVisibleToInvisibleUijScheduleGraceDurationMs = DeviceConfig.getLong(
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                KEY_VISIBLE_TO_INVISIBLE_UIJ_SCHEDULE_GRACE_DURATION,
+                DEFAULT_VISIBLE_TO_INVISIBLE_UIJ_SCHEDULE_GRACE_DURATION);
+    }
+
     private void updateFgsStartForegroundTimeout() {
         mFgsStartForegroundTimeoutMs = DeviceConfig.getLong(
                 DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
@@ -1888,10 +1942,11 @@ final class ActivityManagerConstants extends ContentObserver {
         // Note the trim levels do NOT depend on the override process limit, we want
         // to consider the same level the point where we do trimming regardless of any
         // additional enforced limit.
-        final int rawMaxEmptyProcesses = computeEmptyProcessLimit(MAX_CACHED_PROCESSES);
+        final int rawMaxEmptyProcesses = computeEmptyProcessLimit(
+                Integer.min(CUR_MAX_CACHED_PROCESSES, MAX_CACHED_PROCESSES));
         CUR_TRIM_EMPTY_PROCESSES = computeTrimEmptyApps(rawMaxEmptyProcesses);
-        CUR_TRIM_CACHED_PROCESSES =
-                computeTrimCachedApps(rawMaxEmptyProcesses, MAX_CACHED_PROCESSES);
+        CUR_TRIM_CACHED_PROCESSES = (Integer.min(CUR_MAX_CACHED_PROCESSES, MAX_CACHED_PROCESSES)
+                    - rawMaxEmptyProcesses) / 3;
     }
 
     private void updateProactiveKillsEnabled() {
@@ -2008,6 +2063,13 @@ final class ActivityManagerConstants extends ContentObserver {
             DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
             KEY_TIERED_CACHED_ADJ_DECAY_TIME,
             DEFAULT_TIERED_CACHED_ADJ_DECAY_TIME);
+    }
+
+    private void updateUseModernTrim() {
+        USE_MODERN_TRIM = DeviceConfig.getBoolean(
+            DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+            KEY_USE_MODERN_TRIM,
+            DEFAULT_USE_MODERN_TRIM);
     }
 
     private void updateFGSPermissionEnforcementFlagsIfNecessary(@NonNull String name) {

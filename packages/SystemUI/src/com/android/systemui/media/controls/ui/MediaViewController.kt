@@ -89,10 +89,14 @@ constructor(
                 R.id.turbulence_noise_view,
                 R.id.touch_ripple_view,
             )
+
+        // Sizing view id for recommendation card view.
+        val recSizingViewId = R.id.sizing_view
     }
 
     /** A listener when the current dimensions of the player change */
     lateinit var sizeChangedListener: () -> Unit
+    lateinit var configurationChangeListener: () -> Unit
     private var firstRefresh: Boolean = true
     @VisibleForTesting private var transitionLayout: TransitionLayout? = null
     private val layoutController = TransitionLayoutController()
@@ -176,7 +180,25 @@ constructor(
                         // Layout dimensions are possibly changing, so we need to update them. (at
                         // least on large screen devices)
                         lastOrientation = newOrientation
-                        loadLayoutForType(type)
+                        // Update the height of media controls for the expanded layout. it is needed
+                        // for large screen devices.
+                        if (type == TYPE.PLAYER) {
+                            backgroundIds.forEach { id ->
+                                expandedLayout.getConstraint(id).layout.mHeight =
+                                    context.resources.getDimensionPixelSize(
+                                        R.dimen.qs_media_session_height_expanded
+                                    )
+                            }
+                        } else {
+                            expandedLayout.getConstraint(recSizingViewId).layout.mHeight =
+                                context.resources.getDimensionPixelSize(
+                                    R.dimen.qs_media_session_height_expanded
+                                )
+                        }
+                    }
+                    if (this@MediaViewController::configurationChangeListener.isInitialized) {
+                        configurationChangeListener.invoke()
+                        refreshState()
                     }
                 }
             }
@@ -602,7 +624,11 @@ constructor(
                         tmpState
                     )
             }
-            logger.logMediaSize("setCurrentState", result.width, result.height)
+            logger.logMediaSize(
+                "setCurrentState (progress $transitionProgress)",
+                result.width,
+                result.height
+            )
             layoutController.setState(
                 result,
                 applyImmediately,

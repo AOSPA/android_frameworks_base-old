@@ -66,12 +66,11 @@ class SplitScreenTransitions {
     private final Transitions mTransitions;
     private final Runnable mOnFinish;
 
-    DismissTransition mPendingDismiss = null;
+    DismissSession mPendingDismiss = null;
     TransitSession mPendingEnter = null;
     TransitSession mPendingResize = null;
 
     private IBinder mAnimatingTransition = null;
-    OneShotRemoteHandler mPendingRemoteHandler = null;
     private OneShotRemoteHandler mActiveRemoteHandler = null;
 
     private final Transitions.TransitionFinishCallback mRemoteFinishCB = this::onFinish;
@@ -100,27 +99,30 @@ class SplitScreenTransitions {
         mFinishCallback = finishCallback;
         mAnimatingTransition = transition;
         mFinishTransaction = finishTransaction;
-        if (mPendingRemoteHandler != null) {
-            mPendingRemoteHandler.startAnimation(transition, info, startTransaction,
-                    finishTransaction, mRemoteFinishCB);
-            mActiveRemoteHandler = mPendingRemoteHandler;
-            mPendingRemoteHandler = null;
-            return;
+
+        final TransitSession pendingTransition = getPendingTransition(transition);
+        if (pendingTransition != null) {
+            if (pendingTransition.mCanceled) {
+                // The pending transition was canceled, so skip playing animation.
+                startTransaction.apply();
+                onFinish(null /* wct */, null /* wctCB */);
+                return;
+            }
+
+            if (pendingTransition.mRemoteHandler != null) {
+                pendingTransition.mRemoteHandler.startAnimation(transition, info, startTransaction,
+                        finishTransaction, mRemoteFinishCB);
+                mActiveRemoteHandler = pendingTransition.mRemoteHandler;
+                return;
+            }
         }
+
         playInternalAnimation(transition, info, startTransaction, mainRoot, sideRoot, topRoot);
     }
 
     private void playInternalAnimation(@NonNull IBinder transition, @NonNull TransitionInfo info,
             @NonNull SurfaceControl.Transaction t, @NonNull WindowContainerToken mainRoot,
             @NonNull WindowContainerToken sideRoot, @NonNull WindowContainerToken topRoot) {
-        final TransitSession pendingTransition = getPendingTransition(transition);
-        if (pendingTransition != null && pendingTransition.mCanceled) {
-            // The pending transition was canceled, so skip playing animation.
-            t.apply();
-            onFinish(null /* wct */, null /* wctCB */);
-            return;
-        }
-
         // Play some place-holder fade animations
         for (int i = info.getChanges().size() - 1; i >= 0; --i) {
             final TransitionInfo.Change change = info.getChanges().get(i);
@@ -211,7 +213,7 @@ class SplitScreenTransitions {
         }
     }
 
-    void applyResizeTransition(@NonNull IBinder transition, @NonNull TransitionInfo info,
+    void playResizeAnimation(@NonNull IBinder transition, @NonNull TransitionInfo info,
             @NonNull SurfaceControl.Transaction startTransaction,
             @NonNull SurfaceControl.Transaction finishTransaction,
             @NonNull Transitions.TransitionFinishCallback finishCallback,
@@ -289,6 +291,11 @@ class SplitScreenTransitions {
             Transitions.TransitionHandler handler,
             @Nullable TransitionConsumedCallback consumedCallback,
             @Nullable TransitionFinishedCallback finishedCallback) {
+        if (mPendingEnter != null) {
+            ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS, "  splitTransition "
+                    + " skip to start enter split transition since it already exist. ");
+            return null;
+        }
         final IBinder transition = mTransitions.startTransition(transitType, wct, handler);
         setEnterTransition(transition, remoteTransition, consumedCallback, finishedCallback);
         return transition;
@@ -299,14 +306,8 @@ class SplitScreenTransitions {
             @Nullable RemoteTransition remoteTransition,
             @Nullable TransitionConsumedCallback consumedCallback,
             @Nullable TransitionFinishedCallback finishedCallback) {
-        mPendingEnter = new TransitSession(transition, consumedCallback, finishedCallback);
-
-        if (remoteTransition != null) {
-            // Wrapping it for ease-of-use (OneShot handles all the binder linking/death stuff)
-            mPendingRemoteHandler = new OneShotRemoteHandler(
-                    mTransitions.getMainExecutor(), remoteTransition);
-            mPendingRemoteHandler.setTransition(transition);
-        }
+        mPendingEnter = new TransitSession(
+                transition, consumedCallback, finishedCallback, remoteTransition);
 
         ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS, "  splitTransition "
                 + " deduced Enter split screen");
@@ -316,6 +317,12 @@ class SplitScreenTransitions {
     IBinder startDismissTransition(WindowContainerTransaction wct,
             Transitions.TransitionHandler handler, @SplitScreen.StageType int dismissTop,
             @SplitScreenController.ExitReason int reason) {
+        if (mPendingDismiss != null) {
+            ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS, "  splitTransition "
+                    + " skip to start dismiss split transition since it already exist. reason to "
+                    + " dismiss = %s", exitReasonToString(reason));
+            return null;
+        }
         final int type = reason == EXIT_REASON_DRAG_DIVIDER
                 ? TRANSIT_SPLIT_DISMISS_SNAP : TRANSIT_SPLIT_DISMISS;
         IBinder transition = mTransitions.startTransition(type, wct, handler);
@@ -326,7 +333,7 @@ class SplitScreenTransitions {
     /** Sets a transition to dismiss split. */
     void setDismissTransition(@NonNull IBinder transition, @SplitScreen.StageType int dismissTop,
             @SplitScreenController.ExitReason int reason) {
-        mPendingDismiss = new DismissTransition(transition, reason, dismissTop);
+        mPendingDismiss = new DismissSession(transition, reason, dismissTop);
 
         ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS, "  splitTransition "
                         + " deduced Dismiss due to %s. toTop=%s",
@@ -385,12 +392,10 @@ class SplitScreenTransitions {
                 // An entering transition got merged, appends the rest operations to finish entering
                 // split screen.
                 mStageCoordinator.finishEnterSplitScreen(finishT);
-                mPendingRemoteHandler = null;
             }
 
             mPendingEnter.onConsumed(aborted);
             mPendingEnter = null;
-            mPendingRemoteHandler = null;
         } else if (isPendingDismiss(transition)) {
             mPendingDismiss.onConsumed(aborted);
             mPendingDismiss = null;
@@ -415,7 +420,6 @@ class SplitScreenTransitions {
             mPendingResize = null;
         }
 
-        mPendingRemoteHandler = null;
         mActiveRemoteHandler = null;
         mAnimatingTransition = null;
 
@@ -516,15 +520,16 @@ class SplitScreenTransitions {
     }
 
     /** Calls when the transition finished. */
-    public interface TransitionFinishedCallback {
+    interface TransitionFinishedCallback {
         void onFinished(WindowContainerTransaction wct, SurfaceControl.Transaction t);
     }
 
     /** Session for a transition and its clean-up callback. */
-    static class TransitSession {
+    class TransitSession {
         final IBinder mTransition;
         TransitionConsumedCallback mConsumedCallback;
         TransitionFinishedCallback mFinishedCallback;
+        OneShotRemoteHandler mRemoteHandler;
 
         /** Whether the transition was canceled. */
         boolean mCanceled;
@@ -532,10 +537,24 @@ class SplitScreenTransitions {
         TransitSession(IBinder transition,
                 @Nullable TransitionConsumedCallback consumedCallback,
                 @Nullable TransitionFinishedCallback finishedCallback) {
+            this(transition, consumedCallback, finishedCallback, null /* remoteTransition */);
+        }
+
+        TransitSession(IBinder transition,
+                @Nullable TransitionConsumedCallback consumedCallback,
+                @Nullable TransitionFinishedCallback finishedCallback,
+                @Nullable RemoteTransition remoteTransition) {
             mTransition = transition;
             mConsumedCallback = consumedCallback;
             mFinishedCallback = finishedCallback;
 
+            if (remoteTransition != null) {
+                // Wrapping the remote transition for ease-of-use. (OneShot handles all the binder
+                // linking/death stuff)
+                mRemoteHandler = new OneShotRemoteHandler(
+                        mTransitions.getMainExecutor(), remoteTransition);
+                mRemoteHandler.setTransition(transition);
+            }
         }
 
         /** Sets transition consumed callback. */
@@ -574,11 +593,11 @@ class SplitScreenTransitions {
     }
 
     /** Bundled information of dismiss transition. */
-    static class DismissTransition extends TransitSession {
+    class DismissSession extends TransitSession {
         final int mReason;
         final @SplitScreen.StageType int mDismissTop;
 
-        DismissTransition(IBinder transition, int reason, int dismissTop) {
+        DismissSession(IBinder transition, int reason, int dismissTop) {
             super(transition, null /* consumedCallback */, null /* finishedCallback */);
             this.mReason = reason;
             this.mDismissTop = dismissTop;

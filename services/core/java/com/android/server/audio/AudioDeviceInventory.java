@@ -630,7 +630,13 @@ public class AudioDeviceInventory {
             if (wdcs.mState == AudioService.CONNECTION_STATE_DISCONNECTED
                     && AudioSystem.DEVICE_OUT_ALL_USB_SET.contains(
                             wdcs.mAttributes.getInternalType())) {
-                mDeviceBroker.dispatchPreferredMixerAttributesChangedCausedByDeviceRemoved(info);
+                if (info != null) {
+                    mDeviceBroker.dispatchPreferredMixerAttributesChangedCausedByDeviceRemoved(
+                            info);
+                } else {
+                    Log.e(TAG, "Didn't find AudioDeviceInfo to notify preferred mixer "
+                            + "attributes change for type=" + wdcs.mAttributes.getType());
+                }
             }
             sendDeviceConnectionIntent(type, wdcs.mState,
                     wdcs.mAttributes.getAddress(), wdcs.mAttributes.getName());
@@ -1460,6 +1466,9 @@ public class AudioDeviceInventory {
                         "LE Audio device addr=" + address + " now available").printLog(TAG));
             }
 
+            // Reset LEA suspend state each time a new sink is connected
+            mAudioSystem.setParameters("LeAudioSuspended=false");
+
             mConnectedDevices.put(DeviceInfo.makeDeviceListKey(device, address),
                     new DeviceInfo(device, name, address, AudioSystem.AUDIO_FORMAT_DEFAULT));
             mDeviceBroker.postAccessoryPlugMediaUnmute(device);
@@ -1476,7 +1485,7 @@ public class AudioDeviceInventory {
                 : volumeIndex;
         final int maxIndex = mDeviceBroker.getMaxVssVolumeForStream(streamType);
         mDeviceBroker.postSetLeAudioVolumeIndex(leAudioVolIndex, maxIndex, streamType);
-        mDeviceBroker.postApplyVolumeOnDevice(streamType, device, "makeLeAudioDeviceAvailable");
+        mDeviceBroker.postSetVolumeIndexOnDevice(streamType, leAudioVolIndex, device, "makeLeAudioDeviceAvailable");
     }
 
     @GuardedBy("mDevicesLock")
@@ -1505,6 +1514,9 @@ public class AudioDeviceInventory {
 
     @GuardedBy("mDevicesLock")
     private void makeLeAudioDeviceUnavailableLater(String address, int device, int delayMs) {
+        // prevent any activity on the LEA output to avoid unwanted
+        // reconnection of the sink.
+        mAudioSystem.setParameters("LeAudioSuspended=true");
         // the device will be made unavailable later, so consider it disconnected right away
         mConnectedDevices.remove(DeviceInfo.makeDeviceListKey(device, address));
         // send the delayed message to make the device unavailable later

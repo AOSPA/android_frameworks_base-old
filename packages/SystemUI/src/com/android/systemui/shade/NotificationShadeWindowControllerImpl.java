@@ -347,7 +347,7 @@ public class NotificationShadeWindowControllerImpl implements NotificationShadeW
                     (long) mLpChanged.preferredMaxDisplayRefreshRate);
         }
 
-        if (state.bouncerShowing && !isDebuggable()) {
+        if (state.bouncerShowing) {
             mLpChanged.flags |= LayoutParams.FLAG_SECURE;
         } else {
             mLpChanged.flags &= ~LayoutParams.FLAG_SECURE;
@@ -561,6 +561,7 @@ public class NotificationShadeWindowControllerImpl implements NotificationShadeW
         for (StatusBarWindowCallback cb : activeCallbacks) {
             cb.onStateChanged(mCurrentState.keyguardShowing,
                     mCurrentState.keyguardOccluded,
+                    mCurrentState.keyguardGoingAway,
                     mCurrentState.bouncerShowing,
                     mCurrentState.dozing,
                     mCurrentState.panelExpanded,

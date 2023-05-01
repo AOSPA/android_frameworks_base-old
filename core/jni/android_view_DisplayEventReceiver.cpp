@@ -18,19 +18,17 @@
 
 //#define LOG_NDEBUG 0
 
-#include <nativehelper/JNIHelp.h>
-
-#include <inttypes.h>
-
 #include <android_runtime/AndroidRuntime.h>
+#include <android_runtime/Log.h>
 #include <gui/DisplayEventDispatcher.h>
+#include <inttypes.h>
+#include <nativehelper/JNIHelp.h>
+#include <nativehelper/ScopedLocalRef.h>
 #include <utils/Log.h>
 #include <utils/Looper.h>
 #include <utils/threads.h>
+
 #include "android_os_MessageQueue.h"
-
-#include <nativehelper/ScopedLocalRef.h>
-
 #include "core_jni_helpers.h"
 
 namespace android {
@@ -133,6 +131,12 @@ static jobject createJavaVsyncEventData(JNIEnv* env, VsyncEventData vsyncEventDa
                                                   gDisplayEventReceiverClassInfo
                                                           .frameTimelineClassInfo.clazz,
                                                   /*initial element*/ NULL));
+    if (!frameTimelineObjs.get() || env->ExceptionCheck()) {
+        ALOGW("%s: Failed to create FrameTimeline array", __func__);
+        LOGW_EX(env);
+        env->ExceptionClear();
+        return NULL;
+    }
     for (int i = 0; i < VsyncEventData::kFrameTimelinesLength; i++) {
         VsyncEventData::FrameTimeline frameTimeline = vsyncEventData.frameTimelines[i];
         ScopedLocalRef<jobject>
@@ -144,6 +148,12 @@ static jobject createJavaVsyncEventData(JNIEnv* env, VsyncEventData vsyncEventDa
                                                 frameTimeline.vsyncId,
                                                 frameTimeline.expectedPresentationTime,
                                                 frameTimeline.deadlineTimestamp));
+        if (!frameTimelineObj.get() || env->ExceptionCheck()) {
+            ALOGW("%s: Failed to create FrameTimeline object", __func__);
+            LOGW_EX(env);
+            env->ExceptionClear();
+            return NULL;
+        }
         env->SetObjectArrayElement(frameTimelineObjs.get(), i, frameTimelineObj.get());
     }
     return env->NewObject(gDisplayEventReceiverClassInfo.vsyncEventDataClassInfo.clazz,
@@ -169,21 +179,25 @@ void NativeDisplayEventReceiver::dispatchVsync(nsecs_t timestamp, PhysicalDispla
                           gDisplayEventReceiverClassInfo.vsyncEventDataClassInfo.frameInterval,
                           vsyncEventData.frameInterval);
 
-        jobjectArray frameTimelinesObj = reinterpret_cast<jobjectArray>(
-                env->GetObjectField(vsyncEventDataObj.get(),
-                                    gDisplayEventReceiverClassInfo.vsyncEventDataClassInfo
-                                            .frameTimelines));
+        ScopedLocalRef<jobjectArray>
+                frameTimelinesObj(env,
+                                  reinterpret_cast<jobjectArray>(
+                                          env->GetObjectField(vsyncEventDataObj.get(),
+                                                              gDisplayEventReceiverClassInfo
+                                                                      .vsyncEventDataClassInfo
+                                                                      .frameTimelines)));
         for (int i = 0; i < VsyncEventData::kFrameTimelinesLength; i++) {
             VsyncEventData::FrameTimeline& frameTimeline = vsyncEventData.frameTimelines[i];
-            jobject frameTimelineObj = env->GetObjectArrayElement(frameTimelinesObj, i);
-            env->SetLongField(frameTimelineObj,
+            ScopedLocalRef<jobject>
+                    frameTimelineObj(env, env->GetObjectArrayElement(frameTimelinesObj.get(), i));
+            env->SetLongField(frameTimelineObj.get(),
                               gDisplayEventReceiverClassInfo.frameTimelineClassInfo.vsyncId,
                               frameTimeline.vsyncId);
-            env->SetLongField(frameTimelineObj,
+            env->SetLongField(frameTimelineObj.get(),
                               gDisplayEventReceiverClassInfo.frameTimelineClassInfo
                                       .expectedPresentationTime,
                               frameTimeline.expectedPresentationTime);
-            env->SetLongField(frameTimelineObj,
+            env->SetLongField(frameTimelineObj.get(),
                               gDisplayEventReceiverClassInfo.frameTimelineClassInfo.deadline,
                               frameTimeline.deadlineTimestamp);
         }

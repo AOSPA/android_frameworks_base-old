@@ -38,6 +38,7 @@ import static com.android.internal.app.procstats.ProcessStats.ADJ_MEM_FACTOR_CRI
 import static com.android.internal.app.procstats.ProcessStats.ADJ_MEM_FACTOR_LOW;
 import static com.android.internal.app.procstats.ProcessStats.ADJ_MEM_FACTOR_MODERATE;
 import static com.android.internal.app.procstats.ProcessStats.ADJ_MEM_FACTOR_NORMAL;
+import static com.android.server.am.ActivityManagerDebugConfig.LOG_WRITER_INFO;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.am.AppBatteryTracker.BatteryUsage.BATTERY_USAGE_COUNT;
@@ -58,12 +59,12 @@ import android.app.IActivityManager;
 import android.app.IActivityTaskManager;
 import android.app.IProcessObserver;
 import android.app.IStopUserCallback;
-import android.app.IUidObserver;
 import android.app.IUserSwitchObserver;
 import android.app.KeyguardManager;
 import android.app.ProcessStateEnum;
 import android.app.ProfilerInfo;
 import android.app.RemoteServiceException.CrashedByAdbException;
+import android.app.UidObserver;
 import android.app.UserSwitchObserver;
 import android.app.WaitResult;
 import android.app.usage.AppStandbyInfo;
@@ -112,6 +113,7 @@ import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.DebugUtils;
 import android.util.DisplayMetrics;
+import android.util.TeeWriter;
 import android.util.proto.ProtoOutputStream;
 import android.view.Display;
 import android.window.SplashScreen;
@@ -1066,16 +1068,26 @@ final class ActivityManagerShellCommand extends ShellCommand {
     }
 
     @NeverCompile
-    int runCompact(PrintWriter pw) {
+    int runCompact(PrintWriter pw) throws RemoteException {
         ProcessRecord app;
         String op = getNextArgRequired();
         boolean isFullCompact = op.equals("full");
         boolean isSomeCompact = op.equals("some");
         if (isFullCompact || isSomeCompact) {
             String processName = getNextArgRequired();
-            String uid = getNextArgRequired();
             synchronized (mInternal.mProcLock) {
-                app = mInternal.getProcessRecordLocked(processName, Integer.parseInt(uid));
+                // Default to current user
+                int userId = mInterface.getCurrentUserId();
+                String userOpt = getNextOption();
+                if (userOpt != null && "--user".equals(userOpt)) {
+                    int inputUserId = UserHandle.parseUserArg(getNextArgRequired());
+                    if (inputUserId != UserHandle.USER_CURRENT) {
+                        userId = inputUserId;
+                    }
+                }
+                final int uid =
+                        mInternal.getPackageManagerInternal().getPackageUid(processName, 0, userId);
+                app = mInternal.getProcessRecordLocked(processName, uid);
             }
             pw.println("Process record found pid: " + app.mPid);
             if (isFullCompact) {
@@ -1083,7 +1095,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
                 synchronized (mInternal.mProcLock) {
                     mInternal.mOomAdjuster.mCachedAppOptimizer.compactApp(app,
                             CachedAppOptimizer.CompactProfile.FULL,
-                            CachedAppOptimizer.CompactSource.APP, true);
+                            CachedAppOptimizer.CompactSource.SHELL, true);
                 }
                 pw.println("Finished full compaction for " + app.mPid);
             } else if (isSomeCompact) {
@@ -1091,7 +1103,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
                 synchronized (mInternal.mProcLock) {
                     mInternal.mOomAdjuster.mCachedAppOptimizer.compactApp(app,
                             CachedAppOptimizer.CompactProfile.SOME,
-                            CachedAppOptimizer.CompactSource.APP, true);
+                            CachedAppOptimizer.CompactSource.SHELL, true);
                 }
                 pw.println("Finished some compaction for " + app.mPid);
             }
@@ -1101,6 +1113,28 @@ final class ActivityManagerShellCommand extends ShellCommand {
                 mInternal.mOomAdjuster.mCachedAppOptimizer.compactAllSystem();
             }
             pw.println("Finished system compaction");
+        } else if (op.equals("native")) {
+            op = getNextArgRequired();
+            isFullCompact = op.equals("full");
+            isSomeCompact = op.equals("some");
+            int pid;
+            String pidStr = getNextArgRequired();
+            try {
+                pid = Integer.parseInt(pidStr);
+            } catch (Exception e) {
+                getErrPrintWriter().println("Error: failed to parse '" + pidStr + "' as a PID");
+                return -1;
+            }
+            if (isFullCompact) {
+                mInternal.mOomAdjuster.mCachedAppOptimizer.compactNative(
+                        CachedAppOptimizer.CompactProfile.FULL, pid);
+            } else if (isSomeCompact) {
+                mInternal.mOomAdjuster.mCachedAppOptimizer.compactNative(
+                        CachedAppOptimizer.CompactProfile.SOME, pid);
+            } else {
+                getErrPrintWriter().println("Error: unknown compaction type '" + op + "'");
+                return -1;
+            }
         } else {
             getErrPrintWriter().println("Error: unknown compact command '" + op + "'");
             return -1;
@@ -1824,7 +1858,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         return 0;
     }
 
-    static final class MyUidObserver extends IUidObserver.Stub
+    static final class MyUidObserver extends UidObserver
             implements ActivityManagerService.OomAdjObserver {
         final IActivityManager mInterface;
         final ActivityManagerService mInternal;
@@ -1849,8 +1883,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         }
 
         @Override
-        public void onUidStateChanged(int uid, int procState, long procStateSeq, int capability)
-                throws RemoteException {
+        public void onUidStateChanged(int uid, int procState, long procStateSeq, int capability) {
             synchronized (this) {
                 final StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskWrites();
                 try {
@@ -1869,7 +1902,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         }
 
         @Override
-        public void onUidGone(int uid, boolean disabled) throws RemoteException {
+        public void onUidGone(int uid, boolean disabled) {
             synchronized (this) {
                 final StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskWrites();
                 try {
@@ -1887,7 +1920,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         }
 
         @Override
-        public void onUidActive(int uid) throws RemoteException {
+        public void onUidActive(int uid) {
             synchronized (this) {
                 final StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskWrites();
                 try {
@@ -1901,7 +1934,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         }
 
         @Override
-        public void onUidIdle(int uid, boolean disabled) throws RemoteException {
+        public void onUidIdle(int uid, boolean disabled) {
             synchronized (this) {
                 final StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskWrites();
                 try {
@@ -1919,7 +1952,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         }
 
         @Override
-        public void onUidCachedChanged(int uid, boolean cached) throws RemoteException {
+        public void onUidCachedChanged(int uid, boolean cached) {
             synchronized (this) {
                 final StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskWrites();
                 try {
@@ -1930,10 +1963,6 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     StrictMode.setThreadPolicy(oldPolicy);
                 }
             }
-        }
-
-        @Override
-        public void onUidProcAdjChanged(int uid) throws RemoteException {
         }
 
         @Override
@@ -3332,11 +3361,13 @@ final class ActivityManagerShellCommand extends ShellCommand {
     }
 
     int runWaitForBroadcastIdle(PrintWriter pw) throws RemoteException {
+        pw = new PrintWriter(new TeeWriter(LOG_WRITER_INFO, pw));
         mInternal.waitForBroadcastIdle(pw);
         return 0;
     }
 
     int runWaitForBroadcastBarrier(PrintWriter pw) throws RemoteException {
+        pw = new PrintWriter(new TeeWriter(LOG_WRITER_INFO, pw));
         boolean flushBroadcastLoopers = false;
         boolean flushApplicationThreads = false;
         String opt;
@@ -3355,6 +3386,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
     }
 
     int runWaitForApplicationBarrier(PrintWriter pw) throws RemoteException {
+        pw = new PrintWriter(new TeeWriter(LOG_WRITER_INFO, pw));
         mInternal.waitForApplicationBarrier(pw);
         return 0;
     }
@@ -4018,11 +4050,17 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("      --allow-background-activity-starts: The receiver may start activities");
             pw.println("          even if in the background.");
             pw.println("      --async: Send without waiting for the completion of the receiver.");
-            pw.println("  compact [some|full|system] <process_name> <Package UID>");
-            pw.println("      Force process compaction.");
+            pw.println("  compact [some|full] <process_name> [--user <USER_ID>]");
+            pw.println("      Perform a single process compaction.");
             pw.println("      some: execute file compaction.");
             pw.println("      full: execute anon + file compaction.");
             pw.println("      system: system compaction.");
+            pw.println("  compact system");
+            pw.println("      Perform a full system compaction.");
+            pw.println("  compact native [some|full] <pid>");
+            pw.println("      Perform a native compaction for process with <pid>.");
+            pw.println("      some: execute file compaction.");
+            pw.println("      full: execute anon + file compaction.");
             pw.println("  instrument [-r] [-e <NAME> <VALUE>] [-p <FILE>] [-w]");
             pw.println("          [--user <USER_ID> | current]");
             pw.println("          [--no-hidden-api-checks [--no-test-api-access]]");

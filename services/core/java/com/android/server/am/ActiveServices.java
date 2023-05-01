@@ -73,6 +73,7 @@ import static android.os.PowerExemptionManager.REASON_SYSTEM_MODULE;
 import static android.os.PowerExemptionManager.REASON_SYSTEM_UID;
 import static android.os.PowerExemptionManager.REASON_TEMP_ALLOWED_WHILE_IN_USE;
 import static android.os.PowerExemptionManager.REASON_UID_VISIBLE;
+import static android.os.PowerExemptionManager.REASON_UNKNOWN;
 import static android.os.PowerExemptionManager.TEMPORARY_ALLOW_LIST_TYPE_FOREGROUND_SERVICE_ALLOWED;
 import static android.os.PowerExemptionManager.getReasonCodeFromProcState;
 import static android.os.PowerExemptionManager.reasonCodeToString;
@@ -87,6 +88,7 @@ import static com.android.internal.messages.nano.SystemMessageProto.SystemMessag
 import static com.android.internal.util.FrameworkStatsLog.FOREGROUND_SERVICE_STATE_CHANGED__STATE__DENIED;
 import static com.android.internal.util.FrameworkStatsLog.FOREGROUND_SERVICE_STATE_CHANGED__STATE__ENTER;
 import static com.android.internal.util.FrameworkStatsLog.FOREGROUND_SERVICE_STATE_CHANGED__STATE__EXIT;
+import static com.android.internal.util.FrameworkStatsLog.FOREGROUND_SERVICE_STATE_CHANGED__STATE__TIMED_OUT;
 import static com.android.internal.util.FrameworkStatsLog.SERVICE_REQUEST_EVENT_REPORTED;
 import static com.android.internal.util.FrameworkStatsLog.SERVICE_REQUEST_EVENT_REPORTED__PACKAGE_STOPPED_STATE__PACKAGE_STATE_NORMAL;
 import static com.android.internal.util.FrameworkStatsLog.SERVICE_REQUEST_EVENT_REPORTED__PACKAGE_STOPPED_STATE__PACKAGE_STATE_STOPPED;
@@ -257,12 +259,6 @@ public final class ActiveServices {
     private static final boolean DEBUG_SHORT_SERVICE = true; // DEBUG_SERVICE;
 
     private static final boolean LOG_SERVICE_START_STOP = DEBUG_SERVICE;
-
-    // How long we wait for a service to finish executing.
-    static final int SERVICE_TIMEOUT = 20 * 1000 * Build.HW_TIMEOUT_MULTIPLIER;
-
-    // How long we wait for a service to finish executing.
-    static final int SERVICE_BACKGROUND_TIMEOUT = SERVICE_TIMEOUT * 10;
 
     // Foreground service types that always get immediate notification display,
     // expressed in the same bitmask format that ServiceRecord.foregroundServiceType
@@ -625,7 +621,7 @@ public final class ActiveServices {
                     try {
                         final ServiceRecord.StartItem si = r.pendingStarts.get(0);
                         startServiceInnerLocked(this, si.intent, r, false, true, si.callingId,
-                                si.mCallingProcessName, r.startRequested);
+                                si.mCallingProcessName, r.startRequested, si.mCallingPackageName);
                     } catch (TransactionTooLargeException e) {
                         // Ignore, nobody upstack cares.
                     }
@@ -851,9 +847,9 @@ public final class ActiveServices {
         ServiceRecord r = res.record;
         // Note, when startService() or startForegroundService() is called on an already
         // running SHORT_SERVICE FGS, the call will succeed (i.e. we won't throw
-        // ForegroundServiceStartNotAllowedException), even when the service is alerady timed
-        // out. This is because these APIs will essnetially only change the "started" state
-        // of the service, and it won't afect "the foreground-ness" of the service, or the type
+        // ForegroundServiceStartNotAllowedException), even when the service is already timed
+        // out. This is because these APIs will essentially only change the "started" state
+        // of the service, and it won't affect "the foreground-ness" of the service, or the type
         // of the FGS.
         // However, this call will still _not_ extend the SHORT_SERVICE timeout either.
         // Also, if the app tries to change the type of the FGS later (using
@@ -1014,7 +1010,7 @@ public final class ActiveServices {
                 startServiceInnerLocked(r, service, callingUid, callingPid,
                         getCallingProcessNameLocked(callingUid, callingPid, callingPackage),
                         fgRequired, callerFg,
-                        backgroundStartPrivileges);
+                        backgroundStartPrivileges, callingPackage);
         if (res.aliasComponent != null
                 && !realResult.getPackageName().startsWith("!")
                 && !realResult.getPackageName().startsWith("?")) {
@@ -1035,7 +1031,7 @@ public final class ActiveServices {
     private ComponentName startServiceInnerLocked(ServiceRecord r, Intent service,
             int callingUid, int callingPid, String callingProcessName, boolean fgRequired,
             boolean callerFg,
-            BackgroundStartPrivileges backgroundStartPrivileges)
+            BackgroundStartPrivileges backgroundStartPrivileges, String callingPackage)
             throws TransactionTooLargeException {
         NeededUriGrants neededGrants = mAm.mUgmInternal.checkGrantUriPermissionFromIntent(
                 service, callingUid, r.packageName, r.userId);
@@ -1048,7 +1044,7 @@ public final class ActiveServices {
         r.delayedStop = false;
         r.fgRequired = fgRequired;
         r.pendingStarts.add(new ServiceRecord.StartItem(r, false, r.makeNextStartId(),
-                service, neededGrants, callingUid, callingProcessName));
+                service, neededGrants, callingUid, callingProcessName, callingPackage));
 
         if (fgRequired) {
             // We are now effectively running a foreground service.
@@ -1133,7 +1129,7 @@ public final class ActiveServices {
             r.allowBgActivityStartsOnServiceStart(backgroundStartPrivileges);
         }
         ComponentName cmp = startServiceInnerLocked(smap, service, r, callerFg, addToStarting,
-                callingUid, callingProcessName, wasStartRequested);
+                callingUid, callingProcessName, wasStartRequested, callingPackage);
         return cmp;
     }
 
@@ -1286,7 +1282,7 @@ public final class ActiveServices {
                         try {
                             startServiceInnerLocked(s, serviceIntent, callingUid, callingPid,
                                     callingProcessName, fgRequired, callerFg,
-                                    backgroundStartPrivileges);
+                                    backgroundStartPrivileges, callingPackage);
                         } catch (TransactionTooLargeException e) {
                             /* ignore - local call */
                         }
@@ -1332,7 +1328,7 @@ public final class ActiveServices {
 
     ComponentName startServiceInnerLocked(ServiceMap smap, Intent service, ServiceRecord r,
             boolean callerFg, boolean addToStarting, int callingUid, String callingProcessName,
-            boolean wasStartRequested) throws TransactionTooLargeException {
+            boolean wasStartRequested, String callingPackage) throws TransactionTooLargeException {
         synchronized (mAm.mProcessStats.mLock) {
             final ServiceState stracker = r.getTracker();
             if (stracker != null) {
@@ -1373,7 +1369,9 @@ public final class ActiveServices {
                 : SERVICE_REQUEST_EVENT_REPORTED__PROC_START_TYPE__PROCESS_START_TYPE_WARM),
                 getShortProcessNameForStats(callingUid, callingProcessName),
                 getShortServiceNameForStats(r),
-                packageState);
+                packageState,
+                packageName,
+                callingPackage);
 
         if (r.startRequested && addToStarting) {
             boolean first = smap.mStartingBackground.size() == 0;
@@ -3282,6 +3280,12 @@ public final class ActiveServices {
                 return;
             }
             Slog.e(TAG_SERVICE, "Short FGS timed out: " + sr);
+            final long now = SystemClock.uptimeMillis();
+            logFGSStateChangeLocked(sr,
+                    FOREGROUND_SERVICE_STATE_CHANGED__STATE__TIMED_OUT,
+                    now > sr.mFgsEnterTime ? (int) (now - sr.mFgsEnterTime) : 0,
+                    FGS_STOP_REASON_UNKNOWN,
+                    FGS_TYPE_POLICY_CHECK_UNKNOWN);
             try {
                 sr.app.getThread().scheduleTimeoutService(sr, sr.getShortFgsInfo().getStartId());
             } catch (RemoteException e) {
@@ -3732,7 +3736,9 @@ public final class ActiveServices {
                     : SERVICE_REQUEST_EVENT_REPORTED__PROC_START_TYPE__PROCESS_START_TYPE_WARM),
                     getShortProcessNameForStats(callingUid, callerApp.processName),
                     getShortServiceNameForStats(s),
-                    packageState);
+                    packageState,
+                    s.packageName,
+                    callerApp.info.packageName);
 
             if (DEBUG_SERVICE) Slog.v(TAG_SERVICE, "Bind " + s + " with " + b
                     + ": received=" + b.intent.received
@@ -5427,7 +5433,7 @@ public final class ActiveServices {
         // be called.
         if (r.startRequested && r.callStart && r.pendingStarts.size() == 0) {
             r.pendingStarts.add(new ServiceRecord.StartItem(r, false, r.makeNextStartId(),
-                    null, null, 0, null));
+                    null, null, 0, null, null));
         }
 
         sendServiceArgsLocked(r, execInFg, true);
@@ -6441,7 +6447,7 @@ public final class ActiveServices {
                     stopServiceLocked(sr, true);
                 } else {
                     sr.pendingStarts.add(new ServiceRecord.StartItem(sr, true,
-                            sr.getLastStartId(), baseIntent, null, 0, null));
+                            sr.getLastStartId(), baseIntent, null, 0, null, null));
                     if (sr.app != null && sr.app.getThread() != null) {
                         // We always run in the foreground, since this is called as
                         // part of the "remove task" UI operation.
@@ -6806,13 +6812,15 @@ public final class ActiveServices {
                     return;
                 }
                 final ProcessServiceRecord psr = proc.mServices;
-                if (psr.numberOfExecutingServices() == 0 || proc.getThread() == null) {
+                if (psr.numberOfExecutingServices() == 0 || proc.getThread() == null
+                        || proc.isKilled()) {
                     return;
                 }
                 final long now = SystemClock.uptimeMillis();
                 final long maxTime =  now
                         - (psr.shouldExecServicesFg()
-                        ? SERVICE_TIMEOUT : SERVICE_BACKGROUND_TIMEOUT);
+                        ? mAm.mConstants.SERVICE_TIMEOUT
+                        : mAm.mConstants.SERVICE_BACKGROUND_TIMEOUT);
                 ServiceRecord timeout = null;
                 long nextTime = 0;
                 for (int i = psr.numberOfExecutingServices() - 1; i >= 0; i--) {
@@ -6843,8 +6851,8 @@ public final class ActiveServices {
                             ActivityManagerService.SERVICE_TIMEOUT_MSG);
                     msg.obj = proc;
                     mAm.mHandler.sendMessageAtTime(msg, psr.shouldExecServicesFg()
-                            ? (nextTime + SERVICE_TIMEOUT) :
-                            (nextTime + SERVICE_BACKGROUND_TIMEOUT));
+                            ? (nextTime + mAm.mConstants.SERVICE_TIMEOUT) :
+                            (nextTime + mAm.mConstants.SERVICE_BACKGROUND_TIMEOUT));
                 }
             }
 
@@ -6940,7 +6948,7 @@ public final class ActiveServices {
                 ActivityManagerService.SERVICE_TIMEOUT_MSG);
         msg.obj = proc;
         mAm.mHandler.sendMessageDelayed(msg, proc.mServices.shouldExecServicesFg()
-                ? SERVICE_TIMEOUT : SERVICE_BACKGROUND_TIMEOUT);
+                ? mAm.mConstants.SERVICE_TIMEOUT : mAm.mConstants.SERVICE_BACKGROUND_TIMEOUT);
     }
 
     void scheduleServiceForegroundTransitionTimeoutLocked(ServiceRecord r) {
@@ -7516,10 +7524,11 @@ public final class ActiveServices {
             r.mAllowWhileInUsePermissionInFgs = true;
         }
 
+        final @ReasonCode int allowWhileInUse;
         if (!r.mAllowWhileInUsePermissionInFgs
                 || (r.mAllowStartForeground == REASON_DENIED)) {
-            final @ReasonCode int allowWhileInUse = shouldAllowFgsWhileInUsePermissionLocked(
-                    callingPackage, callingPid, callingUid, r, backgroundStartPrivileges,
+            allowWhileInUse = shouldAllowFgsWhileInUsePermissionLocked(
+                    callingPackage, callingPid, callingUid, r.app, backgroundStartPrivileges,
                     isBindService);
             if (!r.mAllowWhileInUsePermissionInFgs) {
                 r.mAllowWhileInUsePermissionInFgs = (allowWhileInUse != REASON_DENIED);
@@ -7529,6 +7538,24 @@ public final class ActiveServices {
                         allowWhileInUse, callingPackage, callingPid, callingUid, intent, r,
                         backgroundStartPrivileges, isBindService);
             }
+        } else {
+            allowWhileInUse = REASON_UNKNOWN;
+        }
+        // We want to allow scheduling user-initiated jobs when the app is running a
+        // foreground service that was started in the same conditions that allows for scheduling
+        // UI jobs. More explicitly, we want to allow scheduling UI jobs when the app is running
+        // an FGS that started when the app was in the TOP or a BAL-approved state.
+        // As of Android UDC, the conditions required for the while-in-use permissions
+        // are the same conditions that we want, so we piggyback on that logic.
+        // We use that as a shortcut if possible so we don't have to recheck all the conditions.
+        final boolean isFgs = r.isForeground || r.fgRequired;
+        if (isFgs) {
+            r.updateAllowUiJobScheduling(ActivityManagerService
+                    .doesReasonCodeAllowSchedulingUserInitiatedJobs(allowWhileInUse)
+                    || mAm.canScheduleUserInitiatedJobs(
+                            callingUid, callingPid, callingPackage, true));
+        } else {
+            r.updateAllowUiJobScheduling(false);
         }
     }
 
@@ -7539,6 +7566,7 @@ public final class ActiveServices {
         r.mInfoTempFgsAllowListReason = null;
         r.mLoggedInfoAllowStartForeground = false;
         r.mLastSetFgsRestrictionTime = 0;
+        r.updateAllowUiJobScheduling(r.mAllowWhileInUsePermissionInFgs);
     }
 
     boolean canStartForegroundServiceLocked(int callingPid, int callingUid, String callingPackage) {
@@ -7546,7 +7574,7 @@ public final class ActiveServices {
             return true;
         }
         final @ReasonCode int allowWhileInUse = shouldAllowFgsWhileInUsePermissionLocked(
-                callingPackage, callingPid, callingUid, null /* serviceRecord */,
+                callingPackage, callingPid, callingUid, null /* targetProcess */,
                 BackgroundStartPrivileges.NONE, false);
         @ReasonCode int allowStartFgs = shouldAllowFgsStartForegroundNoBindingCheckLocked(
                 allowWhileInUse, callingPid, callingUid, callingPackage, null /* targetService */,
@@ -7563,13 +7591,14 @@ public final class ActiveServices {
     /**
      * Should allow while-in-use permissions in FGS or not.
      * A typical BG started FGS is not allowed to have while-in-use permissions.
+     *
      * @param callingPackage caller app's package name.
-     * @param callingUid caller app's uid.
-     * @param targetService the service to start.
+     * @param callingUid     caller app's uid.
+     * @param targetProcess  the process of the service to start.
      * @return {@link ReasonCode}
      */
     private @ReasonCode int shouldAllowFgsWhileInUsePermissionLocked(String callingPackage,
-            int callingPid, int callingUid, @Nullable ServiceRecord targetService,
+            int callingPid, int callingUid, @Nullable ProcessRecord targetProcess,
             BackgroundStartPrivileges backgroundStartPrivileges, boolean isBindService) {
         int ret = REASON_DENIED;
 
@@ -7637,8 +7666,8 @@ public final class ActiveServices {
         }
 
         if (ret == REASON_DENIED) {
-            if (targetService != null && targetService.app != null) {
-                ActiveInstrumentation instr = targetService.app.getActiveInstrumentation();
+            if (targetProcess != null) {
+                ActiveInstrumentation instr = targetProcess.getActiveInstrumentation();
                 if (instr != null && instr.mHasBackgroundActivityStartsPermission) {
                     ret = REASON_INSTR_BACKGROUND_ACTIVITY_PERMISSION;
                 }
@@ -7723,7 +7752,7 @@ public final class ActiveServices {
                                 final @ReasonCode int allowWhileInUse2 =
                                         shouldAllowFgsWhileInUsePermissionLocked(
                                                 clientPackageName,
-                                                clientPid, clientUid, null /* serviceRecord */,
+                                                clientPid, clientUid, null /* targetProcess */,
                                                 BackgroundStartPrivileges.NONE, false);
                                 final @ReasonCode int allowStartFgs =
                                         shouldAllowFgsStartForegroundNoBindingCheckLocked(
@@ -8072,7 +8101,8 @@ public final class ActiveServices {
         boolean allowWhileInUsePermissionInFgs;
         @PowerExemptionManager.ReasonCode int fgsStartReasonCode;
         if (state == FOREGROUND_SERVICE_STATE_CHANGED__STATE__ENTER
-                || state == FOREGROUND_SERVICE_STATE_CHANGED__STATE__EXIT) {
+                || state == FOREGROUND_SERVICE_STATE_CHANGED__STATE__EXIT
+                || state == FOREGROUND_SERVICE_STATE_CHANGED__STATE__TIMED_OUT) {
             allowWhileInUsePermissionInFgs = r.mAllowWhileInUsePermissionInFgsAtEntering;
             fgsStartReasonCode = r.mAllowStartForegroundAtEntering;
         } else {
@@ -8106,9 +8136,9 @@ public final class ActiveServices {
                 r.mFgsDelegation != null ? r.mFgsDelegation.mOptions.mClientUid : INVALID_UID,
                 r.mFgsDelegation != null ? r.mFgsDelegation.mOptions.mDelegationService
                         : ForegroundServiceDelegationOptions.DELEGATION_SERVICE_DEFAULT,
-                0,
-                null,
-                null);
+                0 /* api_sate */,
+                null /* api_type */,
+                null /* api_timestamp */);
 
         int event = 0;
         if (state == FOREGROUND_SERVICE_STATE_CHANGED__STATE__ENTER) {
@@ -8117,7 +8147,9 @@ public final class ActiveServices {
             event = EventLogTags.AM_FOREGROUND_SERVICE_STOP;
         } else if (state == FOREGROUND_SERVICE_STATE_CHANGED__STATE__DENIED) {
             event = EventLogTags.AM_FOREGROUND_SERVICE_DENIED;
-        } else {
+        } else if (state == FOREGROUND_SERVICE_STATE_CHANGED__STATE__TIMED_OUT) {
+            event = EventLogTags.AM_FOREGROUND_SERVICE_TIMED_OUT;
+        }else {
             // Unknown event.
             return;
         }
@@ -8143,9 +8175,16 @@ public final class ActiveServices {
     boolean canAllowWhileInUsePermissionInFgsLocked(int callingPid, int callingUid,
             String callingPackage) {
         return shouldAllowFgsWhileInUsePermissionLocked(callingPackage, callingPid, callingUid,
-                /* targetService */ null,
+                /* targetProcess */ null,
                 BackgroundStartPrivileges.NONE, false)
                 != REASON_DENIED;
+    }
+
+    boolean canAllowWhileInUsePermissionInFgsLocked(int callingPid, int callingUid,
+            String callingPackage, @Nullable ProcessRecord targetProcess,
+            @NonNull BackgroundStartPrivileges backgroundStartPrivileges) {
+        return shouldAllowFgsWhileInUsePermissionLocked(callingPackage, callingPid, callingUid,
+                targetProcess, backgroundStartPrivileges, false) != REASON_DENIED;
     }
 
     /**

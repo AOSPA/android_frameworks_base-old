@@ -193,11 +193,11 @@ public class ActivityManager {
      */
     public static final int INSTR_FLAG_INSTRUMENT_SDK_SANDBOX = 1 << 5;
 
-    static final class UidObserver extends IUidObserver.Stub {
+    static final class MyUidObserver extends UidObserver {
         final OnUidImportanceListener mListener;
         final Context mContext;
 
-        UidObserver(OnUidImportanceListener listener, Context clientContext) {
+        MyUidObserver(OnUidImportanceListener listener, Context clientContext) {
             mListener = listener;
             mContext = clientContext;
         }
@@ -212,23 +212,171 @@ public class ActivityManager {
         public void onUidGone(int uid, boolean disabled) {
             mListener.onUidImportance(uid, RunningAppProcessInfo.IMPORTANCE_GONE);
         }
+    }
 
-        @Override
-        public void onUidActive(int uid) {
-        }
+    final ArrayMap<OnUidImportanceListener, MyUidObserver> mImportanceListeners = new ArrayMap<>();
 
-        @Override
-        public void onUidIdle(int uid, boolean disabled) {
-        }
+    /**
+     * Map of callbacks that have registered for {@link UidFrozenStateChanged} events.
+     * Will be called when a Uid has become frozen or unfrozen.
+     */
+    private final ArrayMap<UidFrozenStateChangedCallback, Executor> mFrozenStateChangedCallbacks =
+             new ArrayMap<>();
 
-        @Override public void onUidCachedChanged(int uid, boolean cached) {
-        }
+    private final IUidFrozenStateChangedCallback mFrozenStateChangedCallback =
+            new IUidFrozenStateChangedCallback.Stub() {
+            @Override
+            public void onUidFrozenStateChanged(int[] uids, int[] frozenStates) {
+                synchronized (mFrozenStateChangedCallbacks) {
+                    mFrozenStateChangedCallbacks.forEach((callback, executor) -> {
+                        executor.execute(
+                                () -> callback.onUidFrozenStateChanged(uids, frozenStates));
+                    });
+                }
+            }
+        };
 
-        @Override public void onUidProcAdjChanged(int uid) {
+    /**
+     * Callback object for {@link #registerUidFrozenStateChangedCallback}
+     *
+     * @hide
+     */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    @TestApi
+    public interface UidFrozenStateChangedCallback {
+        /**
+         * Indicates that the UID was frozen.
+         *
+         * @hide
+         */
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+        @TestApi
+        int UID_FROZEN_STATE_FROZEN = 1;
+
+        /**
+         * Indicates that the UID was unfrozen.
+         *
+         * @hide
+         */
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+        @TestApi
+        int UID_FROZEN_STATE_UNFROZEN = 2;
+
+        /**
+         * @hide
+         */
+        @Retention(RetentionPolicy.SOURCE)
+        @IntDef(flag = false, prefix = {"UID_FROZEN_STATE_"}, value = {
+                UID_FROZEN_STATE_FROZEN,
+                UID_FROZEN_STATE_UNFROZEN,
+        })
+        public @interface UidFrozenState {}
+
+        /**
+         * Notify the client that the frozen states of an array of UIDs have changed.
+         *
+         * @param uids The UIDs for which the frozen state has changed
+         * @param frozenStates Frozen state for each UID index, Will be set to
+         *               {@link UidFrozenStateChangedCallback#UID_FROZEN_STATE_FROZEN}
+         *               when the UID is frozen. When the UID is unfrozen,
+         *               {@link UidFrozenStateChangedCallback#UID_FROZEN_STATE_UNFROZEN}
+         *               will be set.
+         *
+         * @hide
+         */
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+        @TestApi
+        void onUidFrozenStateChanged(@NonNull int[] uids,
+                @NonNull @UidFrozenState int[] frozenStates);
+    }
+
+    /**
+     * Register a {@link UidFrozenStateChangedCallback} object to receive notification
+     * when a UID is frozen or unfrozen. Will throw an exception if the same
+     * callback object is registered more than once.
+     *
+     * @param executor The executor that the callback will be run from.
+     * @param callback The callback to be registered. Callbacks for previous frozen/unfrozen
+     *                 UID changes will not be delivered. Only changes in state from the point of
+     *                 registration onward will be reported.
+     * @throws IllegalStateException if the {@code callback} is already registered.
+     *
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.PACKAGE_USAGE_STATS)
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    @TestApi
+    public void registerUidFrozenStateChangedCallback(
+            @NonNull Executor executor,
+            @NonNull UidFrozenStateChangedCallback callback) {
+        Preconditions.checkNotNull(executor, "executor cannot be null");
+        Preconditions.checkNotNull(callback, "callback cannot be null");
+        synchronized (mFrozenStateChangedCallbacks) {
+            if (mFrozenStateChangedCallbacks.containsKey(callback)) {
+                throw new IllegalStateException("Callback already registered: " + callback);
+            }
+            mFrozenStateChangedCallbacks.put(callback, executor);
+            if (mFrozenStateChangedCallbacks.size() > 1) {
+                /* There's no need to register more than one binder interface */
+                return;
+            }
+
+            try {
+                getService().registerUidFrozenStateChangedCallback(mFrozenStateChangedCallback);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
         }
     }
 
-    final ArrayMap<OnUidImportanceListener, UidObserver> mImportanceListeners = new ArrayMap<>();
+    /**
+     * Unregister a {@link UidFrozenStateChangedCallback} callback.
+     * @param callback The callback to be unregistered.
+     *
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.PACKAGE_USAGE_STATS)
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    @TestApi
+    public void unregisterUidFrozenStateChangedCallback(
+            @NonNull UidFrozenStateChangedCallback callback) {
+        Preconditions.checkNotNull(callback, "callback cannot be null");
+        synchronized (mFrozenStateChangedCallbacks) {
+            mFrozenStateChangedCallbacks.remove(callback);
+            if (mFrozenStateChangedCallbacks.isEmpty()) {
+                try {
+                    getService().unregisterUidFrozenStateChangedCallback(
+                            mFrozenStateChangedCallback);
+                } catch (RemoteException e) {
+                    throw e.rethrowFromSystemServer();
+                }
+            }
+        }
+    }
+
+    /**
+     * Query the frozen state of a list of UIDs.
+     *
+     * @param uids the array of UIDs which the client would like to know the frozen state of.
+     * @return An array containing the frozen state for each requested UID, by index. Will be set
+     *               to {@link UidFrozenStateChangedCallback#UID_FROZEN_STATE_FROZEN}
+     *               if the UID is frozen. If the UID is not frozen or not found,
+     *               {@link UidFrozenStateChangedCallback#UID_FROZEN_STATE_UNFROZEN}
+     *               will be set.
+     *
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.PACKAGE_USAGE_STATS)
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    @TestApi
+    public @NonNull @UidFrozenStateChangedCallback.UidFrozenState
+            int[] getUidFrozenState(@NonNull int[] uids) {
+        try {
+            return getService().getUidFrozenState(uids);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
 
     /**
      * <a href="{@docRoot}guide/topics/manifest/meta-data-element.html">{@code
@@ -632,6 +780,7 @@ public class ActivityManager {
             PROCESS_CAPABILITY_FOREGROUND_MICROPHONE,
             PROCESS_CAPABILITY_POWER_RESTRICTED_NETWORK,
             PROCESS_CAPABILITY_BFSL,
+            PROCESS_CAPABILITY_USER_RESTRICTED_NETWORK,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ProcessCapability {}
@@ -753,14 +902,6 @@ public class ActivityManager {
     /** @hide Process can access network despite any power saving restrictions */
     @TestApi
     public static final int PROCESS_CAPABILITY_POWER_RESTRICTED_NETWORK = 1 << 3;
-    /**
-     * @hide
-     * @deprecated Use {@link #PROCESS_CAPABILITY_POWER_RESTRICTED_NETWORK} instead.
-     */
-    @TestApi
-    @Deprecated
-    public static final int PROCESS_CAPABILITY_NETWORK =
-            PROCESS_CAPABILITY_POWER_RESTRICTED_NETWORK;
 
     /**
      * Flag used to indicate whether an app is allowed to start a foreground service from the
@@ -782,6 +923,13 @@ public class ActivityManager {
     public static final int PROCESS_CAPABILITY_BFSL = 1 << 4;
 
     /**
+     * @hide
+     * Process can access network at a high enough proc state despite any user restrictions.
+     */
+    @TestApi
+    public static final int PROCESS_CAPABILITY_USER_RESTRICTED_NETWORK = 1 << 5;
+
+    /**
      * @hide all capabilities, the ORing of all flags in {@link ProcessCapability}.
      *
      * Don't expose it as TestApi -- we may add new capabilities any time, which could
@@ -791,7 +939,8 @@ public class ActivityManager {
             | PROCESS_CAPABILITY_FOREGROUND_CAMERA
             | PROCESS_CAPABILITY_FOREGROUND_MICROPHONE
             | PROCESS_CAPABILITY_POWER_RESTRICTED_NETWORK
-            | PROCESS_CAPABILITY_BFSL;
+            | PROCESS_CAPABILITY_BFSL
+            | PROCESS_CAPABILITY_USER_RESTRICTED_NETWORK;
 
     /**
      * All implicit capabilities. There are capabilities that process automatically have.
@@ -811,6 +960,7 @@ public class ActivityManager {
         pw.print((caps & PROCESS_CAPABILITY_FOREGROUND_MICROPHONE) != 0 ? 'M' : '-');
         pw.print((caps & PROCESS_CAPABILITY_POWER_RESTRICTED_NETWORK) != 0 ? 'N' : '-');
         pw.print((caps & PROCESS_CAPABILITY_BFSL) != 0 ? 'F' : '-');
+        pw.print((caps & PROCESS_CAPABILITY_USER_RESTRICTED_NETWORK) != 0 ? 'U' : '-');
     }
 
     /** @hide */
@@ -820,6 +970,7 @@ public class ActivityManager {
         sb.append((caps & PROCESS_CAPABILITY_FOREGROUND_MICROPHONE) != 0 ? 'M' : '-');
         sb.append((caps & PROCESS_CAPABILITY_POWER_RESTRICTED_NETWORK) != 0 ? 'N' : '-');
         sb.append((caps & PROCESS_CAPABILITY_BFSL) != 0 ? 'F' : '-');
+        sb.append((caps & PROCESS_CAPABILITY_USER_RESTRICTED_NETWORK) != 0 ? 'U' : '-');
     }
 
     /**
@@ -4108,7 +4259,7 @@ public class ActivityManager {
                 throw new IllegalArgumentException("Listener already registered: " + listener);
             }
             // TODO: implement the cut point in the system process to avoid IPCs.
-            UidObserver observer = new UidObserver(listener, mContext);
+            MyUidObserver observer = new MyUidObserver(listener, mContext);
             try {
                 getService().registerUidObserver(observer,
                         UID_OBSERVER_PROCSTATE | UID_OBSERVER_GONE,
@@ -4132,7 +4283,7 @@ public class ActivityManager {
     @RequiresPermission(Manifest.permission.PACKAGE_USAGE_STATS)
     public void removeOnUidImportanceListener(OnUidImportanceListener listener) {
         synchronized (this) {
-            UidObserver observer = mImportanceListeners.remove(listener);
+            MyUidObserver observer = mImportanceListeners.remove(listener);
             if (observer == null) {
                 throw new IllegalArgumentException("Listener not registered: " + listener);
             }

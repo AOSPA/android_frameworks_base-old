@@ -33,14 +33,14 @@ import static android.window.TaskFragmentOperation.OP_TYPE_SET_RELATIVE_BOUNDS;
 import static android.window.TaskFragmentOperation.OP_TYPE_START_ACTIVITY_IN_TASK_FRAGMENT;
 import static android.window.TaskFragmentOperation.OP_TYPE_UNKNOWN;
 import static android.window.WindowContainerTransaction.Change.CHANGE_RELATIVE_BOUNDS;
-import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_ADD_RECT_INSETS_PROVIDER;
+import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_ADD_INSETS_FRAME_PROVIDER;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_ADD_TASK_FRAGMENT_OPERATION;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_CHILDREN_TASKS_REPARENT;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_CLEAR_ADJACENT_ROOTS;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_FINISH_ACTIVITY;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_LAUNCH_TASK;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_PENDING_INTENT;
-import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_REMOVE_INSETS_PROVIDER;
+import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_REMOVE_INSETS_FRAME_PROVIDER;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_REMOVE_TASK;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_REORDER;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_REPARENT;
@@ -391,9 +391,14 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 // apply the incoming transaction before finish in case it alters the visibility
                 // of the participants.
                 if (t != null) {
+                    // Set the finishing transition before applyTransaction so the visibility
+                    // changes of the transition participants will only set visible-requested
+                    // and still let finishTransition handle the participants.
+                    mTransitionController.mFinishingTransition = transition;
                     applyTransaction(t, syncId, null /*transition*/, caller, transition);
                 }
-                getTransitionController().finishTransition(transitionToken);
+                mTransitionController.finishTransition(transition);
+                mTransitionController.mFinishingTransition = null;
                 if (syncId >= 0) {
                     setSyncReady(syncId);
                 }
@@ -434,7 +439,11 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 // multiple sync at the same time because it may cause conflict.
                 // Create a new transition when there is no active sync to collect the changes.
                 final Transition transition = mTransitionController.createTransition(type);
-                applyTransaction(wct, -1 /* syncId */, transition, caller);
+                if (applyTransaction(wct, -1 /* syncId */, transition, caller)
+                        == TRANSACT_EFFECTS_NONE && transition.mParticipants.isEmpty()) {
+                    transition.abort();
+                    return;
+                }
                 mTransitionController.requestStartTransition(transition, null /* startTask */,
                         null /* remoteTransition */, null /* displayChange */);
                 transition.setAllReady();
@@ -471,24 +480,26 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                     // calls startSyncSet.
                     () -> mTransitionController.moveToCollecting(nextTransition),
                     () -> {
-                        if (mTaskFragmentOrganizerController.isValidTransaction(wct)) {
-                            applyTransaction(wct, -1 /*syncId*/, nextTransition, caller);
+                        if (mTaskFragmentOrganizerController.isValidTransaction(wct)
+                                && (applyTransaction(wct, -1 /* syncId */, nextTransition, caller)
+                                        != TRANSACT_EFFECTS_NONE
+                                || !nextTransition.mParticipants.isEmpty())) {
                             mTransitionController.requestStartTransition(nextTransition,
                                     null /* startTask */, null /* remoteTransition */,
                                     null /* displayChange */);
                             nextTransition.setAllReady();
-                        } else {
-                            nextTransition.abort();
+                            return;
                         }
+                        nextTransition.abort();
                     });
         } finally {
             Binder.restoreCallingIdentity(ident);
         }
     }
 
-    private void applyTransaction(@NonNull WindowContainerTransaction t, int syncId,
+    private int applyTransaction(@NonNull WindowContainerTransaction t, int syncId,
             @Nullable Transition transition, @NonNull CallerInfo caller) {
-        applyTransaction(t, syncId, transition, caller, null /* finishTransition */);
+        return applyTransaction(t, syncId, transition, caller, null /* finishTransition */);
     }
 
     /**
@@ -496,8 +507,9 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
      * @param transition A transition to collect changes into.
      * @param caller Info about the calling process.
      * @param finishTransition The transition that is currently being finished.
+     * @return The effects of the window container transaction.
      */
-    private void applyTransaction(@NonNull WindowContainerTransaction t, int syncId,
+    private int applyTransaction(@NonNull WindowContainerTransaction t, int syncId,
             @Nullable Transition transition, @NonNull CallerInfo caller,
             @Nullable Transition finishTransition) {
         int effects = TRANSACT_EFFECTS_NONE;
@@ -634,6 +646,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
             mService.mTaskSupervisor.setDeferRootVisibilityUpdate(false /* deferUpdate */);
             mService.continueWindowLayout();
         }
+        return effects;
     }
 
     private int applyChanges(@NonNull WindowContainer<?> container,
@@ -671,12 +684,12 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
             }
         }
 
-        final int prevWindowingMode = container.getWindowingMode();
-        if (windowingMode > -1 && prevWindowingMode != windowingMode) {
+        if (windowingMode > -1) {
             if (mService.isInLockTaskMode()
                     && WindowConfiguration.inMultiWindowMode(windowingMode)) {
-                throw new UnsupportedOperationException("Not supported to set multi-window"
-                        + " windowing mode during locked task mode.");
+                Slog.w(TAG, "Dropping unsupported request to set multi-window windowing mode"
+                        + " during locked task mode.");
+                return effects;
             }
 
             if (windowingMode == WindowConfiguration.WINDOWING_MODE_PINNED) {
@@ -686,8 +699,9 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 return effects;
             }
 
+            final int prevMode = container.getRequestedOverrideWindowingMode();
             container.setWindowingMode(windowingMode);
-            if (prevWindowingMode != container.getWindowingMode()) {
+            if (prevMode != container.getWindowingMode()) {
                 // The activity in the container may become focusable or non-focusable due to
                 // windowing modes changes (such as entering or leaving pinned windowing mode),
                 // so also apply the lifecycle effects to this transaction.
@@ -1042,28 +1056,24 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 taskDisplayArea.moveRootTaskBehindRootTask(thisTask.getRootTask(), restoreAt);
                 break;
             }
-            case HIERARCHY_OP_TYPE_ADD_RECT_INSETS_PROVIDER: {
-                final Rect insetsProviderWindowContainer = hop.getInsetsProviderFrame();
-                final WindowContainer container =
-                        WindowContainer.fromBinder(hop.getContainer());
+            case HIERARCHY_OP_TYPE_ADD_INSETS_FRAME_PROVIDER: {
+                final WindowContainer container = WindowContainer.fromBinder(hop.getContainer());
                 if (container == null) {
                     Slog.e(TAG, "Attempt to add local insets source provider on unknown: "
-                                    + container);
+                            + container);
                     break;
                 }
-                container.addLocalRectInsetsSourceProvider(
-                        insetsProviderWindowContainer, hop.getInsetsTypes());
+                container.addLocalInsetsFrameProvider(hop.getInsetsFrameProvider());
                 break;
             }
-            case HIERARCHY_OP_TYPE_REMOVE_INSETS_PROVIDER: {
-                final WindowContainer container =
-                        WindowContainer.fromBinder(hop.getContainer());
+            case HIERARCHY_OP_TYPE_REMOVE_INSETS_FRAME_PROVIDER: {
+                final WindowContainer container = WindowContainer.fromBinder(hop.getContainer());
                 if (container == null) {
                     Slog.e(TAG, "Attempt to remove local insets source provider from unknown: "
                                     + container);
                     break;
                 }
-                container.removeLocalInsetsSourceProvider(hop.getInsetsTypes());
+                container.removeLocalInsetsFrameProvider(hop.getInsetsFrameProvider());
                 break;
             }
             case HIERARCHY_OP_TYPE_SET_ALWAYS_ON_TOP: {

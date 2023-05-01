@@ -66,10 +66,14 @@ import org.mockito.MockitoAnnotations
  *
  * Kind of like an interaction test case build just for [TelephonyCallback]
  *
- * The list of telephony callbacks we use is: [TelephonyCallback.CarrierNetworkListener]
- * [TelephonyCallback.DataActivityListener] [TelephonyCallback.DataConnectionStateListener]
- * [TelephonyCallback.DataEnabledListener] [TelephonyCallback.DisplayInfoListener]
- * [TelephonyCallback.ServiceStateListener] [TelephonyCallback.SignalStrengthsListener]
+ * The list of telephony callbacks we use is:
+ * - [TelephonyCallback.CarrierNetworkListener]
+ * - [TelephonyCallback.DataActivityListener]
+ * - [TelephonyCallback.DataConnectionStateListener]
+ * - [TelephonyCallback.DataEnabledListener]
+ * - [TelephonyCallback.DisplayInfoListener]
+ * - [TelephonyCallback.ServiceStateListener]
+ * - [TelephonyCallback.SignalStrengthsListener]
  *
  * Because each of these callbacks comes in on the same callbackFlow, collecting on a field backed
  * by only a single callback can immediately create backpressure on the other fields related to a
@@ -116,7 +120,7 @@ class MobileConnectionTelephonySmokeTests : SysuiTestCase() {
 
         underTest =
             MobileConnectionRepositoryImpl(
-                context,
+                mContext,
                 SUB_1_ID,
                 DEFAULT_NAME,
                 SEP,
@@ -205,7 +209,6 @@ class MobileConnectionTelephonySmokeTests : SysuiTestCase() {
                 200 /* unused */
             )
 
-            // Send a bunch of events that we don't care about, to overrun the replay buffer
             flipActivity(100, activityCallback)
 
             val connectionJob = underTest.dataConnectionState.onEach { latest = it }.launchIn(this)
@@ -229,7 +232,6 @@ class MobileConnectionTelephonySmokeTests : SysuiTestCase() {
 
             enabledCallback.onDataEnabledChanged(true, 1 /* unused */)
 
-            // Send a bunch of events that we don't care about, to overrun the replay buffer
             flipActivity(100, activityCallback)
 
             val job = underTest.dataEnabled.onEach { latest = it }.launchIn(this)
@@ -256,7 +258,6 @@ class MobileConnectionTelephonySmokeTests : SysuiTestCase() {
             val ti = mock<TelephonyDisplayInfo>().also { whenever(it.networkType).thenReturn(type) }
             displayInfoCallback.onDisplayInfoChanged(ti)
 
-            // Send a bunch of events that we don't care about, to overrun the replay buffer
             flipActivity(100, activityCallback)
 
             val job = underTest.resolvedNetworkType.onEach { latest = it }.launchIn(this)

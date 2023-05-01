@@ -405,6 +405,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
                         if (mKeyguardStateController.isKeyguardFadingAway()) {
                             mStatusBarKeyguardViewManager.onKeyguardFadedAway();
                         }
+                        dispatchScrimsVisible();
                     }
                 };
 
@@ -809,6 +810,11 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
 
     public void setOccludeAnimationPlaying(boolean occludeAnimationPlaying) {
         mOccludeAnimationPlaying = occludeAnimationPlaying;
+
+        for (ScrimState state : ScrimState.values()) {
+            state.setOccludeAnimationPlaying(occludeAnimationPlaying);
+        }
+
         applyAndDispatchState();
     }
 
@@ -853,7 +859,6 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
         if (mState == ScrimState.UNLOCKED || mState == ScrimState.DREAMING) {
             final boolean occluding =
                     mOccludeAnimationPlaying || mState.mLaunchingAffordanceWithPreview;
-
             // Darken scrim as it's pulled down while unlocked. If we're unlocked but playing the
             // screen off/occlusion animations, ignore expansion changes while those animations
             // play.

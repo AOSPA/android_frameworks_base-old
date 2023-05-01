@@ -202,7 +202,7 @@ public final class Choreographer {
 
     private boolean mDebugPrintNextFrameTimeDelta;
     private int mFPSDivisor = 1;
-    private DisplayEventReceiver.VsyncEventData mLastVsyncEventData =
+    private final DisplayEventReceiver.VsyncEventData mLastVsyncEventData =
             new DisplayEventReceiver.VsyncEventData();
     private final FrameData mFrameData = new FrameData();
     private int mTouchMoveNum = -1;
@@ -934,7 +934,7 @@ public final class Choreographer {
                 mFrameScheduled = false;
                 mLastFrameTimeNanos = frameTimeNanos;
                 mLastFrameIntervalNanos = frameIntervalNanos;
-                mLastVsyncEventData = vsyncEventData;
+                mLastVsyncEventData.copyFrom(vsyncEventData);
             }
 
             if (frameIntervalNanos > 0 && (Math.abs(frameIntervalNanos - mFrameIntervalNanos)
@@ -1333,7 +1333,7 @@ public final class Choreographer {
         private boolean mHavePendingVsync;
         private long mTimestampNanos;
         private int mFrame;
-        private VsyncEventData mLastVsyncEventData = new VsyncEventData();
+        private final VsyncEventData mLastVsyncEventData = new VsyncEventData();
 
         FrameDisplayEventReceiver(Looper looper, int vsyncSource, long layerHandle) {
             super(looper, vsyncSource, /* eventRegistration */ 0, layerHandle);
@@ -1373,7 +1373,7 @@ public final class Choreographer {
 
                 mTimestampNanos = timestampNanos;
                 mFrame = frame;
-                mLastVsyncEventData = vsyncEventData;
+                mLastVsyncEventData.copyFrom(vsyncEventData);
                 ScrollOptimizer.setVsyncTime(mTimestampNanos);
                 Message msg = Message.obtain(mHandler, this);
                 msg.setAsynchronous(true);

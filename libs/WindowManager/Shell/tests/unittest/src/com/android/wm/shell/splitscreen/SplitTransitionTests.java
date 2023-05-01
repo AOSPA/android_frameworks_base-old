@@ -181,7 +181,7 @@ public class SplitTransitionTests extends ShellTestCase {
 
         IBinder transition = mSplitScreenTransitions.startEnterTransition(
                 TRANSIT_SPLIT_SCREEN_PAIR_OPEN, new WindowContainerTransaction(),
-                new RemoteTransition(testRemote), mStageCoordinator, null, null);
+                new RemoteTransition(testRemote, "Test"), mStageCoordinator, null, null);
         mMainStage.onTaskAppeared(mMainChild, createMockSurface());
         mSideStage.onTaskAppeared(mSideChild, createMockSurface());
         boolean accepted = mStageCoordinator.startAnimation(transition, info,
@@ -259,7 +259,8 @@ public class SplitTransitionTests extends ShellTestCase {
                 .build();
 
         // Create a request to bring home forward
-        TransitionRequestInfo request = new TransitionRequestInfo(TRANSIT_TO_FRONT, homeTask, null);
+        TransitionRequestInfo request = new TransitionRequestInfo(TRANSIT_TO_FRONT, homeTask,
+                mock(RemoteTransition.class));
         IBinder transition = mock(IBinder.class);
         WindowContainerTransaction result = mStageCoordinator.handleRequest(transition, request);
         // Don't handle recents opening
@@ -277,7 +278,7 @@ public class SplitTransitionTests extends ShellTestCase {
         // Make sure it cleans-up if recents doesn't restore
         WindowContainerTransaction commitWCT = new WindowContainerTransaction();
         mStageCoordinator.onRecentsInSplitAnimationFinish(commitWCT,
-                mock(SurfaceControl.Transaction.class));
+                mock(SurfaceControl.Transaction.class), mock(TransitionInfo.class));
         assertFalse(mStageCoordinator.isSplitScreenVisible());
     }
 
@@ -292,7 +293,8 @@ public class SplitTransitionTests extends ShellTestCase {
                 .build();
 
         // Create a request to bring home forward
-        TransitionRequestInfo request = new TransitionRequestInfo(TRANSIT_TO_FRONT, homeTask, null);
+        TransitionRequestInfo request = new TransitionRequestInfo(TRANSIT_TO_FRONT, homeTask,
+                mock(RemoteTransition.class));
         IBinder transition = mock(IBinder.class);
         WindowContainerTransaction result = mStageCoordinator.handleRequest(transition, request);
         // Don't handle recents opening
@@ -315,7 +317,7 @@ public class SplitTransitionTests extends ShellTestCase {
         mMainStage.onTaskAppeared(mMainChild, mock(SurfaceControl.class));
         mSideStage.onTaskAppeared(mSideChild, mock(SurfaceControl.class));
         mStageCoordinator.onRecentsInSplitAnimationFinish(restoreWCT,
-                mock(SurfaceControl.Transaction.class));
+                mock(SurfaceControl.Transaction.class), mock(TransitionInfo.class));
         assertTrue(mStageCoordinator.isSplitScreenVisible());
     }
 
@@ -405,7 +407,8 @@ public class SplitTransitionTests extends ShellTestCase {
         TransitionInfo enterInfo = createEnterPairInfo();
         IBinder enterTransit = mSplitScreenTransitions.startEnterTransition(
                 TRANSIT_SPLIT_SCREEN_PAIR_OPEN, new WindowContainerTransaction(),
-                new RemoteTransition(new TestRemoteTransition()), mStageCoordinator, null, null);
+                new RemoteTransition(new TestRemoteTransition(), "Test"),
+                mStageCoordinator, null, null);
         mMainStage.onTaskAppeared(mMainChild, createMockSurface());
         mSideStage.onTaskAppeared(mSideChild, createMockSurface());
         mStageCoordinator.startAnimation(enterTransit, enterInfo,

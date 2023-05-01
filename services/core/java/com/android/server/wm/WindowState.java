@@ -59,13 +59,11 @@ import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_NOT_MAGNIFIAB
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_NO_MOVE_ANIMATION;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_SYSTEM_APPLICATION_OVERLAY;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_TRUSTED_OVERLAY;
-import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_WILL_NOT_REPLACE_ON_RELAUNCH;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST;
 import static android.view.WindowManager.LayoutParams.SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS;
 import static android.view.WindowManager.LayoutParams.SYSTEM_FLAG_SHOW_FOR_ALL_USERS;
 import static android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_MAGNIFICATION_OVERLAY;
-import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_MEDIA;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_MEDIA_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
@@ -430,8 +428,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     boolean mGivenInsetsPending;
 
     /**
-     * These are the content insets that were given during layout for
-     * this window, to be applied to windows behind it.
+     * These are the content insets that were given during layout for this window, to be applied to
+     * windows behind it.
+     * This is only applied to IME windows when corresponding process in DisplayPolicy executed.
      */
     final Rect mGivenContentInsets = new Rect();
 
@@ -632,22 +631,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     boolean mHasSurface = false;
 
-    // This window will be replaced due to relaunch. This allows window manager
-    // to differentiate between simple removal of a window and replacement. In the latter case it
-    // will preserve the old window until the new one is drawn.
-    boolean mWillReplaceWindow = false;
-    // If true, the replaced window was already requested to be removed.
-    private boolean mReplacingRemoveRequested = false;
-    // Whether the replacement of the window should trigger app transition animation.
-    private boolean mAnimateReplacingWindow = false;
-    // If not null, the window that will be used to replace the old one. This is being set when
-    // the window is added and unset when this window reports its first draw.
-    private WindowState mReplacementWindow = null;
-    // For the new window in the replacement transition, if we have
-    // requested to replace without animation, then we should
-    // make sure we also don't apply an enter animation for
-    // the new window.
-    boolean mSkipEnterAnimationForSeamlessReplacement = false;
     // Whether this window is being moved via the resize API
     private boolean mMovedByResize;
 
@@ -1309,13 +1292,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     boolean skipLayout() {
-        if (mWillReplaceWindow && (mAnimatingExit || !mReplacingRemoveRequested)) {
-            // This window is being replaced and either already got information that it's being
-            // removed or we are still waiting for some information. Because of this we don't
-            // want to apply any more changes to it, so it remains in this state until new window
-            // appears.
-            return true;
-        }
         // Skip layout of the window when in transition to pip mode.
         return mActivityRecord != null && mActivityRecord.mWaitForEnteringPinnedMode;
     }
@@ -2354,24 +2330,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
     }
 
-    void onWindowReplacementTimeout() {
-        if (mWillReplaceWindow) {
-            // Since the window already timed out, remove it immediately now.
-            // Use WindowState#removeImmediately() instead of WindowState#removeIfPossible(), as
-            // the latter delays removal on certain conditions, which will leave the stale window
-            // in the root task and marked mWillReplaceWindow=false, so the window will never be
-            // removed.
-            //
-            // Also removes child windows.
-            removeImmediately();
-        } else {
-            for (int i = mChildren.size() - 1; i >= 0; --i) {
-                final WindowState c = mChildren.get(i);
-                c.onWindowReplacementTimeout();
-            }
-        }
-    }
-
     @Override
     void removeImmediately() {
         if (mRemoved) {
@@ -2386,12 +2344,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // to be removed before the parent (so that the sync-engine tracking works). Since
         // WindowStateAnimator is a "virtual" child, we have to do it manually here.
         mWinAnimator.destroySurfaceLocked(getSyncTransaction());
-        super.removeImmediately();
-
-        mWillReplaceWindow = false;
-        if (mReplacementWindow != null) {
-            mReplacementWindow.mSkipEnterAnimationForSeamlessReplacement = false;
+        if (!mDrawHandlers.isEmpty()) {
+            mWmService.mH.removeMessages(WINDOW_STATE_BLAST_SYNC_TIMEOUT, this);
         }
+        super.removeImmediately();
 
         final DisplayContent dc = getDisplayContent();
         if (isImeLayeringTarget()) {
@@ -2472,12 +2428,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             ProtoLog.v(WM_DEBUG_APP_TRANSITIONS,
                     "Remove %s: mSurfaceController=%s mAnimatingExit=%b mRemoveOnExit=%b "
                             + "mHasSurface=%b surfaceShowing=%b animating=%b app-animation=%b "
-                            + "mWillReplaceWindow=%b mDisplayFrozen=%b callers=%s",
+                            + "mDisplayFrozen=%b callers=%s",
                     this, mWinAnimator.mSurfaceController, mAnimatingExit, mRemoveOnExit,
                     mHasSurface, mWinAnimator.getShown(),
                     isAnimating(TRANSITION | PARENTS),
                     mActivityRecord != null && mActivityRecord.isAnimating(PARENTS | TRANSITION),
-                    mWillReplaceWindow,
                     mWmService.mDisplayFrozen, Debug.getCallers(6));
 
             // Visibility of the removed window. Will be used later to update orientation later on.
@@ -2487,22 +2442,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             // window until the animation is done. If the display is frozen, just remove immediately,
             // since the animation wouldn't be seen.
             if (mHasSurface && mToken.okToAnimate()) {
-                if (mWillReplaceWindow) {
-                    // This window is going to be replaced. We need to keep it around until the new one
-                    // gets added, then we will get rid of this one.
-                    ProtoLog.v(WM_DEBUG_ADD_REMOVE,
-                            "Preserving %s until the new one is added", this);
-                    // TODO: We are overloading mAnimatingExit flag to prevent the window state from
-                    // been removed. We probably need another flag to indicate that window removal
-                    // should be deffered vs. overloading the flag that says we are playing an exit
-                    // animation.
-                    ProtoLog.v(WM_DEBUG_ANIM,
-                            "Set animatingExit: reason=remove/replaceWindow win=%s", this);
-                    mAnimatingExit = true;
-                    mReplacingRemoveRequested = true;
-                    return;
-                }
-
                 // If we are not currently running the exit animation, we need to see about starting one
                 wasVisible = isVisible();
 
@@ -2712,53 +2651,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             mInputChannel = null;
         }
         mInputWindowHandle.setToken(null);
-    }
-
-    /** Returns true if the replacement window was removed. */
-    boolean removeReplacedWindowIfNeeded(WindowState replacement) {
-        if (mWillReplaceWindow && mReplacementWindow == replacement && replacement.hasDrawn()) {
-            replacement.mSkipEnterAnimationForSeamlessReplacement = false;
-            removeReplacedWindow();
-            return true;
-        }
-
-        for (int i = mChildren.size() - 1; i >= 0; --i) {
-            final WindowState c = mChildren.get(i);
-            if (c.removeReplacedWindowIfNeeded(replacement)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private void removeReplacedWindow() {
-        ProtoLog.d(WM_DEBUG_ADD_REMOVE, "Removing replaced window: %s", this);
-        mWillReplaceWindow = false;
-        mAnimateReplacingWindow = false;
-        mReplacingRemoveRequested = false;
-        mReplacementWindow = null;
-        if (mAnimatingExit || !mAnimateReplacingWindow) {
-            removeImmediately();
-        }
-    }
-
-    boolean setReplacementWindowIfNeeded(WindowState replacementCandidate) {
-        boolean replacementSet = false;
-
-        if (mWillReplaceWindow && mReplacementWindow == null
-                && getWindowTag().toString().equals(replacementCandidate.getWindowTag().toString())) {
-
-            mReplacementWindow = replacementCandidate;
-            replacementCandidate.mSkipEnterAnimationForSeamlessReplacement = !mAnimateReplacingWindow;
-            replacementSet = true;
-        }
-
-        for (int i = mChildren.size() - 1; i >= 0; --i) {
-            final WindowState c = mChildren.get(i);
-            replacementSet |= c.setReplacementWindowIfNeeded(replacementCandidate);
-        }
-
-        return replacementSet;
     }
 
     void setDisplayLayoutNeeded() {
@@ -3025,8 +2917,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                             .windowForClientLocked(mSession, mClient, false);
                     Slog.i(TAG, "WIN DEATH: " + win);
                     if (win != null) {
-                        if (win.mActivityRecord != null && win.mActivityRecord.findMainWindow() == win) {
-                            mWmService.mTaskSnapshotController.onAppDied(win.mActivityRecord);
+                        if (win.mActivityRecord != null
+                                && win.mActivityRecord.findMainWindow() == win) {
+                            mWmService.mSnapshotController.onAppDied(win.mActivityRecord);
                         }
                         win.removeIfPossible();
                     } else if (mHasSurface) {
@@ -4391,49 +4284,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return parent != null && parent.isGoneForLayout();
     }
 
-    void setWillReplaceWindow(boolean animate) {
-        for (int i = mChildren.size() - 1; i >= 0; i--) {
-            final WindowState c = mChildren.get(i);
-            c.setWillReplaceWindow(animate);
-        }
-
-        if ((mAttrs.privateFlags & PRIVATE_FLAG_WILL_NOT_REPLACE_ON_RELAUNCH) != 0
-                || mAttrs.type == TYPE_APPLICATION_STARTING) {
-            // We don't set replacing on starting windows since they are added by window manager and
-            // not the client so won't be replaced by the client.
-            return;
-        }
-
-        mWillReplaceWindow = true;
-        mReplacementWindow = null;
-        mAnimateReplacingWindow = animate;
-    }
-
-    void clearWillReplaceWindow() {
-        mWillReplaceWindow = false;
-        mReplacementWindow = null;
-        mAnimateReplacingWindow = false;
-
-        for (int i = mChildren.size() - 1; i >= 0; i--) {
-            final WindowState c = mChildren.get(i);
-            c.clearWillReplaceWindow();
-        }
-    }
-
-    boolean waitingForReplacement() {
-        if (mWillReplaceWindow) {
-            return true;
-        }
-
-        for (int i = mChildren.size() - 1; i >= 0; i--) {
-            final WindowState c = mChildren.get(i);
-            if (c.waitingForReplacement()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     void requestUpdateWallpaperIfNeeded() {
         final DisplayContent dc = getDisplayContent();
         if (dc != null && ((mIsWallpaper && !mLastConfigReportedToClient) || hasWallpaper())) {
@@ -4462,43 +4312,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             winY *= mInvGlobalScale;
         }
         return winY;
-    }
-
-    // During activity relaunch due to resize, we sometimes use window replacement
-    // for only child windows (as the main window is handled by window preservation)
-    // and the big surface.
-    //
-    // Though windows of TYPE_APPLICATION or TYPE_DRAWN_APPLICATION (as opposed to
-    // TYPE_BASE_APPLICATION) are not children in the sense of an attached window,
-    // we also want to replace them at such phases, as they won't be covered by window
-    // preservation, and in general we expect them to return following relaunch.
-    boolean shouldBeReplacedWithChildren() {
-        return mIsChildWindow || mAttrs.type == TYPE_APPLICATION
-                || mAttrs.type == TYPE_DRAWN_APPLICATION;
-    }
-
-    void setWillReplaceChildWindows() {
-        if (shouldBeReplacedWithChildren()) {
-            setWillReplaceWindow(false /* animate */);
-        }
-        for (int i = mChildren.size() - 1; i >= 0; i--) {
-            final WindowState c = mChildren.get(i);
-            c.setWillReplaceChildWindows();
-        }
-    }
-
-    WindowState getReplacingWindow() {
-        if (mAnimatingExit && mWillReplaceWindow && mAnimateReplacingWindow) {
-            return this;
-        }
-        for (int i = mChildren.size() - 1; i >= 0; i--) {
-            final WindowState c = mChildren.get(i);
-            final WindowState replacing = c.getReplacingWindow();
-            if (replacing != null) {
-                return replacing;
-            }
-        }
-        return null;
     }
 
     int getRotationAnimationHint() {
@@ -4683,20 +4496,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     @Override
     void updateAboveInsetsState(InsetsState aboveInsetsState,
-            SparseArray<InsetsSourceProvider> localInsetsSourceProvidersFromParent,
+            SparseArray<InsetsSource> localInsetsSourcesFromParent,
             ArraySet<WindowState> insetsChangedWindows) {
-        SparseArray<InsetsSourceProvider> mergedLocalInsetsSourceProviders =
-                localInsetsSourceProvidersFromParent;
-        if (mLocalInsetsSourceProviders != null && mLocalInsetsSourceProviders.size() != 0) {
-            mergedLocalInsetsSourceProviders = createShallowCopy(mergedLocalInsetsSourceProviders);
-            for (int i = 0; i < mLocalInsetsSourceProviders.size(); i++) {
-                mergedLocalInsetsSourceProviders.put(
-                        mLocalInsetsSourceProviders.keyAt(i),
-                        mLocalInsetsSourceProviders.valueAt(i));
-            }
-        }
-        final SparseArray<InsetsSource> mergedLocalInsetsSourcesFromParent =
-                toInsetsSources(mergedLocalInsetsSourceProviders);
+        final SparseArray<InsetsSource> mergedLocalInsetsSources =
+                createMergedSparseArray(localInsetsSourcesFromParent, mLocalInsetsSources);
 
         // Insets provided by the IME window can effect all the windows below it and hence it needs
         // to be visited in the correct order. Because of which updateAboveInsetsState() can't be
@@ -4707,9 +4510,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 insetsChangedWindows.add(w);
             }
 
-            if (!mergedLocalInsetsSourcesFromParent.contentEquals(w.mMergedLocalInsetsSources)) {
-                w.mMergedLocalInsetsSources = createShallowCopy(
-                        mergedLocalInsetsSourcesFromParent);
+            if (!mergedLocalInsetsSources.contentEquals(w.mMergedLocalInsetsSources)) {
+                w.mMergedLocalInsetsSources = mergedLocalInsetsSources;
                 insetsChangedWindows.add(w);
             }
 
@@ -4720,17 +4522,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 }
             }
         }, true /* traverseTopToBottom */);
-    }
-
-    private static SparseArray<InsetsSource> toInsetsSources(
-            SparseArray<InsetsSourceProvider> insetsSourceProviders) {
-        final SparseArray<InsetsSource> insetsSources = new SparseArray<>(
-                insetsSourceProviders.size());
-        for (int i = 0; i < insetsSourceProviders.size(); i++) {
-            insetsSources.append(insetsSourceProviders.keyAt(i),
-                    insetsSourceProviders.valueAt(i).getSource());
-        }
-        return insetsSources;
     }
 
     private boolean forAllWindowTopToBottom(ToBooleanFunction<WindowState> callback) {
@@ -4990,14 +4781,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     boolean clearAnimatingFlags() {
         boolean didSomething = false;
-        // We don't want to clear it out for windows that get replaced, because the
-        // animation depends on the flag to remove the replaced window.
-        //
         // We also don't clear the mAnimatingExit flag for windows which have the
         // mRemoveOnExit flag. This indicates an explicit remove request has been issued
         // by the client. We should let animation proceed and not clear this flag or
         // they won't eventually be removed by WindowStateAnimator#finishExit.
-        if (!mWillReplaceWindow && !mRemoveOnExit) {
+        if (!mRemoveOnExit) {
             // Clear mAnimating flag together with mAnimatingExit. When animation
             // changes from exiting to entering, we need to clear this flag until the
             // new animation gets applied, so that isAnimationStarting() becomes true
@@ -5312,7 +5100,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 return activity.needsZBoost();
             }
         }
-        return mWillReplaceWindow;
+        return false;
     }
 
     private boolean isStartingWindowAssociatedToTask() {
@@ -5389,13 +5177,14 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     @Override
     void prepareSurfaces() {
         mIsDimming = false;
-        applyDims();
-        updateSurfacePositionNonOrganized();
-        // Send information to SurfaceFlinger about the priority of the current window.
-        updateFrameRateSelectionPriorityIfNeeded();
-        updateScaleIfNeeded();
-
-        mWinAnimator.prepareSurfaceLocked(getSyncTransaction());
+        if (mHasSurface) {
+            applyDims();
+            updateSurfacePositionNonOrganized();
+            // Send information to SurfaceFlinger about the priority of the current window.
+            updateFrameRateSelectionPriorityIfNeeded();
+            updateScaleIfNeeded();
+            mWinAnimator.prepareSurfaceLocked(getSyncTransaction());
+        }
         super.prepareSurfaces();
     }
 
@@ -5442,8 +5231,17 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             if (surfaceInsetsChanged) {
                 mLastSurfaceInsets.set(mAttrs.surfaceInsets);
             }
-            if (surfaceSizeChanged && mWinAnimator.getShown() && !canPlayMoveAnimation()
-                    && okToDisplay() && mSyncState == SYNC_STATE_NONE) {
+            final boolean surfaceResizedWithoutMoveAnimation = surfaceSizeChanged
+                    && mWinAnimator.getShown() && !canPlayMoveAnimation() && okToDisplay()
+                    && mSyncState == SYNC_STATE_NONE;
+            final ActivityRecord activityRecord = getActivityRecord();
+            // If this window belongs to an activity that is relaunching due to an orientation
+            // change then delay the position update until it has redrawn to avoid any flickers.
+            final boolean isLetterboxedAndRelaunching = activityRecord != null
+                    && activityRecord.areBoundsLetterboxed()
+                    && activityRecord.mLetterboxUiController
+                        .getIsRelaunchingAfterRequestedOrientationChanged();
+            if (surfaceResizedWithoutMoveAnimation || isLetterboxedAndRelaunching) {
                 applyWithNextDraw(mSetSurfacePositionConsumer);
             } else {
                 mSetSurfacePositionConsumer.accept(t);

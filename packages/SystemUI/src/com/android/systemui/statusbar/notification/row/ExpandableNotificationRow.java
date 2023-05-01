@@ -47,7 +47,6 @@ import android.util.FloatProperty;
 import android.util.IndentingPrintWriter;
 import android.util.Log;
 import android.util.MathUtils;
-import android.util.Property;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -68,6 +67,7 @@ import androidx.annotation.Nullable;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
+import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.util.ContrastColorUtil;
 import com.android.internal.widget.CachingIconView;
 import com.android.internal.widget.CallLayout;
@@ -146,6 +146,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     // the background on first content update just in case it happens to be during a theme change.
     private boolean mUpdateSelfBackgroundOnUpdate = true;
     private boolean mIsSnoozed;
+    private boolean mShowSnooze = false;
     private boolean mIsFaded;
     private boolean mAnimatePinnedRoundness = false;
 
@@ -335,8 +336,8 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     };
     private boolean mKeepInParentForDismissAnimation;
     private boolean mRemoved;
-    private static final Property<ExpandableNotificationRow, Float> TRANSLATE_CONTENT =
-            new FloatProperty<ExpandableNotificationRow>("translate") {
+    public static final FloatProperty<ExpandableNotificationRow> TRANSLATE_CONTENT =
+            new FloatProperty<>("translate") {
                 @Override
                 public void setValue(ExpandableNotificationRow object, float value) {
                     object.setTranslation(value);
@@ -347,6 +348,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
                     return object.getTranslation();
                 }
             };
+
     private OnClickListener mOnClickListener;
     private OnDragSuccessListener mOnDragSuccessListener;
     private boolean mHeadsupDisappearRunning;
@@ -1671,7 +1673,8 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             MetricsLogger metricsLogger,
             SmartReplyConstants smartReplyConstants,
             SmartReplyController smartReplyController,
-            FeatureFlags featureFlags) {
+            FeatureFlags featureFlags,
+            IStatusBarService statusBarService) {
         mEntry = entry;
         mAppName = appName;
         if (mMenuRow == null) {
@@ -1699,7 +1702,8 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
                     mPeopleNotificationIdentifier,
                     rivSubcomponentFactory,
                     smartReplyConstants,
-                    smartReplyController);
+                    smartReplyController,
+                    statusBarService);
         }
         mOnUserInteractionCallback = onUserInteractionCallback;
         mBubblesManagerOptional = bubblesManagerOptional;
@@ -2172,6 +2176,13 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         });
         mTranslateAnim = translateAnim;
         return translateAnim;
+    }
+
+    /** Cancels the ongoing translate animation if there is any. */
+    public void cancelTranslateAnimation() {
+        if (mTranslateAnim != null) {
+            mTranslateAnim.cancel();
+        }
     }
 
     void ensureGutsInflated() {
@@ -3724,5 +3735,15 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         if (mUseRoundnessSourceTypes) {
             updateBaseRoundness();
         }
+    }
+
+    /** Set whether this notification may show a snooze action. */
+    public void setShowSnooze(boolean showSnooze) {
+        mShowSnooze = showSnooze;
+    }
+
+    /** Whether this notification may show a snooze action. */
+    public boolean getShowSnooze() {
+        return mShowSnooze;
     }
 }

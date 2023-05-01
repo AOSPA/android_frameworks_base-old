@@ -462,12 +462,12 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     private static final int CHANGE_WATCHER_PRIORITY = 100;
 
     /**
-     * The span priority of the {@link TransformationMethod} that is set on the text. It must be
+     * The span priority of the {@link OffsetMapping} that is set on the text. It must be
      * higher than the {@link DynamicLayout}'s {@link TextWatcher}, so that the transformed text is
      * updated before {@link DynamicLayout#reflow(CharSequence, int, int, int)} being triggered
      * by {@link TextWatcher#onTextChanged(CharSequence, int, int, int)}.
      */
-    private static final int TRANSFORMATION_SPAN_PRIORITY = 200;
+    private static final int OFFSET_MAPPING_SPAN_PRIORITY = 200;
 
     // New state used to change background based on whether this TextView is multiline.
     private static final int[] MULTILINE_STATE_SET = { R.attr.state_multiline };
@@ -4604,7 +4604,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         }
     }
 
-    private void setTextSizeInternal(int unit, float size, boolean shouldRequestLayout) {
+    @NonNull
+    private DisplayMetrics getDisplayMetricsOrSystem() {
         Context c = getContext();
         Resources r;
 
@@ -4614,8 +4615,12 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             r = c.getResources();
         }
 
+        return r.getDisplayMetrics();
+    }
+
+    private void setTextSizeInternal(int unit, float size, boolean shouldRequestLayout) {
         mTextSizeUnit = unit;
-        setRawTextSize(TypedValue.applyDimension(unit, size, r.getDisplayMetrics()),
+        setRawTextSize(TypedValue.applyDimension(unit, size, getDisplayMetricsOrSystem()),
                 shouldRequestLayout);
     }
 
@@ -6197,14 +6202,42 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      */
     @android.view.RemotableViewMethod
     public void setLineHeight(@Px @IntRange(from = 0) int lineHeight) {
-        Preconditions.checkArgumentNonnegative(lineHeight);
+        setLineHeightPx(lineHeight);
+    }
+
+    private void setLineHeightPx(@Px @FloatRange(from = 0) float lineHeight) {
+        Preconditions.checkArgumentNonnegative((int) lineHeight);
 
         final int fontHeight = getPaint().getFontMetricsInt(null);
         // Make sure we don't setLineSpacing if it's not needed to avoid unnecessary redraw.
+        // TODO(b/274974975): should this also check if lineSpacing needs to change?
         if (lineHeight != fontHeight) {
             // Set lineSpacingExtra by the difference of lineSpacing with lineHeight
             setLineSpacing(lineHeight - fontHeight, 1f);
         }
+    }
+
+    /**
+     * Sets an explicit line height to a given unit and value for this TextView. This is equivalent
+     * to the vertical distance between subsequent baselines in the TextView. See {@link
+     * TypedValue} for the possible dimension units.
+     *
+     * @param unit The desired dimension unit. SP units are strongly recommended so that line height
+     *             stays proportional to the text size when fonts are scaled up for accessibility.
+     * @param lineHeight The desired line height in the given units.
+     *
+     * @see #setLineSpacing(float, float)
+     * @see #getLineSpacingExtra()
+     *
+     * @attr ref android.R.styleable#TextView_lineHeight
+     */
+    @android.view.RemotableViewMethod
+    public void setLineHeight(
+            @TypedValue.ComplexDimensionUnit int unit,
+            @FloatRange(from = 0) float lineHeight
+    ) {
+        setLineHeightPx(
+                TypedValue.applyDimension(unit, lineHeight, getDisplayMetricsOrSystem()));
     }
 
     /**
@@ -7033,9 +7066,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         }
 
         final int textLength = text.length();
+        final boolean isOffsetMapping = mTransformed instanceof OffsetMapping;
 
-        if (text instanceof Spannable && (!mAllowTransformationLengthChange
-                || text instanceof OffsetMapping)) {
+        if (text instanceof Spannable && (!mAllowTransformationLengthChange || isOffsetMapping)) {
             Spannable sp = (Spannable) text;
 
             // Remove any ChangeWatchers that might have come from other TextViews.
@@ -7053,8 +7086,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             if (mEditor != null) mEditor.addSpanWatchers(sp);
 
             if (mTransformation != null) {
+                final int priority = isOffsetMapping ? OFFSET_MAPPING_SPAN_PRIORITY : 0;
                 sp.setSpan(mTransformation, 0, textLength, Spanned.SPAN_INCLUSIVE_INCLUSIVE
-                        | (TRANSFORMATION_SPAN_PRIORITY << Spanned.SPAN_PRIORITY_SHIFT));
+                        | (priority << Spanned.SPAN_PRIORITY_SHIFT));
             }
 
             if (mMovement != null) {
@@ -11466,7 +11500,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             changed = true;
         }
 
-        if (requestRectWithoutFocus && isFocused()) {
+        if (requestRectWithoutFocus || isFocused()) {
             // This offsets because getInterestingRect() is in terms of viewport coordinates, but
             // requestRectangleOnScreen() is in terms of content coordinates.
 

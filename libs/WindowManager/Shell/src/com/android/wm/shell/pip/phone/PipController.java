@@ -104,7 +104,6 @@ import com.android.wm.shell.sysui.UserChangeListener;
 import com.android.wm.shell.transition.Transitions;
 
 import java.io.PrintWriter;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -119,11 +118,13 @@ public class PipController implements PipTransitionController.PipTransitionCallb
         UserChangeListener {
     private static final String TAG = "PipController";
 
+    private static final String LAUNCHER_KEEP_CLEAR_AREA_TAG = "hotseat";
+
     private static final long PIP_KEEP_CLEAR_AREAS_DELAY =
             SystemProperties.getLong("persist.wm.debug.pip_keep_clear_areas_delay", 200);
 
     private boolean mEnablePipKeepClearAlgorithm =
-            SystemProperties.getBoolean("persist.wm.debug.enable_pip_keep_clear_algorithm", false);
+            SystemProperties.getBoolean("persist.wm.debug.enable_pip_keep_clear_algorithm", true);
 
     @VisibleForTesting
     void setEnablePipKeepClearAlgorithm(boolean value) {
@@ -162,6 +163,10 @@ public class PipController implements PipTransitionController.PipTransitionCallb
             this::onKeepClearAreasChangedCallback;
 
     private void onKeepClearAreasChangedCallback() {
+        if (mIsKeyguardShowingOrAnimating) {
+            // early bail out if the change was caused by keyguard showing up
+            return;
+        }
         if (!mEnablePipKeepClearAlgorithm) {
             // early bail out if the keep clear areas feature is disabled
             return;
@@ -187,12 +192,16 @@ public class PipController implements PipTransitionController.PipTransitionCallb
             // early bail out if the keep clear areas feature is disabled
             return;
         }
+        if (mIsKeyguardShowingOrAnimating) {
+            // early bail out if the change was caused by keyguard showing up
+            return;
+        }
         // only move if we're in PiP or transitioning into PiP
         if (!mPipTransitionState.shouldBlockResizeRequest()) {
             Rect destBounds = mPipKeepClearAlgorithm.adjust(mPipBoundsState,
                     mPipBoundsAlgorithm);
             // only move if the bounds are actually different
-            if (destBounds != mPipBoundsState.getBounds()) {
+            if (!destBounds.equals(mPipBoundsState.getBounds())) {
                 if (mPipTransitionState.hasEnteredPip()) {
                     // if already in PiP, schedule separate animation
                     mPipTaskOrganizer.scheduleAnimateResizePip(destBounds,
@@ -638,9 +647,11 @@ public class PipController implements PipTransitionController.PipTransitionCallb
                         DisplayLayout pendingLayout = mDisplayController
                                 .getDisplayLayout(mPipDisplayLayoutState.getDisplayId());
                         if (mIsInFixedRotation
+                                || mIsKeyguardShowingOrAnimating
                                 || pendingLayout.rotation()
                                 != mPipBoundsState.getDisplayLayout().rotation()) {
-                            // bail out if there is a pending rotation or fixed rotation change
+                            // bail out if there is a pending rotation or fixed rotation change or
+                            // there's a keyguard present
                             return;
                         }
                         int oldMaxMovementBound = mPipBoundsState.getMovementBounds().bottom;
@@ -772,7 +783,7 @@ public class PipController implements PipTransitionController.PipTransitionCallb
                     mPipAnimationController.getCurrentAnimator();
             if (animator != null && animator.isRunning()) {
                 // cancel any running animator, as it is using stale display layout information
-                PipAnimationController.quietCancel(animator);
+                animator.cancel();
             }
             onDisplayChangedUncheck(layout, saveRestoreSnapFraction);
         }
@@ -934,13 +945,15 @@ public class PipController implements PipTransitionController.PipTransitionCallb
                     0, mPipBoundsState.getDisplayBounds().bottom - height,
                     mPipBoundsState.getDisplayBounds().right,
                     mPipBoundsState.getDisplayBounds().bottom);
-            Set<Rect> restrictedKeepClearAreas = new HashSet<>(
-                    mPipBoundsState.getRestrictedKeepClearAreas());
-            restrictedKeepClearAreas.add(rect);
-            mPipBoundsState.setKeepClearAreas(restrictedKeepClearAreas,
-                    mPipBoundsState.getUnrestrictedKeepClearAreas());
-            updatePipPositionForKeepClearAreas();
+            mPipBoundsState.addNamedUnrestrictedKeepClearArea(LAUNCHER_KEEP_CLEAR_AREA_TAG, rect);
+        } else {
+            mPipBoundsState.removeNamedUnrestrictedKeepClearArea(LAUNCHER_KEEP_CLEAR_AREA_TAG);
         }
+        updatePipPositionForKeepClearAreas();
+    }
+
+    private void setLauncherAppIconSize(int iconSizePx) {
+        mPipBoundsState.getLauncherState().setAppIconSizePx(iconSizePx);
     }
 
     private void setOnIsInPipStateChangedListener(Consumer<Boolean> callback) {
@@ -1287,26 +1300,26 @@ public class PipController implements PipTransitionController.PipTransitionCallb
                 overlay.setUnreleasedWarningCallSite("PipController.stopSwipePipToHome");
             }
             executeRemoteCallWithTaskPermission(mController, "stopSwipePipToHome",
-                    (controller) -> {
-                        controller.stopSwipePipToHome(taskId, componentName, destinationBounds,
-                                overlay);
-                    });
+                    (controller) -> controller.stopSwipePipToHome(
+                            taskId, componentName, destinationBounds, overlay));
         }
 
         @Override
         public void setShelfHeight(boolean visible, int height) {
             executeRemoteCallWithTaskPermission(mController, "setShelfHeight",
-                    (controller) -> {
-                        controller.setShelfHeight(visible, height);
-                    });
+                    (controller) -> controller.setShelfHeight(visible, height));
         }
 
         @Override
         public void setLauncherKeepClearAreaHeight(boolean visible, int height) {
             executeRemoteCallWithTaskPermission(mController, "setLauncherKeepClearAreaHeight",
-                    (controller) -> {
-                        controller.setLauncherKeepClearAreaHeight(visible, height);
-                    });
+                    (controller) -> controller.setLauncherKeepClearAreaHeight(visible, height));
+        }
+
+        @Override
+        public void setLauncherAppIconSize(int iconSizePx) {
+            executeRemoteCallWithTaskPermission(mController, "setLauncherAppIconSize",
+                    (controller) -> controller.setLauncherAppIconSize(iconSizePx));
         }
 
         @Override
@@ -1324,9 +1337,7 @@ public class PipController implements PipTransitionController.PipTransitionCallb
         @Override
         public void setPipAnimationTypeToAlpha() {
             executeRemoteCallWithTaskPermission(mController, "setPipAnimationTypeToAlpha",
-                    (controller) -> {
-                        controller.setPinnedStackAnimationType(ANIM_TYPE_ALPHA);
-                    });
+                    (controller) -> controller.setPinnedStackAnimationType(ANIM_TYPE_ALPHA));
         }
     }
 }

@@ -435,6 +435,7 @@ public class LocalBluetoothProfileManager {
                         cachedDevice.setHearingAidInfo(infoBuilder.build());
                     }
                 }
+
                 HearingAidStatsLogUtils.logHearingAidInfo(cachedDevice);
             }
 

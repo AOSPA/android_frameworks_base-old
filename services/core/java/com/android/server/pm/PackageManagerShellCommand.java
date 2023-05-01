@@ -692,7 +692,7 @@ class PackageManagerShellCommand extends ShellCommand {
                         null /* usesSplitNames */, null /* configForSplit */,
                         null /* splitApkPaths */, null /* splitRevisionCodes */,
                         apkLite.getTargetSdkVersion(), null /* requiredSplitTypes */,
-                        null /* splitTypes */);
+                        null /* splitTypes */, apkLite.isAllowUpdateOwnership());
                 sessionSize += InstallLocationUtils.calculateInstalledSize(pkgLite,
                         params.sessionParams.abiOverride, fd.getFileDescriptor());
             } catch (IOException e) {
@@ -2447,7 +2447,7 @@ class PackageManagerShellCommand extends ShellCommand {
                     mInterface.getApplicationEnabledSetting(pkg, translatedUserId)));
             return 0;
         } else {
-            mInterface.setComponentEnabledSetting(cn, state, 0, translatedUserId);
+            mInterface.setComponentEnabledSetting(cn, state, 0, translatedUserId, "shell");
             getOutPrintWriter().println("Component " + cn.toShortString() + " new state: "
                     + enabledSettingToString(
                     mInterface.getComponentEnabledSetting(cn, translatedUserId)));
@@ -4400,15 +4400,9 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("      -f: force compilation even if not needed");
         pw.println("      -m: select compilation mode");
         pw.println("          MODE is one of the dex2oat compiler filters:");
-        pw.println("            assume-verified");
-        pw.println("            extract");
         pw.println("            verify");
-        pw.println("            quicken");
-        pw.println("            space-profile");
-        pw.println("            space");
         pw.println("            speed-profile");
         pw.println("            speed");
-        pw.println("            everything");
         pw.println("      -r: select compilation reason");
         pw.println("          REASON is one of:");
         for (int i = 0; i < PackageManagerServiceCompilerMapping.REASON_STRINGS.length; i++) {

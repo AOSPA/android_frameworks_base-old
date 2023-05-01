@@ -2193,6 +2193,11 @@
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this.[CHAR_LIMIT=NONE] -->
     <string name="permdesc_highSamplingRateSensors">Allows the app to sample sensor data at a rate greater than 200 Hz</string>
 
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR_LIMIT=NONE] -->
+    <string name="permlab_updatePackagesWithoutUserAction">update app without user action</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this.[CHAR_LIMIT=NONE] -->
+    <string name="permdesc_updatePackagesWithoutUserAction">Allows the holder to update the app it previously installed without user action</string>
+
     <!-- Policy administration -->
 
     <!-- Title of policy access to limiting the user's password choices -->
@@ -3969,11 +3974,6 @@
     <!-- Description of an application permission that lets it query all other packages. [CHAR LIMIT=NONE] -->
     <string name="permdesc_queryAllPackages">Allows an app to see all installed packages.</string>
 
-    <!-- Description of an application permission that grants access to secondary SIM do not disturb feature. -->
-    <string name="permdesc_sec_dnd">enable do not disturb feature on secondary SIM</string>
-    <!-- Title of an application permission that grants access to secondary SIM do not disturb feature. -->
-    <string name="permlabel_sec_dnd">Secondary SIM Do Not Disturb</string>
-
     <!-- Shown in the tutorial for tap twice for zoom control. -->
     <string name="tutorial_double_tap_to_zoom_message_short">Tap twice for zoom control</string>
 
@@ -5371,15 +5371,11 @@
     <string name="app_suspended_unsuspend_message">Unpause app</string>
 
     <!-- Title of a dialog. This text is confirming that the user wants to turn on access to their work apps, which the user had previously paused. "Work" is an adjective. [CHAR LIMIT=30] -->
-    <string name="work_mode_off_title">Turn on work apps?</string>
-    <!-- Text in a dialog. This text is confirming that the user wants to turn on access to their work apps and notifications, which the user had previously paused. "Work" is an adjective. [CHAR LIMIT=NONE] -->
-    <string name="work_mode_off_message">Get access to your work apps and notifications</string>
-    <!-- Title for button to turn on work profile. [CHAR LIMIT=NONE] -->
-    <string name="work_mode_turn_on">Turn on</string>
+    <string name="work_mode_off_title">Unpause work apps?</string>
+    <!-- Title for button to unpause on work profile. [CHAR LIMIT=NONE] -->
+    <string name="work_mode_turn_on">Unpause</string>
     <!-- Title for button to launch the personal safety app to make an emergency call    -->
     <string name="work_mode_emergency_call_button">Emergency</string>
-    <!-- Text shown in a dialog when the user tries to launch a disabled work profile app when work apps are paused-->
-    <string name="work_mode_dialer_off_message">Get access to your work apps and calls</string>
 
     <!-- Title of the dialog that is shown when the user tries to launch a blocked application [CHAR LIMIT=50] -->
     <string name="app_blocked_title">App is not available</string>
@@ -6274,6 +6270,12 @@ ul.</string>
     <string name="concurrent_display_notification_thermal_title">Device is too warm</string>
     <!-- Content of concurrent display thermal notification. [CHAR LIMIT=NONE] -->
     <string name="concurrent_display_notification_thermal_content">Dual Screen is unavailable because your phone is getting too warm</string>
+    <!-- Title of concurrent display power saver notification. [CHAR LIMIT=NONE] -->
+    <string name="concurrent_display_notification_power_save_title">Dual Screen is unavailable</string>
+    <!-- Content of concurrent display power saver notification. [CHAR LIMIT=NONE] -->
+    <string name="concurrent_display_notification_power_save_content">Dual Screen is unavailable because Battery Saver is on. You can turn this off in Settings.</string>
+    <!-- Text of power saver notification settings button. [CHAR LIMIT=NONE] -->
+    <string name="device_state_notification_settings_button">Go to Settings</string>
     <!-- Text of device state notification turn off button. [CHAR LIMIT=NONE] -->
     <string name="device_state_notification_turn_off_button">Turn off</string>
 

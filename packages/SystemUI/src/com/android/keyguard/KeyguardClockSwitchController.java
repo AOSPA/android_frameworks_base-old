@@ -22,6 +22,7 @@ import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
 import static com.android.keyguard.KeyguardClockSwitch.LARGE;
 import static com.android.keyguard.KeyguardClockSwitch.SMALL;
 
+import android.annotation.Nullable;
 import android.database.ContentObserver;
 import android.os.UserHandle;
 import android.provider.Settings;
@@ -39,7 +40,6 @@ import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
 import com.android.systemui.log.dagger.KeyguardClockLog;
-import com.android.systemui.plugins.ClockAnimations;
 import com.android.systemui.plugins.ClockController;
 import com.android.systemui.plugins.log.LogBuffer;
 import com.android.systemui.plugins.log.LogLevel;
@@ -109,7 +109,7 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
     private final ContentObserver mShowWeatherObserver = new ContentObserver(null) {
         @Override
         public void onChange(boolean change) {
-            setWeatherVisibility();
+            setDateWeatherVisibility();
         }
     };
 
@@ -235,7 +235,7 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
         );
 
         updateDoubleLineClock();
-        setWeatherVisibility();
+        setDateWeatherVisibility();
 
         mKeyguardUnlockAnimationController.addKeyguardUnlockAnimationListener(
                 mKeyguardUnlockAnimationListener);
@@ -336,6 +336,7 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
         }
 
         mCurrentClockSize = clockSize;
+        setDateWeatherVisibility();
 
         ClockController clock = getClock();
         boolean appeared = mView.switchToClock(clockSize, animate);
@@ -388,6 +389,13 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
             PropertyAnimator.setProperty(mStatusArea, AnimatableProperty.TRANSLATION_X,
                     x, props, animate);
         }
+
+    }
+
+    void updateKeyguardStatusViewOffset() {
+        // updateClockTargetRegions will call onTargetRegionChanged
+        // which will require the correct translationY property of keyguardStatusView after updating
+        mView.updateClockTargetRegions();
     }
 
     /**
@@ -456,9 +464,11 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
 
         mClockEventController.setClock(clock);
         mView.setClock(clock, mStatusBarStateController.getState());
+        setDateWeatherVisibility();
     }
 
-    private ClockController getClock() {
+    @Nullable
+    public ClockController getClock() {
         return mClockEventController.getClock();
     }
 
@@ -476,11 +486,18 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
         }
     }
 
-    private void setWeatherVisibility() {
-        if (mWeatherView != null) {
-            mUiExecutor.execute(
-                    () -> mWeatherView.setVisibility(
-                        mSmartspaceController.isWeatherEnabled() ? View.VISIBLE : View.GONE));
+    private void setDateWeatherVisibility() {
+        if (mDateWeatherView != null || mWeatherView != null) {
+            mUiExecutor.execute(() -> {
+                if (mDateWeatherView != null) {
+                    mDateWeatherView.setVisibility(
+                            clockHasCustomWeatherDataDisplay() ? View.GONE : View.VISIBLE);
+                }
+                if (mWeatherView != null) {
+                    mWeatherView.setVisibility(
+                            mSmartspaceController.isWeatherEnabled() ? View.VISIBLE : View.GONE);
+                }
+            });
         }
     }
 
@@ -509,8 +526,14 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
         }
     }
 
-    /** Gets the animations for the current clock. */
-    public ClockAnimations getClockAnimations() {
-        return getClock().getAnimations();
+    /** Returns true if the clock handles the display of weather information */
+    private boolean clockHasCustomWeatherDataDisplay() {
+        ClockController clock = getClock();
+        if (clock == null) {
+            return false;
+        }
+
+        return ((mCurrentClockSize == LARGE) ? clock.getLargeClock() : clock.getSmallClock())
+                .getConfig().getHasCustomWeatherDataDisplay();
     }
 }

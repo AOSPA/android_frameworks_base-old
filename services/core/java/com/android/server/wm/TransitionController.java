@@ -30,6 +30,7 @@ import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.IApplicationThread;
 import android.app.WindowConfiguration;
+import android.graphics.Rect;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.IRemoteCallback;
@@ -88,8 +89,9 @@ class TransitionController {
 
     private WindowProcessController mTransitionPlayerProc;
     final ActivityTaskManagerService mAtm;
+
     final RemotePlayer mRemotePlayer;
-    TaskSnapshotController mTaskSnapshotController;
+    SnapshotController mSnapshotController;
     TransitionTracer mTransitionTracer;
 
     private final ArrayList<WindowManagerInternal.AppTransitionListener> mLegacyListeners =
@@ -106,6 +108,9 @@ class TransitionController {
      * removed from this list.
      */
     private final ArrayList<Transition> mPlayingTransitions = new ArrayList<>();
+
+    /** The currently finishing transition. */
+    Transition mFinishingTransition;
 
     /**
      * The windows that request to be invisible while it is in transition. After the transition
@@ -150,7 +155,7 @@ class TransitionController {
     }
 
     void setWindowManager(WindowManagerService wms) {
-        mTaskSnapshotController = wms.mTaskSnapshotController;
+        mSnapshotController = wms.mSnapshotController;
         mTransitionTracer = wms.mTransitionTracer;
         mIsWaitingForDisplayEnabled = !wms.mDisplayEnabled;
         registerLegacyListener(wms.mActivityManagerAppTransitionNotifier);
@@ -313,6 +318,11 @@ class TransitionController {
         return false;
     }
 
+    /** Returns {@code true} if the `wc` is a participant of the finishing transition. */
+    boolean inFinishingTransition(WindowContainer<?> wc) {
+        return mFinishingTransition != null && mFinishingTransition.mParticipants.contains(wc);
+    }
+
     /** @return {@code true} if a transition is running */
     boolean inTransition() {
         // TODO(shell-transitions): eventually properly support multiple
@@ -358,11 +368,11 @@ class TransitionController {
     }
 
     boolean isTransientHide(@NonNull Task task) {
-        if (mCollectingTransition != null && mCollectingTransition.isTransientHide(task)) {
+        if (mCollectingTransition != null && mCollectingTransition.isInTransientHide(task)) {
             return true;
         }
         for (int i = mPlayingTransitions.size() - 1; i >= 0; --i) {
-            if (mPlayingTransitions.get(i).isTransientHide(task)) return true;
+            if (mPlayingTransitions.get(i).isInTransientHide(task)) return true;
         }
         return false;
     }
@@ -456,6 +466,28 @@ class TransitionController {
         return type == TRANSIT_OPEN || type == TRANSIT_CLOSE;
     }
 
+    /** Whether the display change should run with blast sync. */
+    private static boolean shouldSync(@NonNull TransitionRequestInfo.DisplayChange displayChange) {
+        if ((displayChange.getStartRotation() + displayChange.getEndRotation()) % 2 == 0) {
+            // 180 degrees rotation change may not change screen size. So the clients may draw
+            // some frames before and after the display projection transaction is applied by the
+            // remote player. That may cause some buffers to show in different rotation. So use
+            // sync method to pause clients drawing until the projection transaction is applied.
+            return true;
+        }
+        final Rect startBounds = displayChange.getStartAbsBounds();
+        final Rect endBounds = displayChange.getEndAbsBounds();
+        if (startBounds == null || endBounds == null) return false;
+        final int startWidth = startBounds.width();
+        final int startHeight = startBounds.height();
+        final int endWidth = endBounds.width();
+        final int endHeight = endBounds.height();
+        // This is changing screen resolution. Because the screen decor layers are excluded from
+        // screenshot, their draw transactions need to run with the start transaction.
+        return (endWidth > startWidth) == (endHeight > startHeight)
+                && (endWidth != startWidth || endHeight != startHeight);
+    }
+
     /**
      * If a transition isn't requested yet, creates one and asks the TransitionPlayer (Shell) to
      * start it. Collection can start immediately.
@@ -485,12 +517,7 @@ class TransitionController {
         } else {
             newTransition = requestStartTransition(createTransition(type, flags),
                     trigger != null ? trigger.asTask() : null, remoteTransition, displayChange);
-            if (newTransition != null && displayChange != null && (displayChange.getStartRotation()
-                    + displayChange.getEndRotation()) % 2 == 0) {
-                // 180 degrees rotation change may not change screen size. So the clients may draw
-                // some frames before and after the display projection transaction is applied by the
-                // remote player. That may cause some buffers to show in different rotation. So use
-                // sync method to pause clients drawing until the projection transaction is applied.
+            if (newTransition != null && displayChange != null && shouldSync(displayChange)) {
                 mAtm.mWindowManager.mSyncEngine.setSyncMethod(newTransition.getSyncId(),
                         BLASTSyncEngine.METHOD_BLAST);
             }
@@ -540,7 +567,9 @@ class TransitionController {
             transition.mLogger.mRequestTimeNs = SystemClock.elapsedRealtimeNanos();
             transition.mLogger.mRequest = request;
             mTransitionPlayer.requestStartTransition(transition.getToken(), request);
-            transition.setRemoteTransition(remoteTransition);
+            if (remoteTransition != null) {
+                transition.setRemoteAnimationApp(remoteTransition.getAppThread());
+            }
         } catch (RemoteException e) {
             Slog.e(TAG, "Error requesting transition", e);
             transition.start();
@@ -672,14 +701,13 @@ class TransitionController {
     }
 
     /** @see Transition#finishTransition */
-    void finishTransition(@NonNull IBinder token) {
+    void finishTransition(Transition record) {
         // It is usually a no-op but make sure that the metric consumer is removed.
-        mTransitionMetricsReporter.reportAnimationStart(token, 0 /* startTime */);
+        mTransitionMetricsReporter.reportAnimationStart(record.getToken(), 0 /* startTime */);
         // It is a no-op if the transition did not change the display.
         mAtm.endLaunchPowerMode(POWER_MODE_REASON_CHANGE_DISPLAY);
-        final Transition record = Transition.fromBinder(token);
-        if (record == null || !mPlayingTransitions.contains(record)) {
-            Slog.e(TAG, "Trying to finish a non-playing transition " + token);
+        if (!mPlayingTransitions.contains(record)) {
+            Slog.e(TAG, "Trying to finish a non-playing transition " + record);
             return;
         }
         ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Finish Transition: %s", record);
@@ -732,12 +760,12 @@ class TransitionController {
             t.setEarlyWakeupStart();
             // Usually transitions put quite a load onto the system already (with all the things
             // happening in app), so pause task snapshot persisting to not increase the load.
-            mAtm.mWindowManager.mSnapshotPersistQueue.setPaused(true);
+            mAtm.mWindowManager.mSnapshotController.setPause(true);
             mAnimatingState = true;
             Trace.asyncTraceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "transitAnim", 0);
         } else if (!animatingState && mAnimatingState) {
             t.setEarlyWakeupEnd();
-            mAtm.mWindowManager.mSnapshotPersistQueue.setPaused(false);
+            mAtm.mWindowManager.mSnapshotController.setPause(false);
             mAnimatingState = false;
             Trace.asyncTraceEnd(Trace.TRACE_TAG_WINDOW_MANAGER, "transitAnim", 0);
         }
@@ -753,9 +781,8 @@ class TransitionController {
             mRemotePlayer.clear();
             return;
         }
-        final RemoteTransition remote = transition.getRemoteTransition();
-        if (remote == null) return;
-        final IApplicationThread appThread = remote.getAppThread();
+        final IApplicationThread appThread = transition.getRemoteAnimationApp();
+        if (appThread == null || appThread == mTransitionPlayerProc.getThread()) return;
         final WindowProcessController delegate = mAtm.getProcessController(appThread);
         if (delegate == null) return;
         mRemotePlayer.update(delegate, isPlaying, true /* predict */);
@@ -969,6 +996,8 @@ class TransitionController {
         WindowContainerTransaction mStartWCT;
         int mSyncId;
         TransitionInfo mInfo;
+        ProtoOutputStream mProtoOutputStream = new ProtoOutputStream();
+        long mProtoToken;
 
         private String buildOnSendLog() {
             StringBuilder sb = new StringBuilder("Sent Transition #").append(mSyncId)

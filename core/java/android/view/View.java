@@ -92,6 +92,7 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.hardware.display.DisplayManagerGlobal;
+import android.hardware.input.InputManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -163,7 +164,6 @@ import android.view.translation.ViewTranslationCallback;
 import android.view.translation.ViewTranslationRequest;
 import android.view.translation.ViewTranslationResponse;
 import android.widget.Checkable;
-import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ScrollBarDrawable;
 import android.window.OnBackInvokedDispatcher;
@@ -5414,7 +5414,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * The pointer icon when the mouse hovers on this view. The default is null.
      */
-    private PointerIcon mPointerIcon;
+    private PointerIcon mMousePointerIcon;
 
     /**
      * @hide
@@ -10347,24 +10347,29 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Check whether current activity / package is in denylist.If it's in the denylist,
-     * then the views marked as not important for autofill are not eligible for autofill.
+     * Check whether current activity / package is in autofill denylist.
+     *
+     * Called by viewGroup#populateChildrenForAutofill() to determine whether to include view in
+     * assist structure
      */
     final boolean isActivityDeniedForAutofillForUnimportantView() {
         final AutofillManager afm = getAutofillManager();
-        // keep behavior same with denylist feature not enabled
-        if (afm == null) return true;
-        return afm.isActivityDeniedForAutofillForUnimportantView();
+        if (afm == null) return false;
+        return afm.isActivityDeniedForAutofill();
     }
 
     /**
      * Check whether current view matches autofillable heuristics
+     *
+     * Called by viewGroup#populateChildrenForAutofill() to determine whether to include view in
+     * assist structure
      */
     final boolean isMatchingAutofillableHeuristics() {
         final AutofillManager afm = getAutofillManager();
-        // keep default behavior
         if (afm == null) return false;
-        return afm.isMatchingAutofillableHeuristicsForNotImportantViews(this);
+        // check the flag to see if trigger fill request on not important views is enabled
+        return afm.isTriggerFillRequestOnUnimportantViewEnabled()
+            ? afm.isAutofillable(this) : false;
     }
 
     private boolean isAutofillable() {
@@ -10380,39 +10385,26 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             return false;
         }
 
-        // Experiment imeAction heuristic on important views. If the important view doesn't pass
-        // heuristic check, also check augmented autofill in case augmented autofill is enabled
-        // for the activity
-        // TODO: refactor to have both important views and not important views use the same
-        // heuristic check
-        if (isImportantForAutofill()
-            && afm.isTriggerFillRequestOnFilteredImportantViewsEnabled()
-            && this instanceof EditText
-            && !afm.isPassingImeActionCheck((EditText) this)
-            && !notifyAugmentedAutofillIfNeeded(afm)) {
-            // TODO: add a log to indicate what has filtered out the view
+        // Check whether view is not part of an activity. If it's not, return false.
+        if (getAutofillViewId() <= LAST_APP_AUTOFILL_ID) {
             return false;
         }
 
-        if (!isImportantForAutofill()) {
-            // If view matches heuristics and is not denied, it will be treated same as view that's
-            // important for autofill
-            if (afm.isMatchingAutofillableHeuristicsForNotImportantViews(this)
-                    && !afm.isActivityDeniedForAutofillForUnimportantView()) {
-                return getAutofillViewId() > LAST_APP_AUTOFILL_ID;
-            }
-            // View is not important for "regular" autofill, so we must check if Augmented Autofill
-            // is enabled for the activity
-            if (!notifyAugmentedAutofillIfNeeded(afm)){
-                return false;
-            }
+        // If view is important and filter important view flag is turned on, or view is not
+        // important and trigger fill request on not important view flag is turned on, then use
+        // AutofillManager.isAutofillable() to decide whether view is autofillable instead.
+        if ((isImportantForAutofill() && afm.isTriggerFillRequestOnFilteredImportantViewsEnabled())
+                || (!isImportantForAutofill()
+                    && afm.isTriggerFillRequestOnUnimportantViewEnabled())) {
+            return afm.isAutofillable(this) ? true : notifyAugmentedAutofillIfNeeded(afm);
         }
 
-        return getAutofillViewId() > LAST_APP_AUTOFILL_ID;
+        // If the previous condition is not met, fall back to the previous way to trigger fill
+        // request based on autofill importance instead.
+        return isImportantForAutofill() ? true : notifyAugmentedAutofillIfNeeded(afm);
     }
 
-    /** @hide **/
-    public boolean notifyAugmentedAutofillIfNeeded(AutofillManager afm) {
+    private boolean notifyAugmentedAutofillIfNeeded(AutofillManager afm) {
         final AutofillOptions options = mContext.getAutofillOptions();
         if (options == null || !options.isAugmentedAutofillEnabled(mContext)) {
             return false;
@@ -29519,30 +29511,71 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Returns the pointer icon for the motion event, or null if it doesn't specify the icon.
-     * The default implementation does not care the location or event types, but some subclasses
-     * may use it (such as WebViews).
-     * @param event The MotionEvent from a mouse
-     * @param pointerIndex The index of the pointer for which to retrieve the {@link PointerIcon}.
-     *                     This will be between 0 and {@link MotionEvent#getPointerCount()}.
+     * Resolve the pointer icon that should be used for specified pointer in the motion event.
+     *
+     * The default implementation will resolve the pointer icon to one set using
+     * {@link #setPointerIcon(PointerIcon)} for mouse devices. Subclasses may override this to
+     * customize the icon for the given pointer.
+     *
+     * For example, the pointer icon for a stylus pointer can be resolved in the following way:
+     * <code><pre>
+     * &#64;Override
+     * public PointerIcon onResolvePointerIcon(MotionEvent event, int pointerIndex) {
+     *     final int toolType = event.getToolType(pointerIndex);
+     *     if (!event.isFromSource(InputDevice.SOURCE_MOUSE)
+     *             && event.isFromSource(InputDevice.SOURCE_STYLUS)
+     *             && (toolType == MotionEvent.TOOL_TYPE_STYLUS
+     *                     || toolType == MotionEvent.TOOL_TYPE_ERASER)) {
+     *         // Show this pointer icon only if this pointer is a stylus.
+     *         return PointerIcon.getSystemIcon(mContext, PointerIcon.TYPE_WAIT);
+     *     }
+     *     // Use the default logic for determining the pointer icon for other non-stylus pointers,
+     *     // like for the mouse cursor.
+     *     return super.onResolvePointerIcon(event, pointerIndex);
+     * }
+     * </pre></code>
+     *
+     * @param event The {@link MotionEvent} that requires a pointer icon to be resolved for one of
+     *              pointers.
+     * @param pointerIndex The index of the pointer in {@code event} for which to retrieve the
+     *     {@link PointerIcon}. This will be between 0 and {@link MotionEvent#getPointerCount()}.
+     * @return the pointer icon to use for specified pointer, or {@code null} if a pointer icon
+     *     is not specified and the default icon should be used.
      * @see PointerIcon
+     * @see InputManager#isStylusPointerIconEnabled()
      */
     public PointerIcon onResolvePointerIcon(MotionEvent event, int pointerIndex) {
         final float x = event.getX(pointerIndex);
         final float y = event.getY(pointerIndex);
         if (isDraggingScrollBar() || isOnScrollbarThumb(x, y)) {
-            return PointerIcon.getSystemIcon(mContext, PointerIcon.TYPE_ARROW);
+            // Use the default pointer icon.
+            return null;
         }
-        return mPointerIcon;
+
+        // Note: A drawing tablet will have both SOURCE_MOUSE and SOURCE_STYLUS, but it would use
+        // TOOL_TYPE_STYLUS. For now, treat drawing tablets the same way as a mouse or touchpad.
+        if (event.isFromSource(InputDevice.SOURCE_MOUSE)) {
+            return mMousePointerIcon;
+        }
+
+        return null;
     }
 
     /**
-     * Set the pointer icon for the current view.
+     * Set the pointer icon to be used for a mouse pointer in the current view.
+     *
      * Passing {@code null} will restore the pointer icon to its default value.
+     * Note that setting the pointer icon using this method will only set it for events coming from
+     * a mouse device (i.e. with source {@link InputDevice#SOURCE_MOUSE}). To resolve
+     * the pointer icon for other device types like styluses, override
+     * {@link #onResolvePointerIcon(MotionEvent, int)}.
+     *
      * @param pointerIcon A PointerIcon instance which will be shown when the mouse hovers.
+     * @see #onResolvePointerIcon(MotionEvent, int)
+     * @see PointerIcon
      */
     public void setPointerIcon(PointerIcon pointerIcon) {
-        mPointerIcon = pointerIcon;
+        mMousePointerIcon = pointerIcon;
         if (mAttachInfo == null || mAttachInfo.mHandlingPointerEvent) {
             return;
         }
@@ -29553,11 +29586,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Gets the pointer icon for the current view.
+     * Gets the mouse pointer icon for the current view.
+     *
+     * @see #setPointerIcon(PointerIcon)
      */
     @InspectableProperty
     public PointerIcon getPointerIcon() {
-        return mPointerIcon;
+        return mMousePointerIcon;
     }
 
     /**

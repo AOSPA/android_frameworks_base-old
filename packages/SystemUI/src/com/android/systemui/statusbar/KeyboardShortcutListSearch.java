@@ -33,7 +33,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
-import android.hardware.input.InputManager;
+import android.hardware.input.InputManagerGlobal;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.RemoteException;
@@ -388,7 +388,7 @@ public final class KeyboardShortcutListSearch {
      * Keyboard with its default map.
      */
     private void retrieveKeyCharacterMap(int deviceId) {
-        final InputManager inputManager = InputManager.getInstance();
+        final InputManagerGlobal inputManager = InputManagerGlobal.getInstance();
         mBackupKeyCharacterMap = inputManager.getInputDevice(-1).getKeyCharacterMap();
         if (deviceId != -1) {
             final InputDevice inputDevice = inputManager.getInputDevice(deviceId);
@@ -657,25 +657,6 @@ public final class KeyboardShortcutListSearch {
                                                 R.string.input_switch_input_language_previous),
                                         KeyEvent.KEYCODE_SPACE,
                                         KeyEvent.META_META_ON | KeyEvent.META_SHIFT_ON),
-                                        null))),
-                /* Access emoji: Meta + . */
-                new ShortcutMultiMappingInfo(
-                        context.getString(R.string.input_access_emoji),
-                        null,
-                        Arrays.asList(
-                                new ShortcutKeyGroup(new KeyboardShortcutInfo(
-                                        context.getString(R.string.input_access_emoji),
-                                        KeyEvent.KEYCODE_PERIOD,
-                                        KeyEvent.META_META_ON),
-                                        null))),
-                /* Access voice typing: Meta + V */
-                new ShortcutMultiMappingInfo(
-                        context.getString(R.string.input_access_voice_typing),
-                        null,
-                        Arrays.asList(
-                                new ShortcutKeyGroup(new KeyboardShortcutInfo(
-                                        context.getString(R.string.input_access_voice_typing),
-                                        KeyEvent.KEYCODE_V, KeyEvent.META_META_ON),
                                         null)))
         );
         return new KeyboardShortcutMultiMappingGroup(

@@ -44,7 +44,6 @@ import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_STATES;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_TASKS;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_WALLPAPER;
 import static com.android.internal.protolog.ProtoLogGroup.WM_SHOW_SURFACE_ALLOC;
-import static com.android.internal.protolog.ProtoLogGroup.WM_SHOW_TRANSACTIONS;
 import static com.android.server.policy.PhoneWindowManager.SYSTEM_DIALOG_REASON_ASSIST;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_LAYOUT;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
@@ -440,13 +439,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         }
     };
 
-    private static final Consumer<WindowState> sRemoveReplacedWindowsConsumer = w -> {
-        final ActivityRecord activity = w.mActivityRecord;
-        if (activity != null) {
-            activity.removeReplacedWindowIfNeeded(w);
-        }
-    };
-
     RootWindowContainer(WindowManagerService service) {
         super(service);
         mHandler = new MyHandler(service.mH.getLooper());
@@ -668,17 +660,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     void closeSystemDialogs(String reason) {
         mCloseSystemDialogsReason = reason;
         forAllWindows(mCloseSystemDialogsConsumer, false /* traverseTopToBottom */);
-    }
-
-    void removeReplacedWindows() {
-        ProtoLog.i(WM_SHOW_TRANSACTIONS, ">>> OPEN TRANSACTION removeReplacedWindows");
-        mWmService.openSurfaceTransaction();
-        try {
-            forAllWindows(sRemoveReplacedWindowsConsumer, true /* traverseTopToBottom */);
-        } finally {
-            mWmService.closeSurfaceTransaction("removeReplacedWindows");
-            ProtoLog.i(WM_SHOW_TRANSACTIONS, "<<< CLOSE TRANSACTION removeReplacedWindows");
-        }
     }
 
     boolean hasPendingLayoutChanges(WindowAnimator animator) {
@@ -2411,11 +2392,10 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                     resumedOnDisplay[0] |= curResult;
                     return;
                 }
-                if (rootTask.getDisplayArea().isTopRootTask(rootTask)
-                        && topRunningActivity.isState(RESUMED)) {
-                    // Kick off any lingering app transitions from the MoveTaskToFront
-                    // operation, but only consider the top task and root-task on that
-                    // display.
+                if (topRunningActivity.isState(RESUMED)
+                        && topRunningActivity == rootTask.getDisplayArea().topRunningActivity()) {
+                    // Kick off any lingering app transitions form the MoveTaskToFront operation,
+                    // but only consider the top activity on that display.
                     rootTask.executeAppTransition(targetOptions);
                 } else {
                     resumedOnDisplay[0] |= topRunningActivity.makeActiveIfNeeded(target);
@@ -2480,12 +2460,23 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             }
 
             // Prepare transition before resume top activity, so it can be collected.
-            if (!displayShouldSleep && display.isDefaultDisplay
-                    && !display.getDisplayPolicy().isAwake()
-                    && display.mTransitionController.isShellTransitionsEnabled()
+            if (!displayShouldSleep && display.mTransitionController.isShellTransitionsEnabled()
                     && !display.mTransitionController.isCollecting()) {
-                display.mTransitionController.requestTransitionIfNeeded(TRANSIT_WAKE,
-                        0 /* flags */, null /* trigger */, display);
+                int transit = TRANSIT_NONE;
+                if (!display.getDisplayPolicy().isAwake()) {
+                    // Note that currently this only happens on default display because non-default
+                    // display is always awake.
+                    transit = TRANSIT_WAKE;
+                } else if (display.isKeyguardOccluded()) {
+                    // The display was awake so this is resuming activity for occluding keyguard.
+                    transit = WindowManager.TRANSIT_KEYGUARD_OCCLUDE;
+                }
+                if (transit != TRANSIT_NONE) {
+                    display.mTransitionController.requestStartTransition(
+                            display.mTransitionController.createTransition(transit),
+                            null /* startTask */, null /* remoteTransition */,
+                            null /* displayChange */);
+                }
             }
             // Set the sleeping state of the root tasks on the display.
             display.forAllRootTasks(rootTask -> {

@@ -21,11 +21,14 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 
 import static org.junit.Assert.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyFloat;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
@@ -63,7 +66,6 @@ import com.android.dx.mockito.inline.extended.ExtendedMockito;
 import com.android.server.LocalServices;
 import com.android.server.am.BatteryStatsService;
 import com.android.server.display.RampAnimator.DualRampAnimator;
-import com.android.server.display.brightness.BrightnessEvent;
 import com.android.server.display.color.ColorDisplayService;
 import com.android.server.display.layout.Layout;
 import com.android.server.display.whitebalance.DisplayWhiteBalanceController;
@@ -148,6 +150,8 @@ public final class DisplayPowerController2Test {
                 mCdsiMock).when(() -> LocalServices.getService(
                 ColorDisplayService.ColorDisplayServiceInternal.class));
         doAnswer((Answer<Void>) invocationOnMock -> null).when(BatteryStatsService::getService);
+        doAnswer((Answer<Boolean>) invocationOnMock -> true).when(() ->
+                Settings.System.putFloatForUser(any(), any(), anyFloat(), anyInt()));
 
         setUpSensors();
         mHolder = createDisplayPowerController(DISPLAY_ID, UNIQUE_ID);
@@ -287,73 +291,6 @@ public final class DisplayPowerController2Test {
                 eq(mProxSensor), anyInt(), any(Handler.class));
     }
 
-    /**
-     * Creates a mock and registers it to {@link LocalServices}.
-     */
-    private static <T> void addLocalServiceMock(Class<T> clazz, T mock) {
-        LocalServices.removeServiceForTest(clazz);
-        LocalServices.addService(clazz, mock);
-    }
-
-    private void advanceTime(long timeMs) {
-        mClock.fastForward(timeMs);
-        mTestLooper.dispatchAll();
-    }
-
-    private void setUpSensors() throws Exception {
-        mProxSensor = TestUtils.createSensor(Sensor.TYPE_PROXIMITY, Sensor.STRING_TYPE_PROXIMITY,
-                PROX_SENSOR_MAX_RANGE);
-        Sensor screenOffBrightnessSensor = TestUtils.createSensor(
-                Sensor.TYPE_LIGHT, Sensor.STRING_TYPE_LIGHT);
-        when(mSensorManagerMock.getSensorList(eq(Sensor.TYPE_ALL)))
-                .thenReturn(List.of(mProxSensor, screenOffBrightnessSensor));
-    }
-
-    private SensorEventListener getSensorEventListener(Sensor sensor) {
-        verify(mSensorManagerMock).registerListener(mSensorEventListenerCaptor.capture(),
-                eq(sensor), eq(SensorManager.SENSOR_DELAY_NORMAL), isA(Handler.class));
-        return mSensorEventListenerCaptor.getValue();
-    }
-
-    private void setUpDisplay(int displayId, String uniqueId, LogicalDisplay logicalDisplayMock,
-            DisplayDevice displayDeviceMock, DisplayDeviceConfig displayDeviceConfigMock,
-            boolean isEnabled) {
-        DisplayInfo info = new DisplayInfo();
-        DisplayDeviceInfo deviceInfo = new DisplayDeviceInfo();
-        deviceInfo.uniqueId = uniqueId;
-
-        when(logicalDisplayMock.getDisplayIdLocked()).thenReturn(displayId);
-        when(logicalDisplayMock.getPrimaryDisplayDeviceLocked()).thenReturn(displayDeviceMock);
-        when(logicalDisplayMock.getDisplayInfoLocked()).thenReturn(info);
-        when(logicalDisplayMock.isEnabledLocked()).thenReturn(isEnabled);
-        when(logicalDisplayMock.isInTransitionLocked()).thenReturn(false);
-        when(logicalDisplayMock.getBrightnessThrottlingDataIdLocked()).thenReturn(
-                DisplayDeviceConfig.DEFAULT_ID);
-        when(displayDeviceMock.getDisplayDeviceInfoLocked()).thenReturn(deviceInfo);
-        when(displayDeviceMock.getUniqueId()).thenReturn(uniqueId);
-        when(displayDeviceMock.getDisplayDeviceConfig()).thenReturn(displayDeviceConfigMock);
-        when(displayDeviceConfigMock.getProximitySensor()).thenReturn(
-                new DisplayDeviceConfig.SensorData() {
-                    {
-                        type = Sensor.STRING_TYPE_PROXIMITY;
-                        name = null;
-                    }
-                });
-        when(displayDeviceConfigMock.getNits()).thenReturn(new float[]{2, 500});
-        when(displayDeviceConfigMock.isAutoBrightnessAvailable()).thenReturn(true);
-        when(displayDeviceConfigMock.getAmbientLightSensor()).thenReturn(
-                new DisplayDeviceConfig.SensorData());
-        when(displayDeviceConfigMock.getScreenOffBrightnessSensor()).thenReturn(
-                new DisplayDeviceConfig.SensorData() {
-                    {
-                        type = Sensor.STRING_TYPE_LIGHT;
-                        name = null;
-                    }
-                });
-        when(displayDeviceConfigMock.getScreenOffBrightnessSensorValueToLux())
-                .thenReturn(new int[0]);
-    }
-
     @Test
     public void testDisplayBrightnessFollowers_BothDpcsSupportNits() {
         DisplayPowerControllerHolder followerDpc =
@@ -482,6 +419,32 @@ public final class DisplayPowerController2Test {
         verify(followerDpc.animator).animateTo(eq(brightness), anyFloat(), anyFloat());
     }
 
+    @Test
+    public void testDisplayBrightnessFollowers_AutomaticBrightness() {
+        doAnswer((Answer<Integer>) invocationOnMock ->
+                Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC)
+                .when(() -> Settings.System.getIntForUser(any(ContentResolver.class),
+                        eq(Settings.System.SCREEN_BRIGHTNESS_MODE), anyInt(),
+                        eq(UserHandle.USER_CURRENT)));
+        final float brightness = 0.4f;
+        final float nits = 300;
+        final float ambientLux = 3000;
+        when(mHolder.automaticBrightnessController.getRawAutomaticScreenBrightness())
+                .thenReturn(brightness);
+        when(mHolder.automaticBrightnessController.getAutomaticScreenBrightness())
+                .thenReturn(0.3f);
+        when(mHolder.automaticBrightnessController.convertToNits(brightness)).thenReturn(nits);
+        when(mHolder.automaticBrightnessController.getAmbientLux()).thenReturn(ambientLux);
+        when(mHolder.displayPowerState.getScreenState()).thenReturn(Display.STATE_ON);
+        DisplayPowerController followerDpc = mock(DisplayPowerController.class);
+
+        mHolder.dpc.addDisplayBrightnessFollower(followerDpc);
+        DisplayPowerRequest dpr = new DisplayPowerRequest();
+        mHolder.dpc.requestPowerState(dpr, /* waitForNegativeProximity= */ false);
+        advanceTime(1); // Run updatePowerState
+
+        verify(followerDpc).setBrightnessToFollow(brightness, nits, ambientLux);
+    }
 
     @Test
     public void testDisplayBrightnessFollowersRemoval() {
@@ -601,8 +564,8 @@ public final class DisplayPowerController2Test {
                 .thenReturn(brightness);
         dpr.policy = DisplayPowerRequest.POLICY_BRIGHT;
         when(mHolder.displayPowerState.getScreenState()).thenReturn(Display.STATE_ON);
-        when(mHolder.automaticBrightnessController.getAutomaticScreenBrightness(
-                any(BrightnessEvent.class))).thenReturn(PowerManager.BRIGHTNESS_INVALID_FLOAT);
+        when(mHolder.automaticBrightnessController.getAutomaticScreenBrightness())
+                .thenReturn(PowerManager.BRIGHTNESS_INVALID_FLOAT);
 
         mHolder.dpc.requestPowerState(dpr, /* waitForNegativeProximity= */ false);
         advanceTime(1); // Run updatePowerState
@@ -639,8 +602,8 @@ public final class DisplayPowerController2Test {
                 .thenReturn(brightness);
         dpr.policy = DisplayPowerRequest.POLICY_BRIGHT;
         when(mHolder.displayPowerState.getScreenState()).thenReturn(Display.STATE_ON);
-        when(mHolder.automaticBrightnessController.getAutomaticScreenBrightness(
-                any(BrightnessEvent.class))).thenReturn(PowerManager.BRIGHTNESS_INVALID_FLOAT);
+        when(mHolder.automaticBrightnessController.getAutomaticScreenBrightness())
+                .thenReturn(PowerManager.BRIGHTNESS_INVALID_FLOAT);
 
         mHolder.dpc.requestPowerState(dpr, /* waitForNegativeProximity= */ false);
         advanceTime(1); // Run updatePowerState
@@ -711,6 +674,7 @@ public final class DisplayPowerController2Test {
 
     @Test
     public void testStopScreenOffBrightnessSensorControllerWhenDisplayDeviceChanges() {
+        // New display device
         setUpDisplay(DISPLAY_ID, "new_unique_id", mHolder.display, mock(DisplayDevice.class),
                 mock(DisplayDeviceConfig.class), /* isEnabled= */ true);
 
@@ -750,6 +714,123 @@ public final class DisplayPowerController2Test {
         verify(mHolder.animator, times(2)).animateTo(eq(newBrightness), anyFloat(), anyFloat());
     }
 
+    @Test
+    public void testShortTermModelPersistsWhenDisplayDeviceChanges() {
+        float lux = 2000;
+        float brightness = 0.4f;
+        float nits = 500;
+        when(mHolder.brightnessMappingStrategy.getUserLux()).thenReturn(lux);
+        when(mHolder.brightnessMappingStrategy.getUserBrightness()).thenReturn(brightness);
+        when(mHolder.brightnessMappingStrategy.convertToNits(brightness)).thenReturn(nits);
+        when(mHolder.brightnessMappingStrategy.convertToFloatScale(nits)).thenReturn(brightness);
+        DisplayPowerRequest dpr = new DisplayPowerRequest();
+        mHolder.dpc.requestPowerState(dpr, /* waitForNegativeProximity= */ false);
+        advanceTime(1);
+        clearInvocations(mHolder.injector);
+
+        // New display device
+        setUpDisplay(DISPLAY_ID, "new_unique_id", mHolder.display, mock(DisplayDevice.class),
+                mock(DisplayDeviceConfig.class), /* isEnabled= */ true);
+        mHolder.dpc.onDisplayChanged(mHolder.hbmMetadata, Layout.NO_LEAD_DISPLAY);
+        advanceTime(1);
+
+        verify(mHolder.injector).getAutomaticBrightnessController(
+                any(AutomaticBrightnessController.Callbacks.class),
+                any(Looper.class),
+                eq(mSensorManagerMock),
+                any(),
+                eq(mHolder.brightnessMappingStrategy),
+                anyInt(),
+                anyFloat(),
+                anyFloat(),
+                anyFloat(),
+                anyInt(),
+                anyInt(),
+                anyLong(),
+                anyLong(),
+                anyBoolean(),
+                any(HysteresisLevels.class),
+                any(HysteresisLevels.class),
+                any(HysteresisLevels.class),
+                any(HysteresisLevels.class),
+                eq(mContextSpy),
+                any(HighBrightnessModeController.class),
+                any(BrightnessThrottler.class),
+                isNull(),
+                anyInt(),
+                anyInt(),
+                eq(lux),
+                eq(brightness)
+        );
+    }
+
+    /**
+     * Creates a mock and registers it to {@link LocalServices}.
+     */
+    private static <T> void addLocalServiceMock(Class<T> clazz, T mock) {
+        LocalServices.removeServiceForTest(clazz);
+        LocalServices.addService(clazz, mock);
+    }
+
+    private void advanceTime(long timeMs) {
+        mClock.fastForward(timeMs);
+        mTestLooper.dispatchAll();
+    }
+
+    private void setUpSensors() throws Exception {
+        mProxSensor = TestUtils.createSensor(Sensor.TYPE_PROXIMITY, Sensor.STRING_TYPE_PROXIMITY,
+                PROX_SENSOR_MAX_RANGE);
+        Sensor screenOffBrightnessSensor = TestUtils.createSensor(
+                Sensor.TYPE_LIGHT, Sensor.STRING_TYPE_LIGHT);
+        when(mSensorManagerMock.getSensorList(eq(Sensor.TYPE_ALL)))
+                .thenReturn(List.of(mProxSensor, screenOffBrightnessSensor));
+    }
+
+    private SensorEventListener getSensorEventListener(Sensor sensor) {
+        verify(mSensorManagerMock).registerListener(mSensorEventListenerCaptor.capture(),
+                eq(sensor), eq(SensorManager.SENSOR_DELAY_NORMAL), isA(Handler.class));
+        return mSensorEventListenerCaptor.getValue();
+    }
+
+    private void setUpDisplay(int displayId, String uniqueId, LogicalDisplay logicalDisplayMock,
+            DisplayDevice displayDeviceMock, DisplayDeviceConfig displayDeviceConfigMock,
+            boolean isEnabled) {
+        DisplayInfo info = new DisplayInfo();
+        DisplayDeviceInfo deviceInfo = new DisplayDeviceInfo();
+        deviceInfo.uniqueId = uniqueId;
+
+        when(logicalDisplayMock.getDisplayIdLocked()).thenReturn(displayId);
+        when(logicalDisplayMock.getPrimaryDisplayDeviceLocked()).thenReturn(displayDeviceMock);
+        when(logicalDisplayMock.getDisplayInfoLocked()).thenReturn(info);
+        when(logicalDisplayMock.isEnabledLocked()).thenReturn(isEnabled);
+        when(logicalDisplayMock.isInTransitionLocked()).thenReturn(false);
+        when(logicalDisplayMock.getThermalBrightnessThrottlingDataIdLocked()).thenReturn(
+                DisplayDeviceConfig.DEFAULT_ID);
+        when(displayDeviceMock.getDisplayDeviceInfoLocked()).thenReturn(deviceInfo);
+        when(displayDeviceMock.getUniqueId()).thenReturn(uniqueId);
+        when(displayDeviceMock.getDisplayDeviceConfig()).thenReturn(displayDeviceConfigMock);
+        when(displayDeviceConfigMock.getProximitySensor()).thenReturn(
+                new DisplayDeviceConfig.SensorData() {
+                    {
+                        type = Sensor.STRING_TYPE_PROXIMITY;
+                        name = null;
+                    }
+                });
+        when(displayDeviceConfigMock.getNits()).thenReturn(new float[]{2, 500});
+        when(displayDeviceConfigMock.isAutoBrightnessAvailable()).thenReturn(true);
+        when(displayDeviceConfigMock.getAmbientLightSensor()).thenReturn(
+                new DisplayDeviceConfig.SensorData());
+        when(displayDeviceConfigMock.getScreenOffBrightnessSensor()).thenReturn(
+                new DisplayDeviceConfig.SensorData() {
+                    {
+                        type = Sensor.STRING_TYPE_LIGHT;
+                        name = null;
+                    }
+                });
+        when(displayDeviceConfigMock.getScreenOffBrightnessSensorValueToLux())
+                .thenReturn(new int[0]);
+    }
+
     private DisplayPowerControllerHolder createDisplayPowerController(int displayId,
             String uniqueId) {
         return createDisplayPowerController(displayId, uniqueId, /* isEnabled= */ true);
@@ -768,9 +849,9 @@ public final class DisplayPowerController2Test {
         final ScreenOffBrightnessSensorController screenOffBrightnessSensorController =
                 mock(ScreenOffBrightnessSensorController.class);
 
-        TestInjector injector = new TestInjector(displayPowerState, animator,
+        TestInjector injector = spy(new TestInjector(displayPowerState, animator,
                 automaticBrightnessController, wakelockController, brightnessMappingStrategy,
-                hysteresisLevels, screenOffBrightnessSensorController);
+                hysteresisLevels, screenOffBrightnessSensorController));
 
         final LogicalDisplay display = mock(LogicalDisplay.class);
         final DisplayDevice device = mock(DisplayDevice.class);
@@ -788,7 +869,8 @@ public final class DisplayPowerController2Test {
 
         return new DisplayPowerControllerHolder(dpc, display, displayPowerState, brightnessSetting,
                 animator, automaticBrightnessController, wakelockController,
-                screenOffBrightnessSensorController, hbmMetadata);
+                screenOffBrightnessSensorController, hbmMetadata, brightnessMappingStrategy,
+                injector);
     }
 
     /**
@@ -805,6 +887,8 @@ public final class DisplayPowerController2Test {
         public final WakelockController wakelockController;
         public final ScreenOffBrightnessSensorController screenOffBrightnessSensorController;
         public final HighBrightnessModeMetadata hbmMetadata;
+        public final BrightnessMappingStrategy brightnessMappingStrategy;
+        public final DisplayPowerController2.Injector injector;
 
         DisplayPowerControllerHolder(DisplayPowerController2 dpc, LogicalDisplay display,
                 DisplayPowerState displayPowerState, BrightnessSetting brightnessSetting,
@@ -812,7 +896,9 @@ public final class DisplayPowerController2Test {
                 AutomaticBrightnessController automaticBrightnessController,
                 WakelockController wakelockController,
                 ScreenOffBrightnessSensorController screenOffBrightnessSensorController,
-                HighBrightnessModeMetadata hbmMetadata) {
+                HighBrightnessModeMetadata hbmMetadata,
+                BrightnessMappingStrategy brightnessMappingStrategy,
+                DisplayPowerController2.Injector injector) {
             this.dpc = dpc;
             this.display = display;
             this.displayPowerState = displayPowerState;
@@ -822,6 +908,8 @@ public final class DisplayPowerController2Test {
             this.wakelockController = wakelockController;
             this.screenOffBrightnessSensorController = screenOffBrightnessSensorController;
             this.hbmMetadata = hbmMetadata;
+            this.brightnessMappingStrategy = brightnessMappingStrategy;
+            this.injector = injector;
         }
     }
 

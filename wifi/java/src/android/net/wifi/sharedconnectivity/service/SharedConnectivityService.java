@@ -46,6 +46,7 @@ import com.android.internal.R;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CountDownLatch;
 
 
 /**
@@ -68,9 +69,7 @@ public abstract class SharedConnectivityService extends Service {
             new RemoteCallbackList<>();
     private List<HotspotNetwork> mHotspotNetworks = Collections.emptyList();
     private List<KnownNetwork> mKnownNetworks = Collections.emptyList();
-    private SharedConnectivitySettingsState mSettingsState =
-            new SharedConnectivitySettingsState.Builder().setInstantTetherEnabled(false)
-                    .setExtras(Bundle.EMPTY).build();
+    private SharedConnectivitySettingsState mSettingsState = null;
     private HotspotNetworkConnectionStatus mHotspotNetworkConnectionStatus =
             new HotspotNetworkConnectionStatus.Builder()
                     .setStatus(HotspotNetworkConnectionStatus.CONNECTION_STATUS_UNKNOWN)
@@ -79,6 +78,8 @@ public abstract class SharedConnectivityService extends Service {
             new KnownNetworkConnectionStatus.Builder()
                     .setStatus(KnownNetworkConnectionStatus.CONNECTION_STATUS_UNKNOWN)
                     .setExtras(Bundle.EMPTY).build();
+    // Used for testing
+    private CountDownLatch mCountDownLatch;
 
     @Override
     @Nullable
@@ -202,6 +203,13 @@ public abstract class SharedConnectivityService extends Service {
             @Override
             public SharedConnectivitySettingsState getSettingsState() {
                 checkPermissions();
+                // Done lazily since creating it needs a context.
+                if (mSettingsState == null) {
+                    mSettingsState = new SharedConnectivitySettingsState
+                            .Builder()
+                            .setInstantTetherEnabled(false)
+                            .setExtras(Bundle.EMPTY).build();
+                }
                 return mSettingsState;
             }
 
@@ -260,12 +268,24 @@ public abstract class SharedConnectivityService extends Service {
     public void onBind() {
     }
 
+    /** @hide */
+    @TestApi
+    public final void setCountdownLatch(@Nullable CountDownLatch latch) {
+        mCountDownLatch = latch;
+    }
+
     private void onRegisterCallback(ISharedConnectivityCallback callback) {
         mRemoteCallbackList.register(callback);
+        if (mCountDownLatch != null) {
+            mCountDownLatch.countDown();
+        }
     }
 
     private void onUnregisterCallback(ISharedConnectivityCallback callback) {
         mRemoteCallbackList.unregister(callback);
+        if (mCountDownLatch != null) {
+            mCountDownLatch.countDown();
+        }
     }
 
     /**

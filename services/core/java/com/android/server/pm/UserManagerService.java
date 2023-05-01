@@ -278,6 +278,7 @@ public class UserManagerService extends IUserManager.Stub {
     private static final long EPOCH_PLUS_30_YEARS = 30L * 365 * 24 * 60 * 60 * 1000L; // ms
 
     static final int WRITE_USER_MSG = 1;
+    static final int WRITE_USER_LIST_MSG = 2;
     static final int WRITE_USER_DELAY = 2*1000;  // 2 seconds
 
     private static final long BOOT_USER_SET_TIMEOUT_MS = 300_000;
@@ -321,7 +322,6 @@ public class UserManagerService extends IUserManager.Stub {
     private final Handler mHandler;
 
     private final File mUsersDir;
-    @GuardedBy("mPackagesLock")
     private final File mUserListFile;
 
     private final IBinder mUserRestrictionToken = new Binder();
@@ -1275,8 +1275,16 @@ public class UserManagerService extends IUserManager.Stub {
         intent.putExtra(Intent.EXTRA_USER_HANDLE, profileHandle.getIdentifier());
         getDevicePolicyManagerInternal().broadcastIntentToManifestReceivers(
                 intent, parentHandle, /* requiresPermission= */ true);
-        intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
-        mContext.sendBroadcastAsUser(intent, parentHandle);
+        intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY | Intent.FLAG_RECEIVER_FOREGROUND);
+        final Bundle options = new BroadcastOptions()
+                .setDeferralPolicy(BroadcastOptions.DEFERRAL_POLICY_UNTIL_ACTIVE)
+                .setDeliveryGroupPolicy(BroadcastOptions.DELIVERY_GROUP_POLICY_MOST_RECENT)
+                // Both actions use single namespace because only the final state matters.
+                .setDeliveryGroupMatchingKey(
+                        Intent.ACTION_MANAGED_PROFILE_AVAILABLE /* namespace */,
+                        String.valueOf(profileHandle.getIdentifier()) /* key */)
+                .toBundle();
+        mContext.sendBroadcastAsUser(intent, parentHandle, /* receiverPermission= */ null, options);
     }
 
     @Override
@@ -1996,10 +2004,10 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     @Override
-    public int getDisplayIdAssignedToUser() {
+    public int getMainDisplayIdAssignedToUser() {
         // Not checking for any permission as it returns info about calling user
         int userId = UserHandle.getUserId(Binder.getCallingUid());
-        int displayId = mUserVisibilityMediator.getDisplayAssignedToUser(userId);
+        int displayId = mUserVisibilityMediator.getMainDisplayAssignedToUser(userId);
         return displayId;
     }
 
@@ -2584,7 +2592,7 @@ public class UserManagerService extends IUserManager.Stub {
             }
         }
         if (scheduleWriteUser) {
-            scheduleWriteUser(userData);
+            scheduleWriteUser(userId);
         }
     }
 
@@ -2894,7 +2902,7 @@ public class UserManagerService extends IUserManager.Stub {
                     != newBaseRestrictions);
 
             if (mBaseUserRestrictions.updateRestrictions(userId, newBaseRestrictions)) {
-                scheduleWriteUser(getUserDataNoChecks(userId));
+                scheduleWriteUser(userId);
             }
         }
 
@@ -2970,7 +2978,7 @@ public class UserManagerService extends IUserManager.Stub {
     @GuardedBy("mRestrictionsLock")
     private void applyUserRestrictionsLR(@UserIdInt int userId) {
         updateUserRestrictionsInternalLR(null, userId);
-        scheduleWriteUser(getUserDataNoChecks(userId));
+        scheduleWriteUser(userId);
     }
 
     @GuardedBy("mRestrictionsLock")
@@ -3615,77 +3623,95 @@ public class UserManagerService extends IUserManager.Stub {
         mUpdatingSystemUserMode = true;
     }
 
+
+    private ResilientAtomicFile getUserListFile() {
+        File tempBackup = new File(mUserListFile.getParent(), mUserListFile.getName() + ".backup");
+        File reserveCopy = new File(mUserListFile.getParent(),
+                mUserListFile.getName() + ".reservecopy");
+        int fileMode = FileUtils.S_IRWXU | FileUtils.S_IRWXG | FileUtils.S_IXOTH;
+        return new ResilientAtomicFile(mUserListFile, tempBackup, reserveCopy, fileMode,
+                "user list", (priority, msg) -> {
+            Slog.e(LOG_TAG, msg);
+            // Something went wrong, schedule full rewrite.
+            scheduleWriteUserList();
+        });
+    }
+
     @GuardedBy({"mPackagesLock"})
     private void readUserListLP() {
-        if (!mUserListFile.exists()) {
-            fallbackToSingleUserLP();
-            return;
-        }
-        FileInputStream fis = null;
-        AtomicFile userListFile = new AtomicFile(mUserListFile);
-        try {
-            fis = userListFile.openRead();
-            final TypedXmlPullParser parser = Xml.resolvePullParser(fis);
-            int type;
-            while ((type = parser.next()) != XmlPullParser.START_TAG
-                    && type != XmlPullParser.END_DOCUMENT) {
-                // Skip
-            }
+        try (ResilientAtomicFile file = getUserListFile()) {
+            FileInputStream fin = null;
+            try {
+                fin = file.openRead();
+                if (fin == null) {
+                    Slog.e(LOG_TAG, "userlist.xml not found, fallback to single user");
+                    fallbackToSingleUserLP();
+                    return;
+                }
 
-            if (type != XmlPullParser.START_TAG) {
-                Slog.e(LOG_TAG, "Unable to read user list");
-                fallbackToSingleUserLP();
-                return;
-            }
+                final TypedXmlPullParser parser = Xml.resolvePullParser(fin);
+                int type;
+                while ((type = parser.next()) != XmlPullParser.START_TAG
+                        && type != XmlPullParser.END_DOCUMENT) {
+                    // Skip
+                }
 
-            mNextSerialNumber = -1;
-            if (parser.getName().equals(TAG_USERS)) {
-                mNextSerialNumber =
-                        parser.getAttributeInt(null, ATTR_NEXT_SERIAL_NO, mNextSerialNumber);
-                mUserVersion =
-                        parser.getAttributeInt(null, ATTR_USER_VERSION, mUserVersion);
-                mUserTypeVersion =
-                        parser.getAttributeInt(null, ATTR_USER_TYPE_VERSION, mUserTypeVersion);
-            }
+                if (type != XmlPullParser.START_TAG) {
+                    Slog.e(LOG_TAG, "Unable to read user list");
+                    fallbackToSingleUserLP();
+                    return;
+                }
 
-            while ((type = parser.next()) != XmlPullParser.END_DOCUMENT) {
-                if (type == XmlPullParser.START_TAG) {
-                    final String name = parser.getName();
-                    if (name.equals(TAG_USER)) {
-                        UserData userData = readUserLP(parser.getAttributeInt(null, ATTR_ID));
+                mNextSerialNumber = -1;
+                if (parser.getName().equals(TAG_USERS)) {
+                    mNextSerialNumber =
+                            parser.getAttributeInt(null, ATTR_NEXT_SERIAL_NO, mNextSerialNumber);
+                    mUserVersion =
+                            parser.getAttributeInt(null, ATTR_USER_VERSION, mUserVersion);
+                    mUserTypeVersion =
+                            parser.getAttributeInt(null, ATTR_USER_TYPE_VERSION, mUserTypeVersion);
+                }
 
-                        if (userData != null) {
-                            synchronized (mUsersLock) {
-                                mUsers.put(userData.info.id, userData);
-                                if (mNextSerialNumber < 0
-                                        || mNextSerialNumber <= userData.info.id) {
-                                    mNextSerialNumber = userData.info.id + 1;
-                                }
-                            }
-                        }
-                    } else if (name.equals(TAG_GUEST_RESTRICTIONS)) {
-                        while ((type = parser.next()) != XmlPullParser.END_DOCUMENT
-                                && type != XmlPullParser.END_TAG) {
-                            if (type == XmlPullParser.START_TAG) {
-                                if (parser.getName().equals(TAG_RESTRICTIONS)) {
-                                    synchronized (mGuestRestrictions) {
-                                        UserRestrictionsUtils
-                                                .readRestrictions(parser, mGuestRestrictions);
+                while ((type = parser.next()) != XmlPullParser.END_DOCUMENT) {
+                    if (type == XmlPullParser.START_TAG) {
+                        final String name = parser.getName();
+                        if (name.equals(TAG_USER)) {
+                            UserData userData = readUserLP(parser.getAttributeInt(null, ATTR_ID));
+
+                            if (userData != null) {
+                                synchronized (mUsersLock) {
+                                    mUsers.put(userData.info.id, userData);
+                                    if (mNextSerialNumber < 0
+                                            || mNextSerialNumber <= userData.info.id) {
+                                        mNextSerialNumber = userData.info.id + 1;
                                     }
                                 }
-                                break;
+                            }
+                        } else if (name.equals(TAG_GUEST_RESTRICTIONS)) {
+                            while ((type = parser.next()) != XmlPullParser.END_DOCUMENT
+                                    && type != XmlPullParser.END_TAG) {
+                                if (type == XmlPullParser.START_TAG) {
+                                    if (parser.getName().equals(TAG_RESTRICTIONS)) {
+                                        synchronized (mGuestRestrictions) {
+                                            UserRestrictionsUtils
+                                                    .readRestrictions(parser, mGuestRestrictions);
+                                        }
+                                    }
+                                    break;
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            updateUserIds();
-            upgradeIfNecessaryLP();
-        } catch (IOException | XmlPullParserException e) {
-            fallbackToSingleUserLP();
-        } finally {
-            IoUtils.closeQuietly(fis);
+                updateUserIds();
+                upgradeIfNecessaryLP();
+            } catch (Exception e) {
+                // Remove corrupted file and retry.
+                file.failRead(fin, e);
+                readUserListLP();
+                return;
+            }
         }
 
         synchronized (mUsersLock) {
@@ -4091,16 +4117,44 @@ public class UserManagerService extends IUserManager.Stub {
         }
     }
 
-    private void scheduleWriteUser(UserData userData) {
+    private void scheduleWriteUserList() {
+        if (DBG) {
+            debug("scheduleWriteUserList");
+        }
+        // No need to wrap it within a lock -- worst case, we'll just post the same message
+        // twice.
+        if (!mHandler.hasMessages(WRITE_USER_LIST_MSG)) {
+            Message msg = mHandler.obtainMessage(WRITE_USER_LIST_MSG);
+            mHandler.sendMessageDelayed(msg, WRITE_USER_DELAY);
+        }
+    }
+
+    private void scheduleWriteUser(@UserIdInt int userId) {
         if (DBG) {
             debug("scheduleWriteUser");
         }
         // No need to wrap it within a lock -- worst case, we'll just post the same message
         // twice.
-        if (!mHandler.hasMessages(WRITE_USER_MSG, userData)) {
-            Message msg = mHandler.obtainMessage(WRITE_USER_MSG, userData);
+        if (!mHandler.hasMessages(WRITE_USER_MSG, userId)) {
+            Message msg = mHandler.obtainMessage(WRITE_USER_MSG, userId);
             mHandler.sendMessageDelayed(msg, WRITE_USER_DELAY);
         }
+    }
+
+    private ResilientAtomicFile getUserFile(int userId) {
+        File file = new File(mUsersDir, userId + XML_SUFFIX);
+        File tempBackup = new File(mUsersDir, userId + XML_SUFFIX + ".backup");
+        File reserveCopy = new File(mUsersDir, userId + XML_SUFFIX + ".reservecopy");
+        int fileMode = FileUtils.S_IRWXU | FileUtils.S_IRWXG | FileUtils.S_IXOTH;
+        return new ResilientAtomicFile(file, tempBackup, reserveCopy, fileMode,
+                "user info", (priority, msg) -> {
+            Slog.e(LOG_TAG, msg);
+            // Something went wrong, schedule full rewrite.
+            UserData userData = getUserDataNoChecks(userId);
+            if (userData != null) {
+                scheduleWriteUser(userId);
+            }
+        });
     }
 
     @GuardedBy({"mPackagesLock"})
@@ -4108,15 +4162,16 @@ public class UserManagerService extends IUserManager.Stub {
         if (DBG) {
             debug("writeUserLP " + userData);
         }
-        FileOutputStream fos = null;
-        AtomicFile userFile = new AtomicFile(new File(mUsersDir, userData.info.id + XML_SUFFIX));
-        try {
-            fos = userFile.startWrite();
-            writeUserLP(userData, fos);
-            userFile.finishWrite(fos);
-        } catch (Exception ioe) {
-            Slog.e(LOG_TAG, "Error writing user info " + userData.info.id, ioe);
-            userFile.failWrite(fos);
+        try (ResilientAtomicFile userFile = getUserFile(userData.info.id)) {
+            FileOutputStream fos = null;
+            try {
+                fos = userFile.startWrite();
+                writeUserLP(userData, fos);
+                userFile.finishWrite(fos);
+            } catch (Exception ioe) {
+                Slog.e(LOG_TAG, "Error writing user info " + userData.info.id, ioe);
+                userFile.failWrite(fos);
+            }
         }
     }
 
@@ -4245,65 +4300,71 @@ public class UserManagerService extends IUserManager.Stub {
         if (DBG) {
             debug("writeUserList");
         }
-        FileOutputStream fos = null;
-        AtomicFile userListFile = new AtomicFile(mUserListFile);
-        try {
-            fos = userListFile.startWrite();
-            final TypedXmlSerializer serializer = Xml.resolveSerializer(fos);
-            serializer.startDocument(null, true);
-            serializer.setFeature("http://xmlpull.org/v1/doc/features.html#indent-output", true);
 
-            serializer.startTag(null, TAG_USERS);
-            serializer.attributeInt(null, ATTR_NEXT_SERIAL_NO, mNextSerialNumber);
-            serializer.attributeInt(null, ATTR_USER_VERSION, mUserVersion);
-            serializer.attributeInt(null, ATTR_USER_TYPE_VERSION, mUserTypeVersion);
+        try (ResilientAtomicFile file = getUserListFile()) {
+            FileOutputStream fos = null;
+            try {
+                fos = file.startWrite();
 
-            serializer.startTag(null, TAG_GUEST_RESTRICTIONS);
-            synchronized (mGuestRestrictions) {
-                UserRestrictionsUtils
-                        .writeRestrictions(serializer, mGuestRestrictions, TAG_RESTRICTIONS);
-            }
-            serializer.endTag(null, TAG_GUEST_RESTRICTIONS);
-            int[] userIdsToWrite;
-            synchronized (mUsersLock) {
-                userIdsToWrite = new int[mUsers.size()];
-                for (int i = 0; i < userIdsToWrite.length; i++) {
-                    UserInfo user = mUsers.valueAt(i).info;
-                    userIdsToWrite[i] = user.id;
+                final TypedXmlSerializer serializer = Xml.resolveSerializer(fos);
+                serializer.startDocument(null, true);
+                serializer.setFeature("http://xmlpull.org/v1/doc/features.html#indent-output",
+                        true);
+
+                serializer.startTag(null, TAG_USERS);
+                serializer.attributeInt(null, ATTR_NEXT_SERIAL_NO, mNextSerialNumber);
+                serializer.attributeInt(null, ATTR_USER_VERSION, mUserVersion);
+                serializer.attributeInt(null, ATTR_USER_TYPE_VERSION, mUserTypeVersion);
+
+                serializer.startTag(null, TAG_GUEST_RESTRICTIONS);
+                synchronized (mGuestRestrictions) {
+                    UserRestrictionsUtils
+                            .writeRestrictions(serializer, mGuestRestrictions, TAG_RESTRICTIONS);
                 }
-            }
-            for (int id : userIdsToWrite) {
-                serializer.startTag(null, TAG_USER);
-                serializer.attributeInt(null, ATTR_ID, id);
-                serializer.endTag(null, TAG_USER);
-            }
+                serializer.endTag(null, TAG_GUEST_RESTRICTIONS);
+                int[] userIdsToWrite;
+                synchronized (mUsersLock) {
+                    userIdsToWrite = new int[mUsers.size()];
+                    for (int i = 0; i < userIdsToWrite.length; i++) {
+                        UserInfo user = mUsers.valueAt(i).info;
+                        userIdsToWrite[i] = user.id;
+                    }
+                }
+                for (int id : userIdsToWrite) {
+                    serializer.startTag(null, TAG_USER);
+                    serializer.attributeInt(null, ATTR_ID, id);
+                    serializer.endTag(null, TAG_USER);
+                }
 
-            serializer.endTag(null, TAG_USERS);
+                serializer.endTag(null, TAG_USERS);
 
-            serializer.endDocument();
-            userListFile.finishWrite(fos);
-        } catch (Exception e) {
-            userListFile.failWrite(fos);
-            Slog.e(LOG_TAG, "Error writing user list");
+                serializer.endDocument();
+                file.finishWrite(fos);
+            } catch (Exception e) {
+                Slog.e(LOG_TAG, "Error writing user list", e);
+                file.failWrite(fos);
+            }
         }
     }
 
     @GuardedBy({"mPackagesLock"})
     private UserData readUserLP(int id) {
-        FileInputStream fis = null;
-        try {
-            AtomicFile userFile =
-                    new AtomicFile(new File(mUsersDir, Integer.toString(id) + XML_SUFFIX));
-            fis = userFile.openRead();
-            return readUserLP(id, fis);
-        } catch (IOException ioe) {
-            Slog.e(LOG_TAG, "Error reading user list");
-        } catch (XmlPullParserException pe) {
-            Slog.e(LOG_TAG, "Error reading user list");
-        } finally {
-            IoUtils.closeQuietly(fis);
+        try (ResilientAtomicFile file = getUserFile(id)) {
+            FileInputStream fis = null;
+            try {
+                fis = file.openRead();
+                if (fis == null) {
+                    Slog.e(LOG_TAG, "User info not found, returning null, user id: " + id);
+                    return null;
+                }
+                return readUserLP(id, fis);
+            } catch (Exception e) {
+                // Remove corrupted file and retry.
+                Slog.e(LOG_TAG, "Error reading user info, user id: " + id);
+                file.failRead(fis, e);
+                return readUserLP(id);
+            }
         }
-        return null;
     }
 
     @GuardedBy({"mPackagesLock"})
@@ -4737,9 +4798,9 @@ public class UserManagerService extends IUserManager.Stub {
                             UserManager.USER_OPERATION_ERROR_MAX_USERS);
                 }
                 // Keep logic in sync with getRemainingCreatableUserCount()
-                if (!isGuest && !isProfile && !isDemo && isUserLimitReached()) {
+                if (!isGuest && !isManagedProfile && !isDemo && isUserLimitReached()) {
                     // If the user limit has been reached, we cannot add a user (except guest/demo).
-                    // Note that profiles can bypass it in certain circumstances (taken
+                    // Note that managed profiles can bypass it in certain circumstances (taken
                     // into account in the profile check below).
                     throwCheckedUserOperationException(
                             "Cannot add user. Maximum user limit is reached.",
@@ -5797,9 +5858,8 @@ public class UserManagerService extends IUserManager.Stub {
         synchronized (mPackagesLock) {
             writeUserListLP();
         }
-        // Remove user file
-        AtomicFile userFile = new AtomicFile(new File(mUsersDir, userId + XML_SUFFIX));
-        userFile.delete();
+        // Remove user file(s)
+        getUserFile(userId).delete();
         updateUserIds();
         if (RELEASE_DELETED_USER_ID) {
             synchronized (mUsersLock) {
@@ -5865,20 +5925,24 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     /**
-     * @deprecated Use {@link
-     * android.content.RestrictionsManager#getApplicationRestrictionsPerAdmin} instead.
+     * <p>Starting from Android version {@link android.os.Build.VERSION_CODES#UPSIDE_DOWN_CAKE},
+     * it is possible for there to be multiple managing agents on the device with the ability to set
+     * restrictions, e.g. an Enterprise DPC and a Supervision admin. This API will only to return
+     * the restrictions set by the DPCs. To retrieve restrictions set by all agents, use
+     * {@link android.content.RestrictionsManager#getApplicationRestrictionsPerAdmin} instead.
      */
-    @Deprecated
     @Override
     public Bundle getApplicationRestrictions(String packageName) {
         return getApplicationRestrictionsForUser(packageName, UserHandle.getCallingUserId());
     }
 
     /**
-     * @deprecated Use {@link
-     * android.content.RestrictionsManager#getApplicationRestrictionsPerAdmin} instead.
+     * <p>Starting from Android version {@link android.os.Build.VERSION_CODES#UPSIDE_DOWN_CAKE},
+     * it is possible for there to be multiple managing agents on the device with the ability to set
+     * restrictions, e.g. an Enterprise DPC and a Supervision admin. This API will only to return
+     * the restrictions set by the DPCs. To retrieve restrictions set by all agents, use
+     * {@link android.content.RestrictionsManager#getApplicationRestrictionsPerAdmin} instead.
      */
-    @Deprecated
     @Override
     public Bundle getApplicationRestrictionsForUser(String packageName, @UserIdInt int userId) {
         if (UserHandle.getCallingUserId() != userId
@@ -6299,7 +6363,7 @@ public class UserManagerService extends IUserManager.Stub {
             userData.info.lastLoggedInTime = now;
         }
         userData.info.lastLoggedInFingerprint = PackagePartitions.FINGERPRINT;
-        scheduleWriteUser(userData);
+        scheduleWriteUser(userId);
     }
 
     /**
@@ -6469,7 +6533,7 @@ public class UserManagerService extends IUserManager.Stub {
 
     private void setLastEnteredForegroundTimeToNow(@NonNull UserData userData) {
         userData.mLastEnteredForegroundTimeMillis = System.currentTimeMillis();
-        scheduleWriteUser(userData);
+        scheduleWriteUser(userData.info.id);
     }
 
     @Override
@@ -6758,10 +6822,17 @@ public class UserManagerService extends IUserManager.Stub {
         @Override
         public void handleMessage(Message msg) {
             switch (msg.what) {
+                case WRITE_USER_LIST_MSG: {
+                    removeMessages(WRITE_USER_LIST_MSG);
+                    synchronized (mPackagesLock) {
+                        writeUserListLP();
+                    }
+                    break;
+                }
                 case WRITE_USER_MSG:
                     removeMessages(WRITE_USER_MSG, msg.obj);
                     synchronized (mPackagesLock) {
-                        int userId = ((UserData) msg.obj).info.id;
+                        int userId = (int) msg.obj;
                         UserData userData = getUserDataNoChecks(userId);
                         if (userData != null) {
                             writeUserLP(userData);
@@ -6770,6 +6841,7 @@ public class UserManagerService extends IUserManager.Stub {
                                     + ", it was probably removed before handler could handle it");
                         }
                     }
+                    break;
             }
         }
     }
@@ -7185,8 +7257,8 @@ public class UserManagerService extends IUserManager.Stub {
         }
 
         @Override
-        public int getDisplayAssignedToUser(@UserIdInt int userId) {
-            return mUserVisibilityMediator.getDisplayAssignedToUser(userId);
+        public int getMainDisplayAssignedToUser(@UserIdInt int userId) {
+            return mUserVisibilityMediator.getMainDisplayAssignedToUser(userId);
         }
 
         @Override

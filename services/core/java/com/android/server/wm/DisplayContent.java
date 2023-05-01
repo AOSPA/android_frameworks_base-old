@@ -1228,7 +1228,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     private void finishHoldScreenUpdate() {
         final boolean hold = mTmpHoldScreenWindow != null;
         if (hold && mTmpHoldScreenWindow != mHoldScreenWindow) {
-            mHoldScreenWakeLock.setWorkSource(new WorkSource(mTmpHoldScreenWindow.mSession.mUid));
+            mHoldScreenWakeLock.setWorkSource(new WorkSource(mTmpHoldScreenWindow.mSession.mUid,
+                    mTmpHoldScreenWindow.mSession.mPackageName));
         }
         mHoldScreenWindow = mTmpHoldScreenWindow;
         mTmpHoldScreenWindow = null;
@@ -1566,7 +1567,14 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         if (configChanged) {
             mWaitingForConfig = true;
             if (mTransitionController.isShellTransitionsEnabled()) {
-                requestChangeTransitionIfNeeded(changes, null /* displayChange */);
+                final TransitionRequestInfo.DisplayChange change =
+                        mTransitionController.isCollecting()
+                                ? null : new TransitionRequestInfo.DisplayChange(mDisplayId);
+                if (change != null) {
+                    change.setStartAbsBounds(currentDisplayConfig.windowConfiguration.getBounds());
+                    change.setEndAbsBounds(mTmpConfiguration.windowConfiguration.getBounds());
+                }
+                requestChangeTransitionIfNeeded(changes, change);
             } else if (mLastHasContent) {
                 mWmService.startFreezingDisplay(0 /* exitAnim */, 0 /* enterAnim */, this);
             }
@@ -1640,7 +1648,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     @Override
     boolean handlesOrientationChangeFromDescendant(@ScreenOrientation int orientation) {
-        return !getIgnoreOrientationRequest(orientation)
+        return !shouldIgnoreOrientationRequest(orientation)
                 && !getDisplayRotation().isFixedToUserRotation();
     }
 
@@ -1744,7 +1752,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
         final int activityOrientation = r.getOverrideOrientation();
         if (!WindowManagerService.ENABLE_FIXED_ROTATION_TRANSFORM
-                || getIgnoreOrientationRequest(activityOrientation)) {
+                || shouldIgnoreOrientationRequest(activityOrientation)) {
             return ROTATION_UNDEFINED;
         }
         if (activityOrientation == ActivityInfo.SCREEN_ORIENTATION_BEHIND) {
@@ -2913,6 +2921,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                         /* includeRotationSettings */ false);
                 mDisplaySwitchTransitionLauncher.requestDisplaySwitchTransitionIfNeeded(mDisplayId,
                         mInitialDisplayWidth, mInitialDisplayHeight, newWidth, newHeight);
+                mDisplayRotation.physicalDisplayChanged();
             }
 
             // If there is an override set for base values - use it, otherwise use new values.
@@ -3283,7 +3292,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             mTransitionController.unregisterLegacyListener(mFixedRotationTransitionListener);
             handleAnimatingStoppedAndTransition();
             mWmService.stopFreezingDisplayLocked();
-            mDisplayRotation.removeDefaultDisplayRotationChangedCallback();
             mDeviceStateController.unregisterDeviceStateCallback(mDeviceStateConsumer);
             super.removeImmediately();
             if (DEBUG_DISPLAY) Slog.v(TAG_WM, "Removing display=" + this);
@@ -3292,12 +3300,12 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             // Unlink death from remote to clear the reference from binder -> mRemoteInsetsDeath
             // -> this DisplayContent.
             setRemoteInsetsController(null);
-            mWmService.mAnimator.removeDisplayLocked(mDisplayId);
             mOverlayLayer.release();
             mA11yOverlayLayer.release();
             mWindowingLayer.release();
             mInputMonitor.onDisplayRemoved();
             mWmService.mDisplayNotificationController.dispatchDisplayRemoved(this);
+            mDisplayRotation.onDisplayRemoved();
             mWmService.mAccessibilityController.onDisplayRemoved(mDisplayId);
             mRootWindowContainer.mTaskSupervisor
                     .getKeyguardController().onDisplayRemoved(mDisplayId);
@@ -5138,17 +5146,17 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         @ScreenOrientation
         int getOrientation(@ScreenOrientation int candidate) {
             // IME does not participate in orientation.
-            return getIgnoreOrientationRequest(candidate) ? SCREEN_ORIENTATION_UNSET : candidate;
+            return shouldIgnoreOrientationRequest(candidate) ? SCREEN_ORIENTATION_UNSET : candidate;
         }
 
         @Override
         void updateAboveInsetsState(InsetsState aboveInsetsState,
-                SparseArray<InsetsSourceProvider> localInsetsSourceProvidersFromParent,
+                SparseArray<InsetsSource> localInsetsSourcesFromParent,
                 ArraySet<WindowState> insetsChangedWindows) {
             if (skipImeWindowsDuringTraversal(mDisplayContent)) {
                 return;
             }
-            super.updateAboveInsetsState(aboveInsetsState, localInsetsSourceProvidersFromParent,
+            super.updateAboveInsetsState(aboveInsetsState, localInsetsSourcesFromParent,
                     insetsChangedWindows);
         }
 
@@ -5300,8 +5308,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             // TODO(b/62541591): evaluate whether this is the best spot to declare the
             // {@link DisplayContent} ready for use.
             mDisplayReady = true;
-
-            mWmService.mAnimator.addDisplayLocked(mDisplayId);
 
             if (mWmService.mDisplayManagerInternal != null) {
                 mWmService.mDisplayManagerInternal
@@ -5932,7 +5938,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 mOffTokenAcquirer.release(mDisplayId);
             }
             ProtoLog.v(WM_DEBUG_CONTENT_RECORDING,
-                    "Display %d state is now (%d), so update recording?",
+                    "Content Recording: Display %d state is now (%d), so update recording?",
                     mDisplayId, displayState);
             if (lastDisplayState != displayState) {
                 // If state is on due to surface being added, then start recording.
@@ -6541,7 +6547,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * mirror using MediaProjection. When done through MediaProjection API, the
      * ContentRecordingSession will be created automatically.
      *
-     * This should only be called when there's no ContentRecordingSession already set for this
+     * <p>This should only be called when there's no ContentRecordingSession already set for this
      * display. The code will ask DMS if this display should enable display mirroring and which
      * displayId to mirror from.
      *
@@ -6557,7 +6563,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         if (mirrorDisplayId == mDisplayId) {
             if (mDisplayId != DEFAULT_DISPLAY) {
                 ProtoLog.w(WM_DEBUG_CONTENT_RECORDING,
-                        "Attempting to mirror self on %d", mirrorDisplayId);
+                        "Content Recording: Attempting to mirror self on %d", mirrorDisplayId);
             }
             return false;
         }
@@ -6567,26 +6573,29 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         // to mirror the DEFAULT_DISPLAY so instead we just return
         DisplayContent mirrorDc = mRootWindowContainer.getDisplayContentOrCreate(mirrorDisplayId);
         if (mirrorDc == null && mDisplayId == DEFAULT_DISPLAY) {
-            ProtoLog.w(WM_DEBUG_CONTENT_RECORDING, "Found no matching mirror display for id=%d for"
-                    + " DEFAULT_DISPLAY. Nothing to mirror.", mirrorDisplayId);
+            ProtoLog.w(WM_DEBUG_CONTENT_RECORDING,
+                    "Content Recording: Found no matching mirror display for id=%d for "
+                            + "DEFAULT_DISPLAY. Nothing to mirror.",
+                    mirrorDisplayId);
             return false;
         }
 
         if (mirrorDc == null) {
             mirrorDc = mRootWindowContainer.getDefaultDisplay();
             ProtoLog.w(WM_DEBUG_CONTENT_RECORDING,
-                    "Attempting to mirror %d from %d but no DisplayContent associated. Changing "
-                            + "to mirror default display.",
+                    "Content Recording: Attempting to mirror %d from %d but no DisplayContent "
+                            + "associated. Changing to mirror default display.",
                     mirrorDisplayId, mDisplayId);
         }
 
+        // Create a session for mirroring the display content to this virtual display.
         ContentRecordingSession session = ContentRecordingSession
-                .createDisplaySession(mirrorDc.getDisplayUiContext().getWindowContextToken())
-                .setDisplayId(mDisplayId);
+                .createDisplaySession(mirrorDc.getDisplayId())
+                .setVirtualDisplayId(mDisplayId);
         setContentRecordingSession(session);
         ProtoLog.v(WM_DEBUG_CONTENT_RECORDING,
-                "Successfully created a ContentRecordingSession for displayId=%d to mirror "
-                        + "content from displayId=%d",
+                "Content Recording: Successfully created a ContentRecordingSession for "
+                        + "displayId=%d to mirror content from displayId=%d",
                 mDisplayId, mirrorDisplayId);
         return true;
     }

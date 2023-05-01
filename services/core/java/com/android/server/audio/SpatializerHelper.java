@@ -172,13 +172,17 @@ public class SpatializerHelper {
     // initialization
     @SuppressWarnings("StaticAssignmentInConstructor")
     SpatializerHelper(@NonNull AudioService mother, @NonNull AudioSystemAdapter asa,
-            boolean headTrackingEnabledByDefault) {
+            boolean binauralEnabledDefault,
+            boolean transauralEnabledDefault,
+            boolean headTrackingEnabledDefault) {
         mAudioService = mother;
         mASA = asa;
         // "StaticAssignmentInConstructor" warning is suppressed as the SpatializerHelper being
         // constructed here is the factory for SADeviceState, thus SADeviceState and its
         // private static field sHeadTrackingEnabledDefault should never be accessed directly.
-        SADeviceState.sHeadTrackingEnabledDefault = headTrackingEnabledByDefault;
+        SADeviceState.sBinauralEnabledDefault = binauralEnabledDefault;
+        SADeviceState.sTransauralEnabledDefault = transauralEnabledDefault;
+        SADeviceState.sHeadTrackingEnabledDefault = headTrackingEnabledDefault;
     }
 
     synchronized void init(boolean effectExpected, @Nullable String settings) {
@@ -1066,7 +1070,7 @@ public class SpatializerHelper {
         if (transform.length != 6) {
             throw new IllegalArgumentException("invalid array size" + transform.length);
         }
-        if (!checkSpatForHeadTracking("setGlobalTransform")) {
+        if (!checkSpatializerForHeadTracking("setGlobalTransform")) {
             return;
         }
         try {
@@ -1077,7 +1081,7 @@ public class SpatializerHelper {
     }
 
     synchronized void recenterHeadTracker() {
-        if (!checkSpatForHeadTracking("recenterHeadTracker")) {
+        if (!checkSpatializerForHeadTracking("recenterHeadTracker")) {
             return;
         }
         try {
@@ -1087,8 +1091,30 @@ public class SpatializerHelper {
         }
     }
 
+    synchronized void setDisplayOrientation(float displayOrientation) {
+        if (!checkSpatializer("setDisplayOrientation")) {
+            return;
+        }
+        try {
+            mSpat.setDisplayOrientation(displayOrientation);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling setDisplayOrientation", e);
+        }
+    }
+
+    synchronized void setFoldState(boolean folded) {
+        if (!checkSpatializer("setFoldState")) {
+            return;
+        }
+        try {
+            mSpat.setFoldState(folded);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling setFoldState", e);
+        }
+    }
+
     synchronized void setDesiredHeadTrackingMode(@Spatializer.HeadTrackingModeSet int mode) {
-        if (!checkSpatForHeadTracking("setDesiredHeadTrackingMode")) {
+        if (!checkSpatializerForHeadTracking("setDesiredHeadTrackingMode")) {
             return;
         }
         if (mode != Spatializer.HEAD_TRACKING_MODE_DISABLED) {
@@ -1186,7 +1212,7 @@ public class SpatializerHelper {
         return mHeadTrackerAvailable;
     }
 
-    private boolean checkSpatForHeadTracking(String funcName) {
+    private boolean checkSpatializer(String funcName) {
         switch (mState) {
             case STATE_UNINITIALIZED:
             case STATE_NOT_SUPPORTED:
@@ -1197,14 +1223,18 @@ public class SpatializerHelper {
             case STATE_ENABLED_AVAILABLE:
                 if (mSpat == null) {
                     // try to recover by resetting the native spatializer state
-                    Log.e(TAG, "checkSpatForHeadTracking(): "
-                            + "native spatializer should not be null in state: " + mState);
+                    Log.e(TAG, "checkSpatializer(): called from " + funcName
+                            + "(), native spatializer should not be null in state: " + mState);
                     postReset();
                     return false;
                 }
                 break;
         }
-        return mIsHeadTrackingSupported;
+        return true;
+    }
+
+    private boolean checkSpatializerForHeadTracking(String funcName) {
+        return checkSpatializer(funcName) && mIsHeadTrackingSupported;
     }
 
     private void dispatchActualHeadTrackingMode(int newMode) {
@@ -1521,10 +1551,12 @@ public class SpatializerHelper {
     }
 
     /*package*/ static final class SADeviceState {
+        private static boolean sBinauralEnabledDefault = true;
+        private static boolean sTransauralEnabledDefault = true;
         private static boolean sHeadTrackingEnabledDefault = false;
         final @AudioDeviceInfo.AudioDeviceType int mDeviceType;
         final @NonNull String mDeviceAddress;
-        boolean mEnabled = true;               // by default, SA is enabled on any device
+        boolean mEnabled;
         boolean mHasHeadTracker = false;
         boolean mHeadTrackerEnabled;
         static final String SETTING_FIELD_SEPARATOR = ",";
@@ -1540,6 +1572,12 @@ public class SpatializerHelper {
         SADeviceState(@AudioDeviceInfo.AudioDeviceType int deviceType, @Nullable String address) {
             mDeviceType = deviceType;
             mDeviceAddress = isWireless(deviceType) ? Objects.requireNonNull(address) : "";
+            final int spatMode = SPAT_MODE_FOR_DEVICE_TYPE.get(deviceType, Integer.MIN_VALUE);
+            mEnabled = spatMode == SpatializationMode.SPATIALIZER_BINAURAL
+                    ? sBinauralEnabledDefault
+                    : spatMode == SpatializationMode.SPATIALIZER_TRANSAURAL
+                            ? sTransauralEnabledDefault
+                            : false;
             mHeadTrackerEnabled = sHeadTrackingEnabledDefault;
         }
 

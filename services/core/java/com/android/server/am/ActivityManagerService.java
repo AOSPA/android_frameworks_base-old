@@ -23,6 +23,7 @@ import static android.Manifest.permission.INTERACT_ACROSS_USERS;
 import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
 import static android.Manifest.permission.MANAGE_ACTIVITY_TASKS;
 import static android.Manifest.permission.MANAGE_USERS;
+import static android.Manifest.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND;
 import static android.Manifest.permission.START_ACTIVITIES_FROM_BACKGROUND;
 import static android.Manifest.permission.START_FOREGROUND_SERVICES_FROM_BACKGROUND;
 import static android.app.ActivityManager.INSTR_FLAG_ALWAYS_CHECK_SIGNATURE;
@@ -32,10 +33,13 @@ import static android.app.ActivityManager.INSTR_FLAG_DISABLE_TEST_API_CHECKS;
 import static android.app.ActivityManager.INSTR_FLAG_NO_RESTART;
 import static android.app.ActivityManager.INTENT_SENDER_ACTIVITY;
 import static android.app.ActivityManager.PROCESS_CAPABILITY_ALL;
+import static android.app.ActivityManager.PROCESS_STATE_BOUND_TOP;
 import static android.app.ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND;
 import static android.app.ActivityManager.PROCESS_STATE_NONEXISTENT;
 import static android.app.ActivityManager.PROCESS_STATE_TOP;
 import static android.app.ActivityManager.StopUserOnSwitch;
+import static android.app.ActivityManager.UidFrozenStateChangedCallback.UID_FROZEN_STATE_FROZEN;
+import static android.app.ActivityManager.UidFrozenStateChangedCallback.UID_FROZEN_STATE_UNFROZEN;
 import static android.app.ActivityManagerInternal.ALLOW_FULL_ONLY;
 import static android.app.ActivityManagerInternal.ALLOW_NON_FULL;
 import static android.app.ActivityManagerInternal.MEDIA_PROJECTION_TOKEN_EVENT_CREATED;
@@ -60,9 +64,22 @@ import static android.os.IServiceManager.DUMP_FLAG_PRIORITY_HIGH;
 import static android.os.IServiceManager.DUMP_FLAG_PRIORITY_NORMAL;
 import static android.os.IServiceManager.DUMP_FLAG_PROTO;
 import static android.os.InputConstants.DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
+import static android.os.PowerExemptionManager.REASON_ACTIVITY_VISIBILITY_GRACE_PERIOD;
+import static android.os.PowerExemptionManager.REASON_BACKGROUND_ACTIVITY_PERMISSION;
+import static android.os.PowerExemptionManager.REASON_COMPANION_DEVICE_MANAGER;
+import static android.os.PowerExemptionManager.REASON_INSTR_BACKGROUND_ACTIVITY_PERMISSION;
+import static android.os.PowerExemptionManager.REASON_PROC_STATE_BTOP;
+import static android.os.PowerExemptionManager.REASON_PROC_STATE_PERSISTENT;
+import static android.os.PowerExemptionManager.REASON_PROC_STATE_PERSISTENT_UI;
+import static android.os.PowerExemptionManager.REASON_PROC_STATE_TOP;
+import static android.os.PowerExemptionManager.REASON_START_ACTIVITY_FLAG;
+import static android.os.PowerExemptionManager.REASON_SYSTEM_ALERT_WINDOW_PERMISSION;
 import static android.os.PowerExemptionManager.REASON_SYSTEM_ALLOW_LISTED;
+import static android.os.PowerExemptionManager.REASON_SYSTEM_UID;
+import static android.os.PowerExemptionManager.REASON_UID_VISIBLE;
 import static android.os.PowerExemptionManager.TEMPORARY_ALLOW_LIST_TYPE_FOREGROUND_SERVICE_ALLOWED;
 import static android.os.PowerExemptionManager.TEMPORARY_ALLOW_LIST_TYPE_NONE;
+import static android.os.PowerExemptionManager.getReasonCodeFromProcState;
 import static android.os.Process.BLUETOOTH_UID;
 import static android.os.Process.FIRST_APPLICATION_UID;
 import static android.os.Process.INVALID_UID;
@@ -99,7 +116,6 @@ import static android.os.Process.setThreadScheduler;
 import static android.provider.Settings.Global.ALWAYS_FINISH_ACTIVITIES;
 import static android.provider.Settings.Global.DEBUG_APP;
 import static android.provider.Settings.Global.WAIT_FOR_DEBUGGER;
-import static android.text.format.DateUtils.DAY_IN_MILLIS;
 import static android.util.FeatureFlagUtils.SETTINGS_ENABLE_MONITOR_PHANTOM_PROCS;
 import static android.view.Display.INVALID_DISPLAY;
 
@@ -108,7 +124,6 @@ import static com.android.internal.util.FrameworkStatsLog.UNSAFE_INTENT_EVENT_RE
 import static com.android.internal.util.FrameworkStatsLog.UNSAFE_INTENT_EVENT_REPORTED__EVENT_TYPE__NEW_MUTABLE_IMPLICIT_PENDING_INTENT_RETRIEVED;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_ALL;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_ALLOWLISTS;
-import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_ANR;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_BACKGROUND_CHECK;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_BACKUP;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_BROADCAST;
@@ -120,6 +135,7 @@ import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_OOM_ADJ;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_POWER;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_PROCESSES;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_SERVICE;
+import static com.android.server.am.ActivityManagerDebugConfig.LOG_WRITER_INFO;
 import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_BACKUP;
 import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_BROADCAST;
 import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_CLEANUP;
@@ -167,6 +183,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.PermissionMethod;
 import android.annotation.PermissionName;
+import android.annotation.RequiresPermission;
 import android.annotation.UserIdInt;
 import android.app.Activity;
 import android.app.ActivityClient;
@@ -176,6 +193,7 @@ import android.app.ActivityManager.PendingIntentInfo;
 import android.app.ActivityManager.ProcessCapability;
 import android.app.ActivityManager.RestrictionLevel;
 import android.app.ActivityManager.RunningTaskInfo;
+import android.app.ActivityManager.UidFrozenStateChangedCallback.UidFrozenState;
 import android.app.ActivityManagerInternal;
 import android.app.ActivityManagerInternal.BindServiceEventListener;
 import android.app.ActivityManagerInternal.BroadcastEventListener;
@@ -208,6 +226,7 @@ import android.app.IServiceConnection;
 import android.app.IStopUserCallback;
 import android.app.ITaskStackListener;
 import android.app.IUiAutomationConnection;
+import android.app.IUidFrozenStateChangedCallback;
 import android.app.IUidObserver;
 import android.app.IUnsafeIntentStrictModeCallback;
 import android.app.IUserSwitchObserver;
@@ -316,6 +335,7 @@ import android.os.PowerManager.ServiceType;
 import android.os.PowerManagerInternal;
 import android.os.Process;
 import android.os.RemoteCallback;
+import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ServiceManager;
@@ -353,7 +373,6 @@ import android.util.Pair;
 import android.util.PrintWriterPrinter;
 import android.util.Slog;
 import android.util.SparseArray;
-import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
 import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
@@ -393,7 +412,6 @@ import com.android.internal.os.SomeArgs;
 import com.android.internal.os.TimeoutRecord;
 import com.android.internal.os.TransferPipe;
 import com.android.internal.os.Zygote;
-import com.android.internal.os.anr.AnrLatencyTracker;
 import com.android.internal.policy.AttributeCache;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.ArrayUtils;
@@ -474,14 +492,10 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.nio.charset.StandardCharsets;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -492,18 +506,13 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 
 public class ActivityManagerService extends IActivityManager.Stub
         implements Watchdog.Monitor, BatteryStatsImpl.BatteryCallback, ActivityManagerGlobalLock {
@@ -540,8 +549,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     public static final int STOCK_PM_FLAGS = PackageManager.GET_SHARED_LIBRARY_FILES;
 
     static final String SYSTEM_USER_HOME_NEEDED = "ro.system_user_home_needed";
-
-    public static final String ANR_TRACE_DIR = "/data/anr";
 
     // Maximum number of receivers an app can register.
     private static final int MAX_RECEIVERS_ALLOWED_PER_APP = 1000;
@@ -603,10 +610,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     // the notification will not be legible to the user.
     private static final int MAX_BUGREPORT_TITLE_SIZE = 100;
     private static final int MAX_BUGREPORT_DESCRIPTION_SIZE = 150;
-
-    private static final int NATIVE_DUMP_TIMEOUT_MS =
-            2000 * Build.HW_TIMEOUT_MULTIPLIER; // 2 seconds;
-    private static final int JAVA_DUMP_MINIMUM_SIZE = 100; // 100 bytes.
 
     /* Freq Aggr boost objects */
     public static BoostFramework mPerfServiceStartHint = null;
@@ -3481,432 +3484,6 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
     }
 
-    /**
-     * If a stack trace dump file is configured, dump process stack traces.
-     * @param firstPids of dalvik VM processes to dump stack traces for first
-     * @param lastPids of dalvik VM processes to dump stack traces for last
-     * @param nativePids optional list of native pids to dump stack crawls
-     * @param logExceptionCreatingFile optional writer to which we log errors creating the file
-     * @param auxiliaryTaskExecutor executor to execute auxiliary tasks on
-     * @param latencyTracker the latency tracker instance of the current ANR.
-     */
-    public static File dumpStackTraces(ArrayList<Integer> firstPids,
-            ProcessCpuTracker processCpuTracker, SparseBooleanArray lastPids,
-            Future<ArrayList<Integer>> nativePidsFuture, StringWriter logExceptionCreatingFile,
-            @NonNull Executor auxiliaryTaskExecutor, AnrLatencyTracker latencyTracker) {
-        return dumpStackTraces(firstPids, processCpuTracker, lastPids, nativePidsFuture,
-                logExceptionCreatingFile, null, null, null, auxiliaryTaskExecutor, latencyTracker);
-    }
-
-    /**
-     * If a stack trace dump file is configured, dump process stack traces.
-     * @param firstPids of dalvik VM processes to dump stack traces for first
-     * @param lastPids of dalvik VM processes to dump stack traces for last
-     * @param nativePids optional list of native pids to dump stack crawls
-     * @param logExceptionCreatingFile optional writer to which we log errors creating the file
-     * @param subject optional line related to the error
-     * @param criticalEventSection optional lines containing recent critical events.
-     * @param auxiliaryTaskExecutor executor to execute auxiliary tasks on
-     * @param latencyTracker the latency tracker instance of the current ANR.
-     */
-    public static File dumpStackTraces(ArrayList<Integer> firstPids,
-            ProcessCpuTracker processCpuTracker, SparseBooleanArray lastPids,
-            Future<ArrayList<Integer>> nativePidsFuture, StringWriter logExceptionCreatingFile,
-            String subject, String criticalEventSection, @NonNull Executor auxiliaryTaskExecutor,
-            AnrLatencyTracker latencyTracker) {
-        return dumpStackTraces(firstPids, processCpuTracker, lastPids, nativePidsFuture,
-                logExceptionCreatingFile, null, subject, criticalEventSection,
-                auxiliaryTaskExecutor, latencyTracker);
-    }
-
-    /**
-     * @param firstPidEndOffset Optional, when it's set, it receives the start/end offset
-     *                        of the very first pid to be dumped.
-     */
-    /* package */ static File dumpStackTraces(ArrayList<Integer> firstPids,
-            ProcessCpuTracker processCpuTracker, SparseBooleanArray lastPids,
-            Future<ArrayList<Integer>> nativePidsFuture, StringWriter logExceptionCreatingFile,
-            AtomicLong firstPidEndOffset, String subject, String criticalEventSection,
-            @NonNull Executor auxiliaryTaskExecutor, AnrLatencyTracker latencyTracker) {
-        try {
-
-            if (latencyTracker != null) {
-                latencyTracker.dumpStackTracesStarted();
-            }
-
-            Slog.i(TAG, "dumpStackTraces pids=" + lastPids);
-
-            // Measure CPU usage as soon as we're called in order to get a realistic sampling
-            // of the top users at the time of the request.
-            Supplier<ArrayList<Integer>> extraPidsSupplier = processCpuTracker != null
-                    ? () -> getExtraPids(processCpuTracker, lastPids, latencyTracker) : null;
-            Future<ArrayList<Integer>> extraPidsFuture = null;
-            if (extraPidsSupplier != null) {
-                extraPidsFuture =
-                        CompletableFuture.supplyAsync(extraPidsSupplier, auxiliaryTaskExecutor);
-            }
-
-            final File tracesDir = new File(ANR_TRACE_DIR);
-
-            // NOTE: We should consider creating the file in native code atomically once we've
-            // gotten rid of the old scheme of dumping and lot of the code that deals with paths
-            // can be removed.
-            File tracesFile;
-            try {
-                tracesFile = createAnrDumpFile(tracesDir);
-            } catch (IOException e) {
-                Slog.w(TAG, "Exception creating ANR dump file:", e);
-                if (logExceptionCreatingFile != null) {
-                    logExceptionCreatingFile.append(
-                            "----- Exception creating ANR dump file -----\n");
-                    e.printStackTrace(new PrintWriter(logExceptionCreatingFile));
-                }
-                if (latencyTracker != null) {
-                    latencyTracker.anrSkippedDumpStackTraces();
-                }
-                return null;
-            }
-
-            if (subject != null || criticalEventSection != null) {
-                appendtoANRFile(tracesFile.getAbsolutePath(),
-                        (subject != null ? "Subject: " + subject + "\n\n" : "")
-                        + (criticalEventSection != null ? criticalEventSection : ""));
-            }
-
-            long firstPidEndPos = dumpStackTraces(
-                    tracesFile.getAbsolutePath(), firstPids, nativePidsFuture,
-                    extraPidsFuture, latencyTracker);
-            if (firstPidEndOffset != null) {
-                firstPidEndOffset.set(firstPidEndPos);
-            }
-            // Each set of ANR traces is written to a separate file and dumpstate will process
-            // all such files and add them to a captured bug report if they're recent enough.
-            maybePruneOldTraces(tracesDir);
-
-            return tracesFile;
-        } finally {
-            if (latencyTracker != null) {
-                latencyTracker.dumpStackTracesEnded();
-            }
-        }
-
-    }
-
-    @GuardedBy("ActivityManagerService.class")
-    private static SimpleDateFormat sAnrFileDateFormat;
-    static final String ANR_FILE_PREFIX = "anr_";
-
-    private static ArrayList<Integer> getExtraPids(ProcessCpuTracker processCpuTracker,
-            SparseBooleanArray lastPids, AnrLatencyTracker latencyTracker) {
-        if (latencyTracker != null) {
-            latencyTracker.processCpuTrackerMethodsCalled();
-        }
-        ArrayList<Integer> extraPids = new ArrayList<>();
-        processCpuTracker.init();
-        try {
-            Thread.sleep(200);
-        } catch (InterruptedException ignored) {
-        }
-
-        processCpuTracker.update();
-
-        // We'll take the stack crawls of just the top apps using CPU.
-        final int workingStatsNumber = processCpuTracker.countWorkingStats();
-        for (int i = 0; i < workingStatsNumber && extraPids.size() < 2; i++) {
-            ProcessCpuTracker.Stats stats = processCpuTracker.getWorkingStats(i);
-            if (lastPids.indexOfKey(stats.pid) >= 0) {
-                if (DEBUG_ANR) {
-                    Slog.d(TAG, "Collecting stacks for extra pid " + stats.pid);
-                }
-
-                extraPids.add(stats.pid);
-            } else {
-                Slog.i(TAG,
-                        "Skipping next CPU consuming process, not a java proc: "
-                        + stats.pid);
-            }
-        }
-        if (latencyTracker != null) {
-            latencyTracker.processCpuTrackerMethodsReturned();
-        }
-        return extraPids;
-    }
-
-    private static synchronized File createAnrDumpFile(File tracesDir) throws IOException {
-        if (sAnrFileDateFormat == null) {
-            sAnrFileDateFormat = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS");
-        }
-
-        final String formattedDate = sAnrFileDateFormat.format(new Date());
-        final File anrFile = new File(tracesDir, ANR_FILE_PREFIX + formattedDate);
-
-        if (anrFile.createNewFile()) {
-            FileUtils.setPermissions(anrFile.getAbsolutePath(), 0600, -1, -1); // -rw-------
-            return anrFile;
-        } else {
-            throw new IOException("Unable to create ANR dump file: createNewFile failed");
-        }
-    }
-
-    /**
-     * Prune all trace files that are more than a day old.
-     *
-     * NOTE: It might make sense to move this functionality to tombstoned eventually, along with a
-     * shift away from anr_XX and tombstone_XX to a more descriptive name. We do it here for now
-     * since it's the system_server that creates trace files for most ANRs.
-     */
-    private static void maybePruneOldTraces(File tracesDir) {
-        final File[] files = tracesDir.listFiles();
-        if (files == null) return;
-
-        final int max = SystemProperties.getInt("tombstoned.max_anr_count", 64);
-        final long now = System.currentTimeMillis();
-        try {
-            Arrays.sort(files, Comparator.comparingLong(File::lastModified).reversed());
-            for (int i = 0; i < files.length; ++i) {
-                if (i > max || (now - files[i].lastModified()) > DAY_IN_MILLIS) {
-                    if (!files[i].delete()) {
-                        Slog.w(TAG, "Unable to prune stale trace file: " + files[i]);
-                    }
-                }
-            }
-        } catch (IllegalArgumentException e) {
-            // The modification times changed while we were sorting. Bail...
-            // https://issuetracker.google.com/169836837
-            Slog.w(TAG, "tombstone modification times changed while sorting; not pruning", e);
-        }
-    }
-
-    /**
-     * Dump java traces for process {@code pid} to the specified file. If java trace dumping
-     * fails, a native backtrace is attempted. Note that the timeout {@code timeoutMs} only applies
-     * to the java section of the trace, a further {@code NATIVE_DUMP_TIMEOUT_MS} might be spent
-     * attempting to obtain native traces in the case of a failure. Returns the total time spent
-     * capturing traces.
-     */
-    private static long dumpJavaTracesTombstoned(int pid, String fileName, long timeoutMs) {
-        final long timeStart = SystemClock.elapsedRealtime();
-        int headerSize = writeUptimeStartHeaderForPid(pid, fileName);
-        boolean javaSuccess = Debug.dumpJavaBacktraceToFileTimeout(pid, fileName,
-                (int) (timeoutMs / 1000));
-        if (javaSuccess) {
-            // Check that something is in the file, actually. Try-catch should not be necessary,
-            // but better safe than sorry.
-            try {
-                long size = new File(fileName).length();
-                if ((size - headerSize) < JAVA_DUMP_MINIMUM_SIZE) {
-                    Slog.w(TAG, "Successfully created Java ANR file is empty!");
-                    javaSuccess = false;
-                }
-            } catch (Exception e) {
-                Slog.w(TAG, "Unable to get ANR file size", e);
-                javaSuccess = false;
-            }
-        }
-        if (!javaSuccess) {
-            Slog.w(TAG, "Dumping Java threads failed, initiating native stack dump.");
-            if (!Debug.dumpNativeBacktraceToFileTimeout(pid, fileName,
-                    (NATIVE_DUMP_TIMEOUT_MS / 1000))) {
-                Slog.w(TAG, "Native stack dump failed!");
-            }
-        }
-
-        return SystemClock.elapsedRealtime() - timeStart;
-    }
-
-    private static int appendtoANRFile(String fileName, String text) {
-        try (FileOutputStream fos = new FileOutputStream(fileName, true)) {
-            byte[] header = text.getBytes(StandardCharsets.UTF_8);
-            fos.write(header);
-            return header.length;
-        } catch (IOException e) {
-            Slog.w(TAG, "Exception writing to ANR dump file:", e);
-            return 0;
-        }
-    }
-
-    /*
-     * Writes a header containing the process id and the current system uptime.
-     */
-    private static int writeUptimeStartHeaderForPid(int pid, String fileName) {
-        return appendtoANRFile(fileName, "----- dumping pid: " + pid + " at "
-            + SystemClock.uptimeMillis() + "\n");
-    }
-
-
-    /**
-     * @return The end offset of the trace of the very first PID
-     */
-    public static long dumpStackTraces(String tracesFile,
-            ArrayList<Integer> firstPids, Future<ArrayList<Integer>> nativePidsFuture,
-            Future<ArrayList<Integer>> extraPidsFuture, AnrLatencyTracker latencyTracker) {
-
-        Slog.i(TAG, "Dumping to " + tracesFile);
-
-        // We don't need any sort of inotify based monitoring when we're dumping traces via
-        // tombstoned. Data is piped to an "intercept" FD installed in tombstoned so we're in full
-        // control of all writes to the file in question.
-
-        // We must complete all stack dumps within 20 seconds.
-        long remainingTime = 20 * 1000 * Build.HW_TIMEOUT_MULTIPLIER;
-
-        // As applications are usually interested with the ANR stack traces, but we can't share with
-        // them the stack traces other than their own stacks. So after the very first PID is
-        // dumped, remember the current file size.
-        long firstPidEnd = -1;
-
-        // First collect all of the stacks of the most important pids.
-        if (firstPids != null) {
-            if (latencyTracker != null) {
-                latencyTracker.dumpingFirstPidsStarted();
-            }
-
-            int num = firstPids.size();
-            for (int i = 0; i < num; i++) {
-                final int pid = firstPids.get(i);
-                // We don't copy ANR traces from the system_server intentionally.
-                final boolean firstPid = i == 0 && MY_PID != pid;
-                if (latencyTracker != null) {
-                    latencyTracker.dumpingPidStarted(pid);
-                }
-
-                Slog.i(TAG, "Collecting stacks for pid " + pid);
-                final long timeTaken = dumpJavaTracesTombstoned(pid, tracesFile,
-                                                                remainingTime);
-                if (latencyTracker != null) {
-                    latencyTracker.dumpingPidEnded();
-                }
-
-                remainingTime -= timeTaken;
-                if (remainingTime <= 0) {
-                    Slog.e(TAG, "Aborting stack trace dump (current firstPid=" + pid
-                            + "); deadline exceeded.");
-                    return firstPidEnd;
-                }
-
-                if (firstPid) {
-                    firstPidEnd = new File(tracesFile).length();
-                    // Full latency dump
-                    if (latencyTracker != null) {
-                        appendtoANRFile(tracesFile,
-                                latencyTracker.dumpAsCommaSeparatedArrayWithHeader());
-                    }
-                }
-                if (DEBUG_ANR) {
-                    Slog.d(TAG, "Done with pid " + firstPids.get(i) + " in " + timeTaken + "ms");
-                }
-            }
-            if (latencyTracker != null) {
-                latencyTracker.dumpingFirstPidsEnded();
-            }
-        }
-
-        // Next collect the stacks of the native pids
-        ArrayList<Integer> nativePids = collectPids(nativePidsFuture, "native pids");
-
-        Slog.i(TAG, "dumpStackTraces nativepids=" + nativePids);
-
-        if (nativePids != null) {
-            if (latencyTracker != null) {
-                latencyTracker.dumpingNativePidsStarted();
-            }
-            for (int pid : nativePids) {
-                Slog.i(TAG, "Collecting stacks for native pid " + pid);
-                final long nativeDumpTimeoutMs = Math.min(NATIVE_DUMP_TIMEOUT_MS, remainingTime);
-
-                if (latencyTracker != null) {
-                    latencyTracker.dumpingPidStarted(pid);
-                }
-                final long start = SystemClock.elapsedRealtime();
-                Debug.dumpNativeBacktraceToFileTimeout(
-                        pid, tracesFile, (int) (nativeDumpTimeoutMs / 1000));
-                final long timeTaken = SystemClock.elapsedRealtime() - start;
-                if (latencyTracker != null) {
-                    latencyTracker.dumpingPidEnded();
-                }
-                remainingTime -= timeTaken;
-                if (remainingTime <= 0) {
-                    Slog.e(TAG, "Aborting stack trace dump (current native pid=" + pid +
-                        "); deadline exceeded.");
-                    return firstPidEnd;
-                }
-
-                if (DEBUG_ANR) {
-                    Slog.d(TAG, "Done with native pid " + pid + " in " + timeTaken + "ms");
-                }
-            }
-            if (latencyTracker != null) {
-                latencyTracker.dumpingNativePidsEnded();
-            }
-        }
-
-        // Lastly, dump stacks for all extra PIDs from the CPU tracker.
-        ArrayList<Integer> extraPids = collectPids(extraPidsFuture, "extra pids");
-
-        if (extraPidsFuture != null) {
-            try {
-                extraPids = extraPidsFuture.get();
-            } catch (ExecutionException e) {
-                Slog.w(TAG, "Failed to collect extra pids", e.getCause());
-            } catch (InterruptedException e) {
-                Slog.w(TAG, "Interrupted while collecting extra pids", e);
-            }
-        }
-        Slog.i(TAG, "dumpStackTraces extraPids=" + extraPids);
-
-        if (extraPids != null) {
-            if (latencyTracker != null) {
-                latencyTracker.dumpingExtraPidsStarted();
-            }
-            for (int pid : extraPids) {
-                Slog.i(TAG, "Collecting stacks for extra pid " + pid);
-                if (latencyTracker != null) {
-                    latencyTracker.dumpingPidStarted(pid);
-                }
-                final long timeTaken = dumpJavaTracesTombstoned(pid, tracesFile, remainingTime);
-                if (latencyTracker != null) {
-                    latencyTracker.dumpingPidEnded();
-                }
-                remainingTime -= timeTaken;
-                if (remainingTime <= 0) {
-                    Slog.e(TAG, "Aborting stack trace dump (current extra pid=" + pid +
-                            "); deadline exceeded.");
-                    return firstPidEnd;
-                }
-
-                if (DEBUG_ANR) {
-                    Slog.d(TAG, "Done with extra pid " + pid + " in " + timeTaken + "ms");
-                }
-            }
-            if (latencyTracker != null) {
-                latencyTracker.dumpingExtraPidsEnded();
-            }
-        }
-        // Append the dumping footer with the current uptime
-        appendtoANRFile(tracesFile, "----- dumping ended at " + SystemClock.uptimeMillis() + "\n");
-        Slog.i(TAG, "Done dumping");
-
-        return firstPidEnd;
-    }
-
-    private static ArrayList<Integer> collectPids(Future<ArrayList<Integer>> pidsFuture,
-            String logName) {
-
-        ArrayList<Integer> pids = null;
-
-        if (pidsFuture == null) {
-            return pids;
-        }
-        try {
-            pids = pidsFuture.get();
-        } catch (ExecutionException e) {
-            Slog.w(TAG, "Failed to collect " + logName, e.getCause());
-        } catch (InterruptedException e) {
-            Slog.w(TAG, "Interrupted while collecting " + logName , e);
-        }
-        return pids;
-    }
-
     @Override
     public boolean clearApplicationUserData(final String packageName, boolean keepState,
             final IPackageDataObserver observer, int userId) {
@@ -6615,10 +6192,166 @@ public class ActivityManagerService extends IActivityManager.Stub
     @NonNull
     private BackgroundStartPrivileges getBackgroundStartPrivileges(int uid) {
         synchronized (mProcLock) {
+            final UidRecord uidRecord = mProcessList.getUidRecordLOSP(uid);
+            if (uidRecord == null) {
+                return BackgroundStartPrivileges.NONE;
+            }
             mGetBackgroundStartPrivilegesFunctor.prepare(uid);
-            mProcessList.forEachLruProcessesLOSP(false, mGetBackgroundStartPrivilegesFunctor);
+            uidRecord.forEachProcess(mGetBackgroundStartPrivilegesFunctor);
             return mGetBackgroundStartPrivilegesFunctor.getResult();
         }
+    }
+
+    /**
+     * Returns true if the reasonCode is included in the base set of reasons an app may be
+     * allowed to schedule a
+     * {@link android.app.job.JobInfo.Builder#setUserInitiated(boolean) user-initiated job}.
+     * This is a shortcut and <b>DOES NOT</b> include all reasons.
+     * Use {@link #canScheduleUserInitiatedJobs(int, int, String)} to cover all cases.
+     */
+    static boolean doesReasonCodeAllowSchedulingUserInitiatedJobs(int reasonCode) {
+        switch (reasonCode) {
+            case REASON_PROC_STATE_PERSISTENT:
+            case REASON_PROC_STATE_PERSISTENT_UI:
+            case REASON_PROC_STATE_TOP:
+            case REASON_PROC_STATE_BTOP:
+            case REASON_UID_VISIBLE:
+            case REASON_SYSTEM_UID:
+            case REASON_START_ACTIVITY_FLAG:
+            case REASON_ACTIVITY_VISIBILITY_GRACE_PERIOD:
+            case REASON_SYSTEM_ALERT_WINDOW_PERMISSION:
+            case REASON_COMPANION_DEVICE_MANAGER:
+            case REASON_BACKGROUND_ACTIVITY_PERMISSION:
+            case REASON_INSTR_BACKGROUND_ACTIVITY_PERMISSION:
+                return true;
+        }
+        return false;
+    }
+
+    /**
+     * Returns true if the ProcessRecord has some conditions that allow the app to schedule a
+     * {@link android.app.job.JobInfo.Builder#setUserInitiated(boolean) user-initiated job}.
+     * This is a shortcut and <b>DOES NOT</b> include all reasons.
+     * Use {@link #canScheduleUserInitiatedJobs(int, int, String)} to cover all cases.
+     */
+    @GuardedBy(anyOf = {"this", "mProcLock"})
+    private boolean isProcessInStateToScheduleUserInitiatedJobsLocked(
+            @Nullable ProcessRecord pr, long nowElapsed) {
+        if (pr == null) {
+            return false;
+        }
+
+        final BackgroundStartPrivileges backgroundStartPrivileges =
+                pr.getBackgroundStartPrivileges();
+        // Is the allow activity background start flag on?
+        if (backgroundStartPrivileges.allowsBackgroundActivityStarts()) {
+            // REASON_START_ACTIVITY_FLAG;
+            return true;
+        }
+
+        final ProcessStateRecord state = pr.mState;
+        final int procstate = state.getCurProcState();
+        if (procstate <= PROCESS_STATE_BOUND_TOP) {
+            if (doesReasonCodeAllowSchedulingUserInitiatedJobs(
+                    getReasonCodeFromProcState(procstate))) {
+                return true;
+            }
+        }
+
+        final long lastInvisibleTime = state.getLastInvisibleTime();
+        if (lastInvisibleTime > 0 && lastInvisibleTime < Long.MAX_VALUE) {
+            final long timeSinceVisibleMs = nowElapsed - lastInvisibleTime;
+            if (timeSinceVisibleMs < mConstants.mVisibleToInvisibleUijScheduleGraceDurationMs) {
+                // REASON_ACTIVITY_VISIBILITY_GRACE_PERIOD
+                return true;
+            }
+        }
+
+        final ProcessServiceRecord psr = pr.mServices;
+        if (psr != null && psr.hasForegroundServices()) {
+            for (int s = psr.numberOfExecutingServices() - 1; s >= 0; --s) {
+                final ServiceRecord sr = psr.getExecutingServiceAt(s);
+                if (sr.isForeground && sr.mAllowUiJobScheduling) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Returns whether the app in question is in a state where we allow scheduling a
+     * {@link android.app.job.JobInfo.Builder#setUserInitiated(boolean) user-initiated job}.
+     */
+    // TODO(262260570): log allow reason to an atom
+    private boolean canScheduleUserInitiatedJobs(int uid, int pid, String pkgName) {
+        return canScheduleUserInitiatedJobs(uid, pid, pkgName, false);
+    }
+
+    boolean canScheduleUserInitiatedJobs(int uid, int pid, String pkgName,
+            boolean skipWhileInUseCheck) {
+        synchronized (this) {
+            final ProcessRecord processRecord;
+            synchronized (mPidsSelfLocked) {
+                processRecord = mPidsSelfLocked.get(pid);
+            }
+
+            final long nowElapsed = SystemClock.elapsedRealtime();
+            final BackgroundStartPrivileges backgroundStartPrivileges;
+            if (processRecord != null) {
+                if (isProcessInStateToScheduleUserInitiatedJobsLocked(processRecord, nowElapsed)) {
+                    return true;
+                }
+                backgroundStartPrivileges = processRecord.getBackgroundStartPrivileges();
+            } else {
+                backgroundStartPrivileges = getBackgroundStartPrivileges(uid);
+            }
+            // Is the allow activity background start flag on?
+            if (backgroundStartPrivileges.allowsBackgroundActivityStarts()) {
+                // REASON_START_ACTIVITY_FLAG;
+                return true;
+            }
+
+            // We allow scheduling a user-initiated job when the app is in the TOP or a
+            // Background Activity Launch approved state. These are cases that indicate the user
+            // has interacted with the app and therefore it is reasonable to believe the app may
+            // attempt to schedule a user-initiated job in response to the user interaction.
+            // As of Android UDC, the conditions required to grant a while-in-use permission
+            // covers the majority of those cases, and so we piggyback on that logic as the base.
+            // Missing cases are added after.
+            if (!skipWhileInUseCheck && mServices.canAllowWhileInUsePermissionInFgsLocked(
+                    pid, uid, pkgName, processRecord, backgroundStartPrivileges)) {
+                return true;
+            }
+
+            final UidRecord uidRecord = mProcessList.getUidRecordLOSP(uid);
+            if (uidRecord != null) {
+                for (int i = uidRecord.getNumOfProcs() - 1; i >= 0; --i) {
+                    ProcessRecord pr = uidRecord.getProcessRecordByIndex(i);
+                    if (isProcessInStateToScheduleUserInitiatedJobsLocked(pr, nowElapsed)) {
+                        return true;
+                    }
+                }
+            }
+
+            if (mAtmInternal.hasSystemAlertWindowPermission(uid, pid, pkgName)) {
+                // REASON_SYSTEM_ALERT_WINDOW_PERMISSION;
+                return true;
+            }
+
+            final int userId = UserHandle.getUserId(uid);
+            final boolean isCompanionApp = mInternal.isAssociatedCompanionApp(userId, uid);
+            if (isCompanionApp) {
+                if (checkPermission(REQUEST_COMPANION_RUN_IN_BACKGROUND, pid, uid)
+                        == PERMISSION_GRANTED) {
+                    // REASON_COMPANION_DEVICE_MANAGER;
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -7340,8 +7073,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                 mActivityTaskManager.onScreenAwakeChanged(isAwake);
                 mOomAdjProfiler.onWakefulnessChanged(wakefulness);
                 mOomAdjuster.onWakefulnessChanged(wakefulness);
+
+                updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY);
             }
-            updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY);
         }
     }
 
@@ -7843,6 +7577,109 @@ public class ActivityManagerService extends IActivityManager.Stub
     boolean isUidActiveLOSP(int uid) {
         final UidRecord uidRecord = mProcessList.getUidRecordLOSP(uid);
         return uidRecord != null && !uidRecord.isSetIdle();
+    }
+
+    @GuardedBy("mUidFrozenStateChangedCallbackList")
+    private final RemoteCallbackList<IUidFrozenStateChangedCallback>
+            mUidFrozenStateChangedCallbackList = new RemoteCallbackList<>();
+
+    /**
+     * Register a {@link IUidFrozenStateChangedCallback} to receive Uid frozen state events.
+     *
+     * @param callback remote callback object to be registered
+     */
+    @RequiresPermission(Manifest.permission.PACKAGE_USAGE_STATS)
+    @Override
+    public void registerUidFrozenStateChangedCallback(
+            @NonNull IUidFrozenStateChangedCallback callback) {
+        Preconditions.checkNotNull(callback, "callback cannot be null");
+        enforceCallingPermission(android.Manifest.permission.PACKAGE_USAGE_STATS,
+                "registerUidFrozenStateChangedCallback()");
+        synchronized (mUidFrozenStateChangedCallbackList) {
+            final boolean registered = mUidFrozenStateChangedCallbackList.register(callback);
+            if (!registered) {
+                Slog.w(TAG, "Failed to register with RemoteCallbackList!");
+            }
+        }
+    }
+
+    /**
+     * Unregister a {@link IUidFrozenStateChangedCallback}.
+     *
+     * @param callback remote callback object to be unregistered
+     */
+    @RequiresPermission(Manifest.permission.PACKAGE_USAGE_STATS)
+    @Override
+    public void unregisterUidFrozenStateChangedCallback(
+            @NonNull IUidFrozenStateChangedCallback callback) {
+        Preconditions.checkNotNull(callback, "callback cannot be null");
+        enforceCallingPermission(android.Manifest.permission.PACKAGE_USAGE_STATS,
+                "unregisterUidFrozenStateChangedCallback()");
+        synchronized (mUidFrozenStateChangedCallbackList) {
+            mUidFrozenStateChangedCallbackList.unregister(callback);
+        }
+    }
+
+    /**
+     * Query the frozen state of a list of UIDs.
+     *
+     * @param uids the array of UIDs which the client would like to know the frozen state of.
+     * @return An array containing the frozen state for each requested UID, by index. Will be set
+     *               to {@link UidFrozenStateChangedCallback#UID_FROZEN_STATE_FROZEN}
+     *               if the UID is frozen. If the UID is not frozen or not found,
+     *               {@link UidFrozenStateChangedCallback#UID_FROZEN_STATE_UNFROZEN}
+     *               will be set.
+     *
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.PACKAGE_USAGE_STATS)
+    @Override
+    public @NonNull int[] getUidFrozenState(@NonNull int[] uids) {
+        Preconditions.checkNotNull(uids, "uid array cannot be null");
+        enforceCallingPermission(android.Manifest.permission.PACKAGE_USAGE_STATS,
+                "getUidFrozenState()");
+
+        final int[] frozenStates = new int[uids.length];
+        synchronized (mProcLock) {
+            for (int i = 0; i < uids.length; i++) {
+                final UidRecord uidRec = mProcessList.mActiveUids.get(uids[i]);
+                if (uidRec != null && uidRec.areAllProcessesFrozen()) {
+                    frozenStates[i] = UID_FROZEN_STATE_FROZEN;
+                } else {
+                    frozenStates[i] = UID_FROZEN_STATE_UNFROZEN;
+                }
+            }
+        }
+        return frozenStates;
+    }
+
+    /**
+     * Notify the system that a UID has been frozen or unfrozen.
+     *
+     * @param uids The Uid(s) in question
+     * @param frozenStates Frozen state for each UID index
+     *
+     * @hide
+     */
+    public void reportUidFrozenStateChanged(@NonNull int[] uids,
+            @UidFrozenState int[] frozenStates) {
+        synchronized (mUidFrozenStateChangedCallbackList) {
+            final int n = mUidFrozenStateChangedCallbackList.beginBroadcast();
+            for (int i = 0; i < n; i++) {
+                try {
+                    mUidFrozenStateChangedCallbackList.getBroadcastItem(i).onUidFrozenStateChanged(
+                            uids, frozenStates);
+                } catch (RemoteException e) {
+                    /*
+                    * The process at the other end has died or otherwise gone away.
+                    * According to spec, RemoteCallbacklist will take care of unregistering any
+                    * object associated with that process - we are safe to ignore the exception
+                    * here.
+                    */
+                }
+            }
+            mUidFrozenStateChangedCallbackList.finishBroadcast();
+        }
     }
 
     @Override
@@ -8695,7 +8532,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 try {
                     AppGlobals.getPackageManager().setComponentEnabledSetting(cName,
                             PackageManager.COMPONENT_ENABLED_STATE_ENABLED, 0,
-                            UserHandle.USER_SYSTEM);
+                            UserHandle.USER_SYSTEM, "am");
                 } catch (RemoteException e) {
                     throw e.rethrowAsRuntimeException();
                 }
@@ -8898,13 +8735,16 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
         }
 
+        boolean recoverable = eventType.equals("native_recoverable_crash");
+
         EventLogTags.writeAmCrash(Binder.getCallingPid(),
                 UserHandle.getUserId(Binder.getCallingUid()), processName,
                 r == null ? -1 : r.info.flags,
                 crashInfo.exceptionClassName,
                 crashInfo.exceptionMessage,
                 crashInfo.throwFileName,
-                crashInfo.throwLineNumber);
+                crashInfo.throwLineNumber,
+                recoverable ? 1 : 0);
 
         int processClassEnum = processName.equals("system_server") ? ServerProtoEnums.SYSTEM_SERVER
                 : (r != null) ? r.getProcessClassEnum()
@@ -8972,7 +8812,13 @@ public class ActivityManagerService extends IActivityManager.Stub
                 eventType, r, processName, null, null, null, null, null, null, crashInfo,
                 new Float(loadingProgress), incrementalMetrics, null);
 
-        mAppErrors.crashApplication(r, crashInfo);
+        // For GWP-ASan recoverable crashes, don't make the app crash (the whole point of
+        // 'recoverable' is that the app doesn't crash). Normally, for nonrecoreable native crashes,
+        // debuggerd will terminate the process, but there's a backup where ActivityManager will
+        // also kill it. Avoid that.
+        if (!recoverable) {
+            mAppErrors.crashApplication(r, crashInfo);
+        }
     }
 
     public void handleApplicationStrictModeViolation(
@@ -9439,7 +9285,9 @@ public class ActivityManagerService extends IActivityManager.Stub
 
                 String logcatSetting = Settings.Global.ERROR_LOGCAT_PREFIX + dropboxTag;
                 String maxBytesSetting = Settings.Global.MAX_ERROR_BYTES_PREFIX + dropboxTag;
-                int lines = Settings.Global.getInt(mContext.getContentResolver(), logcatSetting, 0);
+                int lines = Build.IS_USER
+                        ? 0
+                        : Settings.Global.getInt(mContext.getContentResolver(), logcatSetting, 0);
                 int dropboxMaxSize = Settings.Global.getInt(
                         mContext.getContentResolver(), maxBytesSetting, DROPBOX_DEFAULT_MAX_SIZE);
                 int maxDataFileSize = dropboxMaxSize - sb.length()
@@ -13911,8 +13759,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                                 || action.startsWith("android.intent.action.UID_")
                                 || action.startsWith("android.intent.action.EXTERNAL_")) {
                             if (DEBUG_BROADCAST) {
-                                Slog.wtf(TAG, "System internals registering for " + filter
-                                        + " with app priority; this will race with apps!",
+                                Slog.wtf(TAG,
+                                        "System internals registering for " + filter.toLongString()
+                                                + " with app priority; this will race with apps!",
                                         new Throwable());
                             }
 
@@ -13974,7 +13823,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 if (!sdkSandboxManagerLocal.canRegisterBroadcastReceiver(
                         /*IntentFilter=*/ filter, flags, onlyProtectedBroadcasts)) {
                     throw new SecurityException("SDK sandbox not allowed to register receiver"
-                            + " with the given IntentFilter");
+                            + " with the given IntentFilter: " + filter.toString());
                 }
             }
 
@@ -14009,17 +13858,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                                 + "RECEIVER_NOT_EXPORTED flag");
             }
 
-            // STOPSHIP(b/259139792): Allow apps that are currently targeting U and in process of
-            // updating their receivers to be exempt from this requirement until their receivers
-            // are flagged.
-            if (requireExplicitFlagForDynamicReceivers) {
-                if ("com.shannon.imsservice".equals(callerPackage)) {
-                    // Note, a versionCode check for this package is not performed because this
-                    // package consumes the SecurityException, so it wouldn't be caught during
-                    // presubmit.
-                    requireExplicitFlagForDynamicReceivers = false;
-                }
-            }
             if (!onlyProtectedBroadcasts) {
                 if (receiver == null && !explicitExportStateDefined) {
                     // sticky broadcast, no flag specified (flag isn't required)
@@ -14617,18 +14455,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                 enforcePermission(android.Manifest.permission.ACCESS_BROADCAST_RESPONSE_STATS,
                         callingPid, callingUid, "recordResponseEventWhileInBackground");
             }
-        }
-
-        // resultTo broadcasts are always infinitely deferrable.
-        if ((resultTo != null) && !ordered && mEnableModernQueue) {
-            if (brOptions == null) {
-                brOptions = BroadcastOptions.makeBasic();
-            }
-            brOptions.setDeferUntilActive(true);
-        }
-
-        if (mEnableModernQueue && ordered && brOptions != null && brOptions.isDeferUntilActive()) {
-            throw new IllegalArgumentException("Ordered broadcasts can't be deferred until active");
         }
 
         // Verify that protected broadcasts are only being sent by system code,
@@ -16971,7 +16797,7 @@ public class ActivityManagerService extends IActivityManager.Stub
      */
     public void dumpAllResources(ParcelFileDescriptor fd, PrintWriter pw) throws RemoteException {
         final ArrayList<ProcessRecord> processes = new ArrayList<>();
-        synchronized (mPidsSelfLocked) {
+        synchronized (this) {
             processes.addAll(mProcessList.getLruProcessesLOSP());
         }
         for (int i = 0, size = processes.size(); i < size; i++) {
@@ -18216,6 +18042,11 @@ public class ActivityManagerService extends IActivityManager.Stub
             return ActivityManagerService.this.getBackgroundStartPrivileges(uid);
         }
 
+        @Override
+        public boolean canScheduleUserInitiatedJobs(int uid, int pid, String pkgName) {
+            return ActivityManagerService.this.canScheduleUserInitiatedJobs(uid, pid, pkgName);
+        }
+
         public void reportCurKeyguardUsageEvent(boolean keyguardShowing) {
             ActivityManagerService.this.reportGlobalUsageEvent(keyguardShowing
                     ? UsageEvents.Event.KEYGUARD_SHOWN
@@ -18865,13 +18696,17 @@ public class ActivityManagerService extends IActivityManager.Stub
         @Override
         public void logFgsApiBegin(@ForegroundServiceApiType int apiType,
                 int uid, int pid) {
-            ActivityManagerService.this.logFgsApiBegin(apiType, uid, pid);
+            synchronized (this) {
+                mServices.logFgsApiBeginLocked(apiType, uid, pid);
+            }
         }
 
         @Override
         public void logFgsApiEnd(@ForegroundServiceApiType int apiType,
                 int uid, int pid) {
-            ActivityManagerService.this.logFgsApiEnd(apiType, uid, pid);
+            synchronized (this) {
+                mServices.logFgsApiEndLocked(apiType, uid, pid);
+            }
         }
 
         @Override
@@ -18996,27 +18831,25 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public void waitForBroadcastIdle() {
-        waitForBroadcastIdle(/* printWriter= */ null);
+        waitForBroadcastIdle(LOG_WRITER_INFO);
     }
 
-    public void waitForBroadcastIdle(@Nullable PrintWriter pw) {
+    public void waitForBroadcastIdle(@NonNull PrintWriter pw) {
         enforceCallingPermission(permission.DUMP, "waitForBroadcastIdle()");
         BroadcastLoopers.waitForIdle(pw);
         for (BroadcastQueue queue : mBroadcastQueues) {
             queue.waitForIdle(pw);
         }
-        if (pw != null) {
-            pw.println("All broadcast queues are idle!");
-            pw.flush();
-        }
+        pw.println("All broadcast queues are idle!");
+        pw.flush();
     }
 
     @Override
     public void waitForBroadcastBarrier() {
-        waitForBroadcastBarrier(/* printWriter= */ null, false, false);
+        waitForBroadcastBarrier(LOG_WRITER_INFO, false, false);
     }
 
-    public void waitForBroadcastBarrier(@Nullable PrintWriter pw,
+    public void waitForBroadcastBarrier(@NonNull PrintWriter pw,
             boolean flushBroadcastLoopers, boolean flushApplicationThreads) {
         enforceCallingPermission(permission.DUMP, "waitForBroadcastBarrier()");
         if (flushBroadcastLoopers) {
@@ -19034,11 +18867,7 @@ public class ActivityManagerService extends IActivityManager.Stub
      * Wait for all pending {@link IApplicationThread} events to be processed in
      * all currently running apps.
      */
-    public void waitForApplicationBarrier(@Nullable PrintWriter pw) {
-        if (pw == null) {
-            pw = new PrintWriter(new LogWriter(Log.VERBOSE, TAG));
-        }
-
+    public void waitForApplicationBarrier(@NonNull PrintWriter pw) {
         final CountDownLatch finishedLatch = new CountDownLatch(1);
         final AtomicInteger pingCount = new AtomicInteger(0);
         final AtomicInteger pongCount = new AtomicInteger(0);
@@ -19063,7 +18892,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     final IApplicationThread thread = app.getOnewayThread();
                     if (thread != null) {
                         mOomAdjuster.mCachedAppOptimizer.unfreezeTemporarily(app,
-                                OomAdjuster.OOM_ADJ_REASON_NONE);
+                                CachedAppOptimizer.UNFREEZE_REASON_PING);
                         pingCount.incrementAndGet();
                         try {
                             thread.schedulePing(pongCallback);
@@ -19086,15 +18915,18 @@ public class ActivityManagerService extends IActivityManager.Stub
             try {
                 if (finishedLatch.await(1, TimeUnit.SECONDS)) {
                     pw.println("Finished application barriers!");
+                    pw.flush();
                     return;
                 } else {
                     pw.println("Waiting for application barriers, at " + pongCount.get() + " of "
                             + pingCount.get() + "...");
+                    pw.flush();
                 }
             } catch (InterruptedException ignored) {
             }
         }
         pw.println("Gave up waiting for application barriers!");
+        pw.flush();
     }
 
     void setIgnoreDeliveryGroupPolicy(@NonNull String broadcastAction) {
