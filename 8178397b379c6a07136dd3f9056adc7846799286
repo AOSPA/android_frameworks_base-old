@@ -16,6 +16,24 @@
       "message": "It still has a bug which shows a second ripple after the automatic brightness button has been touched and the brightness mirror becomes visible but in my opinion it is still better than what currently use.",
       "revId": "8178397b379c6a07136dd3f9056adc7846799286",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "687cabcb_0f6ce2ad",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2023-05-01T21:32:10Z",
+      "side": 1,
+      "message": "i never even noticed that tbh",
+      "parentUuid": "753b406d_1d4ed29d",
+      "revId": "8178397b379c6a07136dd3f9056adc7846799286",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
