@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "3edc6733_a1502713",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 5
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000463
+      },
+      "writtenOn": "2023-05-03T23:05:38Z",
+      "side": 1,
+      "message": "blocking the merge until we decide about the UX changes",
+      "revId": "88c920b49c0f232b804c872d70f720a398f1a6ff",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
