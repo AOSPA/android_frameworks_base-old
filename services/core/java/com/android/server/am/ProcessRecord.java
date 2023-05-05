@@ -646,6 +646,11 @@ class ProcessRecord implements WindowProcessListener {
         }
     }
 
+    @GuardedBy({"mService", "mProcLock"})
+    int getSetAdj() {
+        return mState.getSetAdj();
+    }
+
     @GuardedBy(anyOf = {"mService", "mProcLock"})
     IApplicationThread getThread() {
         return mThread;

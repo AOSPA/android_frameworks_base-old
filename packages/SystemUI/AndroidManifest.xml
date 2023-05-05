@@ -82,6 +82,7 @@
     <uses-permission android:name="android.permission.CONTROL_VPN" />
     <uses-permission android:name="android.permission.PEERS_MAC_ADDRESS"/>
     <uses-permission android:name="android.permission.READ_WIFI_CREDENTIAL"/>
+    <uses-permission android:name="android.permission.LOCATION_HARDWARE" />
     <!-- Physical hardware -->
     <uses-permission android:name="android.permission.MANAGE_USB" />
     <uses-permission android:name="android.permission.CONTROL_DISPLAY_BRIGHTNESS" />
@@ -383,6 +384,9 @@
         <service android:name="SystemUIService"
             android:exported="true"
         />
+        <service android:name=".wallet.controller.WalletContextualLocationsService"
+            android:exported="true"
+            />
 
         <!-- Service for dumping extremely verbose content during a bug report -->
         <service android:name=".dump.SystemUIAuxiliaryDumpService"
@@ -695,7 +699,9 @@
             android:relinquishTaskIdentity="true"
             android:configChanges=
                 "screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden"
-            android:visibleToInstantApps="true"/>
+            android:visibleToInstantApps="true"
+            android:exported="false"
+            android:permission="android.permission.MANAGE_MEDIA_PROJECTION"/>
 
         <!-- started from TvNotificationPanel -->
         <activity
@@ -966,21 +972,7 @@
                  android:permission="android.permission.BIND_JOB_SERVICE"/>
 
         <!-- region Note Task -->
-        <activity
-            android:name=".notetask.shortcut.CreateNoteTaskShortcutActivity"
-            android:enabled="false"
-            android:exported="true"
-            android:excludeFromRecents="true"
-            android:resizeableActivity="false"
-            android:theme="@android:style/Theme.NoDisplay"
-            android:label="@string/note_task_button_label"
-            android:icon="@drawable/ic_note_task_shortcut_widget">
-
-            <intent-filter>
-                <action android:name="android.intent.action.CREATE_SHORTCUT" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity>
+        <service android:name=".notetask.NoteTaskControllerUpdateService" />
 
         <activity
             android:name=".notetask.shortcut.LaunchNoteTaskActivity"
@@ -1004,6 +996,18 @@
             android:excludeFromRecents="true"
             android:resizeableActivity="false"
             android:theme="@android:style/Theme.NoDisplay" />
+
+        <activity
+            android:name=".notetask.LaunchNotesRoleSettingsTrampolineActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:resizeableActivity="false"
+            android:theme="@android:style/Theme.NoDisplay" >
+            <intent-filter>
+                <action android:name="com.android.systemui.action.MANAGE_NOTES_ROLE_FROM_QUICK_AFFORDANCE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
         <!-- endregion -->
 
         <!-- started from ControlsRequestReceiver -->

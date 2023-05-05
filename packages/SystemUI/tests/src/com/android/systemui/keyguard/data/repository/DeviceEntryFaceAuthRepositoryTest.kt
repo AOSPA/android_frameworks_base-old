@@ -29,6 +29,7 @@ import android.hardware.face.FaceManager
 import android.hardware.face.FaceSensorProperties
 import android.hardware.face.FaceSensorPropertiesInternal
 import android.os.CancellationSignal
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SmallTest
 import com.android.internal.logging.InstanceId.fakeInstanceId
 import com.android.internal.logging.UiEventLogger
@@ -36,6 +37,7 @@ import com.android.keyguard.FaceAuthUiEvent
 import com.android.keyguard.FaceAuthUiEvent.FACE_AUTH_TRIGGERED_ALTERNATE_BIOMETRIC_BOUNCER_SHOWN
 import com.android.keyguard.FaceAuthUiEvent.FACE_AUTH_TRIGGERED_SWIPE_UP_ON_BOUNCER
 import com.android.systemui.R
+import com.android.systemui.RoboPilotTest
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.coroutines.FlowValue
 import com.android.systemui.coroutines.collectLastValue
@@ -52,6 +54,7 @@ import com.android.systemui.keyguard.shared.model.ErrorAuthenticationStatus
 import com.android.systemui.keyguard.shared.model.HelpAuthenticationStatus
 import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.keyguard.shared.model.SuccessAuthenticationStatus
+import com.android.systemui.keyguard.shared.model.TransitionState
 import com.android.systemui.keyguard.shared.model.TransitionStep
 import com.android.systemui.keyguard.shared.model.WakeSleepReason
 import com.android.systemui.keyguard.shared.model.WakefulnessModel
@@ -65,6 +68,7 @@ import com.android.systemui.statusbar.phone.KeyguardBypassController
 import com.android.systemui.user.data.repository.FakeUserRepository
 import com.android.systemui.util.mockito.KotlinArgumentCaptor
 import com.android.systemui.util.mockito.captureMany
+import com.android.systemui.util.mockito.mock
 import com.android.systemui.util.mockito.whenever
 import com.android.systemui.util.time.FakeSystemClock
 import com.android.systemui.util.time.SystemClock
@@ -72,7 +76,6 @@ import com.google.common.truth.Truth.assertThat
 import java.io.PrintWriter
 import java.io.StringWriter
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -82,7 +85,6 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.junit.runners.JUnit4
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.eq
@@ -99,7 +101,8 @@ import org.mockito.MockitoAnnotations
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @SmallTest
-@RunWith(JUnit4::class)
+@RoboPilotTest
+@RunWith(AndroidJUnit4::class)
 class DeviceEntryFaceAuthRepositoryTest : SysuiTestCase() {
     private lateinit var underTest: DeviceEntryFaceAuthRepositoryImpl
 
@@ -192,8 +195,24 @@ class DeviceEntryFaceAuthRepositoryTest : SysuiTestCase() {
         bypassControllerOverride: KeyguardBypassController? = bypassController
     ): DeviceEntryFaceAuthRepositoryImpl {
         val systemClock = FakeSystemClock()
-        val faceAuthBuffer = TableLogBuffer(10, "face auth", systemClock)
-        val faceDetectBuffer = TableLogBuffer(10, "face detect", systemClock)
+        val faceAuthBuffer =
+            TableLogBuffer(
+                10,
+                "face auth",
+                systemClock,
+                mock(),
+                testDispatcher,
+                testScope.backgroundScope
+            )
+        val faceDetectBuffer =
+            TableLogBuffer(
+                10,
+                "face detect",
+                systemClock,
+                mock(),
+                testDispatcher,
+                testScope.backgroundScope
+            )
         keyguardTransitionRepository = FakeKeyguardTransitionRepository()
         val keyguardTransitionInteractor =
             KeyguardTransitionInteractor(keyguardTransitionRepository)
@@ -216,6 +235,7 @@ class DeviceEntryFaceAuthRepositoryTest : SysuiTestCase() {
             faceDetectBuffer,
             faceAuthBuffer,
             keyguardTransitionInteractor,
+            featureFlags,
             dumpManager,
         )
     }
@@ -542,14 +562,6 @@ class DeviceEntryFaceAuthRepositoryTest : SysuiTestCase() {
         }
 
     @Test
-    fun authenticateDoesNotRunWhenCurrentUserIsNotPrimary() =
-        testScope.runTest {
-            testGatingCheckForFaceAuth {
-                launch { fakeUserRepository.setSelectedUserInfo(secondaryUser) }
-            }
-        }
-
-    @Test
     fun authenticateDoesNotRunWhenSecureCameraIsActive() =
         testScope.runTest {
             testGatingCheckForFaceAuth {
@@ -602,6 +614,7 @@ class DeviceEntryFaceAuthRepositoryTest : SysuiTestCase() {
             authStatus()
             detectStatus()
             authRunning()
+            bypassEnabled()
             lockedOut()
             canFaceAuthRun()
             authenticated()
@@ -648,6 +661,58 @@ class DeviceEntryFaceAuthRepositoryTest : SysuiTestCase() {
             assertThat(authenticated()).isTrue()
 
             keyguardRepository.setKeyguardGoingAway(true)
+
+            assertThat(authenticated()).isFalse()
+        }
+
+    @Test
+    fun isAuthenticatedIsResetToFalseWhenDeviceStartsGoingToSleep() =
+        testScope.runTest {
+            initCollectors()
+            allPreconditionsToRunFaceAuthAreTrue()
+
+            triggerFaceAuth(false)
+
+            authenticationCallback.value.onAuthenticationSucceeded(
+                mock(FaceManager.AuthenticationResult::class.java)
+            )
+
+            assertThat(authenticated()).isTrue()
+
+            keyguardRepository.setWakefulnessModel(
+                WakefulnessModel(
+                    WakefulnessState.STARTING_TO_SLEEP,
+                    isWakingUpOrAwake = false,
+                    lastWakeReason = WakeSleepReason.POWER_BUTTON,
+                    lastSleepReason = WakeSleepReason.POWER_BUTTON
+                )
+            )
+
+            assertThat(authenticated()).isFalse()
+        }
+
+    @Test
+    fun isAuthenticatedIsResetToFalseWhenDeviceGoesToSleep() =
+        testScope.runTest {
+            initCollectors()
+            allPreconditionsToRunFaceAuthAreTrue()
+
+            triggerFaceAuth(false)
+
+            authenticationCallback.value.onAuthenticationSucceeded(
+                mock(FaceManager.AuthenticationResult::class.java)
+            )
+
+            assertThat(authenticated()).isTrue()
+
+            keyguardRepository.setWakefulnessModel(
+                WakefulnessModel(
+                    WakefulnessState.ASLEEP,
+                    isWakingUpOrAwake = false,
+                    lastWakeReason = WakeSleepReason.POWER_BUTTON,
+                    lastSleepReason = WakeSleepReason.POWER_BUTTON
+                )
+            )
 
             assertThat(authenticated()).isFalse()
         }
@@ -785,7 +850,11 @@ class DeviceEntryFaceAuthRepositoryTest : SysuiTestCase() {
     fun schedulesFaceManagerWatchdogWhenKeyguardIsGoneFromDozing() =
         testScope.runTest {
             keyguardTransitionRepository.sendTransitionStep(
-                TransitionStep(from = KeyguardState.DOZING, to = KeyguardState.GONE)
+                TransitionStep(
+                    from = KeyguardState.DOZING,
+                    to = KeyguardState.GONE,
+                    transitionState = TransitionState.FINISHED
+                )
             )
 
             runCurrent()
@@ -796,7 +865,11 @@ class DeviceEntryFaceAuthRepositoryTest : SysuiTestCase() {
     fun schedulesFaceManagerWatchdogWhenKeyguardIsGoneFromAod() =
         testScope.runTest {
             keyguardTransitionRepository.sendTransitionStep(
-                TransitionStep(from = KeyguardState.AOD, to = KeyguardState.GONE)
+                TransitionStep(
+                    from = KeyguardState.AOD,
+                    to = KeyguardState.GONE,
+                    transitionState = TransitionState.FINISHED
+                )
             )
 
             runCurrent()
@@ -807,7 +880,11 @@ class DeviceEntryFaceAuthRepositoryTest : SysuiTestCase() {
     fun schedulesFaceManagerWatchdogWhenKeyguardIsGoneFromLockscreen() =
         testScope.runTest {
             keyguardTransitionRepository.sendTransitionStep(
-                TransitionStep(from = KeyguardState.LOCKSCREEN, to = KeyguardState.GONE)
+                TransitionStep(
+                    from = KeyguardState.LOCKSCREEN,
+                    to = KeyguardState.GONE,
+                    transitionState = TransitionState.FINISHED
+                )
             )
 
             runCurrent()
@@ -818,7 +895,11 @@ class DeviceEntryFaceAuthRepositoryTest : SysuiTestCase() {
     fun schedulesFaceManagerWatchdogWhenKeyguardIsGoneFromBouncer() =
         testScope.runTest {
             keyguardTransitionRepository.sendTransitionStep(
-                TransitionStep(from = KeyguardState.PRIMARY_BOUNCER, to = KeyguardState.GONE)
+                TransitionStep(
+                    from = KeyguardState.PRIMARY_BOUNCER,
+                    to = KeyguardState.GONE,
+                    transitionState = TransitionState.FINISHED
+                )
             )
 
             runCurrent()

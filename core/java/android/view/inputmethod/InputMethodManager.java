@@ -488,11 +488,19 @@ public final class InputMethodManager {
     private View mNextServedView;
 
     /**
-     * This is the root view of the overall window that currently has input
-     * method focus.
+     * The latest {@link ViewRootImpl} that has, or most recently had, input method focus.
+     *
+     * <p>This value will be cleared when it becomes inactive and no longer has window focus.
      */
+    @Nullable
     @GuardedBy("mH")
     ViewRootImpl mCurRootView;
+
+    /**
+     * Whether the {@link #mCurRootView} currently has window focus.
+     */
+    @GuardedBy("mH")
+    boolean mCurRootViewWindowFocused;
 
     /**
      * This is set when we are in the process of connecting, to determine
@@ -751,6 +759,7 @@ public final class InputMethodManager {
         public void onPreWindowGainedFocus(ViewRootImpl viewRootImpl) {
             synchronized (mH) {
                 setCurrentRootViewLocked(viewRootImpl);
+                mCurRootViewWindowFocused = true;
             }
         }
 
@@ -824,6 +833,17 @@ public final class InputMethodManager {
                         mCurRootView.mContext.getApplicationInfo().targetSdkVersion,
                         UserHandle.myUserId(), mImeDispatcher);
                 Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
+            }
+        }
+
+        @Override
+        public void onWindowLostFocus(@NonNull ViewRootImpl viewRootImpl) {
+            synchronized (mH) {
+                if (mCurRootView == viewRootImpl) {
+                    mCurRootViewWindowFocused = false;
+
+                    clearCurRootViewIfNeeded();
+                }
             }
         }
 
@@ -1120,6 +1140,10 @@ public final class InputMethodManager {
                             // Note that finishComposingText() is allowed to run
                             // even when we are not active.
                             mFallbackInputConnection.finishComposingTextFromImm();
+
+                            if (clearCurRootViewIfNeeded()) {
+                                return;
+                            }
                         }
                         // Check focus again in case that "onWindowFocus" is called before
                         // handling this message.
@@ -1762,8 +1786,7 @@ public final class InputMethodManager {
     }
 
     /**
-     * Return true if the given view is the currently active view for the
-     * input method.
+     * Return {@code true} if the given view is the currently active view for the input method.
      */
     public boolean isActive(View view) {
         // Re-dispatch if there is a context mismatch.
@@ -1779,12 +1802,26 @@ public final class InputMethodManager {
     }
 
     /**
-     * Return true if any view is currently active in the input method.
+     * Return {@code true} if any view is currently active for the input method.
      */
     public boolean isActive() {
         checkFocus();
         synchronized (mH) {
             return getServedViewLocked() != null && mCurrentEditorInfo != null;
+        }
+    }
+
+    /**
+     * Returns {@code true} if the given view's {@link ViewRootImpl} is the currently active one
+     * for the {@code InputMethodManager}.
+     *
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(Manifest.permission.TEST_INPUT_METHOD)
+    public boolean isCurrentRootView(@NonNull View attachedView) {
+        synchronized (mH) {
+            return mCurRootView == attachedView.getViewRootImpl();
         }
     }
 
@@ -1912,6 +1949,24 @@ public final class InputMethodManager {
         }
         // Clear the back callbacks held by the ime dispatcher to avoid memory leaks.
         mImeDispatcher.clear();
+    }
+
+    /**
+     * Clears the {@link #mCurRootView} if it's no longer window focused and the connection is
+     * no longer active.
+     *
+     * @return {@code} true iff it was cleared.
+     */
+    @GuardedBy("mH")
+    private boolean clearCurRootViewIfNeeded() {
+        if (!mActive && !mCurRootViewWindowFocused) {
+            finishInputLocked();
+            mDelegate.setCurrentRootViewLocked(null);
+
+            return true;
+        }
+
+        return false;
     }
 
     public void displayCompletions(View view, CompletionInfo[] completions) {

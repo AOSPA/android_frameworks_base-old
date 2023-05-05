@@ -215,6 +215,15 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
     }
 
     /**
+     * Pass top margin from ClockPositionAlgorithm in NotificationPanelViewController
+     * Use for clock view in LS to compensate for top margin to align to the screen
+     * Regardless of translation from AOD and unlock gestures
+     */
+    public void setLockscreenClockY(int clockY) {
+        mKeyguardClockSwitchController.setLockscreenClockY(clockY);
+    }
+
+    /**
      * Set whether the view accessibility importance mode.
      */
     public void setStatusAccessibilityImportance(int mode) {
@@ -230,7 +239,6 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
      * Update position of the view with an optional animation
      */
     public void updatePosition(int x, int y, float scale, boolean animate) {
-        float oldY = mView.getY();
         setProperty(AnimatableProperty.Y, y, animate);
 
         ClockController clock = mKeyguardClockSwitchController.getClock();
@@ -245,10 +253,6 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
                     CLOCK_ANIMATION_PROPERTIES, animate);
             setProperty(AnimatableProperty.SCALE_X, 1f, animate);
             setProperty(AnimatableProperty.SCALE_Y, 1f, animate);
-        }
-
-        if (oldY != y) {
-            mKeyguardClockSwitchController.updateKeyguardStatusViewOffset();
         }
     }
 
@@ -363,8 +367,6 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
             } else {
                 View clockView = clockContainerView.getChildAt(0);
 
-                transition.excludeTarget(clockView, /* exclude= */ true);
-
                 TransitionSet set = new TransitionSet();
                 set.addTransition(transition);
 
@@ -389,8 +391,9 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
 
     @VisibleForTesting
     static class SplitShadeTransitionAdapter extends Transition {
-        private static final String PROP_BOUNDS = "splitShadeTransitionAdapter:bounds";
-        private static final String[] TRANSITION_PROPERTIES = { PROP_BOUNDS };
+        private static final String PROP_BOUNDS_LEFT = "splitShadeTransitionAdapter:boundsLeft";
+        private static final String PROP_X_IN_WINDOW = "splitShadeTransitionAdapter:xInWindow";
+        private static final String[] TRANSITION_PROPERTIES = { PROP_BOUNDS_LEFT, PROP_X_IN_WINDOW};
 
         private final KeyguardClockSwitchController mController;
 
@@ -400,12 +403,10 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
         }
 
         private void captureValues(TransitionValues transitionValues) {
-            Rect boundsRect = new Rect();
-            boundsRect.left = transitionValues.view.getLeft();
-            boundsRect.top = transitionValues.view.getTop();
-            boundsRect.right = transitionValues.view.getRight();
-            boundsRect.bottom = transitionValues.view.getBottom();
-            transitionValues.values.put(PROP_BOUNDS, boundsRect);
+            transitionValues.values.put(PROP_BOUNDS_LEFT, transitionValues.view.getLeft());
+            int[] locationInWindowTmp = new int[2];
+            transitionValues.view.getLocationInWindow(locationInWindowTmp);
+            transitionValues.values.put(PROP_X_IN_WINDOW, locationInWindowTmp[0]);
         }
 
         @Override
@@ -427,8 +428,12 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
             }
             ValueAnimator anim = ValueAnimator.ofFloat(0, 1);
 
-            Rect from = (Rect) startValues.values.get(PROP_BOUNDS);
-            Rect to = (Rect) endValues.values.get(PROP_BOUNDS);
+            int fromLeft = (int) startValues.values.get(PROP_BOUNDS_LEFT);
+            int fromWindowX = (int) startValues.values.get(PROP_X_IN_WINDOW);
+            int toWindowX = (int) endValues.values.get(PROP_X_IN_WINDOW);
+            // Using windowX, to determine direction, instead of left, as in RTL the difference of
+            // toLeft - fromLeft is always positive, even when moving left.
+            int direction = toWindowX - fromWindowX > 0 ? 1 : -1;
 
             anim.addUpdateListener(animation -> {
                 ClockController clock = mController.getClock();
@@ -437,7 +442,7 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
                 }
 
                 clock.getLargeClock().getAnimations()
-                        .onPositionUpdated(from, to, animation.getAnimatedFraction());
+                        .onPositionUpdated(fromLeft, direction, animation.getAnimatedFraction());
             });
 
             return anim;

@@ -64,6 +64,7 @@ import com.android.server.ExtendedMockitoRule;
 import com.android.server.LocalServices;
 import com.android.server.am.BatteryStatsService;
 import com.android.server.display.RampAnimator.DualRampAnimator;
+import com.android.server.display.brightness.BrightnessEvent;
 import com.android.server.display.color.ColorDisplayService;
 import com.android.server.display.layout.Layout;
 import com.android.server.display.whitebalance.DisplayWhiteBalanceController;
@@ -445,7 +446,7 @@ public final class DisplayPowerController2Test {
     }
 
     @Test
-    public void testDisplayBrightnessFollowersRemoval() {
+    public void testDisplayBrightnessFollowersRemoval_RemoveSingleFollower() {
         DisplayPowerControllerHolder followerDpc = createDisplayPowerController(FOLLOWER_DISPLAY_ID,
                 FOLLOWER_UNIQUE_ID);
         DisplayPowerControllerHolder secondFollowerDpc = createDisplayPowerController(
@@ -520,21 +521,93 @@ public final class DisplayPowerController2Test {
     }
 
     @Test
+    public void testDisplayBrightnessFollowersRemoval_RemoveAllFollowers() {
+        DisplayPowerControllerHolder followerHolder =
+                createDisplayPowerController(FOLLOWER_DISPLAY_ID, FOLLOWER_UNIQUE_ID);
+        DisplayPowerControllerHolder secondFollowerHolder =
+                createDisplayPowerController(SECOND_FOLLOWER_DISPLAY_ID,
+                        SECOND_FOLLOWER_UNIQUE_DISPLAY_ID);
+
+        DisplayPowerRequest dpr = new DisplayPowerRequest();
+        mHolder.dpc.requestPowerState(dpr, /* waitForNegativeProximity= */ false);
+        followerHolder.dpc.requestPowerState(dpr, /* waitForNegativeProximity= */ false);
+        secondFollowerHolder.dpc.requestPowerState(dpr, /* waitForNegativeProximity= */ false);
+        advanceTime(1); // Run updatePowerState
+
+        ArgumentCaptor<BrightnessSetting.BrightnessSettingListener> listenerCaptor =
+                ArgumentCaptor.forClass(BrightnessSetting.BrightnessSettingListener.class);
+        verify(mHolder.brightnessSetting).registerListener(listenerCaptor.capture());
+        BrightnessSetting.BrightnessSettingListener listener = listenerCaptor.getValue();
+
+        // Set the initial brightness on the DPCs we're going to remove so we have a fixed value for
+        // it to return to.
+        listenerCaptor = ArgumentCaptor.forClass(BrightnessSetting.BrightnessSettingListener.class);
+        verify(followerHolder.brightnessSetting).registerListener(listenerCaptor.capture());
+        BrightnessSetting.BrightnessSettingListener followerListener = listenerCaptor.getValue();
+        listenerCaptor = ArgumentCaptor.forClass(BrightnessSetting.BrightnessSettingListener.class);
+        verify(secondFollowerHolder.brightnessSetting).registerListener(listenerCaptor.capture());
+        BrightnessSetting.BrightnessSettingListener secondFollowerListener =
+                listenerCaptor.getValue();
+        final float initialFollowerBrightness = 0.3f;
+        when(followerHolder.brightnessSetting.getBrightness()).thenReturn(
+                initialFollowerBrightness);
+        when(secondFollowerHolder.brightnessSetting.getBrightness()).thenReturn(
+                initialFollowerBrightness);
+        followerListener.onBrightnessChanged(initialFollowerBrightness);
+        secondFollowerListener.onBrightnessChanged(initialFollowerBrightness);
+        advanceTime(1);
+        verify(followerHolder.animator).animateTo(eq(initialFollowerBrightness),
+                anyFloat(), anyFloat());
+        verify(secondFollowerHolder.animator).animateTo(eq(initialFollowerBrightness),
+                anyFloat(), anyFloat());
+
+        mHolder.dpc.addDisplayBrightnessFollower(followerHolder.dpc);
+        mHolder.dpc.addDisplayBrightnessFollower(secondFollowerHolder.dpc);
+        clearInvocations(followerHolder.animator, secondFollowerHolder.animator);
+
+        // Validate both followers are correctly registered and receiving brightness updates
+        float brightness = 0.6f;
+        float nits = 600;
+        when(mHolder.automaticBrightnessController.convertToNits(brightness)).thenReturn(nits);
+        when(followerHolder.automaticBrightnessController.convertToFloatScale(nits))
+                .thenReturn(brightness);
+        when(secondFollowerHolder.automaticBrightnessController.convertToFloatScale(nits))
+                .thenReturn(brightness);
+        when(mHolder.brightnessSetting.getBrightness()).thenReturn(brightness);
+        listener.onBrightnessChanged(brightness);
+        advanceTime(1); // Send messages, run updatePowerState
+        verify(mHolder.animator).animateTo(eq(brightness), anyFloat(), anyFloat());
+        verify(followerHolder.animator).animateTo(eq(brightness), anyFloat(), anyFloat());
+        verify(secondFollowerHolder.animator).animateTo(eq(brightness), anyFloat(), anyFloat());
+
+        clearInvocations(mHolder.animator, followerHolder.animator, secondFollowerHolder.animator);
+
+        // Stop the lead DPC and validate that the followers go back to their original brightness.
+        mHolder.dpc.stop();
+        advanceTime(1);
+        verify(followerHolder.animator).animateTo(eq(initialFollowerBrightness),
+                anyFloat(), anyFloat());
+        verify(secondFollowerHolder.animator).animateTo(eq(initialFollowerBrightness),
+                anyFloat(), anyFloat());
+        clearInvocations(followerHolder.animator, secondFollowerHolder.animator);
+    }
+
+    @Test
     public void testDoesNotSetScreenStateForNonDefaultDisplayUntilBootCompleted() {
         // We should still set screen state for the default display
         DisplayPowerRequest dpr = new DisplayPowerRequest();
         mHolder.dpc.requestPowerState(dpr, /* waitForNegativeProximity= */ false);
-        advanceTime(1);
+        advanceTime(1); // Run updatePowerState
         verify(mHolder.displayPowerState, times(2)).setScreenState(anyInt());
 
         mHolder = createDisplayPowerController(42, UNIQUE_ID);
 
         mHolder.dpc.requestPowerState(dpr, /* waitForNegativeProximity= */ false);
-        advanceTime(1);
+        advanceTime(1); // Run updatePowerState
         verify(mHolder.displayPowerState, never()).setScreenState(anyInt());
 
         mHolder.dpc.onBootCompleted();
-        advanceTime(1);
+        advanceTime(1); // Run updatePowerState
         verify(mHolder.displayPowerState).setScreenState(anyInt());
     }
 
@@ -560,8 +633,8 @@ public final class DisplayPowerController2Test {
                 .thenReturn(brightness);
         dpr.policy = DisplayPowerRequest.POLICY_BRIGHT;
         when(mHolder.displayPowerState.getScreenState()).thenReturn(Display.STATE_ON);
-        when(mHolder.automaticBrightnessController.getAutomaticScreenBrightness())
-                .thenReturn(PowerManager.BRIGHTNESS_INVALID_FLOAT);
+        when(mHolder.automaticBrightnessController.getAutomaticScreenBrightness(
+                any(BrightnessEvent.class))).thenReturn(PowerManager.BRIGHTNESS_INVALID_FLOAT);
 
         mHolder.dpc.requestPowerState(dpr, /* waitForNegativeProximity= */ false);
         advanceTime(1); // Run updatePowerState
@@ -595,8 +668,8 @@ public final class DisplayPowerController2Test {
                 .thenReturn(brightness);
         dpr.policy = DisplayPowerRequest.POLICY_BRIGHT;
         when(mHolder.displayPowerState.getScreenState()).thenReturn(Display.STATE_ON);
-        when(mHolder.automaticBrightnessController.getAutomaticScreenBrightness())
-                .thenReturn(PowerManager.BRIGHTNESS_INVALID_FLOAT);
+        when(mHolder.automaticBrightnessController.getAutomaticScreenBrightness(
+                any(BrightnessEvent.class))).thenReturn(PowerManager.BRIGHTNESS_INVALID_FLOAT);
 
         mHolder.dpc.requestPowerState(dpr, /* waitForNegativeProximity= */ false);
         advanceTime(1); // Run updatePowerState
@@ -750,6 +823,21 @@ public final class DisplayPowerController2Test {
         );
     }
 
+    @Test
+    public void testUpdateBrightnessThrottlingDataId() {
+        mHolder.display.getDisplayInfoLocked().thermalBrightnessThrottlingDataId =
+                "throttling-data-id";
+        clearInvocations(mHolder.display.getPrimaryDisplayDeviceLocked().getDisplayDeviceConfig());
+
+        mHolder.dpc.onDisplayChanged(mHolder.hbmMetadata, Layout.NO_LEAD_DISPLAY);
+        DisplayPowerRequest dpr = new DisplayPowerRequest();
+        mHolder.dpc.requestPowerState(dpr, /* waitForNegativeProximity= */ false);
+        advanceTime(1); // Run updatePowerState
+
+        verify(mHolder.display.getPrimaryDisplayDeviceLocked().getDisplayDeviceConfig())
+                .getThermalBrightnessThrottlingDataMapByThrottlingId();
+    }
+
     /**
      * Creates a mock and registers it to {@link LocalServices}.
      */
@@ -790,8 +878,6 @@ public final class DisplayPowerController2Test {
         when(logicalDisplayMock.getDisplayInfoLocked()).thenReturn(info);
         when(logicalDisplayMock.isEnabledLocked()).thenReturn(isEnabled);
         when(logicalDisplayMock.isInTransitionLocked()).thenReturn(false);
-        when(logicalDisplayMock.getThermalBrightnessThrottlingDataIdLocked()).thenReturn(
-                DisplayDeviceConfig.DEFAULT_ID);
         when(displayDeviceMock.getDisplayDeviceInfoLocked()).thenReturn(deviceInfo);
         when(displayDeviceMock.getUniqueId()).thenReturn(uniqueId);
         when(displayDeviceMock.getDisplayDeviceConfig()).thenReturn(displayDeviceConfigMock);

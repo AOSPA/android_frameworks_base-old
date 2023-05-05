@@ -89,9 +89,11 @@ import com.android.internal.R;
 import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.settingslib.udfps.UdfpsUtils;
+import com.android.systemui.RoboPilotTest;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.biometrics.domain.interactor.BiometricPromptCredentialInteractor;
 import com.android.systemui.biometrics.domain.interactor.LogContextInteractor;
+import com.android.systemui.biometrics.ui.viewmodel.AuthBiometricFingerprintViewModel;
 import com.android.systemui.biometrics.ui.viewmodel.CredentialViewModel;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.statusbar.CommandQueue;
@@ -120,6 +122,7 @@ import java.util.Random;
 @RunWith(AndroidJUnit4.class)
 @RunWithLooper
 @SmallTest
+@RoboPilotTest
 public class AuthControllerTest extends SysuiTestCase {
 
     private static final long REQUEST_ID = 22;
@@ -169,6 +172,8 @@ public class AuthControllerTest extends SysuiTestCase {
     private InteractionJankMonitor mInteractionJankMonitor;
     @Mock
     private BiometricPromptCredentialInteractor mBiometricPromptCredentialInteractor;
+    @Mock
+    private AuthBiometricFingerprintViewModel mAuthBiometricFingerprintViewModel;
     @Mock
     private CredentialViewModel mCredentialViewModel;
     @Mock
@@ -993,8 +998,9 @@ public class AuthControllerTest extends SysuiTestCase {
                     () -> mSideFpsController, mDisplayManager, mWakefulnessLifecycle,
                     mPanelInteractionDetector, mUserManager, mLockPatternUtils, mUdfpsLogger,
                     mLogContextInteractor, () -> mBiometricPromptCredentialInteractor,
-                    () -> mCredentialViewModel, mInteractionJankMonitor, mHandler,
-                    mBackgroundExecutor, mVibratorHelper, mUdfpsUtils);
+                    () -> mAuthBiometricFingerprintViewModel, () -> mCredentialViewModel,
+                    mInteractionJankMonitor, mHandler, mBackgroundExecutor, mVibratorHelper,
+                    mUdfpsUtils);
         }
 
         @Override

@@ -72,7 +72,6 @@ import android.window.TaskOrganizer;
 import android.window.TaskSnapshot;
 import android.window.WindowContainerToken;
 import android.window.WindowContainerTransaction;
-import android.window.WindowContainerTransactionCallback;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.protolog.common.ProtoLog;
@@ -139,19 +138,12 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
     // the runnable to execute after WindowContainerTransactions is applied to finish resizing pip
     private Runnable mPipFinishResizeWCTRunnable;
 
-    private final WindowContainerTransactionCallback mPipFinishResizeWCTCallback =
-            new WindowContainerTransactionCallback() {
-        @Override
-        public void onTransactionReady(int id, SurfaceControl.Transaction t) {
-            t.apply();
-
-            // execute the runnable if non-null after WCT is applied to finish resizing pip
-            if (mPipFinishResizeWCTRunnable != null) {
-                mPipFinishResizeWCTRunnable.run();
-                mPipFinishResizeWCTRunnable = null;
-            }
+    private void maybePerformFinishResizeCallback() {
+        if (mPipFinishResizeWCTRunnable != null) {
+            mPipFinishResizeWCTRunnable.run();
+            mPipFinishResizeWCTRunnable = null;
         }
-    };
+    }
 
     // These callbacks are called on the update thread
     private final PipAnimationController.PipAnimationCallback mPipAnimationCallback =
@@ -171,6 +163,7 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
             final int direction = animator.getTransitionDirection();
             if (mIsCancelled) {
                 sendOnPipTransitionFinished(direction);
+                maybePerformFinishResizeCallback();
                 return;
             }
             final int animationType = animator.getAnimationType();
@@ -195,6 +188,10 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
                     || isRemovePipDirection(direction);
             if (mPipTransitionState.getTransitionState() != PipTransitionState.EXITING_PIP
                     || isExitPipDirection) {
+                // execute the finish resize callback if needed after the transaction is committed
+                tx.addTransactionCommittedListener(mMainExecutor,
+                        PipTaskOrganizer.this::maybePerformFinishResizeCallback);
+
                 // Finish resize as long as we're not exiting PIP, or, if we are, only if this is
                 // the end of an exit PIP animation.
                 // This is necessary in case there was a resize animation ongoing when exit PIP
@@ -619,11 +616,11 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
      * Removes PiP immediately.
      */
     public void removePip() {
-        if (!mPipTransitionState.isInPip() || mToken == null) {
+        if (!mPipTransitionState.isInPip() || mToken == null || mLeash == null) {
             ProtoLog.wtf(ShellProtoLogGroup.WM_SHELL_PICTURE_IN_PICTURE,
                     "%s: Not allowed to removePip in current state"
-                            + " mState=%d mToken=%s", TAG, mPipTransitionState.getTransitionState(),
-                    mToken);
+                            + " mState=%d mToken=%s mLeash=%s", TAG,
+                    mPipTransitionState.getTransitionState(), mToken, mLeash);
             return;
         }
 
@@ -1528,6 +1525,9 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
             if (snapshotSurface != null) {
                 mSyncTransactionQueue.queue(wct);
                 mSyncTransactionQueue.runInSync(t -> {
+                    // reset the pinch gesture
+                    maybePerformFinishResizeCallback();
+
                     // Scale the snapshot from its pre-resize bounds to the post-resize bounds.
                     mSurfaceTransactionHelper.scale(t, snapshotSurface, preResizeBounds,
                             snapshotDest);
@@ -1608,7 +1608,7 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
             mSplitScreenOptional.ifPresent(splitScreenController ->
                     splitScreenController.enterSplitScreen(mTaskInfo.taskId, wasPipTopLeft, wct));
         } else {
-            mTaskOrganizer.applySyncTransaction(wct, mPipFinishResizeWCTCallback);
+            mTaskOrganizer.applyTransaction(wct);
         }
     }
 
@@ -1679,8 +1679,17 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
             // Similar to auto-enter-pip transition, we use content overlay when there is no
             // source rect hint to enter PiP use bounds animation.
             if (sourceHintRect == null) {
+                // We use content overlay when there is no source rect hint to enter PiP use bounds
+                // animation.
+                // TODO(b/272819817): cleanup the null-check and extra logging.
+                final boolean hasTopActivityInfo = mTaskInfo.topActivityInfo != null;
+                if (!hasTopActivityInfo) {
+                    ProtoLog.w(ShellProtoLogGroup.WM_SHELL_TRANSITIONS,
+                            "%s: TaskInfo.topActivityInfo is null", TAG);
+                }
                 if (SystemProperties.getBoolean(
-                        "persist.wm.debug.enable_pip_app_icon_overlay", true)) {
+                        "persist.wm.debug.enable_pip_app_icon_overlay", true)
+                        && hasTopActivityInfo) {
                     animator.setAppIconContentOverlay(
                             mContext, currentBounds, mTaskInfo.topActivityInfo,
                             mPipBoundsState.getLauncherState().getAppIconSizePx());

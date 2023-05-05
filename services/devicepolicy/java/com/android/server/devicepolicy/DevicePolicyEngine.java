@@ -130,12 +130,11 @@ final class DevicePolicyEngine {
     <V> void setLocalPolicy(
             @NonNull PolicyDefinition<V> policyDefinition,
             @NonNull EnforcingAdmin enforcingAdmin,
-            @NonNull PolicyValue<V> value,
+            @Nullable PolicyValue<V> value,
             int userId,
             boolean skipEnforcePolicy) {
         Objects.requireNonNull(policyDefinition);
         Objects.requireNonNull(enforcingAdmin);
-        Objects.requireNonNull(value);
 
         synchronized (mLock) {
             PolicyState<V> localPolicyState = getLocalPolicyStateLocked(policyDefinition, userId);
@@ -683,6 +682,38 @@ final class DevicePolicyEngine {
             }
             return getUserRestrictionPolicyKeysForAdminLocked(mLocalPolicies.get(userId), admin);
         }
+    }
+
+    <V> void transferPolicies(EnforcingAdmin oldAdmin, EnforcingAdmin newAdmin) {
+        Set<PolicyKey> globalPolicies = new HashSet<>(mGlobalPolicies.keySet());
+        for (PolicyKey policy : globalPolicies) {
+            PolicyState<?> policyState = mGlobalPolicies.get(policy);
+            if (policyState.getPoliciesSetByAdmins().containsKey(oldAdmin)) {
+                PolicyDefinition<V> policyDefinition =
+                        (PolicyDefinition<V>) policyState.getPolicyDefinition();
+                PolicyValue<V> policyValue =
+                        (PolicyValue<V>) policyState.getPoliciesSetByAdmins().get(oldAdmin);
+                setGlobalPolicy(policyDefinition, newAdmin, policyValue);
+            }
+        }
+
+        for (int i = 0; i < mLocalPolicies.size(); i++) {
+            int userId = mLocalPolicies.keyAt(i);
+            Set<PolicyKey> localPolicies = new HashSet<>(
+                    mLocalPolicies.get(userId).keySet());
+            for (PolicyKey policy : localPolicies) {
+                PolicyState<?> policyState = mLocalPolicies.get(userId).get(policy);
+                if (policyState.getPoliciesSetByAdmins().containsKey(oldAdmin)) {
+                    PolicyDefinition<V> policyDefinition =
+                            (PolicyDefinition<V>) policyState.getPolicyDefinition();
+                    PolicyValue<V> policyValue =
+                            (PolicyValue<V>) policyState.getPoliciesSetByAdmins().get(oldAdmin);
+                    setLocalPolicy(policyDefinition, newAdmin, policyValue, userId);
+                }
+            }
+        }
+
+        removePoliciesForAdmin(oldAdmin);
     }
 
     private Set<UserRestrictionPolicyKey> getUserRestrictionPolicyKeysForAdminLocked(

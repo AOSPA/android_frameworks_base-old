@@ -3037,12 +3037,21 @@ public final class Settings {
         public void destroy() {
             try {
                 // If this process is the system server process, mArray is the same object as
-                // the memory int array kept inside SetingsProvider, so skipping the close()
-                if (!Settings.isInSystemServer()) {
+                // the memory int array kept inside SettingsProvider, so skipping the close()
+                if (!Settings.isInSystemServer() && !mArray.isClosed()) {
                     mArray.close();
                 }
             } catch (IOException e) {
                 Log.e(TAG, "Error closing backing array", e);
+            }
+        }
+
+        @Override
+        protected void finalize() throws Throwable {
+            try {
+                destroy();
+            } finally {
+                super.finalize();
             }
         }
     }
@@ -10204,9 +10213,7 @@ public final class Settings {
          *
          * Face unlock re enroll.
          *  0 = No re enrollment.
-         *  1 = Re enrollment is suggested.
-         *  2 = Re enrollment is required after a set time period.
-         *  3 = Re enrollment is required immediately.
+         *  1 = Re enrollment is required.
          *
          * @hide
          */
@@ -11506,6 +11513,8 @@ public final class Settings {
         public static final int DEVICE_STATE_ROTATION_KEY_HALF_FOLDED = 1;
         /** @hide */
         public static final int DEVICE_STATE_ROTATION_KEY_UNFOLDED = 2;
+        /** @hide */
+        public static final int DEVICE_STATE_ROTATION_KEY_REAR_DISPLAY = 3;
 
         /**
          * The different postures that can be used as keys with
@@ -11517,6 +11526,7 @@ public final class Settings {
                 DEVICE_STATE_ROTATION_KEY_FOLDED,
                 DEVICE_STATE_ROTATION_KEY_HALF_FOLDED,
                 DEVICE_STATE_ROTATION_KEY_UNFOLDED,
+                DEVICE_STATE_ROTATION_KEY_REAR_DISPLAY,
         })
         @Retention(RetentionPolicy.SOURCE)
         public @interface DeviceStateRotationLockKey {

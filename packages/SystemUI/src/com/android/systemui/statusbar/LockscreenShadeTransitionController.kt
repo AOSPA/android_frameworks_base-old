@@ -26,11 +26,13 @@ import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dump.DumpManager
 import com.android.systemui.keyguard.WakefulnessLifecycle
 import com.android.systemui.media.controls.ui.MediaHierarchyManager
+import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.plugins.ActivityStarter.OnDismissAction
 import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.plugins.qs.QS
 import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.shade.ShadeViewController
+import com.android.systemui.shade.data.repository.ShadeRepository
 import com.android.systemui.statusbar.notification.collection.NotificationEntry
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow
 import com.android.systemui.statusbar.notification.row.ExpandableView
@@ -62,16 +64,18 @@ class LockscreenShadeTransitionController @Inject constructor(
     private val mediaHierarchyManager: MediaHierarchyManager,
     private val scrimTransitionController: LockscreenShadeScrimTransitionController,
     private val keyguardTransitionControllerFactory:
-        LockscreenShadeKeyguardTransitionController.Factory,
+    LockscreenShadeKeyguardTransitionController.Factory,
     private val depthController: NotificationShadeDepthController,
     private val context: Context,
     private val splitShadeOverScrollerFactory: SplitShadeLockScreenOverScroller.Factory,
     private val singleShadeOverScrollerFactory: SingleShadeLockScreenOverScroller.Factory,
+    private val activityStarter: ActivityStarter,
     wakefulnessLifecycle: WakefulnessLifecycle,
     configurationController: ConfigurationController,
     falsingManager: FalsingManager,
     dumpManager: DumpManager,
     qsTransitionControllerFactory: LockscreenShadeQsTransitionController.Factory,
+    private val shadeRepository: ShadeRepository,
 ) : Dumpable {
     private var pulseHeight: Float = 0f
     @get:VisibleForTesting
@@ -305,7 +309,7 @@ class LockscreenShadeTransitionController @Inject constructor(
             if (nsslController.isInLockedDownShade()) {
                 logger.logDraggedDownLockDownShade(startingChild)
                 statusBarStateController.setLeaveOpenOnKeyguardHide(true)
-                centralSurfaces.dismissKeyguardThenExecute(OnDismissAction {
+                activityStarter.dismissKeyguardThenExecute(OnDismissAction {
                     nextHideKeyguardNeedsNoAnimation = true
                     false
                 }, cancelRunnable, false /* afterKeyguardGone */)
@@ -447,6 +451,7 @@ class LockscreenShadeTransitionController @Inject constructor(
         }
 
         val udfpsProgress = MathUtils.saturate(dragDownAmount / udfpsTransitionDistance)
+        shadeRepository.setUdfpsTransitionToFullShadeProgress(udfpsProgress)
         udfpsKeyguardViewController?.setTransitionToFullShadeProgress(udfpsProgress)
 
         val statusBarProgress = MathUtils.saturate(dragDownAmount / statusBarTransitionDistance)

@@ -24,6 +24,7 @@ import android.view.View
 import android.widget.FrameLayout
 import androidx.annotation.VisibleForTesting
 import com.android.systemui.customization.R
+import com.android.systemui.log.LogBuffer
 import com.android.systemui.plugins.ClockAnimations
 import com.android.systemui.plugins.ClockConfig
 import com.android.systemui.plugins.ClockController
@@ -32,7 +33,6 @@ import com.android.systemui.plugins.ClockFaceConfig
 import com.android.systemui.plugins.ClockFaceController
 import com.android.systemui.plugins.ClockFaceEvents
 import com.android.systemui.plugins.ClockSettings
-import com.android.systemui.plugins.log.LogBuffer
 import java.io.PrintWriter
 import java.util.Locale
 import java.util.TimeZone
@@ -189,8 +189,9 @@ class DefaultClockController(
             view.setLayoutParams(lp)
         }
 
-        fun moveForSplitShade(fromRect: Rect, toRect: Rect, fraction: Float) {
-            view.moveForSplitShade(fromRect, toRect, fraction)
+        /** See documentation at [AnimatableClockView.offsetGlyphsForStepClockAnimation]. */
+        fun offsetGlyphsForStepClockAnimation(fromLeft: Int, direction: Int, fraction: Float) {
+            view.offsetGlyphsForStepClockAnimation(fromLeft, direction, fraction)
         }
     }
 
@@ -263,6 +264,13 @@ class DefaultClockController(
                 view.animateDoze(dozeState.isActive, !hasJumped)
             }
         }
+
+        override fun onPickerCarouselSwiping(swipingFraction: Float, previewRatio: Float) {
+            // TODO(b/278936436): refactor this part when we change recomputePadding
+            // when on the side, swipingFraction = 0, translationY should offset
+            // the top margin change in recomputePadding to make clock be centered
+            view.translationY = 0.5f * view.bottom * (1 - swipingFraction)
+        }
     }
 
     inner class LargeClockAnimations(
@@ -270,8 +278,8 @@ class DefaultClockController(
         dozeFraction: Float,
         foldFraction: Float,
     ) : DefaultClockAnimations(view, dozeFraction, foldFraction) {
-        override fun onPositionUpdated(fromRect: Rect, toRect: Rect, fraction: Float) {
-            largeClock.moveForSplitShade(fromRect, toRect, fraction)
+        override fun onPositionUpdated(fromLeft: Int, direction: Int, fraction: Float) {
+            largeClock.offsetGlyphsForStepClockAnimation(fromLeft, direction, fraction)
         }
     }
 

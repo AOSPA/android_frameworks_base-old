@@ -4690,8 +4690,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             boolean isRestrictedBackupMode = false;
             if (backupTarget != null && backupTarget.appInfo.packageName.equals(processName)) {
                 isRestrictedBackupMode = backupTarget.appInfo.uid >= FIRST_APPLICATION_UID
-                        && ((backupTarget.backupMode == BackupRecord.RESTORE)
-                                || (backupTarget.backupMode == BackupRecord.RESTORE_FULL)
+                        && ((backupTarget.backupMode == BackupRecord.RESTORE_FULL)
                                 || (backupTarget.backupMode == BackupRecord.BACKUP_FULL));
             }
 
@@ -5279,7 +5278,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                         throw new IllegalArgumentException(
                                 "Can't use FLAG_RECEIVER_BOOT_UPGRADE here");
                     }
-                    if (PendingIntent.isNewMutableDisallowedImplicitPendingIntent(flags, intent)) {
+                    boolean isActivityResultType =
+                            type == ActivityManager.INTENT_SENDER_ACTIVITY_RESULT;
+                    if (PendingIntent.isNewMutableDisallowedImplicitPendingIntent(flags, intent,
+                            isActivityResultType)) {
                         boolean isChangeEnabled = CompatChanges.isChangeEnabled(
                                         PendingIntent.BLOCK_MUTABLE_IMPLICIT_PENDING_INTENT,
                                         owningUid);
@@ -7004,7 +7006,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         mActivityTaskManager.unhandledBack();
     }
 
-    // TODO: Move to ContentProviderHelper?
+    // TODO: Replace this method with one that returns a bound IContentProvider.
     public ParcelFileDescriptor openContentUri(String uriString) throws RemoteException {
         enforceNotIsolatedCaller("openContentUri");
         final int userId = UserHandle.getCallingUserId();
@@ -7033,6 +7035,16 @@ public class ActivityManagerService extends IActivityManager.Stub
                     Log.e(TAG, "Cannot find package for uid: " + uid);
                     return null;
                 }
+
+                final ApplicationInfo appInfo = mPackageManagerInt.getApplicationInfo(
+                        androidPackage.getPackageName(), /*flags*/0, Process.SYSTEM_UID,
+                        UserHandle.USER_SYSTEM);
+                if (!appInfo.isVendor() && !appInfo.isSystemApp() && !appInfo.isSystemExt()
+                        && !appInfo.isProduct()) {
+                    Log.e(TAG, "openContentUri may only be used by vendor/system/product.");
+                    return null;
+                }
+
                 final AttributionSource attributionSource = new AttributionSource(
                         Binder.getCallingUid(), androidPackage.getPackageName(), null);
                 pfd = cph.provider.openFile(attributionSource, uri, "r", null);
@@ -7114,7 +7126,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public void notifyLockedProfile(@UserIdInt int userId) {
-        mAtmInternal.notifyLockedProfile(userId, mUserController.getCurrentUserId());
+        mAtmInternal.notifyLockedProfile(userId);
     }
 
     @Override
@@ -13504,7 +13516,8 @@ public class ActivityManagerService extends IActivityManager.Stub
 
             BackupRecord r = new BackupRecord(app, backupMode, targetUserId, backupDestination);
             ComponentName hostingName =
-                    (backupMode == ApplicationThreadConstants.BACKUP_MODE_INCREMENTAL)
+                    (backupMode == ApplicationThreadConstants.BACKUP_MODE_INCREMENTAL
+                            || backupMode == ApplicationThreadConstants.BACKUP_MODE_RESTORE)
                             ? new ComponentName(app.packageName, app.backupAgentName)
                             : new ComponentName("android", "FullBackupAgent");
 
@@ -16159,6 +16172,8 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         final int procState = uidRec != null
                 ? uidRec.getSetProcState() : PROCESS_STATE_NONEXISTENT;
+        final int procAdj = uidRec != null
+                ? uidRec.getMinProcAdj() : ProcessList.INVALID_ADJ;
         final long procStateSeq = uidRec != null ? uidRec.curProcStateSeq : 0;
         final int capability = uidRec != null ? uidRec.getSetCapability() : 0;
         final boolean ephemeral = uidRec != null ? uidRec.isEphemeral() : isEphemeralLocked(uid);
@@ -16174,7 +16189,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
         final int enqueuedChange = mUidObserverController.enqueueUidChange(
                 uidRec == null ? null : uidRec.pendingChange,
-                uid, change, procState, procStateSeq, capability, ephemeral);
+                uid, change, procState, procAdj, procStateSeq, capability, ephemeral);
         if (uidRec != null) {
             uidRec.setLastReportedChange(enqueuedChange);
         }
@@ -16819,6 +16834,11 @@ public class ActivityManagerService extends IActivityManager.Stub
             pw.println(String.format("Resources History for %s (%s)",
                     app.processName,
                     app.info.packageName));
+            if (app.mOptRecord.isFrozen()) {
+                pw.println("  Skipping frozen process");
+                pw.flush();
+                continue;
+            }
             pw.flush();
             try {
                 TransferPipe tp = new TransferPipe("  ");

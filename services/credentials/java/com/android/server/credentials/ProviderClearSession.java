@@ -80,7 +80,7 @@ public final class ProviderClearSession extends ProviderSession<ClearCredentialS
 
     @Override
     public void onProviderResponseSuccess(@Nullable Void response) {
-        Slog.d(TAG, "Remote provider responded with a valid response: " + mComponentName);
+        Slog.i(TAG, "Remote provider responded with a valid response: " + mComponentName);
         mProviderResponseSet = true;
         updateStatusAndInvokeCallback(Status.COMPLETE,
                 /*source=*/ CredentialsSource.REMOTE_PROVIDER);
@@ -91,6 +91,8 @@ public final class ProviderClearSession extends ProviderSession<ClearCredentialS
     public void onProviderResponseFailure(int errorCode, Exception exception) {
         if (exception instanceof ClearCredentialStateException) {
             mProviderException = (ClearCredentialStateException) exception;
+            // TODO(b/271135048) : Decide on exception type length
+            mProviderSessionMetric.collectCandidateFrameworkException(mProviderException.getType());
         }
         mProviderSessionMetric.collectCandidateExceptionStatus(/*hasException=*/true);
         updateStatusAndInvokeCallback(toStatus(errorCode),

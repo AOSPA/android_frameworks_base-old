@@ -282,6 +282,11 @@ public class BubbleStackView extends FrameLayout
     /** Whether the expanded view has been hidden, because we are dragging out a bubble. */
     private boolean mExpandedViewTemporarilyHidden = false;
 
+    /**
+     * Whether the last bubble is being removed when expanded, which impacts the collapse animation.
+     */
+    private boolean mRemovingLastBubbleWhileExpanded = false;
+
     /** Animator for animating the expanded view's alpha (including the TaskView inside it). */
     private final ValueAnimator mExpandedViewAlphaAnimator = ValueAnimator.ofFloat(0f, 1f);
 
@@ -765,7 +770,7 @@ public class BubbleStackView extends FrameLayout
 
                 // Update scrim
                 if (!mScrimAnimating) {
-                    showScrim(true);
+                    showScrim(true, null /* runnable */);
                 }
             }
         }
@@ -880,6 +885,7 @@ public class BubbleStackView extends FrameLayout
 
         final Runnable onBubbleAnimatedOut = () -> {
             if (getBubbleCount() == 0) {
+                mExpandedViewTemporarilyHidden = false;
                 mBubbleController.onAllBubblesAnimatedOut();
             }
         };
@@ -1007,6 +1013,7 @@ public class BubbleStackView extends FrameLayout
                         updatePointerPosition(false /* forIme */);
                         mExpandedAnimationController.expandFromStack(() -> {
                             afterExpandedViewAnimation();
+                            mExpandedViewContainer.setVisibility(VISIBLE);
                             showManageMenu(mShowingManage);
                         } /* after */);
                         PointF p = mPositioner.getExpandedBubbleXY(getBubbleIndex(mExpandedBubble),
@@ -1068,6 +1075,7 @@ public class BubbleStackView extends FrameLayout
                     // We need to be Z ordered on top in order for alpha animations to work.
                     mExpandedBubble.getExpandedView().setSurfaceZOrderedOnTop(true);
                     mExpandedBubble.getExpandedView().setAnimating(true);
+                    mExpandedViewContainer.setVisibility(VISIBLE);
                 }
             }
 
@@ -1771,6 +1779,20 @@ public class BubbleStackView extends FrameLayout
         if (DEBUG_BUBBLE_STACK_VIEW) {
             Log.d(TAG, "removeBubble: " + bubble);
         }
+        if (isExpanded() && getBubbleCount() == 1) {
+            mRemovingLastBubbleWhileExpanded = true;
+            // We're expanded while the last bubble is being removed. Let the scrim animate away
+            // and then remove our views (removing the icon view triggers the removal of the
+            // bubble window so do that at the end of the animation so we see the scrim animate).
+            showScrim(false, () -> {
+                mRemovingLastBubbleWhileExpanded = false;
+                bubble.cleanupExpandedView();
+                mBubbleContainer.removeView(bubble.getIconView());
+                bubble.cleanupViews(); // cleans up the icon view
+                updateExpandedView(); // resets state for no expanded bubble
+            });
+            return;
+        }
         // Remove it from the views
         for (int i = 0; i < getBubbleCount(); i++) {
             View v = mBubbleContainer.getChildAt(i);
@@ -2141,7 +2163,7 @@ public class BubbleStackView extends FrameLayout
         mExpandedViewAlphaAnimator.start();
     }
 
-    private void showScrim(boolean show) {
+    private void showScrim(boolean show, Runnable after) {
         AnimatorListenerAdapter listener = new AnimatorListenerAdapter() {
             @Override
             public void onAnimationStart(Animator animation) {
@@ -2151,6 +2173,9 @@ public class BubbleStackView extends FrameLayout
             @Override
             public void onAnimationEnd(Animator animation) {
                 mScrimAnimating = false;
+                if (after != null) {
+                    after.run();
+                }
             }
         };
         if (show) {
@@ -2177,7 +2202,7 @@ public class BubbleStackView extends FrameLayout
         }
         beforeExpandedViewAnimation();
 
-        showScrim(true);
+        showScrim(true, null /* runnable */);
         updateZOrder();
         updateBadges(false /* setBadgeForCollapsedStack */);
         mBubbleContainer.setActiveController(mExpandedAnimationController);
@@ -2301,7 +2326,10 @@ public class BubbleStackView extends FrameLayout
         mIsExpanded = false;
         mIsExpansionAnimating = true;
 
-        showScrim(false);
+        if (!mRemovingLastBubbleWhileExpanded) {
+            // When we remove the last bubble it animates the scrim.
+            showScrim(false, null /* runnable */);
+        }
 
         mBubbleContainer.cancelAllAnimations();
 
@@ -2856,6 +2884,7 @@ public class BubbleStackView extends FrameLayout
     /** Hide or show the manage menu for the currently expanded bubble. */
     @VisibleForTesting
     public void showManageMenu(boolean show) {
+        if ((mManageMenu.getVisibility() == VISIBLE) == show) return;
         mShowingManage = show;
 
         // This should not happen, since the manage menu is only visible when there's an expanded
@@ -2922,14 +2951,15 @@ public class BubbleStackView extends FrameLayout
         final float targetX = isLtr
                 ? mTempRect.left - margin
                 : mTempRect.right + margin - mManageMenu.getWidth();
-        final float targetY = mTempRect.bottom - mManageMenu.getHeight();
+        final float menuHeight = getVisibleManageMenuHeight();
+        final float targetY = mTempRect.bottom - menuHeight;
 
         final float xOffsetForAnimation = (isLtr ? 1 : -1) * mManageMenu.getWidth() / 4f;
         if (show) {
             mManageMenu.setScaleX(0.5f);
             mManageMenu.setScaleY(0.5f);
             mManageMenu.setTranslationX(targetX - xOffsetForAnimation);
-            mManageMenu.setTranslationY(targetY + mManageMenu.getHeight() / 4f);
+            mManageMenu.setTranslationY(targetY + menuHeight / 4f);
             mManageMenu.setAlpha(0f);
 
             PhysicsAnimator.getInstance(mManageMenu)
@@ -2955,7 +2985,7 @@ public class BubbleStackView extends FrameLayout
                     .spring(DynamicAnimation.SCALE_X, 0.5f)
                     .spring(DynamicAnimation.SCALE_Y, 0.5f)
                     .spring(DynamicAnimation.TRANSLATION_X, targetX - xOffsetForAnimation)
-                    .spring(DynamicAnimation.TRANSLATION_Y, targetY + mManageMenu.getHeight() / 4f)
+                    .spring(DynamicAnimation.TRANSLATION_Y, targetY + menuHeight / 4f)
                     .withEndActions(() -> {
                         mManageMenu.setVisibility(View.INVISIBLE);
                         if (mExpandedBubble != null && mExpandedBubble.getExpandedView() != null) {
@@ -3115,7 +3145,7 @@ public class BubbleStackView extends FrameLayout
                     mAnimatingOutBubbleBuffer.getColorSpace());
 
             mAnimatingOutSurfaceView.setAlpha(1f);
-            mExpandedViewContainer.setVisibility(View.GONE);
+            mExpandedViewContainer.setVisibility(View.INVISIBLE);
 
             mSurfaceSynchronizer.syncSurfaceAndRun(() -> {
                 post(() -> {
@@ -3145,9 +3175,6 @@ public class BubbleStackView extends FrameLayout
         int[] paddings = mPositioner.getExpandedViewContainerPadding(
                 mStackAnimationController.isStackOnLeftSide(), isOverflowExpanded);
         mExpandedViewContainer.setPadding(paddings[0], paddings[1], paddings[2], paddings[3]);
-        if (mIsExpansionAnimating) {
-            mExpandedViewContainer.setVisibility(mIsExpanded ? VISIBLE : GONE);
-        }
         if (mExpandedBubble != null && mExpandedBubble.getExpandedView() != null) {
             PointF p = mPositioner.getExpandedBubbleXY(getBubbleIndex(mExpandedBubble),
                     getState());
@@ -3269,6 +3296,24 @@ public class BubbleStackView extends FrameLayout
             return 0;
         }
         return mBubbleContainer.indexOfChild(provider.getIconView());
+    }
+
+    /**
+     * Menu height calculated for animation
+     * It takes into account view visibility to get the correct total height
+     */
+    private float getVisibleManageMenuHeight() {
+        float menuHeight = 0;
+
+        for (int i = 0; i < mManageMenu.getChildCount(); i++) {
+            View subview = mManageMenu.getChildAt(i);
+
+            if (subview.getVisibility() == VISIBLE) {
+                menuHeight += subview.getHeight();
+            }
+        }
+
+        return menuHeight;
     }
 
     /**
