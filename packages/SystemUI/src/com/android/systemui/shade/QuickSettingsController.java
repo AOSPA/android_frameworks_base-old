@@ -70,6 +70,7 @@ import com.android.systemui.media.controls.ui.MediaHierarchyManager;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.qs.QS;
 import com.android.systemui.screenrecord.RecordingController;
+import com.android.systemui.shade.data.repository.ShadeRepository;
 import com.android.systemui.shade.transition.ShadeTransitionController;
 import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.statusbar.LockscreenShadeTransitionController;
@@ -84,11 +85,13 @@ import com.android.systemui.statusbar.notification.stack.NotificationStackScroll
 import com.android.systemui.statusbar.notification.stack.StackStateAnimator;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.KeyguardStatusBarView;
+import com.android.systemui.statusbar.phone.LightBarController;
 import com.android.systemui.statusbar.phone.LockscreenGestureLogger;
 import com.android.systemui.statusbar.phone.ScrimController;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
 import com.android.systemui.statusbar.phone.StatusBarTouchableRegionManager;
 import com.android.systemui.statusbar.phone.dagger.CentralSurfacesComponent;
+import com.android.systemui.statusbar.policy.CastController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.LargeScreenUtils;
 
@@ -115,6 +118,7 @@ public class QuickSettingsController {
     private final PulseExpansionHandler mPulseExpansionHandler;
     private final ShadeExpansionStateManager mShadeExpansionStateManager;
     private final StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
+    private final LightBarController mLightBarController;
     private final NotificationStackScrollLayoutController mNotificationStackScrollLayoutController;
     private final LockscreenShadeTransitionController mLockscreenShadeTransitionController;
     private final NotificationShadeDepthController mDepthController;
@@ -134,8 +138,10 @@ public class QuickSettingsController {
     private final LockscreenGestureLogger mLockscreenGestureLogger;
     private final ShadeLogger mShadeLog;
     private final KeyguardFaceAuthInteractor mKeyguardFaceAuthInteractor;
+    private final CastController mCastController;
     private final FeatureFlags mFeatureFlags;
     private final InteractionJankMonitor mInteractionJankMonitor;
+    private final ShadeRepository mShadeRepository;
     private final FalsingManager mFalsingManager;
     private final AccessibilityManager mAccessibilityManager;
     private final MetricsLogger mMetricsLogger;
@@ -300,6 +306,7 @@ public class QuickSettingsController {
             NotificationRemoteInputManager remoteInputManager,
             ShadeExpansionStateManager shadeExpansionStateManager,
             StatusBarKeyguardViewManager statusBarKeyguardViewManager,
+            LightBarController lightBarController,
             NotificationStackScrollLayoutController notificationStackScrollLayoutController,
             LockscreenShadeTransitionController lockscreenShadeTransitionController,
             NotificationShadeDepthController notificationShadeDepthController,
@@ -321,7 +328,9 @@ public class QuickSettingsController {
             FeatureFlags featureFlags,
             InteractionJankMonitor interactionJankMonitor,
             ShadeLogger shadeLog,
-            KeyguardFaceAuthInteractor keyguardFaceAuthInteractor
+            KeyguardFaceAuthInteractor keyguardFaceAuthInteractor,
+            ShadeRepository shadeRepository,
+            CastController castController
     ) {
         mPanelViewControllerLazy = panelViewControllerLazy;
         mPanelView = panelView;
@@ -340,6 +349,7 @@ public class QuickSettingsController {
         mRemoteInputManager = remoteInputManager;
         mShadeExpansionStateManager = shadeExpansionStateManager;
         mStatusBarKeyguardViewManager = statusBarKeyguardViewManager;
+        mLightBarController = lightBarController;
         mNotificationStackScrollLayoutController = notificationStackScrollLayoutController;
         mLockscreenShadeTransitionController = lockscreenShadeTransitionController;
         mDepthController = notificationShadeDepthController;
@@ -361,8 +371,10 @@ public class QuickSettingsController {
         mMetricsLogger = metricsLogger;
         mShadeLog = shadeLog;
         mKeyguardFaceAuthInteractor = keyguardFaceAuthInteractor;
+        mCastController = castController;
         mFeatureFlags = featureFlags;
         mInteractionJankMonitor = interactionJankMonitor;
+        mShadeRepository = shadeRepository;
 
         mLockscreenShadeTransitionController.addCallback(new LockscreenShadeTransitionCallback());
     }
@@ -875,7 +887,9 @@ public class QuickSettingsController {
     }
 
     void setOverScrollAmount(int overExpansion) {
-        mQs.setOverScrollAmount(overExpansion);
+        if (mQs != null) {
+            mQs.setOverScrollAmount(overExpansion);
+        }
     }
 
     private void setOverScrolling(boolean overscrolling) {
@@ -1001,6 +1015,7 @@ public class QuickSettingsController {
 
         mDepthController.setQsPanelExpansion(qsExpansionFraction);
         mStatusBarKeyguardViewManager.setQsExpansion(qsExpansionFraction);
+        mShadeRepository.setQsExpansion(qsExpansionFraction);
 
         // TODO (b/265193930): remove dependency on NPVC
         float shadeExpandedFraction = mBarState == KEYGUARD
@@ -1009,6 +1024,9 @@ public class QuickSettingsController {
         mShadeHeaderController.setShadeExpandedFraction(shadeExpandedFraction);
         mShadeHeaderController.setQsExpandedFraction(qsExpansionFraction);
         mShadeHeaderController.setQsVisible(mVisible);
+
+        // Update the light bar
+        mLightBarController.setQsExpanded(mFullyExpanded);
     }
 
     float getLockscreenShadeDragProgress() {
@@ -1183,7 +1201,9 @@ public class QuickSettingsController {
         mLastClipBounds.set(left, top, right, bottom);
         if (mIsFullWidth) {
             clipStatusView = qsVisible;
-            float screenCornerRadius = mRecordingController.isRecording() ? 0 : mScreenCornerRadius;
+            float screenCornerRadius =
+                    mRecordingController.isRecording() || mCastController.hasConnectedCastDevice()
+                            ? 0 : mScreenCornerRadius;
             radius = (int) MathUtils.lerp(screenCornerRadius, mScrimCornerRadius,
                     Math.min(top / (float) mScrimCornerRadius, 1f));
             mScrimController.setNotificationBottomRadius(radius);
@@ -1212,10 +1232,13 @@ public class QuickSettingsController {
             mVisible = qsVisible;
             mQs.setQsVisible(qsVisible);
             mQs.setFancyClipping(
+                    mDisplayLeftInset,
                     clipTop,
+                    mDisplayRightInset,
                     clipBottom,
                     radius,
-                    qsVisible && !mSplitShadeEnabled);
+                    qsVisible && !mSplitShadeEnabled,
+                    mIsFullWidth);
 
         }
 

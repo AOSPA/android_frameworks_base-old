@@ -110,7 +110,6 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
     protected Point mTargetPoint;
     private boolean mDismissed;
     private boolean mRefocusOnDismiss;
-    protected boolean mUseRoundnessSourceTypes;
 
     public ActivatableNotificationView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -709,18 +708,10 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
         mTouchHandler = touchHandler;
     }
 
-    /**
-     * Enable the support for rounded corner based on the SourceType
-     * @param enabled true if is supported
-     */
-    public void useRoundnessSourceTypes(boolean enabled) {
-        mUseRoundnessSourceTypes = enabled;
-    }
-
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        if (mUseRoundnessSourceTypes && !mOnDetachResetRoundness.isEmpty()) {
+        if (!mOnDetachResetRoundness.isEmpty()) {
             for (SourceType sourceType : mOnDetachResetRoundness) {
                 requestRoundnessReset(sourceType);
             }
@@ -742,12 +733,16 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
         super.dump(pw, args);
         if (DUMP_VERBOSE) {
             DumpUtilsKt.withIncreasedIndent(pw, () -> {
-                pw.println("mBackgroundNormal: " + mBackgroundNormal);
-                if (mBackgroundNormal != null) {
-                    DumpUtilsKt.withIncreasedIndent(pw, () -> {
-                        mBackgroundNormal.dump(pw, args);
-                    });
-                }
+                dumpBackgroundView(pw, args);
+            });
+        }
+    }
+
+    protected void dumpBackgroundView(IndentingPrintWriter pw, String[] args) {
+        pw.println("Background View: " + mBackgroundNormal);
+        if (DUMP_VERBOSE && mBackgroundNormal != null) {
+            DumpUtilsKt.withIncreasedIndent(pw, () -> {
+                mBackgroundNormal.dump(pw, args);
             });
         }
     }

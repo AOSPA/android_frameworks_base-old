@@ -23,6 +23,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SmallTest
 import com.android.internal.widget.LockPatternUtils
 import com.android.systemui.R
+import com.android.systemui.RoboPilotTest
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.animation.DialogLaunchAnimator
 import com.android.systemui.common.shared.model.ContentDescription
@@ -71,6 +72,7 @@ import org.mockito.MockitoAnnotations
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @SmallTest
+@RoboPilotTest
 @RunWith(AndroidJUnit4::class)
 class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
 
@@ -635,14 +637,14 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
         }
 
     companion object {
-        private val ICON: Icon = mock {
-            whenever(this.contentDescription)
-                .thenReturn(
+        private const val CONTENT_DESCRIPTION_RESOURCE_ID = 1337
+        private val ICON: Icon =
+            Icon.Resource(
+                res = CONTENT_DESCRIPTION_RESOURCE_ID,
+                contentDescription =
                     ContentDescription.Resource(
                         res = CONTENT_DESCRIPTION_RESOURCE_ID,
-                    )
-                )
-        }
-        private const val CONTENT_DESCRIPTION_RESOURCE_ID = 1337
+                    ),
+            )
     }
 }

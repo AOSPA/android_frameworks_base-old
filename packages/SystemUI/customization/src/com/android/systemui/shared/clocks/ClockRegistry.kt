@@ -23,6 +23,12 @@ import android.os.UserHandle
 import android.provider.Settings
 import android.util.Log
 import androidx.annotation.OpenForTesting
+import com.android.systemui.log.LogBuffer
+import com.android.systemui.log.LogLevel
+import com.android.systemui.log.LogMessage
+import com.android.systemui.log.LogMessageImpl
+import com.android.systemui.log.MessageInitializer
+import com.android.systemui.log.MessagePrinter
 import com.android.systemui.plugins.ClockController
 import com.android.systemui.plugins.ClockId
 import com.android.systemui.plugins.ClockMetadata
@@ -32,12 +38,6 @@ import com.android.systemui.plugins.ClockSettings
 import com.android.systemui.plugins.PluginLifecycleManager
 import com.android.systemui.plugins.PluginListener
 import com.android.systemui.plugins.PluginManager
-import com.android.systemui.plugins.log.LogBuffer
-import com.android.systemui.plugins.log.LogLevel
-import com.android.systemui.plugins.log.LogMessage
-import com.android.systemui.plugins.log.LogMessageImpl
-import com.android.systemui.plugins.log.MessageInitializer
-import com.android.systemui.plugins.log.MessagePrinter
 import com.android.systemui.util.Assert
 import java.io.PrintWriter
 import java.util.concurrent.ConcurrentHashMap
@@ -151,6 +151,7 @@ open class ClockRegistry(
                             { str1 = id },
                             { "Clock Id conflict on load: $str1 is double registered" }
                         )
+                        manager.unloadPlugin()
                         continue
                     }
 
@@ -403,12 +404,14 @@ open class ClockRegistry(
         }
 
         scope.launch(bgDispatcher) {
+            Log.i(TAG, "verifyLoadedProviders: ${availableClocks.size}")
             if (keepAllLoaded) {
                 // Enforce that all plugins are loaded if requested
                 for ((_, info) in availableClocks) {
                     info.manager?.loadPlugin()
                 }
                 isVerifying.set(false)
+                Log.i(TAG, "verifyLoadedProviders: keepAllLoaded=true, load all")
                 return@launch
             }
 
@@ -419,16 +422,21 @@ open class ClockRegistry(
                     info.manager?.unloadPlugin()
                 }
                 isVerifying.set(false)
+                Log.i(TAG, "verifyLoadedProviders: currentClock unavailable, unload all")
                 return@launch
             }
 
             val currentManager = currentClock.manager
             currentManager?.loadPlugin()
+            Log.i(TAG, "verifyLoadedProviders: load ${currentClock.metadata.clockId}")
 
             for ((_, info) in availableClocks) {
                 val manager = info.manager
                 if (manager != null && manager.isLoaded && currentManager != manager) {
+                    Log.i(TAG, "verifyLoadedProviders: unload ${info.metadata.clockId}")
                     manager.unloadPlugin()
+                } else {
+                    Log.i(TAG, "verifyLoadedProviders: skip unload of ${info.metadata.clockId}")
                 }
             }
             isVerifying.set(false)

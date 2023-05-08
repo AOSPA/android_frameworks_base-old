@@ -68,6 +68,7 @@ import com.android.systemui.keyguard.domain.interactor.PrimaryBouncerInteractor;
 import com.android.systemui.navigationbar.NavigationBarView;
 import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.navigationbar.TaskbarDelegate;
+import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.shade.ShadeController;
 import com.android.systemui.shade.ShadeExpansionChangeEvent;
@@ -135,7 +136,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     private final DreamOverlayStateController mDreamOverlayStateController;
     @Nullable
     private final FoldAodAnimationController mFoldAodAnimationController;
-    private KeyguardMessageAreaController<AuthKeyguardMessageArea> mKeyguardMessageAreaController;
+    KeyguardMessageAreaController<AuthKeyguardMessageArea> mKeyguardMessageAreaController;
     private final PrimaryBouncerCallbackInteractor mPrimaryBouncerCallbackInteractor;
     private final PrimaryBouncerInteractor mPrimaryBouncerInteractor;
     private final AlternateBouncerInteractor mAlternateBouncerInteractor;
@@ -284,6 +285,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     private boolean mIsBackAnimationEnabled;
     private final boolean mUdfpsNewTouchDetectionEnabled;
     private final UdfpsOverlayInteractor mUdfpsOverlayInteractor;
+    private final ActivityStarter mActivityStarter;
 
     private OnDismissAction mAfterKeyguardGoneAction;
     private Runnable mKeyguardGoneCancelAction;
@@ -339,7 +341,8 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
             PrimaryBouncerInteractor primaryBouncerInteractor,
             BouncerView primaryBouncerView,
             AlternateBouncerInteractor alternateBouncerInteractor,
-            UdfpsOverlayInteractor udfpsOverlayInteractor
+            UdfpsOverlayInteractor udfpsOverlayInteractor,
+            ActivityStarter activityStarter
     ) {
         mContext = context;
         mViewMediatorCallback = callback;
@@ -367,6 +370,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
                 featureFlags.isEnabled(Flags.WM_ENABLE_PREDICTIVE_BACK_BOUNCER_ANIM);
         mUdfpsNewTouchDetectionEnabled = featureFlags.isEnabled(Flags.UDFPS_NEW_TOUCH_DETECTION);
         mUdfpsOverlayInteractor = udfpsOverlayInteractor;
+        mActivityStarter = activityStarter;
     }
 
     @Override
@@ -426,6 +430,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
             mDockManager.addListener(mDockEventListener);
             mIsDocked = mDockManager.isDocked();
         }
+        mKeyguardStateController.addCallback(mKeyguardStateControllerCallback);
     }
 
     /** Register a callback, to be invoked by the Predictive Back system. */
@@ -1006,7 +1011,13 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
 
     @Override
     public void dismissAndCollapse() {
-        mCentralSurfaces.executeRunnableDismissingKeyguard(null, null, true, false, true);
+        mActivityStarter.executeRunnableDismissingKeyguard(
+                /* runnable= */ null,
+                /* cancelAction= */ null,
+                /* dismissShade= */ true,
+                /* afterKeyguardGone= */ false,
+                /* deferred= */ true
+        );
     }
 
     /**
@@ -1553,6 +1564,14 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         return mode == KeyguardSecurityModel.SecurityMode.SimPin
                 || mode == KeyguardSecurityModel.SecurityMode.SimPuk;
     }
+
+    private KeyguardStateController.Callback mKeyguardStateControllerCallback =
+            new KeyguardStateController.Callback() {
+        @Override
+        public void onUnlockedChanged() {
+            updateAlternateBouncerShowing(mAlternateBouncerInteractor.maybeHide());
+        }
+    };
 
     /**
      * Delegate used to send show and hide events to an alternate authentication method instead of

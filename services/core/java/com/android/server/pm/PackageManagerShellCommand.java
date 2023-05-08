@@ -24,6 +24,7 @@ import static android.content.pm.PackageManager.FLAG_PERMISSION_USER_FIXED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_USER_SET;
 
 import static com.android.server.LocalManagerRegistry.ManagerNotFoundException;
+import static com.android.server.pm.PackageManagerService.PLATFORM_PACKAGE_NAME;
 
 import android.accounts.IAccountManager;
 import android.annotation.NonNull;
@@ -927,6 +928,7 @@ class PackageManagerShellCommand extends ShellCommand {
         boolean showUid = false;
         boolean showVersionCode = false;
         boolean listApexOnly = false;
+        boolean showStopped = false;
         int uid = -1;
         int defaultUserId = UserHandle.USER_ALL;
         try {
@@ -983,6 +985,9 @@ class PackageManagerShellCommand extends ShellCommand {
                         break;
                     case "--match-libraries":
                         getFlags |= PackageManager.MATCH_STATIC_SHARED_AND_SDK_LIBRARIES;
+                        break;
+                    case "--show-stopped":
+                        showStopped = true;
                         break;
                     default:
                         pw.println("Error: Unknown option: " + opt);
@@ -1075,6 +1080,12 @@ class PackageManagerShellCommand extends ShellCommand {
                     } else {
                         stringBuilder.append(info.getLongVersionCode());
                     }
+                }
+                if (showStopped) {
+                    stringBuilder.append(" stopped=");
+                    stringBuilder.append(
+                            ((info.applicationInfo.flags & ApplicationInfo.FLAG_STOPPED) != 0)
+                            ? "true" : "false");
                 }
                 if (listInstaller) {
                     stringBuilder.append("  installer=");
@@ -1954,6 +1965,8 @@ class PackageManagerShellCommand extends ShellCommand {
         List<String> packageNames = null;
         if (allPackages) {
             packageNames = mInterface.getAllPackages();
+            // Compiling the system server is only supported from odrefresh, so skip it.
+            packageNames.removeIf(packageName -> PLATFORM_PACKAGE_NAME.equals(packageName));
         } else {
             String packageName = getNextArg();
             if (packageName == null) {

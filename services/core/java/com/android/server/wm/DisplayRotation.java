@@ -125,6 +125,7 @@ public class DisplayRotation {
 
     public final boolean isDefaultDisplay;
     private final boolean mSupportAutoRotation;
+    private final boolean mAllowRotationResolver;
     private final int mLidOpenRotation;
     private final int mCarDockRotation;
     private final int mDeskDockRotation;
@@ -299,6 +300,8 @@ public class DisplayRotation {
 
         mSupportAutoRotation =
                 mContext.getResources().getBoolean(R.bool.config_supportAutoRotation);
+        mAllowRotationResolver =
+                mContext.getResources().getBoolean(R.bool.config_allowRotationResolver);
         mLidOpenRotation = readRotation(R.integer.config_lidOpenRotation);
         mCarDockRotation = readRotation(R.integer.config_carDockRotation);
         mDeskDockRotation = readRotation(R.integer.config_deskDockRotation);
@@ -1017,6 +1020,10 @@ public class DisplayRotation {
     }
 
     void freezeRotation(int rotation) {
+        if (mDeviceStateController.shouldReverseRotationDirectionAroundZAxis()) {
+            rotation = RotationUtils.reverseRotationDirectionAroundZAxis(rotation);
+        }
+
         rotation = (rotation == -1) ? mRotation : rotation;
         setUserRotation(WindowManagerPolicy.USER_ROTATION_LOCKED, rotation);
     }
@@ -2111,7 +2118,8 @@ public class DisplayRotation {
 
         @Override
         public boolean isRotationResolverEnabled() {
-            return mUserRotationMode == WindowManagerPolicy.USER_ROTATION_FREE
+            return mAllowRotationResolver
+                    && mUserRotationMode == WindowManagerPolicy.USER_ROTATION_FREE
                     && mCameraRotationMode == CAMERA_ROTATION_ENABLED
                     && !mService.mPowerManager.isPowerSaveMode();
         }

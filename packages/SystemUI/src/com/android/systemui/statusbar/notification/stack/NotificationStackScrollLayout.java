@@ -89,6 +89,7 @@ import com.android.systemui.R;
 import com.android.systemui.animation.Interpolators;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.flags.Flags;
+import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper;
 import com.android.systemui.shade.ShadeController;
 import com.android.systemui.statusbar.CommandQueue;
@@ -199,7 +200,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     private Set<Integer> mDebugTextUsedYPositions;
     private final boolean mDebugRemoveAnimation;
     private final boolean mSimplifiedAppearFraction;
-    private final boolean mUseRoundnessSourceTypes;
     private final boolean mSensitiveRevealAnimEndabled;
     private boolean mAnimatedInsets;
 
@@ -319,6 +319,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     };
     private NotificationStackScrollLogger mLogger;
     private CentralSurfaces mCentralSurfaces;
+    private ActivityStarter mActivityStarter;
     private final int[] mTempInt2 = new int[2];
     private boolean mGenerateChildOrderChangedEvent;
     private final HashSet<Runnable> mAnimationFinishedRunnables = new HashSet<>();
@@ -623,7 +624,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         mDebugLines = featureFlags.isEnabled(Flags.NSSL_DEBUG_LINES);
         mDebugRemoveAnimation = featureFlags.isEnabled(Flags.NSSL_DEBUG_REMOVE_ANIMATION);
         mSimplifiedAppearFraction = featureFlags.isEnabled(Flags.SIMPLIFIED_APPEAR_FRACTION);
-        mUseRoundnessSourceTypes = featureFlags.isEnabled(Flags.USE_ROUNDNESS_SOURCETYPES);
         mSensitiveRevealAnimEndabled = featureFlags.isEnabled(Flags.SENSITIVE_REVEAL_ANIM);
         setAnimatedInsetsEnabled(featureFlags.isEnabled(Flags.ANIMATED_NOTIFICATION_SHADE_INSETS));
         mSectionsManager = Dependency.get(NotificationSectionsManager.class);
@@ -2839,6 +2839,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
      * @param listener callback for notification removed
      */
     public void setOnNotificationRemovedListener(OnNotificationRemovedListener listener) {
+        NotificationShelfController.assertRefactorFlagDisabled(mAmbientState.getFeatureFlags());
         mOnNotificationRemovedListener = listener;
     }
 
@@ -2852,10 +2853,14 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         if (!mChildTransferInProgress) {
             onViewRemovedInternal(expandableView, this);
         }
-        if (mOnNotificationRemovedListener != null) {
-            mOnNotificationRemovedListener.onNotificationRemoved(
-                    expandableView,
-                    mChildTransferInProgress);
+        if (mAmbientState.getFeatureFlags().isEnabled(Flags.NOTIFICATION_SHELF_REFACTOR)) {
+            mShelf.requestRoundnessResetFor(expandableView);
+        } else {
+            if (mOnNotificationRemovedListener != null) {
+                mOnNotificationRemovedListener.onNotificationRemoved(
+                        expandableView,
+                        mChildTransferInProgress);
+            }
         }
     }
 
@@ -3127,10 +3132,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
             mAnimateNextSectionBoundsChange = false;
         }
         mAmbientState.setLastVisibleBackgroundChild(lastChild);
-        if (!mUseRoundnessSourceTypes) {
-            // TODO: Refactor SectionManager and put the RoundnessManager there.
-            mController.getNotificationRoundnessManager().updateRoundedChildren(mSections);
-        }
         mAnimateBottomOnLayout = false;
         invalidate();
     }
@@ -3577,9 +3578,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
 
     @ShadeViewRefactor(RefactorComponent.LAYOUT_ALGORITHM)
     protected StackScrollAlgorithm createStackScrollAlgorithm(Context context) {
-        StackScrollAlgorithm stackScrollAlgorithm = new StackScrollAlgorithm(context, this);
-        stackScrollAlgorithm.useRoundnessSourceTypes(mUseRoundnessSourceTypes);
-        return stackScrollAlgorithm;
+        return new StackScrollAlgorithm(context, this);
     }
 
     /**
@@ -4184,10 +4183,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
             mCentralSurfaces.resetUserExpandedStates();
             clearTemporaryViews();
             clearUserLockedViews();
-            if (mSwipeHelper.isSwiping()) {
-                mSwipeHelper.resetSwipeState();
-                updateContinuousShadowDrawing();
-            }
+            cancelActiveSwipe();
         }
     }
 
@@ -4259,6 +4255,9 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
             if (!mIsExpanded) {
                 mGroupExpansionManager.collapseGroups();
                 mExpandHelper.cancelImmediately();
+                if (!mIsExpansionChanging) {
+                    cancelActiveSwipe();
+                }
             }
             updateNotificationAnimationStates();
             updateChronometers();
@@ -4741,13 +4740,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         mFooterView.setVisible(visible, animate);
         mFooterView.setSecondaryVisible(showDismissView, animate);
         mFooterView.showHistory(showHistory);
-        if (mHasFilteredOutSeenNotifications) {
-            mFooterView.setFooterLabelTextAndIcon(
-                    R.string.unlock_to_see_notif_text,
-                    R.drawable.ic_friction_lock_closed);
-        } else {
-            mFooterView.setFooterLabelTextAndIcon(0, 0);
-        }
+        mFooterView.setFooterLabelVisible(mHasFilteredOutSeenNotifications);
     }
 
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
@@ -4813,6 +4806,10 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
     public void setCentralSurfaces(CentralSurfaces centralSurfaces) {
         this.mCentralSurfaces = centralSurfaces;
+    }
+
+    public void setActivityStarter(ActivityStarter activityStarter) {
+        mActivityStarter = activityStarter;
     }
 
     @ShadeViewRefactor(RefactorComponent.STATE_RESOLVER)
@@ -5580,7 +5577,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
             Intent intent = showHistory
                     ? new Intent(Settings.ACTION_NOTIFICATION_HISTORY)
                     : new Intent(Settings.ACTION_NOTIFICATION_SETTINGS);
-            mCentralSurfaces.startActivity(intent, true, true, Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            mActivityStarter.startActivity(intent, true, true, Intent.FLAG_ACTIVITY_SINGLE_TOP);
         });
         setEmptyShadeView(view);
         updateEmptyShadeView(
@@ -6114,7 +6111,11 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         }
     }
 
-    @ShadeViewRefactor(RefactorComponent.STATE_RESOLVER)
+    private void cancelActiveSwipe() {
+        mSwipeHelper.resetSwipeState();
+        updateContinuousShadowDrawing();
+    }
+
     void updateContinuousShadowDrawing() {
         boolean continuousShadowUpdate = mAnimationRunning
                 || mSwipeHelper.isSwiping();
