@@ -490,7 +490,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 mMainHandler, context,
                 new PolicyWarningUIController.NotificationController(context));
         mSecurityPolicy = new AccessibilitySecurityPolicy(policyWarningUIController, mContext,
-                this);
+                this, LocalServices.getService(PackageManagerInternal.class));
         mA11yWindowManager = new AccessibilityWindowManager(mLock, mMainHandler,
                 mWindowManagerService, this, mSecurityPolicy, this, mTraceManager);
         mA11yDisplayListener = new AccessibilityDisplayListener(mContext, mMainHandler);
@@ -5329,9 +5329,8 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             mA11yOverlayLayers.remove(displayId);
             return;
         }
-        SurfaceControl.Transaction transaction = new SurfaceControl.Transaction();
-        transaction.reparent(sc, parent);
-        transaction.apply();
-        transaction.close();
+        SurfaceControl.Transaction t = new SurfaceControl.Transaction();
+        t.reparent(sc, parent).setTrustedOverlay(sc, true).apply();
+        t.close();
     }
 }

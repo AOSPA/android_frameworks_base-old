@@ -164,7 +164,9 @@ fun CreateCredentialScreen(
                 }
             }
         },
-        onDismiss = viewModel::onUserCancel
+        onDismiss = viewModel::onUserCancel,
+        isInitialRender = viewModel.uiState.isInitialRender,
+        onInitialRenderComplete = viewModel::onInitialRenderComplete,
     )
 }
 
@@ -436,7 +438,8 @@ fun CreationSelectionCard(
                 },
             )
         }
-        if (createOptionInfo.footerDescription != null) {
+        val footerDescription = createOptionInfo.footerDescription
+        if (footerDescription != null && footerDescription.length > 0) {
             item {
                 Divider(
                     thickness = 1.dp,
@@ -446,7 +449,7 @@ fun CreationSelectionCard(
             }
             item {
                 Row(modifier = Modifier.fillMaxWidth().wrapContentHeight()) {
-                    BodySmallText(text = createOptionInfo.footerDescription)
+                    BodySmallText(text = footerDescription)
                 }
             }
         }

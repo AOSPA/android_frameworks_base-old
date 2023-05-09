@@ -347,7 +347,12 @@ public class WifiStatusTracker {
     }
 
     @Nullable
-    private WifiInfo getMainOrUnderlyingWifiInfo(NetworkCapabilities networkCapabilities) {
+    private WifiInfo getMainOrUnderlyingWifiInfo(
+            @Nullable NetworkCapabilities networkCapabilities) {
+        if (networkCapabilities == null) {
+            return null;
+        }
+
         WifiInfo mainWifiInfo = getMainWifiInfo(networkCapabilities);
         if (mainWifiInfo != null) {
             return mainWifiInfo;
@@ -380,7 +385,10 @@ public class WifiStatusTracker {
     }
 
     @Nullable
-    private WifiInfo getMainWifiInfo(NetworkCapabilities networkCapabilities) {
+    private WifiInfo getMainWifiInfo(@Nullable NetworkCapabilities networkCapabilities) {
+        if (networkCapabilities == null) {
+            return null;
+        }
         boolean canHaveWifiInfo = networkCapabilities.hasTransport(TRANSPORT_WIFI)
                 || networkCapabilities.hasTransport(TRANSPORT_CELLULAR);
         if (!canHaveWifiInfo) {
@@ -406,7 +414,11 @@ public class WifiStatusTracker {
                 getMainOrUnderlyingWifiInfo(networkCapabilities));
     }
 
-    private boolean connectionIsWifi(NetworkCapabilities networkCapabilities, WifiInfo wifiInfo) {
+    private boolean connectionIsWifi(
+            @Nullable NetworkCapabilities networkCapabilities, WifiInfo wifiInfo) {
+        if (networkCapabilities == null) {
+            return false;
+        }
         return wifiInfo != null || networkCapabilities.hasTransport(TRANSPORT_WIFI);
     }
 

@@ -89,7 +89,7 @@ object Flags {
     // TODO(b/277338665): Tracking Bug
     @JvmField
     val NOTIFICATION_SHELF_REFACTOR =
-        unreleasedFlag(271161129, "notification_shelf_refactor")
+        unreleasedFlag(271161129, "notification_shelf_refactor", teamfood = true)
 
     @JvmField
     val ANIMATED_NOTIFICATION_SHADE_INSETS =
@@ -205,11 +205,6 @@ object Flags {
                     229,
                     "wallpaper_picker_ui_for_aiwp"
             )
-
-    /** Whether to inflate the bouncer view on a background thread. */
-    // TODO(b/273341787): Tracking Bug
-    @JvmField
-    val PREVENT_BYPASS_KEYGUARD = releasedFlag(230, "prevent_bypass_keyguard")
 
     /** Whether to use a new data source for intents to run on keyguard dismissal. */
     @JvmField
@@ -330,6 +325,11 @@ object Flags {
 
     // TODO(b/265892345): Tracking Bug
     val PLUG_IN_STATUS_BAR_CHIP = releasedFlag(265892345, "plug_in_status_bar_chip")
+
+    // TODO(b/280426085): Tracking Bug
+    @JvmField
+    val NEW_BLUETOOTH_REPOSITORY =
+        unreleasedFlag(612, "new_bluetooth_repository", teamfood = true)
 
     // 700 - dialer/calls
     // TODO(b/254512734): Tracking Bug
@@ -603,6 +603,9 @@ object Flags {
     @JvmField val CLIPBOARD_REMOTE_BEHAVIOR = releasedFlag(1701, "clipboard_remote_behavior")
     // TODO(b/278714186) Tracking Bug
     @JvmField val CLIPBOARD_IMAGE_TIMEOUT = unreleasedFlag(1702, "clipboard_image_timeout")
+    // TODO(b/279405451): Tracking Bug
+    @JvmField
+    val CLIPBOARD_SHARED_TRANSITIONS = unreleasedFlag(1703, "clipboard_shared_transitions")
 
     // 1800 - shade container
     // TODO(b/265944639): Tracking Bug
@@ -699,6 +702,11 @@ object Flags {
     @JvmField
     val ADVANCED_VPN_ENABLED = releasedFlag(2800, name = "AdvancedVpn__enable_feature",
             namespace = "vpn")
+
+    // TODO(b/277201412): Tracking Bug
+    @JvmField
+    val SPLIT_SHADE_SUBPIXEL_OPTIMIZATION =
+            unreleasedFlag(2805, "split_shade_subpixel_optimization", teamfood = true)
 
     // TODO(b/278761837): Tracking Bug
     @JvmField

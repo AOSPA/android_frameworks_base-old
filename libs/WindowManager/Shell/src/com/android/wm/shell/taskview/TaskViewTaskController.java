@@ -102,7 +102,7 @@ public class TaskViewTaskController implements ShellTaskOrganizer.TaskListener {
     }
 
     /** Until all users are converted, we may have mixed-use (eg. Car). */
-    private boolean isUsingShellTransitions() {
+    public boolean isUsingShellTransitions() {
         return mTaskViewTransitions != null && mTaskViewTransitions.isEnabled();
     }
 
@@ -401,6 +401,15 @@ public class TaskViewTaskController implements ShellTaskOrganizer.TaskListener {
         mSyncQueue.queue(wct);
     }
 
+    /**
+     * Call to remove the task from window manager. This task will not appear in recents.
+     */
+    void removeTask() {
+        WindowContainerTransaction wct = new WindowContainerTransaction();
+        wct.removeTask(mTaskToken);
+        mTaskViewTransitions.closeTaskView(wct, this);
+    }
+
     /** Should be called when the client surface is destroyed. */
     public void surfaceDestroyed() {
         mSurfaceCreated = false;
@@ -444,7 +453,7 @@ public class TaskViewTaskController implements ShellTaskOrganizer.TaskListener {
             return;
         }
 
-        finishTransaction.reparent(mTaskLeash, null).apply();
+        finishTransaction.reparent(mTaskLeash, null);
 
         if (mListener != null) {
             final int taskId = mTaskInfo.taskId;
@@ -481,13 +490,11 @@ public class TaskViewTaskController implements ShellTaskOrganizer.TaskListener {
         if (mSurfaceCreated) {
             // Surface is ready, so just reparent the task to this surface control
             startTransaction.reparent(mTaskLeash, mSurfaceControl)
-                    .show(mTaskLeash)
-                    .apply();
+                    .show(mTaskLeash);
             // Also reparent on finishTransaction since the finishTransaction will reparent back
             // to its "original" parent by default.
             finishTransaction.reparent(mTaskLeash, mSurfaceControl)
-                    .setPosition(mTaskLeash, 0, 0)
-                    .apply();
+                    .setPosition(mTaskLeash, 0, 0);
             mTaskViewTransitions.updateBoundsState(this, mTaskViewBase.getCurrentBoundsOnScreen());
             mTaskViewTransitions.updateVisibilityState(this, true /* visible */);
             wct.setBounds(mTaskToken, mTaskViewBase.getCurrentBoundsOnScreen());

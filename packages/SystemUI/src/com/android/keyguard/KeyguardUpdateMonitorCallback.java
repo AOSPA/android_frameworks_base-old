@@ -330,4 +330,9 @@ public class KeyguardUpdateMonitorCallback {
      * Called when keyguard is going away or not going away.
      */
     public void onKeyguardGoingAway() { }
+
+    /**
+     * Called when the enabled trust agents associated with the specified user.
+     */
+    public void onEnabledTrustAgentsChanged(int userId) { }
 }
