@@ -24,6 +24,7 @@ import static android.view.InsetsFrameProvider.SOURCE_ARBITRARY_RECTANGLE;
 import static android.view.InsetsFrameProvider.SOURCE_CONTAINER_BOUNDS;
 import static android.view.InsetsFrameProvider.SOURCE_DISPLAY;
 import static android.view.InsetsFrameProvider.SOURCE_FRAME;
+import static android.view.ViewRootImpl.CLIENT_TRANSIENT;
 import static android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
 import static android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS;
 import static android.view.WindowInsetsController.APPEARANCE_LOW_PROFILE_BARS;
@@ -189,7 +190,6 @@ public class DisplayPolicy {
 
     private final boolean mCarDockEnablesAccelerometer;
     private final boolean mDeskDockEnablesAccelerometer;
-    private final boolean mDeskDockRespectsNoSensorAndLockedWithoutAccelerometer;
     private final AccessibilityManager mAccessibilityManager;
     private final ImmersiveModeConfirmation mImmersiveModeConfirmation;
     private final ScreenshotHelper mScreenshotHelper;
@@ -232,7 +232,8 @@ public class DisplayPolicy {
         }
     }
 
-    private final SystemGesturesPointerEventListener mSystemGestures;
+    // Will be null in client transient mode.
+    private SystemGesturesPointerEventListener mSystemGestures;
 
     final DecorInsets mDecorInsets;
 
@@ -445,8 +446,6 @@ public class DisplayPolicy {
         final Resources r = mContext.getResources();
         mCarDockEnablesAccelerometer = r.getBoolean(R.bool.config_carDockEnablesAccelerometer);
         mDeskDockEnablesAccelerometer = r.getBoolean(R.bool.config_deskDockEnablesAccelerometer);
-        mDeskDockRespectsNoSensorAndLockedWithoutAccelerometer =
-                r.getBoolean(R.bool.config_deskRespectsNoSensorAndLockedWithoutAccelerometer);
         mCanSystemBarsBeShownByUser = !r.getBoolean(
                 R.bool.config_remoteInsetsControllerControlsSystemBars) || r.getBoolean(
                 R.bool.config_remoteInsetsControllerSystemBarsCanBeShownByUserAction);
@@ -468,86 +467,105 @@ public class DisplayPolicy {
         final Looper looper = UiThread.getHandler().getLooper();
         mHandler = new PolicyHandler(looper);
         // TODO(b/181821798) Migrate SystemGesturesPointerEventListener to use window context.
-        mSystemGestures = new SystemGesturesPointerEventListener(mUiContext, mHandler,
-                new SystemGesturesPointerEventListener.Callbacks() {
+        if (!CLIENT_TRANSIENT) {
+            SystemGesturesPointerEventListener.Callbacks gesturesPointerEventCallbacks =
+                    new SystemGesturesPointerEventListener.Callbacks() {
 
-                    private static final long MOUSE_GESTURE_DELAY_MS = 500;
+                private static final long MOUSE_GESTURE_DELAY_MS = 500;
 
-                    private Runnable mOnSwipeFromLeft = this::onSwipeFromLeft;
-                    private Runnable mOnSwipeFromTop = this::onSwipeFromTop;
-                    private Runnable mOnSwipeFromRight = this::onSwipeFromRight;
-                    private Runnable mOnSwipeFromBottom = this::onSwipeFromBottom;
+                private Runnable mOnSwipeFromLeft = this::onSwipeFromLeft;
+                private Runnable mOnSwipeFromTop = this::onSwipeFromTop;
+                private Runnable mOnSwipeFromRight = this::onSwipeFromRight;
+                private Runnable mOnSwipeFromBottom = this::onSwipeFromBottom;
 
-                    private Insets getControllableInsets(WindowState win) {
-                        if (win == null) {
-                            return Insets.NONE;
-                        }
-                        final InsetsSourceProvider provider = win.getControllableInsetProvider();
-                        if (provider == null) {
-                            return  Insets.NONE;
-                        }
-                        return provider.getSource().calculateInsets(win.getBounds(),
-                                true /* ignoreVisibility */);
+                private Insets getControllableInsets(WindowState win) {
+                    if (win == null) {
+                        return Insets.NONE;
                     }
-
-                    @Override
-                    public void onSwipeFromTop() {
-                        synchronized (mLock) {
-                            requestTransientBars(mTopGestureHost,
-                                    getControllableInsets(mTopGestureHost).top > 0);
-                        }
+                    final InsetsSourceProvider provider = win.getControllableInsetProvider();
+                    if (provider == null) {
+                        return Insets.NONE;
                     }
+                    return provider.getSource().calculateInsets(win.getBounds(),
+                            true /* ignoreVisibility */);
+                }
 
-                    @Override
-                    public void onSwipeFromBottom() {
-                        synchronized (mLock) {
-                            requestTransientBars(mBottomGestureHost,
-                                    getControllableInsets(mBottomGestureHost).bottom > 0);
-                        }
+                @Override
+                public void onSwipeFromTop() {
+                    synchronized (mLock) {
+                        requestTransientBars(mTopGestureHost,
+                                getControllableInsets(mTopGestureHost).top > 0);
                     }
+                }
 
-                    private boolean allowsSideSwipe(Region excludedRegion) {
-                        return mNavigationBarAlwaysShowOnSideGesture
-                                && !mSystemGestures.currentGestureStartedInRegion(excludedRegion);
+                @Override
+                public void onSwipeFromBottom() {
+                    synchronized (mLock) {
+                        requestTransientBars(mBottomGestureHost,
+                                getControllableInsets(mBottomGestureHost).bottom > 0);
                     }
+                }
 
-                    @Override
-                    public void onSwipeFromRight() {
-                        final Region excludedRegion = Region.obtain();
-                        synchronized (mLock) {
-                            mDisplayContent.calculateSystemGestureExclusion(
-                                    excludedRegion, null /* outUnrestricted */);
-                            final boolean hasWindow =
-                                    getControllableInsets(mRightGestureHost).right > 0;
-                            if (hasWindow || allowsSideSwipe(excludedRegion)) {
-                                requestTransientBars(mRightGestureHost, hasWindow);
-                            }
-                        }
-                        excludedRegion.recycle();
-                    }
+                private boolean allowsSideSwipe(Region excludedRegion) {
+                    return mNavigationBarAlwaysShowOnSideGesture
+                            && !mSystemGestures.currentGestureStartedInRegion(excludedRegion);
+                }
 
-                    @Override
-                    public void onSwipeFromLeft() {
-                        final Region excludedRegion = Region.obtain();
-                        synchronized (mLock) {
-                            mDisplayContent.calculateSystemGestureExclusion(
-                                    excludedRegion, null /* outUnrestricted */);
-                            final boolean hasWindow =
-                                    getControllableInsets(mLeftGestureHost).left > 0;
-                            if (hasWindow || allowsSideSwipe(excludedRegion)) {
-                                requestTransientBars(mLeftGestureHost, hasWindow);
-                            }
-                        }
-                        excludedRegion.recycle();
-                    }
-
-                    @Override
-                    public void onFling(int duration) {
-                        if (mService.mPowerManagerInternal != null) {
-                            mService.mPowerManagerInternal.setPowerBoost(
-                                    Boost.INTERACTION, duration);
+                @Override
+                public void onSwipeFromRight() {
+                    final Region excludedRegion = Region.obtain();
+                    synchronized (mLock) {
+                        mDisplayContent.calculateSystemGestureExclusion(
+                                excludedRegion, null /* outUnrestricted */);
+                        final boolean hasWindow =
+                                getControllableInsets(mRightGestureHost).right > 0;
+                        if (hasWindow || allowsSideSwipe(excludedRegion)) {
+                            requestTransientBars(mRightGestureHost, hasWindow);
                         }
                     }
+                    excludedRegion.recycle();
+                }
+
+                @Override
+                public void onSwipeFromLeft() {
+                    final Region excludedRegion = Region.obtain();
+                    synchronized (mLock) {
+                        mDisplayContent.calculateSystemGestureExclusion(
+                                excludedRegion, null /* outUnrestricted */);
+                        final boolean hasWindow =
+                                getControllableInsets(mLeftGestureHost).left > 0;
+                        if (hasWindow || allowsSideSwipe(excludedRegion)) {
+                            requestTransientBars(mLeftGestureHost, hasWindow);
+                        }
+                    }
+                    excludedRegion.recycle();
+                }
+
+                @Override
+                public void onFling(int duration) {
+                    if (mService.mPowerManagerInternal != null) {
+                        mService.mPowerManagerInternal.setPowerBoost(
+                                Boost.INTERACTION, duration);
+                    }
+                }
+
+                @Override
+                public void onDebug() {
+                    // no-op
+                }
+
+                private WindowOrientationListener getOrientationListener() {
+                    final DisplayRotation rotation = mDisplayContent.getDisplayRotation();
+                    return rotation != null ? rotation.getOrientationListener() : null;
+                }
+
+                @Override
+                public void onDown() {
+                    final WindowOrientationListener listener = getOrientationListener();
+                    if (listener != null) {
+                        listener.onTouchStart();
+                    }
+                }
 
                     @Override
                     public void onVerticalFling(int duration) {
@@ -643,82 +661,62 @@ public class DisplayPolicy {
                         }
                     }
 
-                    @Override
-                    public void onDebug() {
-                        // no-op
+                @Override
+                public void onUpOrCancel() {
+                    final WindowOrientationListener listener = getOrientationListener();
+                    if (listener != null) {
+                        listener.onTouchEnd();
                     }
+                }
 
-                    private WindowOrientationListener getOrientationListener() {
-                        final DisplayRotation rotation = mDisplayContent.getDisplayRotation();
-                        return rotation != null ? rotation.getOrientationListener() : null;
-                    }
+                @Override
+                public void onMouseHoverAtLeft() {
+                    mHandler.removeCallbacks(mOnSwipeFromLeft);
+                    mHandler.postDelayed(mOnSwipeFromLeft, MOUSE_GESTURE_DELAY_MS);
+                }
 
-                    @Override
-                    public void onDown() {
-                        final WindowOrientationListener listener = getOrientationListener();
-                        if (listener != null) {
-                            listener.onTouchStart();
-                        }
-                        if(SCROLL_BOOST_SS_ENABLE && mPerfBoostFling!= null
-                                            && mIsPerfBoostFlingAcquired) {
-                            mPerfBoostFling.perfLockRelease();
-                            mIsPerfBoostFlingAcquired = false;
-                        }
-                    }
+                @Override
+                public void onMouseHoverAtTop() {
+                    mHandler.removeCallbacks(mOnSwipeFromTop);
+                    mHandler.postDelayed(mOnSwipeFromTop, MOUSE_GESTURE_DELAY_MS);
+                }
 
-                    @Override
-                    public void onUpOrCancel() {
-                        final WindowOrientationListener listener = getOrientationListener();
-                        if (listener != null) {
-                            listener.onTouchEnd();
-                        }
-                    }
+                @Override
+                public void onMouseHoverAtRight() {
+                    mHandler.removeCallbacks(mOnSwipeFromRight);
+                    mHandler.postDelayed(mOnSwipeFromRight, MOUSE_GESTURE_DELAY_MS);
+                }
 
-                    @Override
-                    public void onMouseHoverAtLeft() {
-                        mHandler.removeCallbacks(mOnSwipeFromLeft);
-                        mHandler.postDelayed(mOnSwipeFromLeft, MOUSE_GESTURE_DELAY_MS);
-                    }
+                @Override
+                public void onMouseHoverAtBottom() {
+                    mHandler.removeCallbacks(mOnSwipeFromBottom);
+                    mHandler.postDelayed(mOnSwipeFromBottom, MOUSE_GESTURE_DELAY_MS);
+                }
 
-                    @Override
-                    public void onMouseHoverAtTop() {
-                        mHandler.removeCallbacks(mOnSwipeFromTop);
-                        mHandler.postDelayed(mOnSwipeFromTop, MOUSE_GESTURE_DELAY_MS);
-                    }
+                @Override
+                public void onMouseLeaveFromLeft() {
+                    mHandler.removeCallbacks(mOnSwipeFromLeft);
+                }
 
-                    @Override
-                    public void onMouseHoverAtRight() {
-                        mHandler.removeCallbacks(mOnSwipeFromRight);
-                        mHandler.postDelayed(mOnSwipeFromRight, MOUSE_GESTURE_DELAY_MS);
-                    }
+                @Override
+                public void onMouseLeaveFromTop() {
+                    mHandler.removeCallbacks(mOnSwipeFromTop);
+                }
 
-                    @Override
-                    public void onMouseHoverAtBottom() {
-                        mHandler.removeCallbacks(mOnSwipeFromBottom);
-                        mHandler.postDelayed(mOnSwipeFromBottom, MOUSE_GESTURE_DELAY_MS);
-                    }
+                @Override
+                public void onMouseLeaveFromRight() {
+                    mHandler.removeCallbacks(mOnSwipeFromRight);
+                }
 
-                    @Override
-                    public void onMouseLeaveFromLeft() {
-                        mHandler.removeCallbacks(mOnSwipeFromLeft);
-                    }
-
-                    @Override
-                    public void onMouseLeaveFromTop() {
-                        mHandler.removeCallbacks(mOnSwipeFromTop);
-                    }
-
-                    @Override
-                    public void onMouseLeaveFromRight() {
-                        mHandler.removeCallbacks(mOnSwipeFromRight);
-                    }
-
-                    @Override
-                    public void onMouseLeaveFromBottom() {
-                        mHandler.removeCallbacks(mOnSwipeFromBottom);
-                    }
-                });
-        displayContent.registerPointerEventListener(mSystemGestures);
+                @Override
+                public void onMouseLeaveFromBottom() {
+                    mHandler.removeCallbacks(mOnSwipeFromBottom);
+                }
+            };
+            mSystemGestures = new SystemGesturesPointerEventListener(mUiContext, mHandler,
+                    gesturesPointerEventCallbacks);
+            displayContent.registerPointerEventListener(mSystemGestures);
+        }
         mAppTransitionListener = new WindowManagerInternal.AppTransitionListener() {
 
             private Runnable mAppTransitionPending = () -> {
@@ -804,7 +802,9 @@ public class DisplayPolicy {
                 mContext, () -> {
             synchronized (mLock) {
                 onConfigurationChanged();
-                mSystemGestures.onConfigurationChanged();
+                if (!CLIENT_TRANSIENT) {
+                    mSystemGestures.onConfigurationChanged();
+                }
                 mDisplayContent.updateSystemGestureExclusion();
             }
         });
@@ -826,7 +826,9 @@ public class DisplayPolicy {
     }
 
     void systemReady() {
-        mSystemGestures.systemReady();
+        if (!CLIENT_TRANSIENT) {
+            mSystemGestures.systemReady();
+        }
         if (mService.mPointerLocationEnabled) {
             setPointerLocationEnabled(true);
         }
@@ -861,10 +863,6 @@ public class DisplayPolicy {
 
     boolean isDeskDockEnablesAccelerometer() {
         return mDeskDockEnablesAccelerometer;
-    }
-
-    boolean isDeskDockRespectsNoSensorAndLockedWithoutAccelerometer() {
-        return mDeskDockRespectsNoSensorAndLockedWithoutAccelerometer;
     }
 
     public void setPersistentVrModeEnabled(boolean persistentVrModeEnabled) {
@@ -1471,7 +1469,9 @@ public class DisplayPolicy {
     }
 
     void onDisplayInfoChanged(DisplayInfo info) {
-        mSystemGestures.onDisplayInfoChanged(info);
+        if (!CLIENT_TRANSIENT) {
+            mSystemGestures.onDisplayInfoChanged(info);
+        }
     }
 
     /**
@@ -1844,7 +1844,9 @@ public class DisplayPolicy {
         // Update the latest display size, cutout.
         mDisplayContent.updateDisplayInfo();
         onConfigurationChanged();
-        mSystemGestures.onConfigurationChanged();
+        if (!CLIENT_TRANSIENT) {
+            mSystemGestures.onConfigurationChanged();
+        }
     }
 
     /**
@@ -2123,6 +2125,9 @@ public class DisplayPolicy {
 
     @VisibleForTesting
     void requestTransientBars(WindowState swipeTarget, boolean isGestureOnSystemBar) {
+        if (CLIENT_TRANSIENT) {
+            return;
+        }
         if (swipeTarget == null || !mService.mPolicy.isUserSetupComplete()) {
             // Swipe-up for navigation bar is disabled during setup
             return;
@@ -2670,8 +2675,6 @@ public class DisplayPolicy {
         pw.print("mCarDockEnablesAccelerometer="); pw.print(mCarDockEnablesAccelerometer);
         pw.print(" mDeskDockEnablesAccelerometer=");
         pw.println(mDeskDockEnablesAccelerometer);
-        pw.print(" mDeskDockRespectsNoSensorAndLockedWithoutAccelerometer=");
-        pw.println(mDeskDockRespectsNoSensorAndLockedWithoutAccelerometer);
         pw.print(prefix); pw.print("mDockMode="); pw.print(Intent.dockStateToString(mDockMode));
         pw.print(" mLidState="); pw.println(WindowManagerFuncs.lidStateToString(mLidState));
         pw.print(prefix); pw.print("mAwake="); pw.print(mAwake);
@@ -2773,7 +2776,9 @@ public class DisplayPolicy {
             final DecorInsets.Info info = mDecorInsets.mInfoForRotation[rotation];
             pw.println(prefixInner + Surface.rotationToString(rotation) + "=" + info);
         }
-        mSystemGestures.dump(pw, prefix);
+        if (!CLIENT_TRANSIENT) {
+            mSystemGestures.dump(pw, prefix);
+        }
 
         pw.print(prefix); pw.println("Looper state:");
         mHandler.getLooper().dump(new PrintWriterPrinter(pw), prefix + "  ");

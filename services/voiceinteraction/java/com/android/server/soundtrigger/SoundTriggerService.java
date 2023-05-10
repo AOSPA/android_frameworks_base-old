@@ -303,6 +303,10 @@ public class SoundTriggerService extends SystemService {
 
     private SoundTriggerHelper newSoundTriggerHelper(
             ModuleProperties moduleProperties, EventLogger eventLogger) {
+        return newSoundTriggerHelper(moduleProperties, eventLogger, false);
+    }
+    private SoundTriggerHelper newSoundTriggerHelper(
+            ModuleProperties moduleProperties, EventLogger eventLogger, boolean isTrusted) {
 
         Identity middlemanIdentity = new Identity();
         middlemanIdentity.packageName = ActivityThread.currentOpPackageName();
@@ -325,7 +329,7 @@ public class SoundTriggerService extends SystemService {
                 eventLogger,
                 (SoundTrigger.StatusListener statusListener) -> new SoundTriggerModule(
                         mMiddlewareService, moduleId, statusListener,
-                        Looper.getMainLooper(), middlemanIdentity, originatorIdentity),
+                        Looper.getMainLooper(), middlemanIdentity, originatorIdentity, isTrusted),
                 moduleId,
                 () -> listUnderlyingModuleProperties(originatorIdentity)
                 );
@@ -410,6 +414,12 @@ public class SoundTriggerService extends SystemService {
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
+        }
+
+        @Override
+        public void setInPhoneCallState(boolean isInPhoneCall) {
+            Slog.i(TAG, "Overriding phone call state: " + isInPhoneCall);
+            mDeviceStateHandler.onPhoneCallStateChanged(isInPhoneCall);
         }
 
         @Override
@@ -1719,7 +1729,8 @@ public class SoundTriggerService extends SystemService {
         }
 
         @Override
-        public Session attach(@NonNull IBinder client, ModuleProperties underlyingModule) {
+        public Session attach(@NonNull IBinder client, ModuleProperties underlyingModule,
+                boolean isTrusted) {
             var identity = IdentityContext.getNonNull();
             int sessionId = mSessionIdCounter.getAndIncrement();
             mServiceEventLogger.enqueue(new ServiceEvent(
@@ -1728,7 +1739,7 @@ public class SoundTriggerService extends SystemService {
                     "LocalSoundTriggerEventLogger for package: " +
                     identity.packageName + "#" + sessionId);
 
-            return new SessionImpl(newSoundTriggerHelper(underlyingModule, eventLogger),
+            return new SessionImpl(newSoundTriggerHelper(underlyingModule, eventLogger, isTrusted),
                     client, eventLogger, identity);
         }
 

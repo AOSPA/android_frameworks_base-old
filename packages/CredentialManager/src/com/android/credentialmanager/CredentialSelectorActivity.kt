@@ -25,6 +25,7 @@ import android.os.Bundle
 import android.os.ResultReceiver
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -48,11 +49,12 @@ import com.android.credentialmanager.ui.theme.PlatformTheme
 class CredentialSelectorActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.d(Constants.LOG_TAG, "Creating new CredentialSelectorActivity")
         overrideActivityTransition(Activity.OVERRIDE_TRANSITION_OPEN,
             0, 0)
         overrideActivityTransition(Activity.OVERRIDE_TRANSITION_CLOSE,
             0, 0)
-        Log.d(Constants.LOG_TAG, "Creating new CredentialSelectorActivity")
+
         try {
             val (isCancellationRequest, shouldShowCancellationUi, _) =
                 maybeCancelUIUponRequest(intent)
@@ -60,7 +62,20 @@ class CredentialSelectorActivity : ComponentActivity() {
                 return
             }
             val userConfigRepo = UserConfigRepo(this)
-            val credManRepo = CredentialManagerRepo(this, intent, userConfigRepo)
+            val credManRepo = CredentialManagerRepo(
+                this, intent, userConfigRepo, isNewActivity = true)
+
+            val backPressedCallback = object : OnBackPressedCallback(
+                true // default to enabled
+            ) {
+                override fun handleOnBackPressed() {
+                    credManRepo.onUserCancel()
+                    Log.d(Constants.LOG_TAG, "Activity back triggered: finish the activity.")
+                    this@CredentialSelectorActivity.finish()
+                }
+            }
+            onBackPressedDispatcher.addCallback(this, backPressedCallback)
+
             setContent {
                 PlatformTheme {
                     CredentialManagerBottomSheet(
@@ -89,7 +104,8 @@ class CredentialSelectorActivity : ComponentActivity() {
                 }
             } else {
                 val userConfigRepo = UserConfigRepo(this)
-                val credManRepo = CredentialManagerRepo(this, intent, userConfigRepo)
+                val credManRepo = CredentialManagerRepo(
+                    this, intent, userConfigRepo, isNewActivity = false)
                 viewModel.onNewCredentialManagerRepo(credManRepo)
             }
         } catch (e: Exception) {

@@ -16,6 +16,7 @@
 
 package com.android.systemui.keyguard;
 
+import static android.app.StatusBarManager.SESSION_KEYGUARD;
 import static android.provider.Settings.System.SCREEN_OFF_TIMEOUT;
 import static android.view.WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_NO_WINDOW_ANIMATIONS;
 import static android.view.WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_TO_LAUNCHER_CLEAR_SNAPSHOT;
@@ -98,8 +99,10 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.android.app.animation.Interpolators;
 import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.jank.InteractionJankMonitor.Configuration;
+import com.android.internal.logging.UiEventLogger;
 import com.android.internal.policy.IKeyguardDismissCallback;
 import com.android.internal.policy.IKeyguardExitCallback;
 import com.android.internal.policy.IKeyguardStateCallback;
@@ -122,7 +125,6 @@ import com.android.systemui.Dumpable;
 import com.android.systemui.EventLogTags;
 import com.android.systemui.R;
 import com.android.systemui.animation.ActivityLaunchAnimator;
-import com.android.systemui.animation.Interpolators;
 import com.android.systemui.animation.LaunchAnimator;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.classifier.FalsingCollector;
@@ -132,6 +134,7 @@ import com.android.systemui.dump.DumpManager;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.flags.Flags;
 import com.android.systemui.keyguard.dagger.KeyguardModule;
+import com.android.systemui.log.SessionTracker;
 import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.settings.UserTracker;
@@ -403,7 +406,7 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
 
     private static final Bundle USER_PRESENT_INTENT_OPTIONS =
             BroadcastOptions.makeBasic()
-                    .setDeferUntilActive(true)
+                    .setDeferralPolicy(BroadcastOptions.DEFERRAL_POLICY_UNTIL_ACTIVE)
                     .setDeliveryGroupPolicy(BroadcastOptions.DELIVERY_GROUP_POLICY_MOST_RECENT)
                     .toBundle();
 
@@ -1182,12 +1185,16 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
     private Lazy<ScrimController> mScrimControllerLazy;
 
     private FeatureFlags mFeatureFlags;
+    private final UiEventLogger mUiEventLogger;
+    private final SessionTracker mSessionTracker;
 
     /**
      * Injected constructor. See {@link KeyguardModule}.
      */
     public KeyguardViewMediator(
             Context context,
+            UiEventLogger uiEventLogger,
+            SessionTracker sessionTracker,
             UserTracker userTracker,
             FalsingCollector falsingCollector,
             LockPatternUtils lockPatternUtils,
@@ -1271,6 +1278,8 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
         mDreamCloseAnimationDuration = (int) LOCKSCREEN_ANIMATION_DURATION_MS;
 
         mFeatureFlags = featureFlags;
+        mUiEventLogger = uiEventLogger;
+        mSessionTracker = sessionTracker;
     }
 
     public void userActivity() {
@@ -1661,6 +1670,13 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
             if (DEBUG) Log.d(TAG, "onStartedWakingUp, seq = " + mDelayedShowingSequence);
             notifyStartedWakingUp();
         }
+        mUiEventLogger.logWithInstanceIdAndPosition(
+                BiometricUnlockController.BiometricUiEvent.STARTED_WAKING_UP,
+                0,
+                null,
+                mSessionTracker.getSessionId(SESSION_KEYGUARD),
+                pmWakeReason
+        );
         mUpdateMonitor.dispatchStartedWakingUp(pmWakeReason);
         maybeSendUserPresentBroadcast();
         Trace.endSection();
@@ -2947,9 +2963,12 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
         if (mSurfaceBehindRemoteAnimationFinishedCallback != null) {
             try {
                 mSurfaceBehindRemoteAnimationFinishedCallback.onAnimationFinished();
+            } catch (Throwable t) {
+                // The surface may no longer be available. Just capture the exception
+                Log.w(TAG, "Surface behind remote animation callback failed, and it's probably ok: "
+                        + t.getMessage());
+            } finally {
                 mSurfaceBehindRemoteAnimationFinishedCallback = null;
-            } catch (RemoteException e) {
-                e.printStackTrace();
             }
         }
     }

@@ -14,7 +14,13 @@
   ~ See the License for the specific language governing permissions and
   ~ limitations under the License.
   -->
-<!-- Should be the same as in packages/apps/Launcher3/res/color-v31/taskbar_background.xml -->
-<selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:color="@android:color/system_neutral1_500" android:lStar="98" />
-</selector>
+<com.android.systemui.biometrics.UdfpsKeyguardViewLegacy
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/udfps_animation_view"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- Add fingerprint views here. See udfps_keyguard_view_internal.xml. -->
+
+</com.android.systemui.biometrics.UdfpsKeyguardViewLegacy>

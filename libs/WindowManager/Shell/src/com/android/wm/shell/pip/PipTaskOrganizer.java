@@ -27,6 +27,7 @@ import static com.android.wm.shell.ShellTaskOrganizer.TASK_LISTENER_TYPE_PIP;
 import static com.android.wm.shell.ShellTaskOrganizer.taskListenerTypeToString;
 import static com.android.wm.shell.common.split.SplitScreenConstants.SPLIT_POSITION_BOTTOM_OR_RIGHT;
 import static com.android.wm.shell.common.split.SplitScreenConstants.SPLIT_POSITION_TOP_OR_LEFT;
+import static com.android.wm.shell.common.split.SplitScreenConstants.SPLIT_POSITION_UNDEFINED;
 import static com.android.wm.shell.pip.PipAnimationController.ANIM_TYPE_ALPHA;
 import static com.android.wm.shell.pip.PipAnimationController.ANIM_TYPE_BOUNDS;
 import static com.android.wm.shell.pip.PipAnimationController.FRACTION_START;
@@ -524,12 +525,18 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
             }
         }
 
-        final Rect destinationBounds = getExitDestinationBounds();
+        final Rect displayBounds = mPipBoundsState.getDisplayBounds();
+        final Rect destinationBounds = new Rect(displayBounds);
         final int direction = syncWithSplitScreenBounds(destinationBounds, requestEnterSplit)
                 ? TRANSITION_DIRECTION_LEAVE_PIP_TO_SPLIT_SCREEN
                 : TRANSITION_DIRECTION_LEAVE_PIP;
+        // For exiting to fullscreen, the windowing mode of task will be changed to fullscreen
+        // until the animation is finished. Otherwise if the activity is resumed and focused at the
+        // begin of aniamtion, the app may do something too early to distub the animation.
+        final boolean toFullscreen = destinationBounds.equals(displayBounds);
 
-        if (Transitions.ENABLE_SHELL_TRANSITIONS && direction == TRANSITION_DIRECTION_LEAVE_PIP) {
+        if (Transitions.SHELL_TRANSITIONS_ROTATION || (Transitions.ENABLE_SHELL_TRANSITIONS
+                && !toFullscreen)) {
             // When exit to fullscreen with Shell transition enabled, we update the Task windowing
             // mode directly so that it can also trigger display rotation and visibility update in
             // the same transition if there will be any.
@@ -605,7 +612,7 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
         removePip();
     }
 
-    private void applyWindowingModeChangeOnExit(WindowContainerTransaction wct, int direction) {
+    void applyWindowingModeChangeOnExit(WindowContainerTransaction wct, int direction) {
         // Reset the final windowing mode.
         wct.setWindowingMode(mToken, getOutPipWindowingMode());
         // Simply reset the activity mode set prior to the animation running.
@@ -1650,8 +1657,8 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
                     "%s: Abort animation, invalid leash", TAG);
             return null;
         }
-        if (isInPipDirection(direction)
-                && !isSourceRectHintValidForEnterPip(sourceHintRect, destinationBounds)) {
+        if (isInPipDirection(direction) && !PipBoundsAlgorithm
+                .isSourceRectHintValidForEnterPip(sourceHintRect, destinationBounds)) {
             // The given source rect hint is too small for enter PiP animation, reset it to null.
             sourceHintRect = null;
         }
@@ -1750,20 +1757,6 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
     }
 
     /**
-     * This is a situation in which the source rect hint on at least one axis is smaller
-     * than the destination bounds, which represents a problem because we would have to scale
-     * up that axis to fit the bounds. So instead, just fallback to the non-source hint
-     * animation in this case.
-     *
-     * @return {@code false} if the given source is too small to use for the entering animation.
-     */
-    private boolean isSourceRectHintValidForEnterPip(Rect sourceRectHint, Rect destinationBounds) {
-        return sourceRectHint != null
-                && sourceRectHint.width() > destinationBounds.width()
-                && sourceRectHint.height() > destinationBounds.height();
-    }
-
-    /**
      * Sync with {@link SplitScreenController} on destination bounds if PiP is going to
      * split screen.
      *
@@ -1771,14 +1764,26 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
      * @return {@code true} if destinationBounds is altered for split screen
      */
     private boolean syncWithSplitScreenBounds(Rect destinationBoundsOut, boolean enterSplit) {
-        if (!enterSplit || !mSplitScreenOptional.isPresent()) {
+        if (mSplitScreenOptional.isEmpty()) {
+            return false;
+        }
+        final SplitScreenController split = mSplitScreenOptional.get();
+        final int position = mTaskInfo.lastParentTaskIdBeforePip > 0
+                ? split.getSplitPosition(mTaskInfo.lastParentTaskIdBeforePip)
+                : SPLIT_POSITION_UNDEFINED;
+        if (position == SPLIT_POSITION_UNDEFINED && !enterSplit) {
             return false;
         }
         final Rect topLeft = new Rect();
         final Rect bottomRight = new Rect();
-        mSplitScreenOptional.get().getStageBounds(topLeft, bottomRight);
-        destinationBoundsOut.set(isPipToTopLeft()  ? topLeft : bottomRight);
-        return true;
+        split.getStageBounds(topLeft, bottomRight);
+        if (enterSplit) {
+            destinationBoundsOut.set(isPipToTopLeft() ? topLeft : bottomRight);
+            return true;
+        }
+        // Moving to an existing split task.
+        destinationBoundsOut.set(position == SPLIT_POSITION_TOP_OR_LEFT ? topLeft : bottomRight);
+        return false;
     }
 
     /**

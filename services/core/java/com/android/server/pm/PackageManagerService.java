@@ -5283,6 +5283,12 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         }
 
         @Override
+        public @NonNull List<String> getInitialNonStoppedSystemPackages() {
+            return mInitialNonStoppedSystemPackages != null
+                    ? new ArrayList<>(mInitialNonStoppedSystemPackages) : new ArrayList<>();
+        }
+
+        @Override
         public String[] getUnsuspendablePackagesForUser(String[] packageNames, int userId) {
             Objects.requireNonNull(packageNames, "packageNames cannot be null");
             mContext.enforceCallingOrSelfPermission(Manifest.permission.SUSPEND_APPS,
@@ -6862,6 +6868,12 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
 
         @Override
         public boolean isSameApp(@Nullable String packageName, int callingUid, int userId) {
+            return isSameApp(packageName, /*flags=*/0, callingUid, userId);
+        }
+
+        @Override
+        public boolean isSameApp(@Nullable String packageName,
+                @PackageManager.PackageInfoFlagsBits long flags, int callingUid, int userId) {
             if (packageName == null) {
                 return false;
             }
@@ -6870,7 +6882,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                 return packageName.equals(mRequiredSdkSandboxPackage);
             }
             Computer snapshot = snapshot();
-            int uid = snapshot.getPackageUid(packageName, 0, userId);
+            int uid = snapshot.getPackageUid(packageName, flags, userId);
             return UserHandle.isSameApp(uid, callingUid);
         }
 

@@ -22,13 +22,13 @@ import android.compat.annotation.UnsupportedAppUsage;
 import android.media.permission.ClearCallingIdentityContext;
 import android.media.permission.Identity;
 import android.media.permission.SafeCloseable;
-import android.media.soundtrigger.PhraseRecognitionEvent;
 import android.media.soundtrigger.PhraseSoundModel;
-import android.media.soundtrigger.RecognitionEvent;
 import android.media.soundtrigger.SoundModel;
 import android.media.soundtrigger_middleware.ISoundTriggerCallback;
 import android.media.soundtrigger_middleware.ISoundTriggerMiddlewareService;
 import android.media.soundtrigger_middleware.ISoundTriggerModule;
+import android.media.soundtrigger_middleware.PhraseRecognitionEventSys;
+import android.media.soundtrigger_middleware.RecognitionEventSys;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -83,7 +83,8 @@ public class SoundTriggerModule {
      */
     public SoundTriggerModule(@NonNull ISoundTriggerMiddlewareService service,
             int moduleId, @NonNull SoundTrigger.StatusListener listener, @NonNull Looper looper,
-            @NonNull Identity middlemanIdentity, @NonNull Identity originatorIdentity) {
+            @NonNull Identity middlemanIdentity, @NonNull Identity originatorIdentity,
+            boolean isTrusted) {
         mId = moduleId;
         mEventHandlerDelegate = new EventHandlerDelegate(listener, looper);
 
@@ -91,7 +92,8 @@ public class SoundTriggerModule {
             try (SafeCloseable ignored = ClearCallingIdentityContext.create()) {
                 mService = service.attachAsMiddleman(moduleId, middlemanIdentity,
                         originatorIdentity,
-                        mEventHandlerDelegate);
+                        mEventHandlerDelegate,
+                        isTrusted);
             }
             mService.asBinder().linkToDeath(mEventHandlerDelegate, 0);
         } catch (RemoteException e) {
@@ -247,6 +249,16 @@ public class SoundTriggerModule {
     }
 
     /**
+     * Same as above, but return a binder token associated with the session.
+     * @hide
+     */
+    public synchronized IBinder startRecognitionWithToken(int soundModelHandle,
+            SoundTrigger.RecognitionConfig config) throws RemoteException {
+        return mService.startRecognition(soundModelHandle,
+                ConversionUtil.api2aidlRecognitionConfig(config));
+    }
+
+    /**
      * Stop listening to all key phrases in a {@link SoundTrigger.SoundModel}
      * @param soundModelHandle The sound model handle to stop listening to
      * @return - {@link SoundTrigger#STATUS_OK} in case of success
@@ -398,7 +410,7 @@ public class SoundTriggerModule {
         }
 
         @Override
-        public synchronized void onRecognition(int handle, RecognitionEvent event,
+        public synchronized void onRecognition(int handle, RecognitionEventSys event,
                 int captureSession)
                 throws RemoteException {
             Message m = mHandler.obtainMessage(EVENT_RECOGNITION,
@@ -407,7 +419,7 @@ public class SoundTriggerModule {
         }
 
         @Override
-        public synchronized void onPhraseRecognition(int handle, PhraseRecognitionEvent event,
+        public synchronized void onPhraseRecognition(int handle, PhraseRecognitionEventSys event,
                 int captureSession)
                 throws RemoteException {
             Message m = mHandler.obtainMessage(EVENT_RECOGNITION,
