@@ -23,7 +23,7 @@
     <!-- The maximum number of rows in the QuickSettings -->
     <integer name="quick_settings_max_rows">2</integer>
 
-    <integer name="quick_settings_num_columns">4</integer>
+    <integer name="quick_settings_num_columns">2</integer>
 
     <!-- The number of columns that the top level tiles span in the QuickSettings -->
     <integer name="quick_settings_user_time_settings_tile_span">2</integer>
@@ -41,5 +41,19 @@
 
     <!-- Whether we use large screen shade header which takes only one row compared to QS header -->
     <bool name="config_use_large_screen_shade_header">true</bool>
+
+    <!-- Whether to force split shade.
+     For now, this value has effect only when flag lockscreen.enable_landscape is enabled.
+     TODO (b/293252410) - change this comment/resource when flag is enabled -->
+    <bool name="force_config_use_split_notification_shade">true</bool>
+
+    <!-- Whether to show bottom sheets edge to edge -->
+    <bool name="config_edgeToEdgeBottomSheetDialog">false</bool>
+
+    <bool name="can_use_one_handed_bouncer">true</bool>
+
+    <bool name="config_use_split_notification_shade">true</bool>
+
+    <bool name="config_skinnyNotifsInLandscape">false</bool>
 
 </resources>
