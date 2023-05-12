@@ -1703,8 +1703,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
             refresh();
         }
 
-        return new Pair<>(BluetoothUtils.buildBtRainbowDrawable(
-                        mContext, pair.first, getAddress().hashCode()), pair.second);
+        return BluetoothUtils.getBtRainbowDrawableWithDescription(mContext, this);
     }
 
     void releaseLruCache() {

@@ -1104,11 +1104,6 @@ class ProcessRecord implements WindowProcessListener {
         return mState.isCached();
     }
 
-    @GuardedBy(anyOf = {"mService", "mProcLock"})
-    public boolean hasForegroundActivities() {
-        return mState.hasForegroundActivities();
-    }
-
     boolean hasActivities() {
         return mWindowProcessController.hasActivities();
     }
