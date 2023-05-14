@@ -775,6 +775,8 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         }
 
         String summary = networkTypeDescription;
+        boolean isSmartDdsEnabled = Settings.Global.getInt(context.getContentResolver(),
+                Settings.Global.SMART_DDS_SWITCH, 0) == 1;
         boolean isForDds = subId == mDefaultDataSubId;
         int activeSubId = getActiveAutoSwitchNonDdsSubId();
         boolean isOnNonDds = activeSubId != SubscriptionManager.INVALID_SUBSCRIPTION_ID;
@@ -783,8 +785,10 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         if (activeNetworkIsCellular() || isCarrierNetworkActive()) {
             summary = context.getString(R.string.preference_summary_default_combination,
                     context.getString(
-                            isForDds // if nonDds is active, explains Dds status as poor connection
-                                    ? (isOnNonDds ? R.string.mobile_data_poor_connection
+                            // if nonDds is active, explains Dds status as poor connection
+                            isForDds || isSmartDdsEnabled
+                                    ? (isOnNonDds && !isSmartDdsEnabled
+                                            ? R.string.mobile_data_poor_connection
                                             : R.string.mobile_data_connection_active)
                             : R.string.mobile_data_temp_connection_active),
                     networkTypeDescription);
