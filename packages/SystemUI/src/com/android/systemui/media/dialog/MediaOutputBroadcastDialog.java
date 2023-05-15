@@ -212,8 +212,8 @@ public class MediaOutputBroadcastDialog extends MediaOutputBaseDialog {
     }
 
     @Override
-    public void onStart() {
-        super.onStart();
+    public void start() {
+        super.start();
         refreshUi();
         if (!mIsLeBroadcastAssistantCallbackRegistered) {
             mIsLeBroadcastAssistantCallbackRegistered = true;
@@ -224,8 +224,8 @@ public class MediaOutputBroadcastDialog extends MediaOutputBaseDialog {
     }
 
     @Override
-    public void onStop() {
-        super.onStop();
+    public void stop() {
+        super.stop();
         if (mIsLeBroadcastAssistantCallbackRegistered) {
             mIsLeBroadcastAssistantCallbackRegistered = false;
             mMediaOutputController.unregisterLeBroadcastAssistantServiceCallback(

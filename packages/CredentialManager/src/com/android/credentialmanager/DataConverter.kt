@@ -46,6 +46,7 @@ import com.android.credentialmanager.getflow.AuthenticationEntryInfo
 import com.android.credentialmanager.getflow.CredentialEntryInfo
 import com.android.credentialmanager.getflow.ProviderInfo
 import com.android.credentialmanager.getflow.RemoteEntryInfo
+import com.android.credentialmanager.getflow.TopBrandingContent
 import androidx.credentials.CreateCredentialRequest
 import androidx.credentials.CreateCustomCredentialRequest
 import androidx.credentials.CreatePasswordRequest
@@ -198,7 +199,8 @@ class GetFlowUtils {
                     it.type,
                     it.credentialRetrievalData,
                     it.credentialRetrievalData,
-                    it.isSystemProviderRequired
+                    it.isSystemProviderRequired,
+                    it.allowedProviders,
                 )
                 if (credentialOptionJetpack is GetPublicKeyCredentialOption) {
                     credentialOptionJetpack.preferImmediatelyAvailableCredentials
@@ -206,6 +208,23 @@ class GetFlowUtils {
                     false
                 }
             }
+            val preferUiBrandingComponentName =
+                getCredentialRequest.data.getParcelable(
+                    "androidx.credentials.BUNDLE_KEY_PREFER_UI_BRANDING_COMPONENT_NAME",
+                    ComponentName::class.java
+                )
+            val preferTopBrandingContent: TopBrandingContent? =
+                if (preferUiBrandingComponentName == null) null
+                else {
+                    val (displayName, icon) = getServiceLabelAndIcon(
+                        context.packageManager, preferUiBrandingComponentName.flattenToString())
+                        ?: Pair(null, null)
+                    if (displayName != null && icon != null) {
+                        TopBrandingContent(icon, displayName)
+                    } else {
+                        null
+                    }
+                }
             return com.android.credentialmanager.getflow.RequestDisplayInfo(
                 appName = originName
                     ?: getAppLabel(context.packageManager, requestInfo.appPackageName)
@@ -215,6 +234,7 @@ class GetFlowUtils {
                     // TODO(b/276777444): replace with direct library constant reference once
                     // exposed.
                     "androidx.credentials.BUNDLE_KEY_PREFER_IDENTITY_DOC_UI"),
+                preferTopBrandingContent = preferTopBrandingContent,
             )
         }
 
@@ -245,20 +265,13 @@ class GetFlowUtils {
                             userName = credentialEntry.username.toString(),
                             displayName = credentialEntry.displayName?.toString(),
                             icon = credentialEntry.icon.loadDrawable(context),
-                            shouldTintIcon = credentialEntry.isDefaultIcon ?: false,
+                            shouldTintIcon = credentialEntry.isDefaultIcon,
                             lastUsedTimeMillis = credentialEntry.lastUsedTime,
                             isAutoSelectable = credentialEntry.isAutoSelectAllowed &&
                                 credentialEntry.autoSelectAllowedFromOption,
                         ))
                     }
                     is PublicKeyCredentialEntry -> {
-                        val passkeyUsername = credentialEntry.username.toString()
-                        val passkeyDisplayName = credentialEntry.displayName?.toString() ?: ""
-                        val (username, displayName) = userAndDisplayNameForPasskey(
-                            passkeyUsername = passkeyUsername,
-                            passkeyDisplayName = passkeyDisplayName,
-                        )
-
                         result.add(CredentialEntryInfo(
                             providerId = providerId,
                             providerDisplayName = providerLabel,
@@ -268,8 +281,8 @@ class GetFlowUtils {
                             fillInIntent = it.frameworkExtrasIntent,
                             credentialType = CredentialType.PASSKEY,
                             credentialTypeDisplayName = credentialEntry.typeDisplayName.toString(),
-                            userName = username,
-                            displayName = displayName,
+                            userName = credentialEntry.username.toString(),
+                            displayName = credentialEntry.displayName?.toString(),
                             icon = credentialEntry.icon.loadDrawable(context),
                             shouldTintIcon = credentialEntry.isDefaultIcon,
                             lastUsedTimeMillis = credentialEntry.lastUsedTime,
@@ -469,8 +482,12 @@ class CreateFlowUtils {
                 createCredentialRequest.type,
                 createCredentialRequest.credentialData,
                 createCredentialRequest.candidateQueryData,
-                createCredentialRequest.isSystemProviderRequired
+                createCredentialRequest.isSystemProviderRequired,
+                createCredentialRequest.origin,
             )
+            val appPreferredDefaultProviderId: String? =
+                if (!requestInfo.hasPermissionToOverrideDefault()) null
+                else createCredentialRequestJetpack?.displayInfo?.preferDefaultProvider
             return when (createCredentialRequestJetpack) {
                 is CreatePasswordRequest -> RequestDisplayInfo(
                     createCredentialRequestJetpack.id,
@@ -479,6 +496,7 @@ class CreateFlowUtils {
                     appLabel,
                     context.getDrawable(R.drawable.ic_password_24) ?: return null,
                     preferImmediatelyAvailableCredentials = false,
+                    appPreferredDefaultProviderId = appPreferredDefaultProviderId,
                 )
                 is CreatePublicKeyCredentialRequest -> {
                     newRequestDisplayInfoFromPasskeyJson(
@@ -487,6 +505,7 @@ class CreateFlowUtils {
                         context = context,
                         preferImmediatelyAvailableCredentials =
                         createCredentialRequestJetpack.preferImmediatelyAvailableCredentials,
+                        appPreferredDefaultProviderId = appPreferredDefaultProviderId,
                     )
                 }
                 is CreateCustomCredentialRequest -> {
@@ -502,6 +521,7 @@ class CreateFlowUtils {
                         typeIcon = displayInfo.credentialTypeIcon?.loadDrawable(context)
                             ?: context.getDrawable(R.drawable.ic_other_sign_in_24) ?: return null,
                         preferImmediatelyAvailableCredentials = false,
+                        appPreferredDefaultProviderId = appPreferredDefaultProviderId,
                     )
                 }
                 else -> null
@@ -511,20 +531,27 @@ class CreateFlowUtils {
         fun toCreateCredentialUiState(
             enabledProviders: List<EnabledProviderInfo>,
             disabledProviders: List<DisabledProviderInfo>?,
-            defaultProviderId: String?,
+            defaultProviderIdPreferredByApp: String?,
+            defaultProviderIdSetByUser: String?,
             requestDisplayInfo: RequestDisplayInfo,
             isOnPasskeyIntroStateAlready: Boolean,
             isPasskeyFirstUse: Boolean,
         ): CreateCredentialUiState? {
             var lastSeenProviderWithNonEmptyCreateOptions: EnabledProviderInfo? = null
             var remoteEntry: RemoteInfo? = null
-            var defaultProvider: EnabledProviderInfo? = null
+            var defaultProviderPreferredByApp: EnabledProviderInfo? = null
+            var defaultProviderSetByUser: EnabledProviderInfo? = null
             var createOptionsPairs:
                 MutableList<Pair<CreateOptionInfo, EnabledProviderInfo>> = mutableListOf()
             enabledProviders.forEach { enabledProvider ->
-                if (defaultProviderId != null) {
-                    if (enabledProvider.id == defaultProviderId) {
-                        defaultProvider = enabledProvider
+                if (defaultProviderIdPreferredByApp != null) {
+                    if (enabledProvider.id == defaultProviderIdPreferredByApp) {
+                        defaultProviderPreferredByApp = enabledProvider
+                    }
+                }
+                if (defaultProviderIdSetByUser != null) {
+                    if (enabledProvider.id == defaultProviderIdSetByUser) {
+                        defaultProviderSetByUser = enabledProvider
                     }
                 }
                 if (enabledProvider.createOptions.isNotEmpty()) {
@@ -543,12 +570,14 @@ class CreateFlowUtils {
                     remoteEntry = currRemoteEntry
                 }
             }
+            val defaultProvider = defaultProviderPreferredByApp ?: defaultProviderSetByUser
             val initialScreenState = toCreateScreenState(
-                /*createOptionSize=*/createOptionsPairs.size,
-                /*isOnPasskeyIntroStateAlready=*/isOnPasskeyIntroStateAlready,
-                /*requestDisplayInfo=*/requestDisplayInfo,
-                /*defaultProvider=*/defaultProvider, /*remoteEntry=*/remoteEntry,
-                /*isPasskeyFirstUse=*/isPasskeyFirstUse
+                createOptionSize = createOptionsPairs.size,
+                isOnPasskeyIntroStateAlready = isOnPasskeyIntroStateAlready,
+                requestDisplayInfo = requestDisplayInfo,
+                defaultProvider = defaultProvider,
+                remoteEntry = remoteEntry,
+                isPasskeyFirstUse = isPasskeyFirstUse
             ) ?: return null
             return CreateCredentialUiState(
                 enabledProviders = enabledProviders,
@@ -674,6 +703,7 @@ class CreateFlowUtils {
             appLabel: String,
             context: Context,
             preferImmediatelyAvailableCredentials: Boolean,
+            appPreferredDefaultProviderId: String?,
         ): RequestDisplayInfo? {
             val json = JSONObject(requestJson)
             var passkeyUsername = ""
@@ -694,6 +724,7 @@ class CreateFlowUtils {
                 appLabel,
                 context.getDrawable(R.drawable.ic_passkey_24) ?: return null,
                 preferImmediatelyAvailableCredentials,
+                appPreferredDefaultProviderId,
             )
         }
     }
@@ -707,7 +738,7 @@ class CreateFlowUtils {
  * 2) username on top if display-name is not available.
  * 3) don't show username on second line if username == display-name
  */
-private fun userAndDisplayNameForPasskey(
+fun userAndDisplayNameForPasskey(
     passkeyUsername: String,
     passkeyDisplayName: String,
 ): Pair<String, String> {

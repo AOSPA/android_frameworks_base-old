@@ -57,6 +57,8 @@ import static android.view.WindowManager.LayoutParams.TYPE_NOTIFICATION_SHADE;
 import static android.view.WindowManager.LayoutParams.TYPE_PRESENTATION;
 import static android.view.WindowManager.LayoutParams.TYPE_PRIVATE_PRESENTATION;
 import static android.view.WindowManager.LayoutParams.TYPE_QS_DIALOG;
+import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_BLACKSCREEN_OVERLAY;
+import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_DRAGDROP_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 import static android.view.WindowManager.LayoutParams.TYPE_VOICE_INTERACTION;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
@@ -96,6 +98,7 @@ import android.app.ActivityManager.RecentTaskInfo;
 import android.app.ActivityManagerInternal;
 import android.app.ActivityTaskManager;
 import android.app.AppOpsManager;
+import android.app.CrossDeviceManager;
 import android.app.IUiModeManager;
 import android.app.NotificationManager;
 import android.app.ProgressDialog;
@@ -132,6 +135,7 @@ import android.media.session.MediaSessionLegacyHelper;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.DeviceIdleManager;
+import android.os.DeviceIntegrationUtils;
 import android.os.FactoryTest;
 import android.os.Handler;
 import android.os.IBinder;
@@ -222,7 +226,9 @@ import com.android.server.policy.keyguard.KeyguardServiceDelegate.DrawnListener;
 import com.android.server.policy.keyguard.KeyguardStateMonitor.StateCallback;
 import com.android.server.statusbar.StatusBarManagerInternal;
 import com.android.server.vr.VrManagerInternal;
+import com.android.server.wallpaper.WallpaperManagerInternal;
 import com.android.server.wm.ActivityTaskManagerInternal;
+import com.android.server.wm.BlackScreenWindowManager;
 import com.android.server.wm.DisplayPolicy;
 import com.android.server.wm.DisplayRotation;
 import com.android.server.wm.WindowManagerInternal;
@@ -412,6 +418,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     SensorPrivacyManager mSensorPrivacyManager;
     DisplayManager mDisplayManager;
     DisplayManagerInternal mDisplayManagerInternal;
+
+    private WallpaperManagerInternal mWallpaperManagerInternal;
+
     boolean mPreloadedRecentApps;
     final Object mServiceAcquireLock = new Object();
     Vibrator mVibrator; // Vibrator for giving feedback of orientation changes
@@ -1034,6 +1043,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                         + "fingerprint sensor");
                 return;
             }
+
+            // Device Integration: If the power button is handled by black screen, then do nothing
+            if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION
+                && BlackScreenWindowManager.getInstance().interceptPowerKey()) {
+                return;
+            }
+
             switch (mShortPressOnPowerBehavior) {
                 case SHORT_PRESS_POWER_NOTHING:
                     break;
@@ -2739,6 +2755,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 case TYPE_NAVIGATION_BAR_PANEL:
                     // The window manager will check these.
                     return ADD_OKAY;
+                case TYPE_SYSTEM_DRAGDROP_OVERLAY:
+                case TYPE_SYSTEM_BLACKSCREEN_OVERLAY:
+                    if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
+                        // Device Integration: permission check
+                        return (CrossDeviceManager.isCallerAllowed(mContext)) ? ADD_OKAY : ADD_PERMISSION_DENIED;
+                    }
             }
 
             return (mContext.checkCallingOrSelfPermission(INTERNAL_SYSTEM_WINDOW)
@@ -5034,11 +5056,34 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         return bootCompleted ? mKeyguardDrawnTimeout : 5000;
     }
 
+    @Nullable
+    private WallpaperManagerInternal getWallpaperManagerInternal() {
+        if (mWallpaperManagerInternal == null) {
+            mWallpaperManagerInternal = LocalServices.getService(WallpaperManagerInternal.class);
+        }
+        return mWallpaperManagerInternal;
+    }
+
+    private void reportScreenTurningOnToWallpaper(int displayId) {
+        WallpaperManagerInternal wallpaperManagerInternal = getWallpaperManagerInternal();
+        if (wallpaperManagerInternal != null) {
+            wallpaperManagerInternal.onScreenTurningOn(displayId);
+        }
+    }
+
+    private void reportScreenTurnedOnToWallpaper(int displayId) {
+        WallpaperManagerInternal wallpaperManagerInternal = getWallpaperManagerInternal();
+        if (wallpaperManagerInternal != null) {
+            wallpaperManagerInternal.onScreenTurnedOn(displayId);
+        }
+    }
+
     // Called on the DisplayManager's DisplayPowerController thread.
     @Override
     public void screenTurningOn(int displayId, final ScreenOnListener screenOnListener) {
         if (DEBUG_WAKEUP) Slog.i(TAG, "Display " + displayId + " turning on...");
 
+        reportScreenTurningOnToWallpaper(displayId);
         if (displayId == DEFAULT_DISPLAY) {
             Trace.asyncTraceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "screenTurningOn",
                     0 /* cookie */);
@@ -5078,6 +5123,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     @Override
     public void screenTurnedOn(int displayId) {
         if (DEBUG_WAKEUP) Slog.i(TAG, "Display " + displayId + " turned on...");
+
+        reportScreenTurnedOnToWallpaper(displayId);
 
         if (displayId != DEFAULT_DISPLAY) {
             return;

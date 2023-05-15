@@ -493,7 +493,7 @@ public class Build {
          * @hide
          */
         @TestApi
-        public static final int RESOURCES_SDK_INT = SDK_INT + ACTIVE_CODENAMES.length;
+        public static final int RESOURCES_SDK_INT = SDK_INT;
 
         /**
          * The current lowest supported value of app target SDK. Applications targeting
@@ -1222,7 +1222,7 @@ public class Build {
         /**
          * Upside Down Cake.
          */
-        public static final int UPSIDE_DOWN_CAKE = CUR_DEVELOPMENT;
+        public static final int UPSIDE_DOWN_CAKE = 34;
     }
 
     /** The type of build, like "user" or "eng". */

@@ -17,6 +17,8 @@
 
 package com.android.systemui.shade;
 
+import static android.view.WindowInsets.Type.ime;
+
 import static com.android.internal.jank.InteractionJankMonitor.CUJ_NOTIFICATION_SHADE_QS_EXPAND_COLLAPSE;
 import static com.android.systemui.classifier.Classifier.QS_COLLAPSE;
 import static com.android.systemui.shade.NotificationPanelViewController.COUNTER_PANEL_OPEN_QS;
@@ -62,6 +64,7 @@ import com.android.systemui.classifier.Classifier;
 import com.android.systemui.classifier.FalsingCollector;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.fragments.FragmentHostManager;
+import com.android.systemui.keyguard.domain.interactor.KeyguardFaceAuthInteractor;
 import com.android.systemui.media.controls.pipeline.MediaDataManager;
 import com.android.systemui.media.controls.ui.MediaHierarchyManager;
 import com.android.systemui.plugins.FalsingManager;
@@ -130,6 +133,7 @@ public class QuickSettingsController {
     private final FalsingCollector mFalsingCollector;
     private final LockscreenGestureLogger mLockscreenGestureLogger;
     private final ShadeLogger mShadeLog;
+    private final KeyguardFaceAuthInteractor mKeyguardFaceAuthInteractor;
     private final FeatureFlags mFeatureFlags;
     private final InteractionJankMonitor mInteractionJankMonitor;
     private final FalsingManager mFalsingManager;
@@ -316,7 +320,8 @@ public class QuickSettingsController {
             MetricsLogger metricsLogger,
             FeatureFlags featureFlags,
             InteractionJankMonitor interactionJankMonitor,
-            ShadeLogger shadeLog
+            ShadeLogger shadeLog,
+            KeyguardFaceAuthInteractor keyguardFaceAuthInteractor
     ) {
         mPanelViewControllerLazy = panelViewControllerLazy;
         mPanelView = panelView;
@@ -355,6 +360,7 @@ public class QuickSettingsController {
         mLockscreenGestureLogger = lockscreenGestureLogger;
         mMetricsLogger = metricsLogger;
         mShadeLog = shadeLog;
+        mKeyguardFaceAuthInteractor = keyguardFaceAuthInteractor;
         mFeatureFlags = featureFlags;
         mInteractionJankMonitor = interactionJankMonitor;
 
@@ -463,9 +469,17 @@ public class QuickSettingsController {
         return (mQs != null ? mQs.getHeader().getHeight() : 0) + mPeekHeight;
     }
 
+    private boolean isRemoteInputActiveWithKeyboardUp() {
+        //TODO(b/227115380) remove the isVisible(ime()) check once isRemoteInputActive is fixed.
+        // The check for keyboard visibility is a temporary workaround that allows QS to expand
+        // even when isRemoteInputActive is mistakenly returning true.
+        return mRemoteInputManager.isRemoteInputActive()
+                && mPanelView.getRootWindowInsets().isVisible(ime());
+    }
+
     public boolean isExpansionEnabled() {
         return mExpansionEnabledPolicy && mExpansionEnabledAmbient
-                && !mRemoteInputManager.isRemoteInputActive();
+            && !isRemoteInputActiveWithKeyboardUp();
     }
 
     public float getTransitioningToFullShadeProgress() {
@@ -927,6 +941,7 @@ public class QuickSettingsController {
         // When expanding QS, let's authenticate the user if possible,
         // this will speed up notification actions.
         if (height == 0 && !mKeyguardStateController.canDismissLockScreen()) {
+            mKeyguardFaceAuthInteractor.onQsExpansionStared();
             mKeyguardUpdateMonitor.requestFaceAuth(FaceAuthApiRequestReason.QS_EXPANDED);
         }
     }

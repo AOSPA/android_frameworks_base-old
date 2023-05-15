@@ -37,6 +37,8 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.hardware.Sensor;
+import android.hardware.SensorManager;
 import android.hardware.power.stats.PowerEntity;
 import android.hardware.power.stats.State;
 import android.hardware.power.stats.StateResidency;
@@ -108,8 +110,8 @@ import com.android.server.power.stats.BatteryExternalStatsWorker;
 import com.android.server.power.stats.BatteryStatsImpl;
 import com.android.server.power.stats.BatteryUsageStatsProvider;
 import com.android.server.power.stats.BatteryUsageStatsStore;
-import com.android.server.power.stats.CpuWakeupStats;
 import com.android.server.power.stats.SystemServerCpuThreadReader.SystemServiceCpuThreadTimes;
+import com.android.server.power.stats.wakeups.CpuWakeupStats;
 
 import java.io.File;
 import java.io.FileDescriptor;
@@ -149,7 +151,6 @@ public final class BatteryStatsService extends IBatteryStats.Stub
 
     private final PowerProfile mPowerProfile;
     final BatteryStatsImpl mStats;
-    @GuardedBy("mWakeupStats")
     final CpuWakeupStats mCpuWakeupStats;
     private final BatteryUsageStatsStore mBatteryUsageStatsStore;
     private final BatteryStatsImpl.UserInfoProvider mUserManagerUserInfoProvider;
@@ -515,13 +516,11 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         @Override
         public void noteCpuWakingActivity(int subsystem, long elapsedMillis, int... uids) {
             Objects.requireNonNull(uids);
-            mCpuWakeupStats.noteWakingActivity(subsystem, elapsedMillis, uids);
+            mHandler.post(() -> mCpuWakeupStats.noteWakingActivity(subsystem, elapsedMillis, uids));
         }
-
         @Override
         public void noteWakingSoundTrigger(long elapsedMillis, int uid) {
-            // TODO(b/267717665): Pipe to noteCpuWakingActivity once SoundTrigger starts using this.
-            Slog.w(TAG, "Sound trigger event dispatched to uid " + uid);
+            noteCpuWakingActivity(CPU_WAKEUP_SUBSYSTEM_SOUND_TRIGGER, elapsedMillis, uid);
         }
     }
 
@@ -1260,6 +1259,26 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         }
         FrameworkStatsLog.write_non_chained(FrameworkStatsLog.SENSOR_STATE_CHANGED, uid,
                 null, sensor, FrameworkStatsLog.SENSOR_STATE_CHANGED__STATE__ON);
+    }
+
+    @Override
+    public void noteWakeupSensorEvent(long elapsedNanos, int uid, int sensorHandle) {
+        final int callingUid = Binder.getCallingUid();
+        if (callingUid != Process.SYSTEM_UID) {
+            throw new SecurityException("Calling uid " + callingUid + " is not system uid");
+        }
+
+        final SensorManager sm = mContext.getSystemService(SensorManager.class);
+        final Sensor sensor = sm.getSensorByHandle(sensorHandle);
+        if (sensor == null) {
+            Slog.w(TAG, "Unknown sensor handle " + sensorHandle
+                    + " received in noteWakeupSensorEvent");
+            return;
+        }
+        Slog.i(TAG, "Sensor " + sensor + " wakeup event at " + elapsedNanos + " sent to uid "
+                + uid);
+        // TODO (b/275436924): Remove log and pipe to CpuWakeupStats for wakeup attribution
+        // This method should return as quickly as possible. Use mHandler#post to do longer work.
     }
 
     @Override

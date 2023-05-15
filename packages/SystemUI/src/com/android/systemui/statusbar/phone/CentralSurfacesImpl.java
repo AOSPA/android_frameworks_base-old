@@ -192,6 +192,9 @@ import com.android.systemui.shade.ShadeController;
 import com.android.systemui.shade.ShadeExpansionChangeEvent;
 import com.android.systemui.shade.ShadeExpansionStateManager;
 import com.android.systemui.shared.recents.utilities.Utilities;
+import com.android.systemui.shade.ShadeLogger;
+import com.android.systemui.shade.ShadeSurface;
+import com.android.systemui.shade.ShadeViewController;
 import com.android.systemui.statusbar.AutoHideUiElement;
 import com.android.systemui.statusbar.BackDropView;
 import com.android.systemui.statusbar.CircleReveal;
@@ -229,6 +232,7 @@ import com.android.systemui.statusbar.notification.stack.NotificationStackScroll
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutController;
 import com.android.systemui.statusbar.phone.dagger.CentralSurfacesComponent;
 import com.android.systemui.statusbar.phone.dagger.StatusBarPhoneModule;
+import com.android.systemui.statusbar.phone.fragment.CollapsedStatusBarFragment;
 import com.android.systemui.statusbar.phone.ongoingcall.OngoingCallController;
 import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.BrightnessMirrorController;
@@ -504,7 +508,8 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
 
     /** Controller for the Shade. */
     @VisibleForTesting
-    NotificationPanelViewController mNotificationPanelViewController;
+    ShadeSurface mShadeSurface;
+    private final ShadeLogger mShadeLogger;
 
     // settings
     private QSPanelController mQSPanelController;
@@ -696,9 +701,9 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         @Override
         public void onBackProgressed(BackEvent event) {
             if (shouldBackBeHandled()) {
-                if (mNotificationPanelViewController.canBeCollapsed()) {
+                if (mShadeSurface.canBeCollapsed()) {
                     float fraction = event.getProgress();
-                    mNotificationPanelViewController.onBackProgressed(fraction);
+                    mShadeSurface.onBackProgressed(fraction);
                 }
             }
         }
@@ -738,6 +743,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
             KeyguardViewMediator keyguardViewMediator,
             DisplayMetrics displayMetrics,
             MetricsLogger metricsLogger,
+            ShadeLogger shadeLogger,
             @UiBackground Executor uiBgExecutor,
             NotificationMediaManager notificationMediaManager,
             NotificationLockscreenUserManager lockScreenUserManager,
@@ -830,6 +836,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         mKeyguardViewMediator = keyguardViewMediator;
         mDisplayMetrics = displayMetrics;
         mMetricsLogger = metricsLogger;
+        mShadeLogger = shadeLogger;
         mUiBgExecutor = uiBgExecutor;
         mMediaManager = notificationMediaManager;
         mLockscreenUserManager = lockScreenUserManager;
@@ -946,11 +953,6 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         mWakefulnessLifecycle.addObserver(mWakefulnessObserver);
         mUiModeManager = mContext.getSystemService(UiModeManager.class);
         mBubblesOptional.ifPresent(this::initBubbles);
-
-        // Do not restart System UI when the bugreport flag changes.
-        mFeatureFlags.addListener(Flags.LEAVE_SHADE_OPEN_FOR_BUGREPORT, event -> {
-            event.requestNoRestart();
-        });
 
         mStatusBarSignalPolicy.init();
         mKeyguardIndicationController.init();
@@ -1086,7 +1088,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                 this,
                 mStatusBarKeyguardViewManager,
                 mNotificationShadeWindowViewController,
-                mNotificationPanelViewController,
+                mShadeSurface,
                 mAmbientIndicationContainer);
         updateLightRevealScrimVisibility();
 
@@ -1249,7 +1251,9 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
 
         // TODO: Deal with the ugliness that comes from having some of the status bar broken out
         // into fragments, but the rest here, it leaves some awkward lifecycle and whatnot.
-        mNotificationIconAreaController.setupShelf(mNotificationShelfController);
+        if (!mFeatureFlags.isEnabled(Flags.NOTIFICATION_SHELF_REFACTOR)) {
+            mNotificationIconAreaController.setupShelf(mNotificationShelfController);
+        }
         mShadeExpansionStateManager.addExpansionListener(mWakeUpCoordinator);
 
         // Allow plugins to reference DarkIconDispatcher and StatusBarStateController
@@ -1270,7 +1274,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                     // re-display the notification panel if necessary (for example, if
                     // a heads-up notification was being displayed and should continue being
                     // displayed).
-                    mNotificationPanelViewController.updateExpansionAndVisibility();
+                    mShadeSurface.updateExpansionAndVisibility();
                     setBouncerShowingForStatusBarComponents(mBouncerShowing);
                     checkBarModes();
                 });
@@ -1345,7 +1349,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         mScreenOffAnimationController.initialize(this, mLightRevealScrim);
         updateLightRevealScrimVisibility();
 
-        mNotificationPanelViewController.initDependencies(
+        mShadeSurface.initDependencies(
                 this,
                 mGestureRec,
                 mShadeController::makeExpandedInvisible,
@@ -1353,8 +1357,13 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                 mHeadsUpManager);
 
         BackDropView backdrop = mNotificationShadeWindowView.findViewById(R.id.backdrop);
-        mMediaManager.setup(backdrop, backdrop.findViewById(R.id.backdrop_front),
-                backdrop.findViewById(R.id.backdrop_back), mScrimController, mLockscreenWallpaper);
+        if (mWallpaperManager.isLockscreenLiveWallpaperEnabled()) {
+            mMediaManager.setup(null, null, null, mScrimController, null);
+        } else {
+            mMediaManager.setup(backdrop, backdrop.findViewById(R.id.backdrop_front),
+                    backdrop.findViewById(R.id.backdrop_back), mScrimController,
+                    mLockscreenWallpaper);
+        }
         float maxWallpaperZoom = mContext.getResources().getFloat(
                 com.android.internal.R.dimen.config_wallpaperMaxScale);
         mNotificationShadeDepthControllerLazy.get().addListener(depth -> {
@@ -1382,7 +1391,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                             .build());
             mBrightnessMirrorController = new BrightnessMirrorController(
                     mNotificationShadeWindowView,
-                    mNotificationPanelViewController,
+                    mShadeSurface,
                     mNotificationShadeDepthControllerLazy.get(),
                     mBrightnessSliderFactory,
                     (visible) -> {
@@ -1482,7 +1491,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                 || !mKeyguardStateController.canDismissLockScreen()
                 || mKeyguardViewMediator.isAnySimPinSecure()
                 || (mQsController.getExpanded() && trackingTouch)
-                || mNotificationPanelViewController.getBarState() == StatusBarState.SHADE_LOCKED) {
+                || mShadeSurface.getBarState() == StatusBarState.SHADE_LOCKED) {
             return;
         }
 
@@ -1502,8 +1511,8 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         boolean tracking = event.getTracking();
         dispatchPanelExpansionForKeyguardDismiss(fraction, tracking);
 
-        if (getNotificationPanelViewController() != null) {
-            getNotificationPanelViewController().updateSystemUiStateFlags();
+        if (getShadeViewController() != null) {
+            getShadeViewController().updateSystemUiStateFlags();
         }
 
         if (fraction == 0 || fraction == 1) {
@@ -1559,7 +1568,6 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                 mNotifListContainer,
                 mHeadsUpManager,
                 mJankMonitor);
-        mNotificationShelfController.setOnActivatedListener(mPresenter);
         mRemoteInputManager.addControllerCallback(mNotificationShadeWindowController);
         mStackScrollerController.setNotificationActivityStarter(mNotificationActivityStarter);
         mGutsManager.setNotificationActivityStarter(mNotificationActivityStarter);
@@ -1586,12 +1594,10 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
      * Ask the display to wake up if currently dozing, else do nothing
      *
      * @param time when to wake up
-     * @param where the view requesting the wakeup
      * @param why the reason for the wake up
      */
     @Override
-    public void wakeUpIfDozing(long time, View where, String why,
-            @PowerManager.WakeReason int wakeReason) {
+    public void wakeUpIfDozing(long time, String why, @PowerManager.WakeReason int wakeReason) {
         if (mDozing && mScreenOffAnimationController.allowWakeUpIfDozing()) {
             mPowerManager.wakeUp(
                     time, wakeReason, "com.android.systemui:" + why);
@@ -1627,16 +1633,19 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
             }
         }
         mCentralSurfacesComponent = mCentralSurfacesComponentFactory.create();
-        mFragmentService.addFragmentInstantiationProvider(mCentralSurfacesComponent);
+        mFragmentService.addFragmentInstantiationProvider(
+                CollapsedStatusBarFragment.class,
+                mCentralSurfacesComponent::createCollapsedStatusBarFragment);
 
         mNotificationShadeWindowView = mCentralSurfacesComponent.getNotificationShadeWindowView();
         mNotificationShadeWindowViewController = mCentralSurfacesComponent
                 .getNotificationShadeWindowViewController();
         mNotificationShadeWindowController.setNotificationShadeView(mNotificationShadeWindowView);
         mNotificationShadeWindowViewController.setupExpandedStatusBar();
-        mNotificationPanelViewController =
+        NotificationPanelViewController npvc =
                 mCentralSurfacesComponent.getNotificationPanelViewController();
-        mShadeController.setNotificationPanelViewController(mNotificationPanelViewController);
+        mShadeSurface = npvc;
+        mShadeController.setNotificationPanelViewController(npvc);
         mShadeController.setNotificationShadeWindowViewController(
                 mNotificationShadeWindowViewController);
         mCentralSurfacesComponent.getLockIconViewController().init();
@@ -1702,7 +1711,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                 });
         mKeyguardViewMediator.registerCentralSurfaces(
                 /* statusBar= */ this,
-                mNotificationPanelViewController,
+                mShadeSurface,
                 mShadeExpansionStateManager,
                 mBiometricUnlockController,
                 mStackScroller,
@@ -1730,8 +1739,8 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
     }
 
     @Override
-    public NotificationPanelViewController getNotificationPanelViewController() {
-        return mNotificationPanelViewController;
+    public ShadeViewController getShadeViewController() {
+        return mShadeSurface;
     }
 
     @Override
@@ -2088,16 +2097,16 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         }
 
         if (start) {
-            mNotificationPanelViewController.startWaitingForExpandGesture();
+            mShadeSurface.startWaitingForExpandGesture();
         } else {
-            mNotificationPanelViewController.stopWaitingForExpandGesture(cancel, velocity);
+            mShadeSurface.stopWaitingForExpandGesture(cancel, velocity);
         }
     }
 
     @Override
     public void animateCollapseQuickSettings() {
         if (mState == StatusBarState.SHADE) {
-            mNotificationPanelViewController.collapse(
+            mShadeSurface.collapse(
                     true, false /* delayed */, 1.0f /* speedUpFactor */);
         }
     }
@@ -2410,11 +2419,22 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
     }
 
     @Override
+    public void startActivityDismissingKeyguard(Intent intent, boolean onlyProvisioned,
+            boolean dismissShade, boolean disallowEnterPictureInPictureWhileLaunching,
+            Callback callback, int flags,
+            @androidx.annotation.Nullable ActivityLaunchAnimator.Controller animationController,
+            UserHandle userHandle) {
+        startActivityDismissingKeyguard(intent, onlyProvisioned, dismissShade,
+                disallowEnterPictureInPictureWhileLaunching, callback, flags, animationController,
+                userHandle, null /* customMessage */);
+    }
+
+    @Override
     public void startActivityDismissingKeyguard(final Intent intent, boolean onlyProvisioned,
             final boolean dismissShade, final boolean disallowEnterPictureInPictureWhileLaunching,
             final Callback callback, int flags,
             @Nullable ActivityLaunchAnimator.Controller animationController,
-            final UserHandle userHandle) {
+            final UserHandle userHandle, @Nullable String customMessage) {
         if (onlyProvisioned && !mDeviceProvisionedController.isDeviceProvisioned()) return;
 
         final boolean willLaunchResolverActivity =
@@ -2501,7 +2521,8 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                 && mKeyguardStateController.isOccluded();
         boolean deferred = !occluded;
         executeRunnableDismissingKeyguard(runnable, cancelRunnable, dismissShadeDirectly,
-                willLaunchResolverActivity, deferred /* deferred */, animate);
+                willLaunchResolverActivity, deferred /* deferred */, animate,
+                customMessage /* customMessage */);
     }
 
     /**
@@ -2554,7 +2575,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
             final boolean afterKeyguardGone,
             final boolean deferred) {
         executeRunnableDismissingKeyguard(runnable, cancelAction, dismissShade, afterKeyguardGone,
-                deferred, false /* willAnimateOnKeyguard */);
+                deferred, false /* willAnimateOnKeyguard */, null /* customMessage */);
     }
 
     @Override
@@ -2563,7 +2584,8 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
             final boolean dismissShade,
             final boolean afterKeyguardGone,
             final boolean deferred,
-            final boolean willAnimateOnKeyguard) {
+            final boolean willAnimateOnKeyguard,
+            @Nullable String customMessage) {
         OnDismissAction onDismissAction = new OnDismissAction() {
             @Override
             public boolean onDismiss() {
@@ -2592,7 +2614,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                 return willAnimateOnKeyguard;
             }
         };
-        dismissKeyguardThenExecute(onDismissAction, cancelAction, afterKeyguardGone);
+        dismissKeyguardThenExecute(onDismissAction, cancelAction, afterKeyguardGone, customMessage);
     }
 
     private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
@@ -2610,6 +2632,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                 }
                 mRemoteInputManager.closeRemoteInputs();
                 if (mLockscreenUserManager.isCurrentProfile(getSendingUserId())) {
+                    mShadeLogger.d("ACTION_CLOSE_SYSTEM_DIALOGS intent: closing shade");
                     int flags = CommandQueue.FLAG_EXCLUDE_NONE;
                     if (reason != null) {
                         if (reason.equals(SYSTEM_DIALOG_REASON_RECENT_APPS)) {
@@ -2624,6 +2647,8 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                         }
                     }
                     mShadeController.animateCollapseShade(flags);
+                } else {
+                    mShadeLogger.d("ACTION_CLOSE_SYSTEM_DIALOGS intent: non-matching user ID");
                 }
             } else if (Intent.ACTION_SCREEN_OFF.equals(action)) {
                 if (mNotificationShadeWindowController != null) {
@@ -2670,6 +2695,12 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
     @Override
     public void dismissKeyguardThenExecute(OnDismissAction action, Runnable cancelAction,
             boolean afterKeyguardGone) {
+        dismissKeyguardThenExecute(action, cancelAction, afterKeyguardGone, null);
+    }
+
+    @Override
+    public void dismissKeyguardThenExecute(OnDismissAction action, Runnable cancelAction,
+            boolean afterKeyguardGone, String customMessage) {
         if (!action.willRunAnimationOnKeyguard()
                 && mWakefulnessLifecycle.getWakefulness() == WAKEFULNESS_ASLEEP
                 && mKeyguardStateController.canDismissLockScreen()
@@ -2682,7 +2713,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         }
         if (mKeyguardStateController.isShowing()) {
             mStatusBarKeyguardViewManager.dismissWithAction(action, cancelAction,
-                    afterKeyguardGone);
+                    afterKeyguardGone, customMessage);
         } else {
             // If the keyguard isn't showing but the device is dreaming, we should exit the dream.
             if (mKeyguardUpdateMonitor.isDreaming()) {
@@ -2690,7 +2721,9 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
             }
             action.onDismiss();
         }
+
     }
+
     /**
      * Notify the shade controller that the current user changed
      *
@@ -2698,7 +2731,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
      */
     @Override
     public void setLockscreenUser(int newUserId) {
-        if (mLockscreenWallpaper != null) {
+        if (mLockscreenWallpaper != null && !mWallpaperManager.isLockscreenLiveWallpaperEnabled()) {
             mLockscreenWallpaper.setCurrentUser(newUserId);
         }
         mScrimController.setCurrentUser(newUserId);
@@ -2724,8 +2757,8 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
             mStatusBarWindowController.refreshStatusBarHeight();
         }
 
-        if (mNotificationPanelViewController != null) {
-            mNotificationPanelViewController.updateResources();
+        if (mShadeSurface != null) {
+            mShadeSurface.updateResources();
         }
         if (mBrightnessMirrorController != null) {
             mBrightnessMirrorController.updateResources();
@@ -2895,6 +2928,14 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
     @Override
     public void postStartActivityDismissingKeyguard(Intent intent, int delay,
             @Nullable ActivityLaunchAnimator.Controller animationController) {
+        postStartActivityDismissingKeyguard(intent, delay, animationController,
+                null /* customMessage */);
+    }
+
+    @Override
+    public void postStartActivityDismissingKeyguard(Intent intent, int delay,
+            @Nullable ActivityLaunchAnimator.Controller animationController,
+            @Nullable String customMessage) {
         mMainExecutor.executeDelayed(
                 () ->
                         startActivityDismissingKeyguard(intent, true /* onlyProvisioned */,
@@ -2903,7 +2944,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                                 null /* callback */,
                                 0 /* flags */,
                                 animationController,
-                                getActivityUserHandle(intent)),
+                                getActivityUserHandle(intent), customMessage),
                 delay);
     }
 
@@ -2975,7 +3016,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
     public void showKeyguardImpl() {
         Trace.beginSection("CentralSurfaces#showKeyguard");
         if (mKeyguardStateController.isLaunchTransitionFadingAway()) {
-            mNotificationPanelViewController.cancelAnimation();
+            mShadeSurface.cancelAnimation();
             onLaunchTransitionFadingEnded();
         }
         mMessageRouter.cancelMessages(MSG_LAUNCH_TRANSITION_TIMEOUT);
@@ -2994,7 +3035,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
     }
 
     private void onLaunchTransitionFadingEnded() {
-        mNotificationPanelViewController.resetAlpha();
+        mShadeSurface.resetAlpha();
         mCameraLauncherLazy.get().setLaunchingAffordance(false);
         releaseGestureWakeLock();
         runLaunchTransitionEndRunnable();
@@ -3024,8 +3065,8 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
             }
             updateScrimController();
             mPresenter.updateMediaMetaData(false, true);
-            mNotificationPanelViewController.resetAlpha();
-            mNotificationPanelViewController.fadeOut(
+            mShadeSurface.resetAlpha();
+            mShadeSurface.fadeOut(
                     FADE_KEYGUARD_START_DELAY, FADE_KEYGUARD_DURATION,
                     this::onLaunchTransitionFadingEnded);
             mCommandQueue.appTransitionStarting(mDisplayId, SystemClock.uptimeMillis(),
@@ -3057,7 +3098,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         Log.w(TAG, "Launch transition: Timeout!");
         mCameraLauncherLazy.get().setLaunchingAffordance(false);
         releaseGestureWakeLock();
-        mNotificationPanelViewController.resetViews(false /* animate */);
+        mShadeSurface.resetViews(false /* animate */);
     }
 
     private void runLaunchTransitionEndRunnable() {
@@ -3097,7 +3138,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
             // Disable layout transitions in navbar for this transition because the load is just
             // too heavy for the CPU and GPU on any device.
             mNavigationBarController.disableAnimationsDuringHide(mDisplayId, delay);
-        } else if (!mNotificationPanelViewController.isCollapsing()) {
+        } else if (!mShadeSurface.isCollapsing()) {
             mShadeController.instantCollapseShade();
         }
 
@@ -3109,9 +3150,9 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         mMessageRouter.cancelMessages(MSG_LAUNCH_TRANSITION_TIMEOUT);
         releaseGestureWakeLock();
         mCameraLauncherLazy.get().setLaunchingAffordance(false);
-        mNotificationPanelViewController.resetAlpha();
-        mNotificationPanelViewController.resetTranslation();
-        mNotificationPanelViewController.resetViewGroupFade();
+        mShadeSurface.resetAlpha();
+        mShadeSurface.resetTranslation();
+        mShadeSurface.resetViewGroupFade();
         updateDozingState();
         updateScrimController();
         Trace.endSection();
@@ -3213,7 +3254,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         boolean animate = (!mDozing && shouldAnimateDozeWakeup())
                 || (mDozing && mDozeParameters.shouldControlScreenOff() && keyguardVisibleOrWillBe);
 
-        mNotificationPanelViewController.setDozing(mDozing, animate);
+        mShadeSurface.setDozing(mDozing, animate);
         updateQsExpansionEnabled();
         Trace.endSection();
     }
@@ -3293,16 +3334,16 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
             return true;
         }
         if (mQsController.getExpanded()) {
-            mNotificationPanelViewController.animateCollapseQs(false);
+            mShadeSurface.animateCollapseQs(false);
             return true;
         }
-        if (mNotificationPanelViewController.closeUserSwitcherIfOpen()) {
+        if (mShadeSurface.closeUserSwitcherIfOpen()) {
             return true;
         }
         if (shouldBackBeHandled()) {
-            if (mNotificationPanelViewController.canBeCollapsed()) {
+            if (mShadeSurface.canBeCollapsed()) {
                 // this is the Shade dismiss animation, so make sure QQS closes when it ends.
-                mNotificationPanelViewController.onBackPressed();
+                mShadeSurface.onBackPressed();
                 mShadeController.animateCollapseShade();
             }
             return true;
@@ -3445,7 +3486,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         mStatusBarHideIconsForBouncerManager.setBouncerShowingAndTriggerUpdate(bouncerShowing);
         mCommandQueue.recomputeDisableFlags(mDisplayId, true /* animate */);
         if (mBouncerShowing) {
-            wakeUpIfDozing(SystemClock.uptimeMillis(), null, "BOUNCER_VISIBLE",
+            wakeUpIfDozing(SystemClock.uptimeMillis(), "BOUNCER_VISIBLE",
                     PowerManager.WAKE_REASON_GESTURE);
         }
         updateScrimController();
@@ -3478,8 +3519,8 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         if (mPhoneStatusBarViewController != null) {
             mPhoneStatusBarViewController.setImportantForAccessibility(importance);
         }
-        mNotificationPanelViewController.setImportantForAccessibility(importance);
-        mNotificationPanelViewController.setBouncerShowing(bouncerShowing);
+        mShadeSurface.setImportantForAccessibility(importance);
+        mShadeSurface.setBouncerShowing(bouncerShowing);
     }
 
     /**
@@ -3487,18 +3528,11 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
      */
     @Override
     public void collapseShade() {
-        if (mNotificationPanelViewController.isTracking()) {
+        if (mShadeSurface.isTracking()) {
             mNotificationShadeWindowViewController.cancelCurrentTouch();
         }
         if (mPanelExpanded && mState == StatusBarState.SHADE) {
             mShadeController.animateCollapseShade();
-        }
-    }
-
-    @Override
-    public void collapseShadeForBugreport() {
-        if (!mFeatureFlags.isEnabled(Flags.LEAVE_SHADE_OPEN_FOR_BUGREPORT)) {
-            collapseShade();
         }
     }
 
@@ -3598,7 +3632,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                     }
                 }
 
-                mNotificationPanelViewController.setWillPlayDelayedDozeAmountAnimation(
+                mShadeSurface.setWillPlayDelayedDozeAmountAnimation(
                         mShouldDelayWakeUpAnimation);
                 mWakeUpCoordinator.setWakingUp(
                         /* wakingUp= */ true,
@@ -3640,12 +3674,12 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                 // So if AOD is off or unsupported we need to trigger these updates at screen on
                 // when the keyguard is occluded.
                 mLockscreenUserManager.updatePublicMode();
-                mNotificationPanelViewController.getNotificationStackScrollLayoutController()
+                mShadeSurface.getNotificationStackScrollLayoutController()
                         .updateSensitivenessForOccludedWakeup();
             }
             if (mLaunchCameraWhenFinishedWaking) {
                 mCameraLauncherLazy.get().launchCamera(mLastCameraLaunchSource,
-                        mNotificationPanelViewController.isFullyCollapsed());
+                        mShadeSurface.isFullyCollapsed());
                 mLaunchCameraWhenFinishedWaking = false;
             }
             if (mLaunchEmergencyActionWhenFinishedWaking) {
@@ -3672,7 +3706,11 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         boolean disabled = (!mDeviceInteractive && !mDozeServiceHost.isPulsing())
                 || goingToSleepWithoutAnimation
                 || mDeviceProvisionedController.isFrpActive();
-        mNotificationPanelViewController.setTouchAndAnimationDisabled(disabled);
+        mShadeLogger.logUpdateNotificationPanelTouchState(disabled, isGoingToSleep(),
+                !mDozeParameters.shouldControlScreenOff(), !mDeviceInteractive,
+                !mDozeServiceHost.isPulsing(), mDeviceProvisionedController.isFrpActive());
+
+        mShadeSurface.setTouchAndAnimationDisabled(disabled);
         mNotificationIconAreaController.setAnimationsEnabled(!disabled);
     }
 
@@ -3680,7 +3718,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         @Override
         public void onScreenTurningOn() {
             mFalsingCollector.onScreenTurningOn();
-            mNotificationPanelViewController.onScreenTurningOn();
+            mShadeSurface.onScreenTurningOn();
         }
 
         @Override
@@ -4325,7 +4363,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
             }
             // We need the new R.id.keyguard_indication_area before recreating
             // mKeyguardIndicationController
-            mNotificationPanelViewController.onThemeChanged();
+            mShadeSurface.onThemeChanged();
 
             if (mStatusBarKeyguardViewManager != null) {
                 mStatusBarKeyguardViewManager.onThemeChanged();
@@ -4371,7 +4409,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                     mNavigationBarController.touchAutoDim(mDisplayId);
                     Trace.beginSection("CentralSurfaces#updateKeyguardState");
                     if (mState == StatusBarState.KEYGUARD) {
-                        mNotificationPanelViewController.cancelPendingCollapse();
+                        mShadeSurface.cancelPendingCollapse();
                     }
                     updateDozingState();
                     checkBarModes();
@@ -4397,7 +4435,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                             && mDozeParameters.shouldControlScreenOff();
                     // resetting views is already done when going into doze, there's no need to
                     // reset them again when we're waking up
-                    mNotificationPanelViewController.resetViews(dozingAnimated && isDozing);
+                    mShadeSurface.resetViews(dozingAnimated && isDozing);
 
                     updateQsExpansionEnabled();
                     mKeyguardViewMediator.setDozing(mDozing);

@@ -272,7 +272,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     private OnExpandClickListener mOnExpandClickListener;
     private View.OnClickListener mOnFeedbackClickListener;
     private Path mExpandingClipPath;
-    private boolean mIsInlineReplyAnimationFlagEnabled = false;
 
     // Listener will be called when receiving a long click event.
     // Use #setLongPressPosition to optionally assign positional data with the long press.
@@ -298,6 +297,16 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
      * If {@code true}, the header background will disappear when expanded.
      */
     private boolean mShowGroupBackgroundWhenExpanded;
+
+    /**
+     * True if we always show the collapsed layout on lockscreen because vertical space is low.
+     */
+    private boolean mSaveSpaceOnLockscreen;
+
+    /**
+     * True if we use intrinsic height regardless of vertical space available on lockscreen.
+     */
+    private boolean mIgnoreLockscreenConstraints;
 
     private OnClickListener mExpandClickListener = new OnClickListener() {
         @Override
@@ -394,6 +403,14 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         return mGroupExpansionChanging;
     }
 
+    public void setSaveSpaceOnLockscreen(boolean saveSpace) {
+        mSaveSpaceOnLockscreen = saveSpace;
+    }
+
+    public boolean getSaveSpaceOnLockscreen() {
+        return mSaveSpaceOnLockscreen;
+    }
+
     public void setGroupExpansionChanging(boolean changing) {
         mGroupExpansionChanging = changing;
     }
@@ -419,15 +436,9 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
      */
     public void setAnimationRunning(boolean running) {
         // Sets animations running in the private/public layouts.
-        if (mFeatureFlags.isEnabled(Flags.NOTIFICATION_ANIMATE_BIG_PICTURE)) {
-            for (NotificationContentView l : mLayouts) {
-                if (l != null) {
-                    l.setContentAnimationRunning(running);
-                    setIconAnimationRunning(running, l);
-                }
-            }
-        } else {
-            for (NotificationContentView l : mLayouts) {
+        for (NotificationContentView l : mLayouts) {
+            if (l != null) {
+                l.setContentAnimationRunning(running);
                 setIconAnimationRunning(running, l);
             }
         }
@@ -954,15 +965,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         } else {
             return false;
         }
-    }
-
-    @Override
-    protected boolean handleSlideBack() {
-        if (mMenuRow != null && mMenuRow.isMenuVisible()) {
-            animateResetTranslation();
-            return true;
-        }
-        return false;
     }
 
     @Override
@@ -2553,11 +2555,18 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     }
 
     @Override
+    public int getHeightWithoutLockscreenConstraints() {
+        mIgnoreLockscreenConstraints = true;
+        final int height = getIntrinsicHeight();
+        mIgnoreLockscreenConstraints = false;
+        return height;
+    }
+
+    @Override
     public int getIntrinsicHeight() {
         if (isUserLocked()) {
             return getActualHeight();
-        }
-        if (mGuts != null && mGuts.isExposed()) {
+        } else if (mGuts != null && mGuts.isExposed()) {
             return mGuts.getIntrinsicHeight();
         } else if ((isChildInGroup() && !isGroupExpanded())) {
             return mPrivateLayout.getMinHeight();
@@ -2579,13 +2588,14 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             return getCollapsedHeight();
         }
     }
-
     /**
      * @return {@code true} if the notification can show it's heads up layout. This is mostly true
      * except for legacy use cases.
      */
     public boolean canShowHeadsUp() {
-        if (mOnKeyguard && !isDozing() && !isBypassEnabled() && !mEntry.isStickyAndNotDemoted()) {
+        if (mOnKeyguard && !isDozing() && !isBypassEnabled() &&
+                (!mEntry.isStickyAndNotDemoted()
+                        || (!mIgnoreLockscreenConstraints && mSaveSpaceOnLockscreen))) {
             return false;
         }
         return true;
@@ -3075,10 +3085,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         return showingLayout != null && showingLayout.requireRowToHaveOverlappingRendering();
     }
 
-    public void setInlineReplyAnimationFlagEnabled(boolean isEnabled) {
-        mIsInlineReplyAnimationFlagEnabled = isEnabled;
-    }
-
     @Override
     public void setActualHeight(int height, boolean notifyListeners) {
         boolean changed = height != getActualHeight();
@@ -3098,11 +3104,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         }
         int contentHeight = Math.max(getMinHeight(), height);
         for (NotificationContentView l : mLayouts) {
-            if (mIsInlineReplyAnimationFlagEnabled) {
-                l.setContentHeight(height);
-            } else {
-                l.setContentHeight(contentHeight);
-            }
+            l.setContentHeight(height);
         }
         if (mIsSummaryWithChildren) {
             mChildrenContainer.setActualHeight(height);

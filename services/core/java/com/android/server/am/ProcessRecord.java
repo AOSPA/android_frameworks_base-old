@@ -16,6 +16,8 @@
 
 package com.android.server.am;
 
+import static android.app.ActivityManagerInternal.OOM_ADJ_REASON_ACTIVITY;
+
 import static com.android.internal.util.Preconditions.checkArgument;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
@@ -38,6 +40,7 @@ import android.content.pm.VersionedPackage;
 import android.content.res.CompatibilityInfo;
 import android.os.Binder;
 import android.os.Bundle;
+import android.os.DeviceIntegrationUtils;
 import android.os.IBinder;
 import android.os.Process;
 import android.os.RemoteException;
@@ -589,7 +592,9 @@ class ProcessRecord implements WindowProcessListener {
         processName = _processName;
         sdkSandboxClientAppPackage = _sdkSandboxClientAppPackage;
         if (isSdkSandbox) {
-            sdkSandboxClientAppVolumeUuid = getClientInfoForSdkSandbox().volumeUuid;
+            final ApplicationInfo clientInfo = getClientInfoForSdkSandbox();
+            sdkSandboxClientAppVolumeUuid = clientInfo != null
+                    ? clientInfo.volumeUuid : null;
         } else {
             sdkSandboxClientAppVolumeUuid = null;
         }
@@ -1267,6 +1272,11 @@ class ProcessRecord implements WindowProcessListener {
             }
             Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
         }
+        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
+            // Device Integartion: If the app is died during the remote task status,
+            // we need to inform RemoteTaskManager to clear the references and dirty data.
+            mService.mActivityTaskManager.getRemoteTaskManager().handleProcessDied(getWindowProcessController());
+        }
     }
 
     @Override
@@ -1521,7 +1531,7 @@ class ProcessRecord implements WindowProcessListener {
             }
             mService.updateLruProcessLocked(this, activityChange, null /* client */);
             if (updateOomAdj) {
-                mService.updateOomAdjLocked(this, OomAdjuster.OOM_ADJ_REASON_ACTIVITY);
+                mService.updateOomAdjLocked(this, OOM_ADJ_REASON_ACTIVITY);
             }
         }
     }

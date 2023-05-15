@@ -293,7 +293,7 @@ class FullMobileConnectionRepositoryTest : SysuiTestCase() {
         }
 
     @Test
-    fun `factory - reuses log buffers for same connection`() =
+    fun factory_reusesLogBuffersForSameConnection() =
         testScope.runTest {
             val realLoggerFactory = TableLogBufferFactory(mock(), FakeSystemClock())
 
@@ -328,7 +328,7 @@ class FullMobileConnectionRepositoryTest : SysuiTestCase() {
         }
 
     @Test
-    fun `factory - reuses log buffers for same sub ID even if carrier merged`() =
+    fun factory_reusesLogBuffersForSameSubIDevenIfCarrierMerged() =
         testScope.runTest {
             val realLoggerFactory = TableLogBufferFactory(mock(), FakeSystemClock())
 

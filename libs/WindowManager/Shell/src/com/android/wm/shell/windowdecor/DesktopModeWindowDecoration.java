@@ -42,6 +42,7 @@ import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.window.SurfaceSyncGroup;
 import android.window.WindowContainerTransaction;
 
 import com.android.launcher3.icons.IconProvider;
@@ -172,15 +173,15 @@ public class DesktopModeWindowDecoration extends WindowDecoration<WindowDecorLin
     @Override
     void relayout(ActivityManager.RunningTaskInfo taskInfo) {
         final SurfaceControl.Transaction t = new SurfaceControl.Transaction();
-        relayout(taskInfo, t, t);
-        mSyncQueue.runInSync(transaction -> {
-            transaction.merge(t);
-            t.close();
-        });
+        // Use |applyStartTransactionOnDraw| so that the transaction (that applies task crop) is
+        // synced with the buffer transaction (that draws the View). Both will be shown on screen
+        // at the same, whereas applying them independently causes flickering. See b/270202228.
+        relayout(taskInfo, t, t, true /* applyStartTransactionOnDraw */);
     }
 
     void relayout(ActivityManager.RunningTaskInfo taskInfo,
-            SurfaceControl.Transaction startT, SurfaceControl.Transaction finishT) {
+            SurfaceControl.Transaction startT, SurfaceControl.Transaction finishT,
+            boolean applyStartTransactionOnDraw) {
         final int shadowRadiusID = taskInfo.isFocused
                 ? R.dimen.freeform_decor_shadow_focused_thickness
                 : R.dimen.freeform_decor_shadow_unfocused_thickness;
@@ -208,11 +209,6 @@ public class DesktopModeWindowDecoration extends WindowDecoration<WindowDecorLin
         final SurfaceControl oldDecorationSurface = mDecorationContainerSurface;
         final WindowContainerTransaction wct = new WindowContainerTransaction();
 
-        final int outsetLeftId = R.dimen.freeform_resize_handle;
-        final int outsetTopId = R.dimen.freeform_resize_handle;
-        final int outsetRightId = R.dimen.freeform_resize_handle;
-        final int outsetBottomId = R.dimen.freeform_resize_handle;
-
         final int windowDecorLayoutId = getDesktopModeWindowDecorLayoutId(
                 taskInfo.getWindowingMode());
         mRelayoutParams.reset();
@@ -220,9 +216,7 @@ public class DesktopModeWindowDecoration extends WindowDecoration<WindowDecorLin
         mRelayoutParams.mLayoutResId = windowDecorLayoutId;
         mRelayoutParams.mCaptionHeightId = R.dimen.freeform_decor_caption_height;
         mRelayoutParams.mShadowRadiusId = shadowRadiusID;
-        if (isDragResizeable) {
-            mRelayoutParams.setOutsets(outsetLeftId, outsetTopId, outsetRightId, outsetBottomId);
-        }
+        mRelayoutParams.mApplyStartTransactionOnDraw = applyStartTransactionOnDraw;
 
         relayout(mRelayoutParams, startT, finishT, wct, oldRootView, mResult);
         // After this line, mTaskInfo is up-to-date and should be used instead of taskInfo
@@ -319,51 +313,50 @@ public class DesktopModeWindowDecoration extends WindowDecoration<WindowDecorLin
      * Create and display handle menu window
      */
     void createHandleMenu() {
+        final SurfaceSyncGroup ssg = new SurfaceSyncGroup(TAG);
         final SurfaceControl.Transaction t = new SurfaceControl.Transaction();
         updateHandleMenuPillPositions();
 
-        createAppInfoPill(t);
+        createAppInfoPill(t, ssg);
 
         // Only show windowing buttons in proto2. Proto1 uses a system-level mode only.
         final boolean shouldShowWindowingPill = DesktopModeStatus.isProto2Enabled();
         if (shouldShowWindowingPill) {
-            createWindowingPill(t);
+            createWindowingPill(t, ssg);
         }
 
-        createMoreActionsPill(t);
+        createMoreActionsPill(t, ssg);
 
-        mSyncQueue.runInSync(transaction -> {
-            transaction.merge(t);
-            t.close();
-        });
+        ssg.addTransaction(t);
+        ssg.markSyncReady();
         setupHandleMenu(shouldShowWindowingPill);
     }
 
-    private void createAppInfoPill(SurfaceControl.Transaction t) {
+    private void createAppInfoPill(SurfaceControl.Transaction t, SurfaceSyncGroup ssg) {
         final int x = (int) mHandleMenuAppInfoPillPosition.x;
         final int y = (int) mHandleMenuAppInfoPillPosition.y;
         mHandleMenuAppInfoPill = addWindow(
                 R.layout.desktop_mode_window_decor_handle_menu_app_info_pill,
                 "Menu's app info pill",
-                t, x, y, mMenuWidth, mAppInfoPillHeight, mShadowRadius, mCornerRadius);
+                t, ssg, x, y, mMenuWidth, mAppInfoPillHeight, mShadowRadius, mCornerRadius);
     }
 
-    private void createWindowingPill(SurfaceControl.Transaction t) {
+    private void createWindowingPill(SurfaceControl.Transaction t, SurfaceSyncGroup ssg) {
         final int x = (int) mHandleMenuWindowingPillPosition.x;
         final int y = (int) mHandleMenuWindowingPillPosition.y;
         mHandleMenuWindowingPill = addWindow(
                 R.layout.desktop_mode_window_decor_handle_menu_windowing_pill,
                 "Menu's windowing pill",
-                t, x, y, mMenuWidth, mWindowingPillHeight, mShadowRadius, mCornerRadius);
+                t, ssg, x, y, mMenuWidth, mWindowingPillHeight, mShadowRadius, mCornerRadius);
     }
 
-    private void createMoreActionsPill(SurfaceControl.Transaction t) {
+    private void createMoreActionsPill(SurfaceControl.Transaction t, SurfaceSyncGroup ssg) {
         final int x = (int) mHandleMenuMoreActionsPillPosition.x;
         final int y = (int) mHandleMenuMoreActionsPillPosition.y;
         mHandleMenuMoreActionsPill = addWindow(
                 R.layout.desktop_mode_window_decor_handle_menu_more_actions_pill,
                 "Menu's more actions pill",
-                t, x, y, mMenuWidth, mMoreActionsPillHeight, mShadowRadius, mCornerRadius);
+                t, ssg, x, y, mMenuWidth, mMoreActionsPillHeight, mShadowRadius, mCornerRadius);
     }
 
     private void setupHandleMenu(boolean windowingPillShown) {
@@ -424,13 +417,12 @@ public class DesktopModeWindowDecoration extends WindowDecoration<WindowDecorLin
         if (mRelayoutParams.mLayoutResId
                 == R.layout.desktop_mode_app_controls_window_decor) {
             // Align the handle menu to the left of the caption.
-            menuX = mRelayoutParams.mCaptionX - mResult.mDecorContainerOffsetX + mMarginMenuStart;
-            menuY = mRelayoutParams.mCaptionY - mResult.mDecorContainerOffsetY + mMarginMenuTop;
+            menuX = mRelayoutParams.mCaptionX + mMarginMenuStart;
+            menuY = mRelayoutParams.mCaptionY + mMarginMenuTop;
         } else {
             // Position the handle menu at the center of the caption.
-            menuX = mRelayoutParams.mCaptionX + (captionWidth / 2) - (mMenuWidth / 2)
-                    - mResult.mDecorContainerOffsetX;
-            menuY = mRelayoutParams.mCaptionY - mResult.mDecorContainerOffsetY + mMarginMenuStart;
+            menuX = mRelayoutParams.mCaptionX + (captionWidth / 2) - (mMenuWidth / 2);
+            menuY = mRelayoutParams.mCaptionY + mMarginMenuStart;
         }
 
         // App Info pill setup.
@@ -487,26 +479,30 @@ public class DesktopModeWindowDecoration extends WindowDecoration<WindowDecorLin
         if (mHandleMenuAppInfoPill.mWindowViewHost.getView().getWidth() == 0) return;
 
         PointF inputPoint = offsetCaptionLocation(ev);
+
+        // If this is called before open_menu_button's onClick, we don't want to close
+        // the menu since it will just reopen in onClick.
+        final boolean pointInOpenMenuButton = pointInView(
+                mResult.mRootView.findViewById(R.id.open_menu_button),
+                inputPoint.x,
+                inputPoint.y);
+
         final boolean pointInAppInfoPill = pointInView(
                 mHandleMenuAppInfoPill.mWindowViewHost.getView(),
-                inputPoint.x - mHandleMenuAppInfoPillPosition.x - mResult.mDecorContainerOffsetX,
-                inputPoint.y - mHandleMenuAppInfoPillPosition.y
-                        - mResult.mDecorContainerOffsetY);
+                inputPoint.x - mHandleMenuAppInfoPillPosition.x,
+                inputPoint.y - mHandleMenuAppInfoPillPosition.y);
         boolean pointInWindowingPill = false;
         if (mHandleMenuWindowingPill != null) {
             pointInWindowingPill = pointInView(mHandleMenuWindowingPill.mWindowViewHost.getView(),
-                    inputPoint.x - mHandleMenuWindowingPillPosition.x
-                            - mResult.mDecorContainerOffsetX,
-                    inputPoint.y - mHandleMenuWindowingPillPosition.y
-                            - mResult.mDecorContainerOffsetY);
+                    inputPoint.x - mHandleMenuWindowingPillPosition.x,
+                    inputPoint.y - mHandleMenuWindowingPillPosition.y);
         }
         final boolean pointInMoreActionsPill = pointInView(
                 mHandleMenuMoreActionsPill.mWindowViewHost.getView(),
-                inputPoint.x - mHandleMenuMoreActionsPillPosition.x
-                        - mResult.mDecorContainerOffsetX,
-                inputPoint.y - mHandleMenuMoreActionsPillPosition.y
-                        - mResult.mDecorContainerOffsetY);
-        if (!pointInAppInfoPill && !pointInWindowingPill && !pointInMoreActionsPill) {
+                inputPoint.x - mHandleMenuMoreActionsPillPosition.x,
+                inputPoint.y - mHandleMenuMoreActionsPillPosition.y);
+        if (!pointInAppInfoPill && !pointInWindowingPill
+                && !pointInMoreActionsPill && !pointInOpenMenuButton) {
             closeHandleMenu();
         }
     }

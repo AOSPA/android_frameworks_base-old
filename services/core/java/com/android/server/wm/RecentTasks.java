@@ -60,6 +60,7 @@ import android.content.pm.ParceledListSlice;
 import android.content.pm.UserInfo;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
+import android.os.DeviceIntegrationUtils;
 import android.os.Environment;
 import android.os.IBinder;
 import android.os.RemoteException;
@@ -1505,6 +1506,12 @@ class RecentTasks {
                 // after dismissing primary split screen.
                 continue;
             }
+            // Device Integration: We don't want to system remove our remote task while in home Activity idle scenario,
+            // skip this.
+            if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION
+                && mService.getRemoteTaskManager().anyTaskExist(hiddenTask)) {
+                continue;
+            }
             mHiddenTasks.remove(i);
             mSupervisor.removeTask(hiddenTask, false /* killProcess */,
                     !REMOVE_FROM_RECENTS, "remove-hidden-task");
@@ -1530,7 +1537,7 @@ class RecentTasks {
         // callbacks here.
         final Task removedTask = mTasks.remove(removeIndex);
         if (removedTask != task) {
-            if (removedTask.hasChild()) {
+            if (removedTask.hasChild() && !removedTask.isActivityTypeHome()) {
                 Slog.i(TAG, "Add " + removedTask + " to hidden list because adding " + task);
                 // A non-empty task is replaced by a new task. Because the removed task is no longer
                 // managed by the recent tasks list, add it to the hidden list to prevent the task

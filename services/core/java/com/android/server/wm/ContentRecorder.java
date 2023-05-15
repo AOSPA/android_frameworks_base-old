@@ -30,6 +30,7 @@ import android.content.res.Configuration;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.media.projection.IMediaProjectionManager;
+import android.os.DeviceIntegrationUtils;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -85,6 +86,11 @@ final class ContentRecorder implements WindowContainerListener {
      * The last configuration orientation.
      */
     private int mLastOrientation = ORIENTATION_UNDEFINED;
+
+    /**
+     * Device Integration: last SurfaceSize
+     */
+    @Nullable private Point mLastSurfaceSize = null;
 
     ContentRecorder(@NonNull DisplayContent displayContent) {
         this(displayContent, new RemoteMediaProjectionManagerWrapper());
@@ -478,6 +484,9 @@ final class ContentRecorder implements WindowContainerListener {
                 .setPosition(mRecordedSurface, shiftedX /* x */, shiftedY /* y */)
                 .apply();
         mLastRecordedBounds = new Rect(recordedContentBounds);
+        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
+            mLastSurfaceSize = surfaceSize;
+        }
         // Request to notify the client about the resize.
         mMediaProjectionManager.notifyActiveProjectionCapturedContentResized(
                 mLastRecordedBounds.width(), mLastRecordedBounds.height());
@@ -617,5 +626,23 @@ final class ContentRecorder implements WindowContainerListener {
     private boolean isRecordingContentTask() {
         return mContentRecordingSession != null
                 && mContentRecordingSession.getContentToRecord() == RECORD_CONTENT_TASK;
+    }
+
+    boolean updateMirroringIfSurfaceSizeChanged() {
+        if (!isCurrentlyRecording() || mLastRecordedBounds == null || mRecordedWindowContainer == null) {
+            return false;
+        }
+
+        WindowContainer container = mRecordedWindowContainer;
+        final Rect displayAreaBounds = container.getDisplayContent().getBounds();
+        Point surfaceSize = fetchSurfaceSizeIfPresent();
+
+        if (surfaceSize != null && !surfaceSize.equals(mLastSurfaceSize)
+                && surfaceSize.x != 0 && surfaceSize.y != 0) {
+            updateMirroredSurface(mDisplayContent.mWmService.mTransactionFactory.get(),
+                    displayAreaBounds, surfaceSize);
+            return true;
+        }
+        return false;
     }
 }

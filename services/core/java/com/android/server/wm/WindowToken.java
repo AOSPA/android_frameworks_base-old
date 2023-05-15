@@ -18,6 +18,7 @@ package com.android.server.wm;
 
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
+import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_BLACKSCREEN_OVERLAY;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ADD_REMOVE;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS;
@@ -39,6 +40,7 @@ import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Debug;
+import android.os.DeviceIntegrationUtils;
 import android.os.IBinder;
 import android.util.proto.ProtoOutputStream;
 import android.view.DisplayInfo;
@@ -119,24 +121,20 @@ class WindowToken extends WindowContainer<WindowState> {
         final DisplayInfo mDisplayInfo;
         final DisplayFrames mDisplayFrames;
         final Configuration mRotatedOverrideConfiguration;
-        final SeamlessRotator mRotator;
+
         /**
          * The tokens that share the same transform. Their end time of transform are the same. The
          * list should at least contain the token who creates this state.
          */
         final ArrayList<WindowToken> mAssociatedTokens = new ArrayList<>(3);
-        final ArrayList<WindowContainer<?>> mRotatedContainers = new ArrayList<>(3);
+
         boolean mIsTransforming = true;
 
         FixedRotationTransformState(DisplayInfo rotatedDisplayInfo,
-                DisplayFrames rotatedDisplayFrames, Configuration rotatedConfig,
-                int currentRotation) {
+                DisplayFrames rotatedDisplayFrames, Configuration rotatedConfig) {
             mDisplayInfo = rotatedDisplayInfo;
             mDisplayFrames = rotatedDisplayFrames;
             mRotatedOverrideConfiguration = rotatedConfig;
-            // This will use unrotate as rotate, so the new and old rotation are inverted.
-            mRotator = new SeamlessRotator(rotatedDisplayInfo.rotation, currentRotation,
-                    rotatedDisplayInfo, true /* applyFixedTransformationHint */);
         }
 
         /**
@@ -144,16 +142,48 @@ class WindowToken extends WindowContainer<WindowState> {
          * showing the window in a display with different rotation.
          */
         void transform(WindowContainer<?> container) {
-            mRotator.unrotate(container.getPendingTransaction(), container);
-            if (!mRotatedContainers.contains(container)) {
-                mRotatedContainers.add(container);
-            }
+            // The default implementation assumes shell transition is enabled, so the transform
+            // is done by getOrCreateFixedRotationLeash().
         }
 
         /**
          * Resets the transformation of the window containers which have been rotated. This should
          * be called when the window has the same rotation as display.
          */
+        void resetTransform() {
+            for (int i = mAssociatedTokens.size() - 1; i >= 0; --i) {
+                mAssociatedTokens.get(i).removeFixedRotationLeash();
+            }
+        }
+
+        /** The state may not only be used by self. Make sure to leave the influence by others. */
+        void disassociate(WindowToken token) {
+            mAssociatedTokens.remove(token);
+        }
+    }
+
+    private static class FixedRotationTransformStateLegacy extends FixedRotationTransformState {
+        final SeamlessRotator mRotator;
+        final ArrayList<WindowContainer<?>> mRotatedContainers = new ArrayList<>(3);
+
+        FixedRotationTransformStateLegacy(DisplayInfo rotatedDisplayInfo,
+                DisplayFrames rotatedDisplayFrames, Configuration rotatedConfig,
+                int currentRotation) {
+            super(rotatedDisplayInfo, rotatedDisplayFrames, rotatedConfig);
+            // This will use unrotate as rotate, so the new and old rotation are inverted.
+            mRotator = new SeamlessRotator(rotatedDisplayInfo.rotation, currentRotation,
+                    rotatedDisplayInfo, true /* applyFixedTransformationHint */);
+        }
+
+        @Override
+        void transform(WindowContainer<?> container) {
+            mRotator.unrotate(container.getPendingTransaction(), container);
+            if (!mRotatedContainers.contains(container)) {
+                mRotatedContainers.add(container);
+            }
+        }
+
+        @Override
         void resetTransform() {
             for (int i = mRotatedContainers.size() - 1; i >= 0; i--) {
                 final WindowContainer<?> c = mRotatedContainers.get(i);
@@ -164,9 +194,9 @@ class WindowToken extends WindowContainer<WindowState> {
             }
         }
 
-        /** The state may not only be used by self. Make sure to leave the influence by others. */
+        @Override
         void disassociate(WindowToken token) {
-            mAssociatedTokens.remove(token);
+            super.disassociate(token);
             mRotatedContainers.remove(token);
         }
     }
@@ -360,7 +390,10 @@ class WindowToken extends WindowContainer<WindowState> {
     @Override
     SurfaceControl.Builder makeSurface() {
         final SurfaceControl.Builder builder = super.makeSurface();
-        if (mRoundedCornerOverlay) {
+        // Device Integration: This is to make phone screen not show our black screen
+        if (mRoundedCornerOverlay
+                || (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION
+                    && windowType == TYPE_SYSTEM_BLACKSCREEN_OVERLAY)) {
             builder.setParent(null);
         }
         return builder;
@@ -437,8 +470,11 @@ class WindowToken extends WindowContainer<WindowState> {
         if (mFixedRotationTransformState != null) {
             mFixedRotationTransformState.disassociate(this);
         }
-        mFixedRotationTransformState = new FixedRotationTransformState(info, displayFrames,
-                new Configuration(config), mDisplayContent.getRotation());
+        config = new Configuration(config);
+        mFixedRotationTransformState = mTransitionController.isShellTransitionsEnabled()
+                ? new FixedRotationTransformState(info, displayFrames, config)
+                : new FixedRotationTransformStateLegacy(info, displayFrames, config,
+                        mDisplayContent.getRotation());
         mFixedRotationTransformState.mAssociatedTokens.add(this);
         mDisplayContent.getDisplayPolicy().simulateLayoutDisplay(displayFrames);
         onFixedRotationStatePrepared();
@@ -508,14 +544,7 @@ class WindowToken extends WindowContainer<WindowState> {
         if (state == null) {
             return;
         }
-        if (!mTransitionController.isShellTransitionsEnabled()) {
-            state.resetTransform();
-        } else {
-            // Remove all the leashes
-            for (int i = state.mAssociatedTokens.size() - 1; i >= 0; --i) {
-                state.mAssociatedTokens.get(i).removeFixedRotationLeash();
-            }
-        }
+        state.resetTransform();
         // Clear the flag so if the display will be updated to the same orientation, the transform
         // won't take effect.
         state.mIsTransforming = false;
@@ -589,7 +618,9 @@ class WindowToken extends WindowContainer<WindowState> {
     void removeFixedRotationLeash() {
         if (mFixedRotationTransformLeash == null) return;
         final SurfaceControl.Transaction t = getSyncTransaction();
-        t.reparent(getSurfaceControl(), getParentSurfaceControl());
+        if (mSurfaceControl != null) {
+            t.reparent(mSurfaceControl, getParentSurfaceControl());
+        }
         t.remove(mFixedRotationTransformLeash);
         mFixedRotationTransformLeash = null;
     }

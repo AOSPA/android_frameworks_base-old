@@ -187,6 +187,7 @@ import android.hardware.display.DisplayManagerInternal;
 import android.metrics.LogMaker;
 import android.os.Bundle;
 import android.os.Debug;
+import android.os.DeviceIntegrationUtils;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
@@ -775,6 +776,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      */
     DisplayWindowPolicyControllerHelper mDwpcHelper;
 
+    private final DisplayRotationReversionController mRotationReversionController;
+
     private final Consumer<WindowState> mUpdateWindowsForAnimator = w -> {
         WindowStateAnimator winAnimator = w.mWinAnimator;
         final ActivityRecord activity = w.mActivityRecord;
@@ -1204,6 +1207,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 mWmService.mLetterboxConfiguration.isCameraCompatTreatmentEnabled(
                             /* checkDeviceConfig */ false)
                         ? new DisplayRotationCompatPolicy(this) : null;
+        mRotationReversionController = new DisplayRotationReversionController(this);
 
         mInputMonitor = new InputMonitor(mWmService, this);
         mInsetsPolicy = new InsetsPolicy(mInsetsStateController, this);
@@ -1331,6 +1335,10 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 .show(mOverlayLayer)
                 .setLayer(mA11yOverlayLayer, Integer.MAX_VALUE - 1)
                 .show(mA11yOverlayLayer);
+    }
+
+    DisplayRotationReversionController getRotationReversionController() {
+        return mRotationReversionController;
     }
 
     boolean isReady() {
@@ -1711,9 +1719,14 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     }
 
     private boolean updateOrientation(boolean forceUpdate) {
+        final WindowContainer prevOrientationSource = mLastOrientationSource;
         final int orientation = getOrientation();
         // The last orientation source is valid only after getOrientation.
         final WindowContainer orientationSource = getLastOrientationSource();
+        if (orientationSource != prevOrientationSource
+                && mRotationReversionController.isRotationReversionEnabled()) {
+            mRotationReversionController.updateForNoSensorOverride();
+        }
         final ActivityRecord r =
                 orientationSource != null ? orientationSource.asActivityRecord() : null;
         if (r != null) {
@@ -6605,6 +6618,10 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * has content or the display is not on.
      */
     @VisibleForTesting void updateRecording() {
+        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION
+            && getContentRecorder().updateMirroringIfSurfaceSizeChanged()) {
+            return;
+        }
         if (mContentRecorder == null || !mContentRecorder.isContentRecordingSessionSet()) {
             if (!setDisplayMirroring()) {
                 return;

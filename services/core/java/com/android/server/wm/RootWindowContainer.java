@@ -111,6 +111,7 @@ import android.hardware.power.Mode;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Debug;
+import android.os.DeviceIntegrationUtils;
 import android.os.FactoryTest;
 import android.os.Handler;
 import android.os.IBinder;
@@ -2318,6 +2319,14 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             mTmpFindTaskResult.process(taskDisplayArea);
             if (mTmpFindTaskResult.mIdealRecord != null) {
                 return mTmpFindTaskResult.mIdealRecord;
+            } else if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION
+                       && mTmpFindTaskResult.mCandidateRecord != null
+                       && mService.getRemoteTaskManager().
+                            findTaskOnlyForLaunch(
+                                    intent,
+                                    taskAffinity,
+                                    mTmpFindTaskResult.mCandidateRecord.getTask().mTaskId)) {
+                return mTmpFindTaskResult.mCandidateRecord;
             }
             return null;
         });
@@ -2439,19 +2448,23 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 // this as a signal to the transition-player.
                 final Transition transition = new Transition(TRANSIT_SLEEP, 0 /* flags */,
                         display.mTransitionController, mWmService.mSyncEngine);
-                final Runnable sendSleepTransition = () -> {
+                final TransitionController.OnStartCollect sendSleepTransition = (deferred) -> {
                     display.mTransitionController.requestStartTransition(transition,
                             null /* trigger */, null /* remote */, null /* display */);
                     // Force playing immediately so that unrelated ops can't be collected.
                     transition.playNow();
                 };
-                if (display.mTransitionController.isCollecting()) {
-                    mWmService.mSyncEngine.queueSyncSet(
-                            () -> display.mTransitionController.moveToCollecting(transition),
-                            sendSleepTransition);
-                } else {
+                if (!display.mTransitionController.isCollecting()) {
+                    // Since this bypasses sync, submit directly ignoring whether sync-engine
+                    // is active.
+                    if (mWindowManager.mSyncEngine.hasActiveSync()) {
+                        Slog.w(TAG, "Ongoing sync outside of a transition.");
+                    }
                     display.mTransitionController.moveToCollecting(transition);
-                    sendSleepTransition.run();
+                    sendSleepTransition.onCollectStarted(false /* deferred */);
+                } else {
+                    display.mTransitionController.startCollectOrQueue(transition,
+                            sendSleepTransition);
                 }
             }
 

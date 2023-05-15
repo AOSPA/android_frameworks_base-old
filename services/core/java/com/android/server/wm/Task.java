@@ -16,6 +16,7 @@
 
 package com.android.server.wm;
 
+import static android.app.RemoteTaskConstants.FLAG_TASK_LAUNCH_SCENARIO_COMMON;
 import static android.app.ActivityManager.isStartResultSuccessful;
 import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.app.ActivityTaskManager.INVALID_WINDOWING_MODE;
@@ -157,6 +158,7 @@ import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.Binder;
 import android.os.Debug;
+import android.os.DeviceIntegrationUtils;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -192,7 +194,6 @@ import android.window.WindowContainerToken;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.IVoiceInteractor;
-import com.android.internal.protolog.ProtoLogGroup;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.XmlUtils;
 import com.android.internal.util.function.pooled.PooledLambda;
@@ -370,6 +371,9 @@ class Task extends TaskFragment {
      * user wants to return to it. */
     private WindowProcessController mRootProcess;
 
+    /** The process id that hosted the root activity of this task for remote task check. 0 if none*/
+    private int mRemoteTaskPid;
+
     /** Takes on same value as first root activity */
     boolean isPersistable = false;
     int maxRecents;
@@ -407,6 +411,8 @@ class Task extends TaskFragment {
     int mCallingUid;
     String mCallingPackage;
     String mCallingFeatureId;
+
+    int mLaunchScenario;
 
     private static final Rect sTmpBounds = new Rect();
 
@@ -513,6 +519,9 @@ class Task extends TaskFragment {
      * possible.
      */
     boolean mReparentLeafTaskIfRelaunch;
+
+    // Device Integration: Allow task reparent to a new display or not. Remote Task is not allow to reparent.
+    boolean mAllowReparent = true;
 
     private final AnimatingActivityRegistry mAnimatingActivityRegistry =
             new AnimatingActivityRegistry();
@@ -675,6 +684,9 @@ class Task extends TaskFragment {
         mCallingUid = callingUid;
         mCallingPackage = callingPackage;
         mCallingFeatureId = callingFeatureId;
+        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
+            mLaunchScenario = FLAG_TASK_LAUNCH_SCENARIO_COMMON;
+        }
         mResizeMode = resizeMode;
         if (info != null) {
             setIntent(_intent, info);
@@ -2328,6 +2340,13 @@ class Task extends TaskFragment {
             mRootProcess = proc;
             mRootProcess.addRecentTask(this);
         }
+        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
+            mRemoteTaskPid = proc.getPid();
+        }
+    }
+
+    int getRemoteTaskPid() {
+        return mRemoteTaskPid;
     }
 
     void clearRootProcess() {
@@ -2693,6 +2712,15 @@ class Task extends TaskFragment {
     }
 
     @Override
+    void reparent(WindowContainer newParent, int position) {
+        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION
+            && !mAllowReparent) {
+            return;
+        }
+        super.reparent(newParent, position);
+    }
+
+    @Override
     void onDisplayChanged(DisplayContent dc) {
         final boolean isRootTask = isRootTask();
         if (!isRootTask && !mCreatedByOrganizer) {
@@ -3013,7 +3041,8 @@ class Task extends TaskFragment {
 
     /** Checking if self or its child tasks are animated by recents animation. */
     boolean isAnimatingByRecents() {
-        return isAnimating(CHILDREN, ANIMATION_TYPE_RECENTS);
+        return isAnimating(CHILDREN, ANIMATION_TYPE_RECENTS)
+                || mTransitionController.isTransientHide(this);
     }
 
     WindowState getTopVisibleAppMainWindow() {
@@ -3259,9 +3288,10 @@ class Task extends TaskFragment {
 
     @Override
     void prepareSurfaces() {
-        final Rect dimBounds = mDimmer.resetDimStates();
+        mDimmer.resetDimStates();
         super.prepareSurfaces();
 
+        final Rect dimBounds = mDimmer.getDimBounds();
         if (dimBounds != null) {
             getDimBounds(dimBounds);
 
@@ -4694,7 +4724,7 @@ class Task extends TaskFragment {
         if (!isAttached()) {
             return;
         }
-        mTransitionController.collect(this);
+        mTransitionController.recordTaskOrder(this);
 
         final TaskDisplayArea taskDisplayArea = getDisplayArea();
 
@@ -5640,30 +5670,20 @@ class Task extends TaskFragment {
             final Transition transition = new Transition(TRANSIT_TO_BACK, 0 /* flags */,
                     mTransitionController, mWmService.mSyncEngine);
             // Guarantee that this gets its own transition by queueing on SyncEngine
-            if (mWmService.mSyncEngine.hasActiveSync()) {
-                ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS,
-                        "Creating Pending Move-to-back: %s", transition);
-                mWmService.mSyncEngine.queueSyncSet(
-                        () -> mTransitionController.moveToCollecting(transition),
-                        () -> {
-                            // Need to check again since this happens later and the system might
-                            // be in a different state.
-                            if (!canMoveTaskToBack(tr)) {
-                                Slog.e(TAG, "Failed to move task to back after saying we could: "
-                                        + tr.mTaskId);
-                                transition.abort();
-                                return;
-                            }
-                            mTransitionController.requestStartTransition(transition, tr,
-                                    null /* remoteTransition */, null /* displayChange */);
-                            moveTaskToBackInner(tr);
-                        });
-            } else {
-                mTransitionController.moveToCollecting(transition);
-                mTransitionController.requestStartTransition(transition, tr,
-                        null /* remoteTransition */, null /* displayChange */);
-                moveTaskToBackInner(tr);
-            }
+            mTransitionController.startCollectOrQueue(transition,
+                    (deferred) -> {
+                        // Need to check again if deferred since the system might
+                        // be in a different state.
+                        if (deferred && !canMoveTaskToBack(tr)) {
+                            Slog.e(TAG, "Failed to move task to back after saying we could: "
+                                    + tr.mTaskId);
+                            transition.abort();
+                            return;
+                        }
+                        mTransitionController.requestStartTransition(transition, tr,
+                                null /* remoteTransition */, null /* displayChange */);
+                        moveTaskToBackInner(tr);
+                    });
         } else {
             // Skip the transition for pinned task.
             if (!inPinnedWindowingMode()) {
@@ -5692,6 +5712,7 @@ class Task extends TaskFragment {
             // Usually resuming a top activity triggers the next app transition, but nothing's got
             // resumed in this case, so we need to execute it explicitly.
             mDisplayContent.executeAppTransition();
+            mDisplayContent.setFocusedApp(topActivity);
         } else {
             mRootWindowContainer.resumeFocusedTasksTopActivities();
         }

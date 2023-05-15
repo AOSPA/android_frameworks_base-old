@@ -164,6 +164,7 @@ import android.os.BatteryStats;
 import android.os.BatteryStatsManager;
 import android.os.BugreportManager;
 import android.os.Build;
+import android.os.DeviceIntegrationUtils;
 import android.os.DropBoxManager;
 import android.os.HardwarePropertiesManager;
 import android.os.IBatteryPropertiesRegistrar;
@@ -506,10 +507,10 @@ public final class SystemServiceRegistry {
 
         // InputManager stores its own static instance for historical purposes.
         registerService(Context.INPUT_SERVICE, InputManager.class,
-                new ServiceFetcher<InputManager>() {
+                new CachedServiceFetcher<InputManager>() {
             @Override
-            public InputManager getService(ContextImpl ctx) {
-                return InputManager.getInstance(ctx.getOuterContext());
+            public InputManager createService(ContextImpl ctx) {
+                return new InputManager(ctx.getOuterContext());
             }});
 
         registerService(Context.DISPLAY_SERVICE, DisplayManager.class,
@@ -1546,6 +1547,19 @@ public final class SystemServiceRegistry {
                                 IAmbientContextManager.Stub.asInterface(iBinder);
                         return new AmbientContextManager(ctx.getOuterContext(), manager);
                     }});
+
+        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
+            registerService(Context.CROSS_DEVICE_SERVICE, CrossDeviceManager.class,
+                    new CachedServiceFetcher<CrossDeviceManager>() {
+                        @Override
+                        public CrossDeviceManager createService(ContextImpl ctx)
+                                throws ServiceNotFoundException {
+                            // Check the service and throw an exception if not found
+                            ServiceManager.getServiceOrThrow(Context.CROSS_DEVICE_SERVICE);
+                            return new CrossDeviceManager();
+                        }
+                    });
+        }
 
         registerService(Context.WEARABLE_SENSING_SERVICE, WearableSensingManager.class,
                 new CachedServiceFetcher<WearableSensingManager>() {

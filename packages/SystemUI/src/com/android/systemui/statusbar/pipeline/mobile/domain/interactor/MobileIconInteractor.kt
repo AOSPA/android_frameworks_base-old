@@ -54,6 +54,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 
 interface MobileIconInteractor {
@@ -162,6 +163,7 @@ class MobileIconInteractorImpl(
     override val showVolteIcon: StateFlow<Boolean>,
     override val showVowifiIcon: StateFlow<Boolean>,
     private val context: Context,
+    private val defaultDataSubId: StateFlow<Int>,
     val carrierIdOverrides: MobileIconCarrierIdOverrides = MobileIconCarrierIdOverridesImpl()
 ) : MobileIconInteractor {
     override val tableLogBuffer: TableLogBuffer = connectionRepository.tableLogBuffer
@@ -230,13 +232,22 @@ class MobileIconInteractorImpl(
         }
         .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
+    private val isDefaultDataSub = defaultDataSubId
+        .mapLatest { connectionRepository.subId == it }
+        .stateIn(
+            scope,
+            SharingStarted.WhileSubscribed(),
+            connectionRepository.subId == defaultDataSubId.value
+        )
+
     override val networkTypeIconCustomization: StateFlow<MobileIconCustomizationMode> =
         combine(
             networkTypeIconCustomizationFlow,
             isDataEnabled,
             connectionRepository.dataRoamingEnabled,
             isRoaming,
-        ){ state, mobileDataEnabled, dataRoamingEnabled, isRoaming ->
+            isDefaultDataSub,
+        ){ state, mobileDataEnabled, dataRoamingEnabled, isRoaming, isDefaultDataSub ->
             MobileIconCustomizationMode(
                 isRatCustomization = state.isRatCustomization,
                 alwaysShowNetworkTypeIcon = state.alwaysShowNetworkTypeIcon,
@@ -244,6 +255,7 @@ class MobileIconInteractorImpl(
                 nonDdsRatIconEnhancementEnabled = state.nonDdsRatIconEnhancementEnabled,
                 mobileDataEnabled = mobileDataEnabled,
                 dataRoamingEnabled = dataRoamingEnabled,
+                isDefaultDataSub = isDefaultDataSub,
                 isRoaming = isRoaming
             )
         }.stateIn(scope, SharingStarted.WhileSubscribed(), MobileIconCustomizationMode())

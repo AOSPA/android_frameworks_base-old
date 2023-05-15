@@ -25,6 +25,7 @@ import static android.content.pm.PackageManager.GET_META_DATA;
 import static android.content.pm.PackageManager.GET_SERVICES;
 import static android.content.pm.PackageManager.MATCH_DEBUG_TRIAGED_MISSING;
 import static android.hardware.soundtrigger.SoundTrigger.STATUS_BAD_VALUE;
+import static android.hardware.soundtrigger.SoundTrigger.STATUS_DEAD_OBJECT;
 import static android.hardware.soundtrigger.SoundTrigger.STATUS_ERROR;
 import static android.hardware.soundtrigger.SoundTrigger.STATUS_OK;
 import static android.provider.Settings.Global.MAX_SOUND_TRIGGER_DETECTION_SERVICE_OPS_PER_DAY;
@@ -39,12 +40,13 @@ import android.app.ActivityThread;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.PermissionChecker;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.hardware.soundtrigger.ConversionUtil;
 import android.hardware.soundtrigger.IRecognitionStatusCallback;
 import android.hardware.soundtrigger.ModelParams;
-import android.hardware.soundtrigger.ConversionUtil;
 import android.hardware.soundtrigger.SoundTrigger;
 import android.hardware.soundtrigger.SoundTrigger.GenericSoundModel;
 import android.hardware.soundtrigger.SoundTrigger.KeyphraseSoundModel;
@@ -64,18 +66,18 @@ import android.media.permission.SafeCloseable;
 import android.media.soundtrigger.ISoundTriggerDetectionService;
 import android.media.soundtrigger.ISoundTriggerDetectionServiceClient;
 import android.media.soundtrigger.SoundTriggerDetectionService;
+import android.media.soundtrigger_middleware.ISoundTriggerInjection;
 import android.media.soundtrigger_middleware.ISoundTriggerMiddlewareService;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import android.os.Parcel;
 import android.os.ParcelUuid;
 import android.os.PowerManager;
 import android.os.RemoteException;
-import android.os.ServiceSpecificException;
 import android.os.ServiceManager;
+import android.os.ServiceSpecificException;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.provider.Settings;
@@ -86,6 +88,7 @@ import android.util.Slog;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.app.ISoundTriggerService;
 import com.android.internal.app.ISoundTriggerSession;
+import com.android.server.SoundTriggerInternal;
 import com.android.server.SystemService;
 import com.android.server.utils.EventLogger;
 
@@ -98,8 +101,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * A single SystemService to manage all sound/voice-based sound models on the DSP.
@@ -296,6 +299,23 @@ public class SoundTriggerService extends SystemService {
                 return listUnderlyingModuleProperties(originatorIdentity);
             }
         }
+
+        @Override
+        public void attachInjection(@NonNull ISoundTriggerInjection injection) {
+            if (PermissionChecker.checkCallingPermissionForPreflight(mContext,
+                    android.Manifest.permission.MANAGE_SOUND_TRIGGER, null)
+                        != PermissionChecker.PERMISSION_GRANTED) {
+                throw new SecurityException();
+            }
+            try {
+                ISoundTriggerMiddlewareService.Stub
+                        .asInterface(ServiceManager
+                                .waitForService(Context.SOUND_TRIGGER_MIDDLEWARE_SERVICE))
+                        .attachFakeHalInjection(injection);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
     }
 
     class SoundTriggerSessionStub extends ISoundTriggerSession.Stub {
@@ -317,21 +337,6 @@ public class SoundTriggerService extends SystemService {
                 }, 0);
             } catch (RemoteException e) {
                 Slog.e(TAG, "Failed to register death listener.", e);
-            }
-        }
-
-        @Override
-        public boolean onTransact(int code, Parcel data, Parcel reply, int flags)
-                throws RemoteException {
-            try {
-                return super.onTransact(code, data, reply, flags);
-            } catch (RuntimeException e) {
-                // The activity manager only throws security exceptions, so let's
-                // log all others.
-                if (!(e instanceof SecurityException)) {
-                    Slog.wtf(TAG, "SoundTriggerService Crash", e);
-                }
-                throw e;
             }
         }
 
@@ -1369,8 +1374,7 @@ public class SoundTriggerService extends SystemService {
                         }));
             }
 
-            @Override
-            public void onError(int status) {
+            private void onError(int status) {
                 if (DEBUG) Slog.v(TAG, mPuuid + ": onError: " + status);
 
                 sEventLogger.enqueue(new EventLogger.StringEvent(mPuuid
@@ -1390,6 +1394,30 @@ public class SoundTriggerService extends SystemService {
                                 (opId, service) -> service.onError(mPuuid, opId, status),
                                 // nothing to do if throttled
                                 null));
+            }
+
+            @Override
+            public void onPreempted() {
+                if (DEBUG) Slog.v(TAG, mPuuid + ": onPreempted");
+                onError(STATUS_ERROR);
+            }
+
+            @Override
+            public void onModuleDied() {
+                if (DEBUG) Slog.v(TAG, mPuuid + ": onModuleDied");
+                onError(STATUS_DEAD_OBJECT);
+            }
+
+            @Override
+            public void onResumeFailed(int status) {
+                if (DEBUG) Slog.v(TAG, mPuuid + ": onResumeFailed: " + status);
+                onError(status);
+            }
+
+            @Override
+            public void onPauseFailed(int status) {
+                if (DEBUG) Slog.v(TAG, mPuuid + ": onPauseFailed: " + status);
+                onError(status);
             }
 
             @Override

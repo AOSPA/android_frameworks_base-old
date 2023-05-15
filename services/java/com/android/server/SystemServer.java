@@ -61,6 +61,7 @@ import android.os.BaseBundle;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Debug;
+import android.os.DeviceIntegrationUtils;
 import android.os.Environment;
 import android.os.FactoryTest;
 import android.os.FileUtils;
@@ -126,6 +127,7 @@ import com.android.server.compat.PlatformCompatNative;
 import com.android.server.connectivity.PacProxyService;
 import com.android.server.contentcapture.ContentCaptureManagerInternal;
 import com.android.server.coverage.CoverageService;
+import com.android.server.cpu.CpuMonitorService;
 import com.android.server.devicepolicy.DevicePolicyManagerService;
 import com.android.server.devicestate.DeviceStateManagerService;
 import com.android.server.display.DisplayManagerService;
@@ -222,6 +224,7 @@ import com.android.server.vr.VrManagerService;
 import com.android.server.wearable.WearableSensingManagerService;
 import com.android.server.webkit.WebViewUpdateService;
 import com.android.server.wm.ActivityTaskManagerService;
+import com.android.server.wm.CrossDeviceService;
 import com.android.server.wm.WindowManagerGlobalLock;
 import com.android.server.wm.WindowManagerService;
 
@@ -1406,6 +1409,15 @@ public final class SystemServer implements Dumpable {
         t.traceBegin("StartRemoteProvisioningService");
         mSystemServiceManager.startService(RemoteProvisioningService.class);
         t.traceEnd();
+
+        // TODO(b/277600174): Start CpuMonitorService on all builds and not just on debuggable
+        // builds once the Android JobScheduler starts using this service.
+        if (Build.IS_DEBUGGABLE || Build.IS_ENG) {
+          // Service for CPU monitor.
+          t.traceBegin("CpuMonitorService");
+          mSystemServiceManager.startService(CpuMonitorService.class);
+          t.traceEnd();
+        }
 
         t.traceEnd(); // startCoreServices
     }
@@ -2836,6 +2848,12 @@ public final class SystemServer implements Dumpable {
         t.traceBegin("MakePackageManagerServiceReady");
         mPackageManagerService.systemReady();
         t.traceEnd();
+
+        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
+            t.traceBegin("StartCrossDeviceService");
+            ServiceManager.addService(Context.CROSS_DEVICE_SERVICE, new CrossDeviceService(mSystemContext, mActivityManagerService.mActivityTaskManager));
+            t.traceEnd();
+        }
 
         t.traceBegin("MakeDisplayManagerServiceReady");
         try {

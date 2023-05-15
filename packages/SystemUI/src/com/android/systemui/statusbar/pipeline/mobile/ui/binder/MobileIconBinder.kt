@@ -188,6 +188,8 @@ object MobileIconBinder {
                     }
                 }
 
+                launch { viewModel.showSignalStrengthIcon.collect { iconView.isVisible = it } }
+
                 try {
                     awaitCancellation()
                 } finally {

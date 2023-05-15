@@ -91,6 +91,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_SEARCH_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR_ADDITIONAL;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR_SUB_PANEL;
+import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_BLACKSCREEN_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 import static android.view.WindowManager.LayoutParams.TYPE_VOLUME_OVERLAY;
@@ -197,6 +198,7 @@ import android.gui.TouchOcclusionMode;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Debug;
+import android.os.DeviceIntegrationUtils;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeReason;
@@ -1100,7 +1102,12 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mContext = mWmService.mContext;
         DeathRecipient deathRecipient = new DeathRecipient();
         mPowerManagerWrapper = powerManagerWrapper;
-        mForceSeamlesslyRotate = token.mRoundedCornerOverlay;
+        // Device Integration: This is to make phone screen not show our black screen
+        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
+            mForceSeamlesslyRotate = token.mRoundedCornerOverlay || mAttrs.type == TYPE_SYSTEM_BLACKSCREEN_OVERLAY;
+        } else {
+            mForceSeamlesslyRotate = token.mRoundedCornerOverlay;
+        }
         mInputWindowHandle = new InputWindowHandleWrapper(new InputWindowHandle(
                 mActivityRecord != null
                         ? mActivityRecord.getInputApplicationHandle(false /* update */) : null,
@@ -5330,6 +5337,17 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                     && imeTarget.compareTo(this) <= 0;
             return inTokenWithAndAboveImeTarget;
         }
+
+        // The condition is for the system dialog not belonging to any Activity.
+        // (^FLAG_NOT_FOCUSABLE & FLAG_ALT_FOCUSABLE_IM) means the dialog is still focusable but
+        // should be placed above the IME window.
+        if ((mAttrs.flags & (FLAG_NOT_FOCUSABLE | FLAG_ALT_FOCUSABLE_IM))
+                == FLAG_ALT_FOCUSABLE_IM && isTrustedOverlay() && canAddInternalSystemWindow()) {
+            // Check the current IME target so that it does not lift this window above the IME if
+            // the Z-order of the current IME layering target is greater than it.
+            final WindowState imeTarget = getImeLayeringTarget();
+            return imeTarget != null && imeTarget != this && imeTarget.compareTo(this) <= 0;
+        }
         return false;
     }
 
@@ -5647,7 +5665,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     @Override
     boolean isSyncFinished() {
-        if (!isVisibleRequested()) {
+        if (!isVisibleRequested() || isFullyTransparent()) {
             // Don't wait for invisible windows. However, we don't alter the state in case the
             // window becomes visible while the sync group is still active.
             return true;

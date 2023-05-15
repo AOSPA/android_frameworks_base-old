@@ -1349,16 +1349,6 @@
     <!-- Description of the background body sensors permission, listed so the user can decide whether to allow the application to access data from body sensors in the background. [CHAR LIMIT=NONE] -->
     <string name="permdesc_bodySensors_background" product="default">Allows the app to access body sensor data, such as heart rate, temperature, and blood oxygen percentage, while the app is in the background.</string>
 
-    <!-- Title of the body sensors wrist temperature permission, listed so the user can decide whether to allow the application to access body sensor wrist temperature data. [CHAR LIMIT=NONE] -->
-    <string name="permlab_bodySensorsWristTemperature">Access body sensor wrist temperature data while the app is in use.</string>
-    <!-- Description of the body sensors wrist temperature permission, listed so the user can decide whether to allow the application to access data from body sensors. [CHAR LIMIT=NONE] -->
-    <string name="permdesc_bodySensorsWristTemperature" product="default">Allows the app to access body sensor wrist temperature data, while the app is in use.</string>
-
-    <!-- Title of the body sensors wrist temperature permission, listed so the user can decide whether to allow the application to access body sensor wrist temperature data. [CHAR LIMIT=NONE] -->
-    <string name="permlab_bodySensors_wristTemperature_background">Access body sensor wrist temperature data while the app is in the background.</string>
-    <!-- Description of the body sensors wrist temperature permission, listed so the user can decide whether to allow the application to access data from body sensors. [CHAR LIMIT=NONE] -->
-    <string name="permdesc_bodySensors_wristTemperature_background" product="default">Allows the app to access body sensor wrist temperature data, while the app is in the background.</string>
-
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_readCalendar">Read calendar events and details</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
@@ -1982,8 +1972,8 @@
     <string name="face_error_user_canceled">Face Unlock canceled by user</string>
     <!-- Generic error message shown when the face operation fails because too many attempts have been made. [CHAR LIMIT=50] -->
     <string name="face_error_lockout">Too many attempts. Try again later.</string>
-    <!-- Generic error message shown when the face operation fails because strong authentication is required. [CHAR LIMIT=90] -->
-    <string name="face_error_lockout_permanent">Too many attempts. Face Unlock disabled.</string>
+    <!-- Generic error message shown when the face operation fails because strong authentication is required. [CHAR LIMIT=100] -->
+    <string name="face_error_lockout_permanent">Too many attempts. Face Unlock unavailable.</string>
     <!-- Generic error message shown when the face operation fails because strong authentication is required. [CHAR LIMIT=90] -->
     <string name="face_error_lockout_screen_lock">Too many attempts. Enter screen lock instead.</string>
     <!-- Generic error message shown when the face hardware can't recognize the face. [CHAR LIMIT=50] -->
@@ -5919,9 +5909,9 @@
     <string name="resolver_no_personal_apps_available">No personal apps</string>
 
     <!-- Dialog title. User must choose between opening content in a cross-profile app or same-profile browser. [CHAR LIMIT=NONE] -->
-    <string name="miniresolver_open_in_personal">Open <xliff:g id="app" example="YouTube">%s</xliff:g> in your personal profile?</string>
+    <string name="miniresolver_open_in_personal">Open personal <xliff:g id="app" example="YouTube">%s</xliff:g></string>
     <!-- Dialog title. User must choose between opening content in a cross-profile app or same-profile browser. [CHAR LIMIT=NONE] -->
-    <string name="miniresolver_open_in_work">Open <xliff:g id="app" example="YouTube">%s</xliff:g> in your work profile?</string>
+    <string name="miniresolver_open_in_work">Open work <xliff:g id="app" example="YouTube">%s</xliff:g></string>
     <!-- Button option. Open the link in the personal browser. [CHAR LIMIT=NONE] -->
     <string name="miniresolver_use_personal_browser">Use personal browser</string>
     <!-- Button option. Open the link in the work browser. [CHAR LIMIT=NONE] -->

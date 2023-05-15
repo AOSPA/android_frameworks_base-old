@@ -34,6 +34,7 @@ import android.app.ActivityManager.RunningTaskInfo;
 import android.app.ActivityTaskManager;
 import android.content.Context;
 import android.content.res.Resources;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.hardware.input.InputManager;
 import android.os.Handler;
@@ -197,7 +198,7 @@ public class DesktopModeWindowDecorViewModel implements WindowDecorViewModel {
 
     @Override
     public void onTransitionMerged(@NonNull IBinder merged, @NonNull IBinder playing) {
-        if (mTransitionPausingRelayout.equals(merged)) {
+        if (merged.equals(mTransitionPausingRelayout)) {
             mTransitionPausingRelayout = playing;
         }
     }
@@ -246,7 +247,7 @@ public class DesktopModeWindowDecorViewModel implements WindowDecorViewModel {
         if (decoration == null) {
             createWindowDecoration(taskInfo, taskSurface, startT, finishT);
         } else {
-            decoration.relayout(taskInfo, startT, finishT);
+            decoration.relayout(taskInfo, startT, finishT, false /* applyStartTransactionOnDraw */);
         }
     }
 
@@ -258,7 +259,7 @@ public class DesktopModeWindowDecorViewModel implements WindowDecorViewModel {
         final DesktopModeWindowDecoration decoration = mWindowDecorByTaskId.get(taskInfo.taskId);
         if (decoration == null) return;
 
-        decoration.relayout(taskInfo, startT, finishT);
+        decoration.relayout(taskInfo, startT, finishT, false /* applyStartTransactionOnDraw */);
     }
 
     @Override
@@ -312,8 +313,12 @@ public class DesktopModeWindowDecorViewModel implements WindowDecorViewModel {
             } else if (id == R.id.back_button) {
                 mTaskOperations.injectBackKey();
             } else if (id == R.id.caption_handle || id == R.id.open_menu_button) {
-                moveTaskToFront(mTaskOrganizer.getRunningTaskInfo(mTaskId));
-                decoration.createHandleMenu();
+                if (!decoration.isHandleMenuActive()) {
+                    moveTaskToFront(mTaskOrganizer.getRunningTaskInfo(mTaskId));
+                    decoration.createHandleMenu();
+                } else {
+                    decoration.closeHandleMenu();
+                }
             } else if (id == R.id.desktop_button) {
                 mDesktopModeController.ifPresent(c -> c.setDesktopModeActive(true));
                 mDesktopTasksController.ifPresent(c -> c.moveToDesktop(mTaskId));
@@ -330,7 +335,8 @@ public class DesktopModeWindowDecorViewModel implements WindowDecorViewModel {
         @Override
         public boolean onTouch(View v, MotionEvent e) {
             final int id = v.getId();
-            if (id != R.id.caption_handle && id != R.id.desktop_mode_caption) {
+            if (id != R.id.caption_handle && id != R.id.desktop_mode_caption
+                    && id != R.id.open_menu_button && id != R.id.close_window) {
                 return false;
             }
             moveTaskToFront(mTaskOrganizer.getRunningTaskInfo(mTaskId));
@@ -553,8 +559,10 @@ public class DesktopModeWindowDecorViewModel implements WindowDecorViewModel {
                         mDragToDesktopAnimationStarted = false;
                         return;
                     } else if (mDragToDesktopAnimationStarted) {
-                        mDesktopTasksController.ifPresent(c ->
-                                c.moveToFullscreen(relevantDecor.mTaskInfo));
+                        Point startPosition = new Point((int) ev.getX(), (int) ev.getY());
+                        mDesktopTasksController.ifPresent(
+                                c -> c.cancelMoveToFreeform(relevantDecor.mTaskInfo,
+                                        startPosition));
                         mDragToDesktopAnimationStarted = false;
                         return;
                     }
@@ -773,7 +781,8 @@ public class DesktopModeWindowDecorViewModel implements WindowDecorViewModel {
         windowDecoration.setCaptionListeners(touchEventListener, touchEventListener);
         windowDecoration.setDragPositioningCallback(taskPositioner);
         windowDecoration.setDragDetector(touchEventListener.mDragDetector);
-        windowDecoration.relayout(taskInfo, startT, finishT);
+        windowDecoration.relayout(taskInfo, startT, finishT,
+                false /* applyStartTransactionOnDraw */);
         incrementEventReceiverTasks(taskInfo.displayId);
     }
 

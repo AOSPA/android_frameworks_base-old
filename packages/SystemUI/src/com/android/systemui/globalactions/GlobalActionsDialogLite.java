@@ -1043,9 +1043,6 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
                             Log.w(TAG, "Bugreport handler could not be launched");
                             mIActivityManager.requestInteractiveBugReport();
                         }
-                        // Maybe close shade (depends on a flag) so user sees the activity
-                        mCentralSurfacesOptional.ifPresent(
-                                CentralSurfaces::collapseShadeForBugreport);
                     } catch (RemoteException e) {
                     }
                 }
@@ -1064,8 +1061,6 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
                 mMetricsLogger.action(MetricsEvent.ACTION_BUGREPORT_FROM_POWER_MENU_FULL);
                 mUiEventLogger.log(GlobalActionsEvent.GA_BUGREPORT_LONG_PRESS);
                 mIActivityManager.requestFullBugReport();
-                // Maybe close shade (depends on a flag) so user sees the activity
-                mCentralSurfacesOptional.ifPresent(CentralSurfaces::collapseShadeForBugreport);
             } catch (RemoteException e) {
             }
             return false;
@@ -2477,8 +2472,7 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
         }
 
         @Override
-        protected void onStart() {
-            super.onStart();
+        protected void start() {
             mGlobalActionsLayout.updateList();
 
             if (mBackgroundDrawable instanceof ScrimDrawable) {
@@ -2509,8 +2503,7 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
         }
 
         @Override
-        protected void onStop() {
-            super.onStop();
+        protected void stop() {
             mColorExtractor.removeOnColorsChangedListener(this);
         }
 
