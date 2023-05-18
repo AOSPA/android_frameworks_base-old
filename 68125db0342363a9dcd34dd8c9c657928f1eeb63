@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "0ec3fbf7_25f58053",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2023-05-18T05:57:36Z",
+      "side": 1,
+      "message": "works but tapping it should ask for unlock - it opens in the background with no response",
+      "revId": "68125db0342363a9dcd34dd8c9c657928f1eeb63",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
