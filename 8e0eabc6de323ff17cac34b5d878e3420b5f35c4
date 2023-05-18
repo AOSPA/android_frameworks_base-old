@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "95fd494a_7731b6d8",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 4
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2023-05-18T05:56:24Z",
+      "side": 1,
+      "message": "this was talked about a few months ago on slack, IIRC \"not much of a point\" was the end, but im open to bringing it up again",
+      "revId": "8e0eabc6de323ff17cac34b5d878e3420b5f35c4",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
