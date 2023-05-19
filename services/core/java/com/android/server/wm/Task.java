@@ -751,6 +751,9 @@ class Task extends TaskFragment {
         }
 
         removeIfPossible("cleanUpResourcesForDestroy");
+        if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
+            mAtmService.getRemoteTaskManager().handleRemoveTask(this);
+        }
     }
 
     @VisibleForTesting
