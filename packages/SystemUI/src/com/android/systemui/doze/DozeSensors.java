@@ -203,6 +203,7 @@ public class DozeSensors {
                         false /* touchscreen */,
                         false /* ignoresSetting */,
                         false /* requires prox */,
+                        !dozeParameters.pickupEventNeedsProximityCheck() /* performsProxCheck */,
                         true /* immediatelyReRegister */,
                         false /* requiresAod */
                 ),
