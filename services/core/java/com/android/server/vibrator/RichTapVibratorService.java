@@ -95,6 +95,22 @@ public class RichTapVibratorService {
         }
     }
 
+    public int richTapVibratorPerform(int id, byte scale) {
+        int timeout = 0;
+        try {
+            IRichtapVibrator service = getRichtapService();
+            if (service != null) {
+                Slog.d(TAG, "perform richtap vibrator");
+                timeout = service.perform(id, scale, this.mCallback);
+                Slog.d(TAG, "aac richtap perform timeout:" + timeout);
+                return timeout;
+            }
+        } catch (Exception e) {
+            Slog.e(TAG, "aac richtap perform fail.", e);
+        }
+        return timeout;
+    }
+
     public void richTapVibratorOnRawPattern(int[] pattern, int amplitude, int freq) {
         try {
             IRichtapVibrator service = getRichtapService();

@@ -31,6 +31,14 @@ public class RichTapVibrationEffect {
         return Resources.getSystem().getBoolean(R.bool.config_usesRichtapVibration);
     }
 
+    public static boolean usesPrebakedEffects() {
+        return Resources.getSystem().getBoolean(R.bool.config_usesRichtapPrebakedEffects);
+    }
+
+    public static int getPrebakedEffectsOffset() {
+        return Resources.getSystem().getInteger(R.integer.config_usesRichtapPrebakedEffectsOffset);
+    }
+
     public static int[] getInnerEffect(int id) {
         switch (id) {
             case VibrationEffect.EFFECT_CLICK:
@@ -64,6 +72,20 @@ public class RichTapVibrationEffect {
             default:
                 Slog.e(TAG, "Wrong Effect Strength!!");
                 return 0;
+        }
+    }
+
+    public static byte getPrebakedEffectStrength(int strength) {
+        switch (strength) {
+            case 0:
+                return (byte) 69;
+            case 1:
+                return (byte) 89;
+            case 2:
+                return (byte) 99;
+            default:
+                Slog.d(TAG, "Wrong Effect Strength!!");
+                return (byte) 0;
         }
     }
 }
