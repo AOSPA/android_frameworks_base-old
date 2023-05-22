@@ -364,6 +364,10 @@ public class DozeParameters implements
         return 2 * getPulseVisibleDuration();
     }
 
+    public boolean doubleTapNeedsProximityCheck() {
+        return mResources.getBoolean(R.bool.doze_double_tap_proximity_check);
+    }
+
     public boolean pickupEventNeedsProximityCheck() {
         return mResources.getBoolean(R.bool.doze_pickup_event_proximity_check);
     }
