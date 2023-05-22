@@ -212,7 +212,7 @@ public class DozeSensors {
                         true /* configured */,
                         DozeLog.REASON_SENSOR_DOUBLE_TAP,
                         dozeParameters.doubleTapReportsTouchCoordinates(),
-                        true /* touchscreen */
+                        !dozeParameters.doubleTapNeedsProximityCheck() /* performsProxCheck */
                 ),
                 new TriggerSensor(
                         findSensors(config.tapSensorTypeMapping()),
