@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "8f3be09b_05bba1e7",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000062
+      },
+      "writtenOn": "2023-05-22T16:43:15Z",
+      "side": 1,
+      "message": "Not sure how other framework guys would think of this.\n\nLet me know.",
+      "revId": "f810f9fc5b2d9623ff86665cb46f8bc664687190",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
