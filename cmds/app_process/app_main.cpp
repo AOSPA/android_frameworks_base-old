@@ -176,9 +176,12 @@ static const char ZYGOTE_NICE_NAME[] = "zygote";
 int main(int argc, char* const argv[])
 {
     std::string bootmode = GetProperty("ro.bootmode", "");
+    std::string buildType = GetProperty("ro.build.type", "");
 
-    if ((strncmp(bootmode.c_str(), "ffbm-00", 7) == 0)
-            || (strncmp(bootmode.c_str(), "ffbm-01", 7) == 0)) {
+    if (((strncmp(bootmode.c_str(), "ffbm-00", 7) == 0)
+            || (strncmp(bootmode.c_str(), "ffbm-01", 7) == 0))
+            && ((strncmp(buildType.c_str(), "eng", 3) == 0)
+            || (strncmp(buildType.c_str(), "userdebug", 9) == 0))) {
             return 0;
     }
 
