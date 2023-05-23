@@ -670,6 +670,18 @@
     <protected-broadcast android:name="android.bluetooth.bat.profile.action.BA_DIV_CHANGED" />
     <protected-broadcast android:name="android.bluetooth.bat.profile.action.BA_STR_ID_CHANGED" />
 
+    <protected-broadcast
+        android:name="android.bluetooth.bc.profile.action.CONNECTION_STATE_CHANGED" />
+    <protected-broadcast
+        android:name="android.bluetooth.broadcast.profile.action.BROADCAST_STATE_CHANGED" />
+    <protected-broadcast
+        android:name="android.bluetooth.broadcast.profile.action.BROADCAST_ENCRYPTION_KEY_GENERATED" />
+    <protected-broadcast
+        android:name="android.bluetooth.broadcast.profile.action.BROADCAST_AUDIO_STATE_CHANGED" />
+    <protected-broadcast
+        android:name="android.bluetooth.BroadcastAudioSAManager.action.BROADCAST_SOURCE_INFO" />
+
+
     <protected-broadcast android:name="android.intent.action.TWILIGHT_CHANGED" />
 
     <protected-broadcast android:name="com.android.server.fingerprint.ACTION_LOCKOUT_RESET" />
