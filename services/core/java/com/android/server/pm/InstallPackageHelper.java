@@ -58,6 +58,7 @@ import static com.android.server.pm.PackageManagerService.DEBUG_REMOVE;
 import static com.android.server.pm.PackageManagerService.DEBUG_UPGRADE;
 import static com.android.server.pm.PackageManagerService.DEBUG_VERIFY;
 import static com.android.server.pm.PackageManagerService.EMPTY_INT_ARRAY;
+import static com.android.server.pm.PackageManagerService.MIN_INSTALLABLE_TARGET_SDK;
 import static com.android.server.pm.PackageManagerService.PLATFORM_PACKAGE_NAME;
 import static com.android.server.pm.PackageManagerService.POST_INSTALL;
 import static com.android.server.pm.PackageManagerService.PRECOMPILE_LAYOUTS;
@@ -144,7 +145,6 @@ import android.os.incremental.IncrementalManager;
 import android.os.incremental.IncrementalStorage;
 import android.os.storage.StorageManager;
 import android.os.storage.VolumeInfo;
-import android.provider.DeviceConfig;
 import android.stats.storage.StorageEnums;
 import android.system.ErrnoException;
 import android.system.Os;
@@ -281,7 +281,7 @@ final class InstallPackageHelper {
             SharedUserSetting requestSharedUserSetting = mPm.mSettings.getSharedUserSettingLPr(
                     request.getScanRequestPackageSetting());
             SharedUserSetting resultSharedUserSetting = mPm.mSettings.getSharedUserSettingLPr(
-                    request.getScanRequestPackageSetting());
+                    request.getScannedPackageSetting());
             if (requestSharedUserSetting != null
                     && requestSharedUserSetting != resultSharedUserSetting) {
                 // shared user changed, remove from old shared user
@@ -325,7 +325,6 @@ final class InstallPackageHelper {
         InstallSource installSource = request.getInstallSource();
         final boolean isApex = (scanFlags & SCAN_AS_APEX) != 0;
         final boolean pkgAlreadyExists = oldPkgSetting != null;
-        final boolean isAllowUpdateOwnership = parsedPackage.isAllowUpdateOwnership();
         final String oldUpdateOwner =
                 pkgAlreadyExists ? oldPkgSetting.getInstallSource().mUpdateOwnerPackageName : null;
         final String updateOwnerFromSysconfig = isApex || !pkgSetting.isSystem() ? null
@@ -347,11 +346,7 @@ final class InstallPackageHelper {
             }
 
             // Handle the update ownership enforcement for APK
-            if (!isAllowUpdateOwnership) {
-                // If the app wants to opt-out of the update ownership enforcement via manifest,
-                // it overrides the installer's use of #setRequestUpdateOwnership.
-                installSource = installSource.setUpdateOwnerPackageName(null);
-            } else if (!isApex) {
+            if (!isApex) {
                 // User installer UID as "current" userId if present; otherwise, use the userId
                 // from InstallRequest.
                 final int userId = installSource.mInstallerPackageUid != Process.INVALID_UID
@@ -392,22 +387,18 @@ final class InstallPackageHelper {
         // For non-standard install (addForInit), installSource is null.
         } else if (pkgSetting.isSystem()) {
             // We still honor the manifest attr if the system app wants to opt-out of it.
-            if (!isAllowUpdateOwnership) {
-                pkgSetting.setUpdateOwnerPackage(null);
-            } else {
-                final boolean isSameUpdateOwner = isUpdateOwnershipEnabled
-                        && TextUtils.equals(oldUpdateOwner, updateOwnerFromSysconfig);
+            final boolean isSameUpdateOwner = isUpdateOwnershipEnabled
+                    && TextUtils.equals(oldUpdateOwner, updateOwnerFromSysconfig);
 
-                // Here we handle the update owner for the system package, and the rules are:
-                // -. We use the update owner from sysconfig as the initial value.
-                // -. Once an app becomes to system app later via OTA, only retains the update
-                //    owner if it's consistence with sysconfig.
-                // -. Clear the update owner when update owner changes from sysconfig.
-                if (!pkgAlreadyExists || isSameUpdateOwner) {
-                    pkgSetting.setUpdateOwnerPackage(updateOwnerFromSysconfig);
-                } else {
-                    pkgSetting.setUpdateOwnerPackage(null);
-                }
+            // Here we handle the update owner for the system package, and the rules are:
+            // -. We use the update owner from sysconfig as the initial value.
+            // -. Once an app becomes to system app later via OTA, only retains the update
+            //    owner if it's consistence with sysconfig.
+            // -. Clear the update owner when update owner changes from sysconfig.
+            if (!pkgAlreadyExists || isSameUpdateOwner) {
+                pkgSetting.setUpdateOwnerPackage(updateOwnerFromSysconfig);
+            } else {
+                pkgSetting.setUpdateOwnerPackage(null);
             }
         }
 
@@ -498,13 +489,6 @@ final class InstallPackageHelper {
         if (mPm.mCustomResolverComponentName != null
                 && mPm.mCustomResolverComponentName.getPackageName().equals(pkg.getPackageName())) {
             mPm.setUpCustomResolverActivity(pkg, pkgSetting);
-        }
-
-        File appMetadataFile = new File(pkgSetting.getPath(), APP_METADATA_FILE_NAME);
-        if (appMetadataFile.exists()) {
-            pkgSetting.setAppMetadataFilePath(appMetadataFile.getAbsolutePath());
-        } else {
-            pkgSetting.setAppMetadataFilePath(null);
         }
 
         if (pkg.getPackageName().equals("android")) {
@@ -614,8 +598,8 @@ final class InstallPackageHelper {
         Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
     }
 
-    public int installExistingPackageAsUser(@Nullable String packageName, @UserIdInt int userId,
-            @PackageManager.InstallFlags int installFlags,
+    public Pair<Integer, IntentSender> installExistingPackageAsUser(@Nullable String packageName,
+            @UserIdInt int userId, @PackageManager.InstallFlags int installFlags,
             @PackageManager.InstallReason int installReason,
             @Nullable List<String> allowlistedRestrictedPermissions,
             @Nullable IntentSender intentSender) {
@@ -640,7 +624,7 @@ final class InstallPackageHelper {
                 true /* requireFullPermission */, true /* checkShell */,
                 "installExistingPackage for user " + userId);
         if (mPm.isUserRestricted(userId, UserManager.DISALLOW_INSTALL_APPS)) {
-            return PackageManager.INSTALL_FAILED_USER_RESTRICTED;
+            return Pair.create(PackageManager.INSTALL_FAILED_USER_RESTRICTED, intentSender);
         }
 
         final long callingId = Binder.clearCallingIdentity();
@@ -656,7 +640,7 @@ final class InstallPackageHelper {
                 final Computer snapshot = mPm.snapshotComputer();
                 pkgSetting = mPm.mSettings.getPackageLPr(packageName);
                 if (pkgSetting == null || pkgSetting.getPkg() == null) {
-                    return PackageManager.INSTALL_FAILED_INVALID_URI;
+                    return Pair.create(PackageManager.INSTALL_FAILED_INVALID_URI, intentSender);
                 }
                 if (!snapshot.canViewInstantApps(callingUid, UserHandle.getUserId(callingUid))) {
                     // only allow the existing package to be used if it's installed as a full
@@ -669,7 +653,7 @@ final class InstallPackageHelper {
                         }
                     }
                     if (!installAllowed) {
-                        return PackageManager.INSTALL_FAILED_INVALID_URI;
+                        return Pair.create(PackageManager.INSTALL_FAILED_INVALID_URI, intentSender);
                     }
                 }
                 if (!pkgSetting.getInstalled(userId)) {
@@ -727,14 +711,17 @@ final class InstallPackageHelper {
                 }
                 // start async restore with no post-install since we finish install here
 
+                final IntentSender onCompleteSender = intentSender;
+                intentSender = null;
+
                 InstallRequest request = new InstallRequest(userId,
                         PackageManager.INSTALL_SUCCEEDED, pkgSetting.getPkg(), new int[]{ userId },
                         () -> {
                             mPm.restorePermissionsAndUpdateRolesForNewUserInstall(packageName,
                                     userId);
-                            if (intentSender != null) {
-                                onRestoreComplete(PackageManager.INSTALL_SUCCEEDED, mContext,
-                                        intentSender);
+                            if (onCompleteSender != null) {
+                                onInstallComplete(PackageManager.INSTALL_SUCCEEDED, mContext,
+                                        onCompleteSender);
                             }
                         });
                 restoreAndPostInstall(request);
@@ -743,10 +730,10 @@ final class InstallPackageHelper {
             Binder.restoreCallingIdentity(callingId);
         }
 
-        return PackageManager.INSTALL_SUCCEEDED;
+        return Pair.create(PackageManager.INSTALL_SUCCEEDED, intentSender);
     }
 
-    private static void onRestoreComplete(int returnCode, Context context, IntentSender target) {
+    static void onInstallComplete(int returnCode, Context context, IntentSender target) {
         Intent fillIn = new Intent();
         fillIn.putExtra(PackageInstaller.EXTRA_STATUS,
                 PackageManager.installStatusToPublicStatus(returnCode));
@@ -1139,73 +1126,27 @@ final class InstallPackageHelper {
             Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
         }
 
-        // If the minimum installable SDK version enforcement is enabled, block the install
-        // of apps using a lower target SDK version than required. This helps improve security
-        // and privacy as malware can target older SDK versions to avoid enforcement of new API
-        // behavior.
-        if (DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_PACKAGE_MANAGER_SERVICE,
-                "MinInstallableTargetSdk__install_block_enabled",
-                false)) {
-            int minInstallableTargetSdk =
-                    DeviceConfig.getInt(DeviceConfig.NAMESPACE_PACKAGE_MANAGER_SERVICE,
-                            "MinInstallableTargetSdk__min_installable_target_sdk",
-                            0);
+        // Block the install of apps using a lower target SDK version than required.
+        // This helps improve security and privacy as malware can target older SDK versions
+        // to avoid enforcement of new API behavior.
+        boolean bypassLowTargetSdkBlock =
+                ((installFlags & PackageManager.INSTALL_BYPASS_LOW_TARGET_SDK_BLOCK) != 0);
 
-            // Determine if enforcement is in strict mode
-            boolean strictMode = false;
+        // Skip enforcement when the testOnly flag is set
+        if (!bypassLowTargetSdkBlock && parsedPackage.isTestOnly()) {
+            bypassLowTargetSdkBlock = true;
+        }
 
-            if (DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_PACKAGE_MANAGER_SERVICE,
-                    "MinInstallableTargetSdk__install_block_strict_mode_enabled",
-                    false)) {
-                if (parsedPackage.getTargetSdkVersion()
-                        < DeviceConfig.getInt(DeviceConfig.NAMESPACE_PACKAGE_MANAGER_SERVICE,
-                        "MinInstallableTargetSdk__strict_mode_target_sdk",
-                        0)) {
-                    strictMode = true;
-                }
-            }
-
-            // Skip enforcement when the bypass flag is set
-            boolean bypassLowTargetSdkBlock =
-                    ((installFlags & PackageManager.INSTALL_BYPASS_LOW_TARGET_SDK_BLOCK) != 0);
-
-            // Skip enforcement for tests that were installed from adb
-            if (!strictMode && !bypassLowTargetSdkBlock
-                    && ((installFlags & PackageManager.INSTALL_FROM_ADB) != 0)) {
-                bypassLowTargetSdkBlock = true;
-            }
-
-            // Skip enforcement if the installer package name is not set
-            // (e.g. "pm install" from shell)
-            if (!strictMode && !bypassLowTargetSdkBlock) {
-                if (request.getInstallerPackageName() == null) {
-                    bypassLowTargetSdkBlock = true;
-                } else {
-                    // Also skip if the install is occurring from an app that was installed from adb
-                    if (mContext
-                            .getPackageManager()
-                            .getInstallerPackageName(request.getInstallerPackageName()) == null) {
-                        bypassLowTargetSdkBlock = true;
-                    }
-                }
-            }
-
-            // Skip enforcement when the testOnly flag is set
-            if (!bypassLowTargetSdkBlock && parsedPackage.isTestOnly()) {
-                bypassLowTargetSdkBlock = true;
-            }
-
-            // Enforce the low target sdk install block except when
-            // the --bypass-low-target-sdk-block is set for the install
-            if (!bypassLowTargetSdkBlock
-                    && parsedPackage.getTargetSdkVersion() < minInstallableTargetSdk) {
-                Slog.w(TAG, "App " + parsedPackage.getPackageName()
-                        + " targets deprecated sdk version");
-                throw new PrepareFailure(INSTALL_FAILED_DEPRECATED_SDK_VERSION,
-                        "App package must target at least SDK version "
-                                + minInstallableTargetSdk + ", but found "
-                                + parsedPackage.getTargetSdkVersion());
-            }
+        // Enforce the low target sdk install block except when
+        // the --bypass-low-target-sdk-block is set for the install
+        if (!bypassLowTargetSdkBlock
+                && parsedPackage.getTargetSdkVersion() < MIN_INSTALLABLE_TARGET_SDK) {
+            Slog.w(TAG, "App " + parsedPackage.getPackageName()
+                    + " targets deprecated sdk version");
+            throw new PrepareFailure(INSTALL_FAILED_DEPRECATED_SDK_VERSION,
+                    "App package must target at least SDK version "
+                            + MIN_INSTALLABLE_TARGET_SDK + ", but found "
+                            + parsedPackage.getTargetSdkVersion());
         }
 
         // Instant apps have several additional install-time checks.
@@ -2181,6 +2122,13 @@ final class InstallPackageHelper {
                 installRequest.setNewUsers(
                         ps.queryInstalledUsers(mPm.mUserManager.getUserIds(), true));
                 ps.setUpdateAvailable(false /*updateAvailable*/);
+
+                File appMetadataFile = new File(ps.getPath(), APP_METADATA_FILE_NAME);
+                if (appMetadataFile.exists()) {
+                    ps.setAppMetadataFilePath(appMetadataFile.getAbsolutePath());
+                } else {
+                    ps.setAppMetadataFilePath(null);
+                }
             }
             if (installRequest.getReturnCode() == PackageManager.INSTALL_SUCCEEDED) {
                 mPm.updateSequenceNumberLP(ps, installRequest.getNewUsers());

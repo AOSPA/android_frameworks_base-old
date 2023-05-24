@@ -40,6 +40,7 @@ import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothSap;
 import android.bluetooth.BluetoothUuid;
 import android.bluetooth.BluetoothVcp;
+import android.bluetooth.BluetoothVolumeControl;
 import android.content.Context;
 import android.content.Intent;
 import android.os.ParcelUuid;
@@ -309,8 +310,8 @@ public class LocalBluetoothProfileManager {
                 Log.d(TAG, "Adding local Volume Control profile");
             }
             mVolumeControlProfile = new VolumeControlProfile(mContext, mDeviceManager, this);
-            // Note: no event handler for VCP, only for being connectable.
-            mProfileNameMap.put(VolumeControlProfile.NAME, mVolumeControlProfile);
+            addProfile(mVolumeControlProfile, VolumeControlProfile.NAME,
+                    BluetoothVolumeControl.ACTION_CONNECTION_STATE_CHANGED);
         }
         if (mLeAudioProfile == null && supportedList.contains(BluetoothProfile.LE_AUDIO)) {
             if (DEBUG) {

@@ -24,9 +24,7 @@ import static android.view.WindowManager.LayoutParams.INVALID_WINDOW_TYPE;
 import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
 import static android.view.WindowManager.TRANSIT_CHANGE;
 import static android.view.WindowManager.TRANSIT_CLOSE;
-import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY;
 import static android.view.WindowManager.TRANSIT_KEYGUARD_GOING_AWAY;
-import static android.view.WindowManager.TRANSIT_KEYGUARD_UNOCCLUDE;
 import static android.view.WindowManager.TRANSIT_OPEN;
 import static android.view.WindowManager.TRANSIT_TO_BACK;
 import static android.view.WindowManager.TRANSIT_TO_FRONT;
@@ -82,23 +80,6 @@ public class TransitionUtil {
                 return true;
             }
         }
-        return false;
-    }
-
-    /**
-     * Some transitions we always need to report to keyguard even if they are empty.
-     * TODO (b/274954192): Remove this once keyguard dispatching moves to Shell.
-     */
-    public static boolean alwaysReportToKeyguard(TransitionInfo info) {
-        // occlusion status of activities can change while screen is off so there will be no
-        // visibility change but we still need keyguardservice to be notified.
-        if (info.getType() == TRANSIT_KEYGUARD_UNOCCLUDE) return true;
-
-        // It's possible for some activities to stop with bad timing (esp. since we can't yet
-        // queue activity transitions initiated by apps) that results in an empty transition for
-        // keyguard going-away. In general, we should should always report Keyguard-going-away.
-        if ((info.getFlags() & TRANSIT_FLAG_KEYGUARD_GOING_AWAY) != 0) return true;
-
         return false;
     }
 
@@ -195,7 +176,14 @@ public class TransitionUtil {
         }
 
         // Put all the OPEN/SHOW on top
-        if (TransitionUtil.isOpeningType(mode)) {
+        if ((change.getFlags() & FLAG_IS_WALLPAPER) != 0) {
+            // Wallpaper is always at the bottom, opening wallpaper on top of closing one.
+            if (mode == WindowManager.TRANSIT_OPEN || mode == WindowManager.TRANSIT_TO_FRONT) {
+                t.setLayer(leash, -zSplitLine + info.getChanges().size() - layer);
+            } else {
+                t.setLayer(leash, -zSplitLine - layer);
+            }
+        } else if (TransitionUtil.isOpeningType(mode)) {
             if (isOpening) {
                 t.setLayer(leash, zSplitLine + info.getChanges().size() - layer);
                 if ((change.getFlags() & FLAG_STARTING_WINDOW_TRANSFER_RECIPIENT) == 0) {
@@ -252,11 +240,20 @@ public class TransitionUtil {
     public static RemoteAnimationTarget newTarget(TransitionInfo.Change change, int order,
             TransitionInfo info, SurfaceControl.Transaction t,
             @Nullable ArrayMap<SurfaceControl, SurfaceControl> leashMap) {
+        return newTarget(change, order, false /* forceTranslucent */, info, t, leashMap);
+    }
+
+    /**
+     * Creates a new RemoteAnimationTarget from the provided change info
+     */
+    public static RemoteAnimationTarget newTarget(TransitionInfo.Change change, int order,
+            boolean forceTranslucent, TransitionInfo info, SurfaceControl.Transaction t,
+            @Nullable ArrayMap<SurfaceControl, SurfaceControl> leashMap) {
         final SurfaceControl leash = createLeash(info, change, order, t);
         if (leashMap != null) {
             leashMap.put(change.getLeash(), leash);
         }
-        return newTarget(change, order, leash);
+        return newTarget(change, order, leash, forceTranslucent);
     }
 
     /**
@@ -264,6 +261,14 @@ public class TransitionUtil {
      */
     public static RemoteAnimationTarget newTarget(TransitionInfo.Change change, int order,
             SurfaceControl leash) {
+        return newTarget(change, order, leash, false /* forceTranslucent */);
+    }
+
+    /**
+     * Creates a new RemoteAnimationTarget from the provided change and leash
+     */
+    public static RemoteAnimationTarget newTarget(TransitionInfo.Change change, int order,
+            SurfaceControl leash, boolean forceTranslucent) {
         if (isDividerBar(change)) {
             return getDividerTarget(change, leash);
         }
@@ -293,7 +298,7 @@ public class TransitionUtil {
                 // TODO: once we can properly sync transactions across process,
                 // then get rid of this leash.
                 leash,
-                (change.getFlags() & TransitionInfo.FLAG_TRANSLUCENT) != 0,
+                forceTranslucent || (change.getFlags() & TransitionInfo.FLAG_TRANSLUCENT) != 0,
                 null,
                 // TODO(shell-transitions): we need to send content insets? evaluate how its used.
                 new Rect(0, 0, 0, 0),
@@ -312,6 +317,7 @@ public class TransitionUtil {
         target.setWillShowImeOnTarget(
                 (change.getFlags() & TransitionInfo.FLAG_WILL_IME_SHOWN) != 0);
         target.setRotationChange(change.getEndRotation() - change.getStartRotation());
+        target.backgroundColor = change.getBackgroundColor();
         return target;
     }
 

@@ -794,10 +794,10 @@
 
     <!--  Control whether to launch Car dock home app when user presses home button or when
           car dock intent is fired.
-          In mobile device, usually separate home app is expected in car mode, and this should be
-          enabled. But in environments like real car, default home app may be enough, and in that
-          case, this can be disabled (set to false). -->
-    <bool name="config_enableCarDockHomeLaunch">true</bool>
+          For devices where a separate home app is expected in car mode this should be enabled.
+          But in environments like real car, default home app may be enough, and in that case
+          this can be disabled (set to false). Defaults to false on mobile devices. -->
+    <bool name="config_enableCarDockHomeLaunch">false</bool>
 
     <!-- Control whether to force apps to give up control over the display of system bars at all
          times regardless of System Ui Flags.
@@ -3724,6 +3724,10 @@
          magnification settings and adjust the default magnification capability.  -->
     <bool name="config_magnification_area">true</bool>
 
+    <!-- The default value for always on magnification feature flag if the remote feature
+         flag does not exist -->
+    <bool name="config_magnification_always_on_enabled">true</bool>
+
     <!-- If true, the display will be shifted around in ambient mode. -->
     <bool name="config_enableBurnInProtection">false</bool>
 
@@ -5196,10 +5200,11 @@
         <item>0,0,1.0,0,1</item>
         <item>1,1,1.0,0,1</item>
         <item>1,1,1.0,.4,1</item>
+        <item>1,1,1.0,.15,15</item>
     </string-array>
 
     <!-- The integer index of the selected option in config_udfps_touch_detection_options -->
-    <integer name="config_selected_udfps_touch_detection">2</integer>
+    <integer name="config_selected_udfps_touch_detection">3</integer>
 
     <!-- An array of arrays of side fingerprint sensor properties relative to each display.
          Note: this value is temporary and is expected to be queried directly

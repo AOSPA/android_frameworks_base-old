@@ -3036,7 +3036,9 @@ public final class Settings {
 
         public void destroy() {
             try {
-                if (!mArray.isClosed()) {
+                // If this process is the system server process, mArray is the same object as
+                // the memory int array kept inside SettingsProvider, so skipping the close()
+                if (!Settings.isInSystemServer() && !mArray.isClosed()) {
                     mArray.close();
                 }
             } catch (IOException e) {
@@ -12170,6 +12172,14 @@ public final class Settings {
         public static final String ADB_WIFI_ENABLED = "adb_wifi_enabled";
 
         /**
+         * Whether existing ADB sessions over both USB and Wifi should be terminated when the user
+         * revokes debugging authorizations.
+         * @hide
+         */
+        public static final String ADB_DISCONNECT_SESSIONS_ON_REVOKE =
+                "adb_disconnect_sessions_on_revoke";
+
+        /**
          * Whether Views are allowed to save their attribute data.
          * @hide
          */
@@ -12447,6 +12457,17 @@ public final class Settings {
          */
         public static final String BYPASS_DEVICE_POLICY_MANAGEMENT_ROLE_QUALIFICATIONS =
                 "bypass_device_policy_management_role_qualifications";
+
+        /**
+         * Whether work profile telephony feature is enabled for non
+         * {@link android.app.role.RoleManager#ROLE_DEVICE_POLICY_MANAGEMENT} holders.
+         * ("0" = false, "1" = true).
+         *
+         * @hide
+         */
+        @Readable
+        public static final String ALLOW_WORK_PROFILE_TELEPHONY_FOR_NON_DPM_ROLE_HOLDERS =
+                "allow_work_profile_telephony_for_non_dpm_role_holders";
 
         /**
          * Indicates whether mobile data should be allowed while the device is being provisioned.

@@ -175,7 +175,7 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
     // while-in-use permissions in FGS started from background might be restricted.
     boolean mAllowWhileInUsePermissionInFgs;
     @PowerExemptionManager.ReasonCode
-    int mAllowWhileInUsePermissionInFgsReason;
+    int mAllowWhileInUsePermissionInFgsReason = REASON_DENIED;
 
     // Integer version of mAllowWhileInUsePermissionInFgs that we keep track to compare
     // the old and new logics.
@@ -622,12 +622,13 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
             pw.println(mBackgroundStartPrivilegesByStartMerged);
         }
         pw.print(prefix); pw.print("mAllowWhileInUsePermissionInFgsReason=");
-        pw.println(mAllowWhileInUsePermissionInFgsReason);
+        pw.println(PowerExemptionManager.reasonCodeToString(mAllowWhileInUsePermissionInFgsReason));
 
         pw.print(prefix); pw.print("debugWhileInUseReasonInStartForeground=");
-        pw.println(mDebugWhileInUseReasonInStartForeground);
+        pw.println(PowerExemptionManager.reasonCodeToString(
+                mDebugWhileInUseReasonInStartForeground));
         pw.print(prefix); pw.print("debugWhileInUseReasonInBindService=");
-        pw.println(mDebugWhileInUseReasonInBindService);
+        pw.println(PowerExemptionManager.reasonCodeToString(mDebugWhileInUseReasonInBindService));
 
         pw.print(prefix); pw.print("allowUiJobScheduling="); pw.println(mAllowUiJobScheduling);
         pw.print(prefix); pw.print("recentCallingPackage=");

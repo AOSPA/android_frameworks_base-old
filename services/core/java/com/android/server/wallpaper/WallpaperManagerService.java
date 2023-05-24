@@ -181,6 +181,8 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
     private final Object mLock = new Object();
     /** True to enable a second engine for lock screen wallpaper when different from system wp. */
     private final boolean mIsLockscreenLiveWallpaperEnabled;
+    /** True to support different crops for different display dimensions */
+    private final boolean mIsMultiCropEnabled;
     /** Tracks wallpaper being migrated from system+lock to lock when setting static wp. */
     WallpaperDestinationChangeHandler mPendingMigrationViaStatic;
 
@@ -1602,6 +1604,8 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
 
         mIsLockscreenLiveWallpaperEnabled =
                 SystemProperties.getBoolean("persist.wm.debug.lockscreen_live_wallpaper", false);
+        mIsMultiCropEnabled =
+                SystemProperties.getBoolean("persist.wm.debug.wallpaper_multi_crop", false);
         LocalServices.addService(WallpaperManagerInternal.class, new LocalService());
     }
 
@@ -3027,9 +3031,6 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
             }
         }
 
-        final boolean fromForegroundApp = Binder.withCleanCallingIdentity(() ->
-                mActivityManager.getPackageImportance(callingPackage) == IMPORTANCE_FOREGROUND);
-
         synchronized (mLock) {
             if (DEBUG) Slog.v(TAG, "setWallpaper which=0x" + Integer.toHexString(which));
             WallpaperData wallpaper;
@@ -3062,7 +3063,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
                     wallpaper.mSystemWasBoth = systemIsBoth;
                     wallpaper.mWhich = which;
                     wallpaper.setComplete = completion;
-                    wallpaper.fromForegroundApp = fromForegroundApp;
+                    wallpaper.fromForegroundApp = isFromForegroundApp(callingPackage);
                     wallpaper.cropHint.set(cropHint);
                     wallpaper.allowBackup = allowBackup;
                     wallpaper.mWallpaperDimAmount = getWallpaperDimAmount();
@@ -3149,27 +3150,28 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
             @SetWallpaperFlags int which, int userId) {
 
         if (isWallpaperSupported(callingPackage) && isSetWallpaperAllowed(callingPackage)) {
-            setWallpaperComponent(name, which, userId);
+            setWallpaperComponent(name, callingPackage, which, userId);
         }
     }
 
     // ToDo: Remove this version of the function
     @Override
     public void setWallpaperComponent(ComponentName name) {
-        setWallpaperComponent(name, UserHandle.getCallingUserId(), FLAG_SYSTEM);
+        setWallpaperComponent(name, "", UserHandle.getCallingUserId(), FLAG_SYSTEM);
     }
 
     @VisibleForTesting
-    void setWallpaperComponent(ComponentName name, @SetWallpaperFlags int which, int userId) {
+    void setWallpaperComponent(ComponentName name, String callingPackage,
+            @SetWallpaperFlags int which, int userId) {
         if (mIsLockscreenLiveWallpaperEnabled) {
-            setWallpaperComponentInternal(name, which, userId);
+            setWallpaperComponentInternal(name, callingPackage, which, userId);
         } else {
-            setWallpaperComponentInternalLegacy(name, which, userId);
+            setWallpaperComponentInternalLegacy(name, callingPackage, which, userId);
         }
     }
 
-    private void setWallpaperComponentInternal(ComponentName name, @SetWallpaperFlags int which,
-            int userIdIn) {
+    private void setWallpaperComponentInternal(ComponentName name, String callingPackage,
+            @SetWallpaperFlags int which, int userIdIn) {
         if (DEBUG) {
             Slog.v(TAG, "Setting new live wallpaper: which=" + which + ", component: " + name);
         }
@@ -3205,6 +3207,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
                 newWallpaper.imageWallpaperPending = false;
                 newWallpaper.mWhich = which;
                 newWallpaper.mSystemWasBoth = systemIsBoth;
+                newWallpaper.fromForegroundApp = isFromForegroundApp(callingPackage);
                 final WallpaperDestinationChangeHandler
                         liveSync = new WallpaperDestinationChangeHandler(
                         newWallpaper);
@@ -3276,7 +3279,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
     }
 
     // TODO(b/266818039) Remove this method
-    private void setWallpaperComponentInternalLegacy(ComponentName name,
+    private void setWallpaperComponentInternalLegacy(ComponentName name, String callingPackage,
             @SetWallpaperFlags int which, int userId) {
         userId = ActivityManager.handleIncomingUser(getCallingPid(), getCallingUid(), userId,
                 false /* all */, true /* full */, "changing live wallpaper", null /* pkg */);
@@ -3316,6 +3319,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
             try {
                 wallpaper.imageWallpaperPending = false;
                 wallpaper.mWhich = which;
+                wallpaper.fromForegroundApp = isFromForegroundApp(callingPackage);
                 boolean same = changingToSame(name, wallpaper);
                 if (bindWallpaperComponentLocked(name, false, true, wallpaper, null)) {
                     if (!same) {
@@ -3675,6 +3679,11 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
         }
     }
 
+    private boolean isFromForegroundApp(String callingPackage) {
+        return Binder.withCleanCallingIdentity(() ->
+                mActivityManager.getPackageImportance(callingPackage) == IMPORTANCE_FOREGROUND);
+    }
+
     /**
      * Certain user types do not support wallpapers (e.g. managed profiles). The check is
      * implemented through through the OP_WRITE_WALLPAPER AppOp.
@@ -3721,6 +3730,11 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
     @Override
     public boolean isLockscreenLiveWallpaperEnabled() {
         return mIsLockscreenLiveWallpaperEnabled;
+    }
+
+    @Override
+    public boolean isMultiCropEnabled() {
+        return mIsMultiCropEnabled;
     }
 
     private void onDisplayReadyInternal(int displayId) {
@@ -3973,6 +3987,8 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
             if (mFallbackWallpaper != null) {
                 dumpWallpaper(mFallbackWallpaper, pw);
             }
+            pw.print("mIsLockscreenLiveWallpaperEnabled=");
+            pw.println(mIsLockscreenLiveWallpaperEnabled);
         }
     }
 }

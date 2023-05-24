@@ -1142,7 +1142,8 @@ public class AudioDeviceInventory {
         synchronized (rolesMap) {
             Pair<Integer, Integer> key = new Pair<>(useCase, role);
             if (!rolesMap.containsKey(key)) {
-                return AudioSystem.SUCCESS;
+                // trying to clear a role for a device that wasn't set
+                return AudioSystem.BAD_VALUE;
             }
             final int status = asi.deviceRoleAction(useCase, role, null);
             if (status == AudioSystem.SUCCESS) {
@@ -1581,6 +1582,9 @@ public class AudioDeviceInventory {
             AudioService.sDeviceLogger.enqueue(new EventLogger.StringEvent(
                     "A2DP device addr=" + address + " now available").printLog(TAG));
         }
+
+        // Reset A2DP suspend state each time a new sink is connected
+        mDeviceBroker.clearA2dpSuspended();
 
         // The convention for head tracking sensors associated with A2DP devices is to
         // use a UUID derived from the MAC address as follows:

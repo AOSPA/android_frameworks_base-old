@@ -63,6 +63,8 @@ import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.window.BackEvent;
 
+import androidx.annotation.DimenRes;
+
 import com.android.internal.config.sysui.SystemUiDeviceConfigFlags;
 import com.android.internal.policy.GestureNavigationSettingsObserver;
 import com.android.systemui.R;
@@ -224,10 +226,9 @@ public class EdgeBackGestureHandler implements PluginListener<NavigationEdgeBack
     private float mBottomGestureHeight;
     // The slop to distinguish between horizontal and vertical motion
     private float mTouchSlop;
-    // The threshold for triggering back
-    private float mBackSwipeTriggerThreshold;
     // The threshold for back swipe full progress.
-    private float mBackSwipeProgressThreshold;
+    private float mBackSwipeLinearThreshold;
+    private float mNonLinearFactor;
     // Duration after which we consider the event as longpress.
     private final int mLongPressTimeout;
     private int mStartingQuickstepRotation = -1;
@@ -473,11 +474,17 @@ public class EdgeBackGestureHandler implements PluginListener<NavigationEdgeBack
         final float backGestureSlop = DeviceConfig.getFloat(DeviceConfig.NAMESPACE_SYSTEMUI,
                         SystemUiDeviceConfigFlags.BACK_GESTURE_SLOP_MULTIPLIER, 0.75f);
         mTouchSlop = mViewConfiguration.getScaledTouchSlop() * backGestureSlop;
-        mBackSwipeTriggerThreshold = res.getDimension(
-                R.dimen.navigation_edge_action_drag_threshold);
-        mBackSwipeProgressThreshold = res.getDimension(
+        mBackSwipeLinearThreshold = res.getDimension(
                 R.dimen.navigation_edge_action_progress_threshold);
+        mNonLinearFactor = getDimenFloat(res,
+                R.dimen.back_progress_non_linear_factor);
         updateBackAnimationThresholds();
+    }
+
+    private float getDimenFloat(Resources res, @DimenRes int resId) {
+        TypedValue typedValue = new TypedValue();
+        res.getValue(resId, typedValue, true);
+        return typedValue.getFloat();
     }
 
     public void updateNavigationBarOverlayExcludeRegion(Rect exclude) {
@@ -1120,9 +1127,9 @@ public class EdgeBackGestureHandler implements PluginListener<NavigationEdgeBack
         if (mBackAnimation == null) {
             return;
         }
-        mBackAnimation.setSwipeThresholds(
-                mBackSwipeTriggerThreshold,
-                Math.min(mDisplaySize.x, mBackSwipeProgressThreshold));
+        int maxDistance = mDisplaySize.x;
+        float linearDistance = Math.min(maxDistance, mBackSwipeLinearThreshold);
+        mBackAnimation.setSwipeThresholds(linearDistance, maxDistance, mNonLinearFactor);
     }
 
     private boolean sendEvent(int action, int code) {

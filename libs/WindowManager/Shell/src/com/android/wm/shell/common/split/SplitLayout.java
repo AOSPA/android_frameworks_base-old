@@ -709,12 +709,17 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
         return context.getSystemService(WindowManager.class)
                 .getMaximumWindowMetrics()
                 .getWindowInsets()
-                .getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout())
+                .getInsetsIgnoringVisibility(WindowInsets.Type.systemBars()
+                        | WindowInsets.Type.displayCutout())
                 .toRect();
     }
 
     private static boolean isLandscape(Rect bounds) {
         return bounds.width() > bounds.height();
+    }
+
+    public boolean isDensityChanged(int densityDpi) {
+        return mDensity != densityDpi;
     }
 
     /**
