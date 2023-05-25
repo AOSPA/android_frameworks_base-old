@@ -214,9 +214,13 @@ public abstract class ProviderSession<T, R>
     protected void updateStatusAndInvokeCallback(@NonNull Status status,
             CredentialsSource source) {
         setStatus(status);
-        mProviderSessionMetric.collectCandidateMetricUpdate(isTerminatingStatus(status),
-                isCompletionStatus(status), mProviderSessionUid,
-                source == CredentialsSource.AUTH_ENTRY);
+        boolean isPrimary = mProviderInfo != null && mProviderInfo.isPrimary();
+        mProviderSessionMetric.collectCandidateMetricUpdate(isTerminatingStatus(status)
+                        || isStatusWaitingForRemoteResponse(status),
+                isCompletionStatus(status) || isUiInvokingStatus(status),
+                mProviderSessionUid,
+                /*isAuthEntry*/source == CredentialsSource.AUTH_ENTRY,
+                /*isPrimary*/isPrimary);
         mCallbacks.onProviderStatusChanged(status, mComponentName, source);
     }
     /** Common method that transfers metrics from the init phase to candidates */

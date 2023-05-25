@@ -19,6 +19,12 @@ package com.android.server.autofill;
 import static android.Manifest.permission.PROVIDE_OWN_AUTOFILL_SUGGESTIONS;
 import static android.service.autofill.AutofillFieldClassificationService.EXTRA_SCORES;
 import static android.service.autofill.AutofillService.EXTRA_FILL_RESPONSE;
+import static android.service.autofill.Dataset.PICK_REASON_NO_PCC;
+import static android.service.autofill.Dataset.PICK_REASON_PCC_DETECTION_ONLY;
+import static android.service.autofill.Dataset.PICK_REASON_PCC_DETECTION_PREFERRED_WITH_PROVIDER;
+import static android.service.autofill.Dataset.PICK_REASON_PROVIDER_DETECTION_ONLY;
+import static android.service.autofill.Dataset.PICK_REASON_PROVIDER_DETECTION_PREFERRED_WITH_PCC;
+import static android.service.autofill.Dataset.PICK_REASON_UNKNOWN;
 import static android.service.autofill.FillEventHistory.Event.UI_TYPE_DIALOG;
 import static android.service.autofill.FillEventHistory.Event.UI_TYPE_INLINE;
 import static android.service.autofill.FillEventHistory.Event.UI_TYPE_MENU;
@@ -36,6 +42,7 @@ import static android.view.autofill.AutofillManager.ACTION_START_SESSION;
 import static android.view.autofill.AutofillManager.ACTION_VALUE_CHANGED;
 import static android.view.autofill.AutofillManager.ACTION_VIEW_ENTERED;
 import static android.view.autofill.AutofillManager.ACTION_VIEW_EXITED;
+import static android.view.autofill.AutofillManager.COMMIT_REASON_SESSION_DESTROYED;
 import static android.view.autofill.AutofillManager.COMMIT_REASON_UNKNOWN;
 import static android.view.autofill.AutofillManager.FLAG_SMART_SUGGESTION_SYSTEM;
 import static android.view.autofill.AutofillManager.getSmartSuggestionModeToString;
@@ -45,6 +52,9 @@ import static com.android.server.autofill.FillRequestEventLogger.TRIGGER_REASON_
 import static com.android.server.autofill.FillRequestEventLogger.TRIGGER_REASON_PRE_TRIGGER;
 import static com.android.server.autofill.FillRequestEventLogger.TRIGGER_REASON_SERVED_FROM_CACHED_RESPONSE;
 import static com.android.server.autofill.FillResponseEventLogger.AVAILABLE_COUNT_WHEN_FILL_REQUEST_FAILED_OR_TIMEOUT;
+import static com.android.server.autofill.FillResponseEventLogger.DETECTION_PREFER_AUTOFILL_PROVIDER;
+import static com.android.server.autofill.FillResponseEventLogger.DETECTION_PREFER_UNKNOWN;
+import static com.android.server.autofill.FillResponseEventLogger.DETECTION_PREFER_PCC;
 import static com.android.server.autofill.FillResponseEventLogger.HAVE_SAVE_TRIGGER_ID;
 import static com.android.server.autofill.FillResponseEventLogger.RESPONSE_STATUS_FAILURE;
 import static com.android.server.autofill.FillResponseEventLogger.RESPONSE_STATUS_SESSION_DESTROYED;
@@ -79,7 +89,6 @@ import static com.android.server.autofill.SaveEventLogger.SAVE_UI_SHOWN_REASON_O
 import static com.android.server.autofill.SaveEventLogger.SAVE_UI_SHOWN_REASON_REQUIRED_ID_CHANGE;
 import static com.android.server.autofill.SaveEventLogger.SAVE_UI_SHOWN_REASON_TRIGGER_ID_SET;
 import static com.android.server.autofill.SaveEventLogger.SAVE_UI_SHOWN_REASON_UNKNOWN;
-import static com.android.server.autofill.SessionCommittedEventLogger.COMMIT_REASON_SESSION_DESTROYED;
 import static com.android.server.wm.ActivityTaskManagerInternal.ASSIST_KEY_RECEIVER_EXTRAS;
 import static com.android.server.wm.ActivityTaskManagerInternal.ASSIST_KEY_STRUCTURE;
 
@@ -124,6 +133,7 @@ import android.service.autofill.AutofillFieldClassificationService.Scores;
 import android.service.autofill.AutofillService;
 import android.service.autofill.CompositeUserData;
 import android.service.autofill.Dataset;
+import android.service.autofill.Dataset.DatasetEligibleReason;
 import android.service.autofill.FieldClassification;
 import android.service.autofill.FieldClassification.Match;
 import android.service.autofill.FieldClassificationUserData;
@@ -798,7 +808,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
      * Returns empty list if PCC is off or no types available
     */
     private List<String> getTypeHintsForProvider() {
-        if (!mService.getMaster().isPccClassificationEnabled()) {
+        if (!mService.isPccClassificationEnabled()) {
             return Collections.EMPTY_LIST;
         }
         final String typeHints = mService.getMaster().getPccProviderHints();
@@ -1158,7 +1168,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             }
             mSessionFlags.mAugmentedAutofillOnly = true;
             mFillRequestEventLogger.maybeSetRequestId(AUGMENTED_AUTOFILL_REQUEST_ID);
-            mFillRequestEventLogger.maybeSetIsAugmented(mSessionFlags.mAugmentedAutofillOnly);
+            mFillRequestEventLogger.maybeSetIsAugmented(true);
             mFillRequestEventLogger.logAndEndEvent();
             triggerAugmentedAutofillLocked(flags);
             return;
@@ -1200,7 +1210,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         // structure is taken. This causes only one fill request per burst of focus changes.
         cancelCurrentRequestLocked();
 
-        if (mService.getMaster().isPccClassificationEnabled()
+        if (mService.isPccClassificationEnabled()
                 && mClassificationState.mHintsToAutofillIdMap == null) {
             if (sVerbose) {
                 Slog.v(TAG, "triggering field classification");
@@ -1453,6 +1463,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         mFillResponseEventLogger.maybeSetRequestId(requestId);
         mFillResponseEventLogger.maybeSetAppPackageUid(uid);
         mFillResponseEventLogger.maybeSetResponseStatus(RESPONSE_STATUS_SUCCESS);
+        mFillResponseEventLogger.startResponseProcessingTime();
         // Time passed since session was created
         final long fillRequestReceivedRelativeTimestamp =
             SystemClock.elapsedRealtime() - mLatencyBaseTime;
@@ -1460,6 +1471,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             (int) (fillRequestReceivedRelativeTimestamp));
         mFillResponseEventLogger.maybeSetLatencyFillResponseReceivedMillis(
             (int) (fillRequestReceivedRelativeTimestamp));
+        mFillResponseEventLogger.maybeSetDetectionPreference(getDetectionPreferenceForLogging());
 
         synchronized (mLock) {
             if (mDestroyed) {
@@ -1478,6 +1490,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                 Slog.w(TAG, "onFillRequestSuccess(): no request log for id " + requestId);
             }
             if (response == null) {
+                mFillResponseEventLogger.maybeSetTotalDatasetsProvided(0);
                 if (requestLog != null) {
                     requestLog.addTaggedData(MetricsEvent.FIELD_AUTOFILL_NUM_DATASETS, -1);
                 }
@@ -1554,9 +1567,8 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                 Slog.d(TAG, message.toString());
             }
         }
-
-        if (((response.getDatasets() == null || response.getDatasets().isEmpty())
-                        && response.getAuthentication() == null)
+        List<Dataset> datasetList = response.getDatasets();
+        if (((datasetList == null || datasetList.isEmpty()) && response.getAuthentication() == null)
                 || autofillDisabled) {
             // Response is "empty" from a UI point of view, need to notify client.
             notifyUnavailableToClient(
@@ -1578,10 +1590,16 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             }
         }
 
+        int datasetCount = (datasetList == null) ? 0 : datasetList.size();
+        mFillResponseEventLogger.maybeSetTotalDatasetsProvided(datasetCount);
+        // It's possible that this maybe overwritten later on after PCC filtering.
+        mFillResponseEventLogger.maybeSetAvailableCount(datasetCount);
+
         // TODO(b/266379948): Ideally wait for PCC request to finish for a while more
         // (say 100ms) before proceeding further on.
 
         processResponseLockedForPcc(response, response.getClientState(), requestFlags);
+        mFillResponseEventLogger.maybeSetLatencyResponseProcessingMillis();
     }
 
 
@@ -1631,7 +1649,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             Slog.d(TAG, "DBG: computeDatasetsForProviderAndUpdateContainer: "
                     + autofillProviderContainer);
         }
-        if (!mService.getMaster().isPccClassificationEnabled())  {
+        if (!mService.isPccClassificationEnabled())  {
             if (sVerbose) {
                 Slog.v(TAG, "PCC classification is disabled");
             }
@@ -1728,6 +1746,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             }
             if (ids.isEmpty()) return saveInfo;
             AutofillId[] autofillIds = new AutofillId[ids.size()];
+            mSaveEventLogger.maybeSetIsFrameworkCreatedSaveInfo(true);
             ids.toArray(autofillIds);
             return SaveInfo.copy(saveInfo, autofillIds);
         }
@@ -1798,6 +1817,13 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
 
     private void computeDatasetsForProviderAndUpdateContainer(
             FillResponse response, DatasetComputationContainer container) {
+        @DatasetEligibleReason int globalPickReason = PICK_REASON_UNKNOWN;
+        boolean isPccEnabled = mService.isPccClassificationEnabled();
+        if (isPccEnabled) {
+            globalPickReason = PICK_REASON_PROVIDER_DETECTION_ONLY;
+        } else {
+            globalPickReason = PICK_REASON_NO_PCC;
+        }
         List<Dataset> datasets = response.getDatasets();
         if (datasets == null) return;
         ArrayMap<AutofillId, Set<Dataset>> autofillIdToDatasetMap = new ArrayMap<>();
@@ -1805,6 +1831,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         Set<AutofillId> eligibleAutofillIds = new ArraySet<>();
         for (Dataset dataset : response.getDatasets()) {
             if (dataset.getFieldIds() == null || dataset.getFieldIds().isEmpty()) continue;
+            @DatasetEligibleReason int pickReason = globalPickReason;
             if (dataset.getAutofillDatatypes() != null
                     && !dataset.getAutofillDatatypes().isEmpty()) {
                 // This dataset has information relevant for detection too, so we should filter
@@ -1827,6 +1854,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                 if (newSize == 0) continue;
 
                 if (conversionRequired) {
+                    pickReason = PICK_REASON_PROVIDER_DETECTION_PREFERRED_WITH_PCC;
                     ArrayList<AutofillId> fieldIds = new ArrayList<>(newSize);
                     ArrayList<AutofillValue> fieldValues = new ArrayList<>(newSize);
                     ArrayList<RemoteViews> fieldPresentations = new ArrayList<>(newSize);
@@ -1870,6 +1898,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                                     dataset.getAuthentication());
                 }
             }
+            dataset.setEligibleReasonReason(pickReason);
             eligibleDatasets.add(dataset);
             for (AutofillId id : dataset.getFieldIds()) {
                 eligibleAutofillIds.add(id);
@@ -1905,6 +1934,8 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             Set<AutofillId> eligibleAutofillIds = new ArraySet<>();
 
             for (int i = 0; i < datasets.size(); i++) {
+
+                @DatasetEligibleReason int pickReason = PICK_REASON_PCC_DETECTION_ONLY;
                 Dataset dataset = datasets.get(i);
                 if (dataset.getAutofillDatatypes() == null
                         || dataset.getAutofillDatatypes().isEmpty()) continue;
@@ -1919,7 +1950,12 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                 Set<AutofillId> datasetAutofillIds = new ArraySet<>();
 
                 for (int j = 0; j < dataset.getAutofillDatatypes().size(); j++) {
-                    if (dataset.getAutofillDatatypes().get(j) == null) continue;
+                    if (dataset.getAutofillDatatypes().get(j) == null) {
+                        if (dataset.getFieldIds() != null && dataset.getFieldIds().get(j) != null) {
+                            pickReason = PICK_REASON_PCC_DETECTION_PREFERRED_WITH_PROVIDER;
+                        }
+                        continue;
+                    }
                     String hint = dataset.getAutofillDatatypes().get(j);
 
                     if (hintsToAutofillIdMap.containsKey(hint)) {
@@ -1966,6 +2002,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                                 null,
                                 dataset.getId(),
                                 dataset.getAuthentication());
+                newDataset.setEligibleReasonReason(pickReason);
                 eligibleDatasets.add(newDataset);
                 Set<Dataset> newDatasets;
                 for (AutofillId autofillId : datasetAutofillIds) {
@@ -2008,7 +2045,10 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         mFillResponseEventLogger.maybeSetRequestId(requestId);
         mFillResponseEventLogger.maybeSetAppPackageUid(uid);
         mFillResponseEventLogger.maybeSetAvailableCount(
-            AVAILABLE_COUNT_WHEN_FILL_REQUEST_FAILED_OR_TIMEOUT);
+                AVAILABLE_COUNT_WHEN_FILL_REQUEST_FAILED_OR_TIMEOUT);
+        mFillResponseEventLogger.maybeSetTotalDatasetsProvided(
+                AVAILABLE_COUNT_WHEN_FILL_REQUEST_FAILED_OR_TIMEOUT);
+        mFillResponseEventLogger.maybeSetDetectionPreference(getDetectionPreferenceForLogging());
         final long fillRequestReceivedRelativeTimestamp =
             SystemClock.elapsedRealtime() - mLatencyBaseTime;
         mFillResponseEventLogger.maybeSetLatencyFillResponseReceivedMillis(
@@ -2229,7 +2269,6 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
     @Override
     public void save() {
         synchronized (mLock) {
-            mSaveEventLogger.maybeSetSaveButtonClicked(true);
             if (mDestroyed) {
                 Slog.w(TAG, "Call to Session#save() rejected - session: "
                         + id + " destroyed");
@@ -2248,7 +2287,6 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
     public void cancelSave() {
         synchronized (mLock) {
             mSessionFlags.mShowingSaveUi = false;
-            mSaveEventLogger.maybeSetDialogDismissed(true);
             if (mDestroyed) {
                 Slog.w(TAG, "Call to Session#cancelSave() rejected - session: "
                         + id + " destroyed");
@@ -2707,6 +2745,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         mHandler.sendMessage(obtainMessage(Session::handleLogContextCommitted, this,
                 Event.NO_SAVE_UI_REASON_NONE,
                 COMMIT_REASON_UNKNOWN));
+        logAllEvents(COMMIT_REASON_UNKNOWN);
     }
 
     /**
@@ -2720,6 +2759,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             @AutofillCommitReason int commitReason) {
         mHandler.sendMessage(obtainMessage(Session::handleLogContextCommitted, this,
                 saveDialogNotShowReason, commitReason));
+        logAllEvents(commitReason);
     }
 
     private void handleLogContextCommitted(@NoSaveReason int saveDialogNotShowReason,
@@ -2951,6 +2991,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                 changedFieldIds, changedDatasetIds, manuallyFilledFieldIds,
                 manuallyFilledDatasetIds, detectedFieldIds, detectedFieldClassifications,
                 mComponentName, mCompatMode, saveDialogNotShowReason);
+        logAllEvents(commitReason);
     }
 
     /**
@@ -3403,7 +3444,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                 getUiForShowing().showSaveUi(serviceLabel, serviceIcon,
                         mService.getServicePackageName(), saveInfo, this,
                         mComponentName, this, mContext,  mPendingSaveUi, isUpdate, mCompatMode,
-                        response.getShowSaveDialogIcon());
+                        response.getShowSaveDialogIcon(), mSaveEventLogger);
                 mSaveEventLogger.maybeSetLatencySaveUiDisplayMillis(
                     SystemClock.elapsedRealtime()- saveUiDisplayStartTimestamp);
                 if (client != null) {
@@ -3858,8 +3899,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                 // View is triggering autofill.
                 mCurrentViewId = viewState.id;
                 viewState.update(value, virtualBounds, flags);
-                mPresentationStatsEventLogger.startNewEvent();
-                mPresentationStatsEventLogger.maybeSetAutofillServiceUid(getAutofillServiceUid());
+                startNewEventForPresentationStatsEventLogger();
                 mPresentationStatsEventLogger.maybeSetIsNewRequest(true);
                 if (!isRequestSupportFillDialog(flags)) {
                     mSessionFlags.mFillDialogDisabled = true;
@@ -3992,9 +4032,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                 }
                 // If previous request was FillDialog request, a logger event was already started
                 if (!wasPreviouslyFillDialog) {
-                    mPresentationStatsEventLogger.startNewEvent();
-                    mPresentationStatsEventLogger.maybeSetAutofillServiceUid(
-                            getAutofillServiceUid());
+                    startNewEventForPresentationStatsEventLogger();
                 }
                 if (requestNewFillResponseOnViewEnteredIfNecessaryLocked(id, viewState, flags)) {
                     // If a new request was issued even if previously it was fill dialog request,
@@ -4003,9 +4041,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                     // lock guarded, we should be safe.
                     if (wasPreviouslyFillDialog) {
                         mPresentationStatsEventLogger.logAndEndEvent();
-                        mPresentationStatsEventLogger.startNewEvent();
-                        mPresentationStatsEventLogger.maybeSetAutofillServiceUid(
-                                getAutofillServiceUid());
+                        startNewEventForPresentationStatsEventLogger();
                     }
                     return;
                 }
@@ -4015,8 +4051,6 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                     mPresentationStatsEventLogger.maybeSetRequestId(response.getRequestId());
                     mPresentationStatsEventLogger.maybeSetAvailableCount(
                             response.getDatasets(), mCurrentViewId);
-                    mFillResponseEventLogger.maybeSetAvailableCount(
-                        response.getDatasets(), mCurrentViewId);
                 }
 
                 if (isSameViewEntered) {
@@ -4365,6 +4399,12 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             return false;
         }
 
+        if (mInlineSessionController.isImeShowing()) {
+            // IME is showing, fallback to normal suggestions UI
+            // Note: only work when inline suggestions supported
+            return false;
+        }
+
         synchronized (mLock) {
             if (mLastFillDialogTriggerIds == null
                     || !ArrayUtils.contains(mLastFillDialogTriggerIds, filledId)) {
@@ -4382,7 +4422,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
 
         getUiForShowing().showFillDialog(filledId, response, filterText,
                 mService.getServicePackageName(), mComponentName, serviceIcon, this,
-                id, mCompatMode);
+                id, mCompatMode, mPresentationStatsEventLogger);
         return true;
     }
 
@@ -4701,6 +4741,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             autofillableIds = null;
         }
         // Log the existing FillResponse event.
+        mFillResponseEventLogger.maybeSetAvailableCount(0);
         mFillResponseEventLogger.logAndEndEvent();
         mService.resetLastResponse();
 
@@ -4812,6 +4853,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         mFillRequestEventLogger.maybeSetAppPackageUid(uid);
         mFillRequestEventLogger.maybeSetFlags(mFlags);
         mFillRequestEventLogger.maybeSetRequestId(AUGMENTED_AUTOFILL_REQUEST_ID);
+        mFillRequestEventLogger.maybeSetIsAugmented(true);
         mFillRequestEventLogger.logAndEndEvent();
 
         final ViewState viewState = mViewStates.get(mCurrentViewId);
@@ -4928,10 +4970,10 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         mResponses.put(requestId, newResponse);
         mClientState = newClientState != null ? newClientState : newResponse.getClientState();
 
-        mPresentationStatsEventLogger.maybeSetAvailableCount(
-                newResponse.getDatasets(), mCurrentViewId);
-        mFillResponseEventLogger.maybeSetAvailableCount(
-            newResponse.getDatasets(), mCurrentViewId);
+        List<Dataset> datasetList = newResponse.getDatasets();
+
+        mPresentationStatsEventLogger.maybeSetAvailableCount(datasetList, mCurrentViewId);
+        mFillResponseEventLogger.maybeSetDatasetsCountAfterPotentialPccFiltering(datasetList);
 
         setViewStatesLocked(newResponse, ViewState.STATE_FILLABLE, false);
         updateFillDialogTriggerIdsLocked();
@@ -5051,11 +5093,14 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                         + id + " destroyed");
                 return;
             }
+            // Selected dataset id is logged regardless of authentication result.
+            mPresentationStatsEventLogger.maybeSetSelectedDatasetId(datasetIndex);
+            mPresentationStatsEventLogger.maybeSetSelectedDatasetPickReason(
+                dataset.getEligibleReason());
             // Autofill it directly...
             if (dataset.getAuthentication() == null) {
                 if (generateEvent) {
                     mService.logDatasetSelected(dataset.getId(), id, mClientState, uiType);
-                    mPresentationStatsEventLogger.maybeSetSelectedDatasetId(datasetIndex);
                 }
                 if (mCurrentViewId != null) {
                     mInlineSessionController.hideInlineSuggestionsUiLocked(mCurrentViewId);
@@ -5114,6 +5159,25 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                 mLastInlineSuggestionsRequest = Pair.create(requestId, inlineSuggestionsRequest);
             }
         };
+    }
+
+    private int getDetectionPreferenceForLogging() {
+        if (mService.isPccClassificationEnabled()) {
+            if (mService.getMaster().preferProviderOverPcc()) {
+                return DETECTION_PREFER_AUTOFILL_PROVIDER;
+            }
+            return DETECTION_PREFER_PCC;
+        }
+        return DETECTION_PREFER_UNKNOWN;
+    }
+
+    private void startNewEventForPresentationStatsEventLogger() {
+        synchronized (mLock) {
+            mPresentationStatsEventLogger.startNewEvent();
+            mPresentationStatsEventLogger.maybeSetDetectionPreference(
+                    getDetectionPreferenceForLogging());
+            mPresentationStatsEventLogger.maybeSetAutofillServiceUid(getAutofillServiceUid());
+        }
     }
 
     private void startAuthentication(int authenticationId, IntentSender intent,
@@ -5649,6 +5713,19 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         }
     }
 
+    @GuardedBy("mLock")
+    private void logAllEvents(@AutofillCommitReason int val) {
+        mSessionCommittedEventLogger.maybeSetCommitReason(val);
+        mSessionCommittedEventLogger.maybeSetRequestCount(mRequestCount);
+        mSessionCommittedEventLogger.maybeSetSessionDurationMillis(
+            SystemClock.elapsedRealtime() - mStartTime);
+        mFillRequestEventLogger.logAndEndEvent();
+        mFillResponseEventLogger.logAndEndEvent();
+        mPresentationStatsEventLogger.logAndEndEvent();
+        mSaveEventLogger.logAndEndEvent();
+        mSessionCommittedEventLogger.logAndEndEvent();
+    }
+
     /**
      * Destroy this session and perform any clean up work.
      *
@@ -5663,15 +5740,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
     @GuardedBy("mLock")
     RemoteFillService destroyLocked() {
         // Log unlogged events.
-        mSessionCommittedEventLogger.maybeSetCommitReason(COMMIT_REASON_SESSION_DESTROYED);
-        mSessionCommittedEventLogger.maybeSetRequestCount(mRequestCount);
-        mSessionCommittedEventLogger.maybeSetSessionDurationMillis(
-            SystemClock.elapsedRealtime() - mStartTime);
-        mSessionCommittedEventLogger.logAndEndEvent();
-        mPresentationStatsEventLogger.logAndEndEvent();
-        mSaveEventLogger.logAndEndEvent();
-        mFillResponseEventLogger.logAndEndEvent();
-        mFillRequestEventLogger.logAndEndEvent();
+        logAllEvents(COMMIT_REASON_SESSION_DESTROYED);
 
         if (mDestroyed) {
             return null;

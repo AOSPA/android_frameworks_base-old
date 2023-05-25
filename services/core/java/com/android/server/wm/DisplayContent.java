@@ -189,6 +189,7 @@ import android.os.Bundle;
 import android.os.Debug;
 import android.os.DeviceIntegrationUtils;
 import android.os.Handler;
+import android.os.HandlerExecutor;
 import android.os.IBinder;
 import android.os.Message;
 import android.os.PowerManager;
@@ -1183,7 +1184,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                     mDisplaySwitchTransitionLauncher.foldStateChanged(newFoldState);
                     mDisplayRotation.foldStateChanged(newFoldState);
                 };
-        mDeviceStateController.registerDeviceStateCallback(mDeviceStateConsumer);
+        mDeviceStateController.registerDeviceStateCallback(mDeviceStateConsumer,
+                new HandlerExecutor(mWmService.mH));
 
         mCloseToSquareMaxAspectRatio = mWmService.mContext.getResources().getFloat(
                 R.dimen.config_closeToSquareDisplayMaxAspectRatio);
@@ -2963,6 +2965,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 mDisplaySwitchTransitionLauncher.requestDisplaySwitchTransitionIfNeeded(mDisplayId,
                         mInitialDisplayWidth, mInitialDisplayHeight, newWidth, newHeight);
                 mDisplayRotation.physicalDisplayChanged();
+                mDisplayPolicy.physicalDisplayChanged();
             }
 
             // If there is an override set for base values - use it, otherwise use new values.
@@ -2994,6 +2997,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             reconfigureDisplayLocked();
 
             if (physicalDisplayChanged) {
+                mDisplayPolicy.physicalDisplayUpdated();
                 mDisplaySwitchTransitionLauncher.onDisplayUpdated(currentRotation, getRotation(),
                         getDisplayAreaInfo());
             }
@@ -3043,7 +3047,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                         + mBaseDisplayHeight + " on display:" + getDisplayId());
             }
         }
-        if (mDisplayReady) {
+        if (mDisplayReady && !mDisplayPolicy.shouldKeepCurrentDecorInsets()) {
             mDisplayPolicy.mDecorInsets.invalidate();
         }
     }
@@ -6689,9 +6693,10 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     /**
      * Start recording if this DisplayContent no longer has content. Stop recording if it now
-     * has content or the display is not on.
+     * has content or the display is not on. Update recording if the content has changed (for
+     * example, the user has granted consent to token re-use, so we can now start mirroring).
      */
-    @VisibleForTesting void updateRecording() {
+    void updateRecording() {
         if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION
             && getContentRecorder().updateMirroringIfSurfaceSizeChanged()) {
             return;

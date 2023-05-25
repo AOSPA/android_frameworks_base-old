@@ -299,8 +299,8 @@
     <string name="android_system_label" msgid="5974767339591067210">"Sistema Android"</string>
     <string name="user_owner_label" msgid="8628726904184471211">"Canvia al perfil personal"</string>
     <string name="managed_profile_label" msgid="7316778766973512382">"Canvia al perfil de treball"</string>
-    <string name="user_owner_app_label" msgid="1553595155465750298">"Canvia al perfil personal de <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
-    <string name="managed_profile_app_label" msgid="367401088383965725">"Canvia al perfil de treball de <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
+    <string name="user_owner_app_label" msgid="1553595155465750298">"Canvia al perfil personal a <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
+    <string name="managed_profile_app_label" msgid="367401088383965725">"Canvia al perfil de treball a <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
     <string name="permgrouplab_contacts" msgid="4254143639307316920">"Contactes"</string>
     <string name="permgroupdesc_contacts" msgid="9163927941244182567">"accedir als contactes"</string>
     <string name="permgrouplab_location" msgid="1858277002233964394">"Ubicació"</string>
@@ -703,7 +703,7 @@
     <skip />
     <string name="face_acquired_recalibrate_alt" msgid="5702674220280332115">"No es pot crear el model facial. Torna-ho a provar."</string>
     <string name="face_acquired_dark_glasses_detected_alt" msgid="4052123776406041972">"S\'han detectat ulleres fosques. La cara ha de ser completament visible."</string>
-    <string name="face_acquired_mouth_covering_detected_alt" msgid="1122294982850589766">"S\'ha detectat una mascareta. La cara ha de ser completament visible."</string>
+    <string name="face_acquired_mouth_covering_detected_alt" msgid="1122294982850589766">"S\'ha detectat una mascareta. La cara ha de veure\'s sencera."</string>
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="5085202213036026288">"No es pot verificar la cara. Maquinari no disponible."</string>
@@ -1366,7 +1366,7 @@
     <string name="usb_midi_notification_title" msgid="7404506788950595557">"S\'ha activat el mode MIDI per USB"</string>
     <string name="usb_uvc_notification_title" msgid="2030032862673400008">"Dispositiu connectat com a càmera web"</string>
     <string name="usb_accessory_notification_title" msgid="1385394660861956980">"S\'ha connectat un accessori USB"</string>
-    <string name="usb_notification_message" msgid="4715163067192110676">"Toca per veure més opcions."</string>
+    <string name="usb_notification_message" msgid="4715163067192110676">"Toca per veure més opcions"</string>
     <string name="usb_power_notification_message" msgid="7284765627437897702">"S\'està carregant el dispositiu connectat. Toca per veure més opcions."</string>
     <string name="usb_unsupported_audio_accessory_title" msgid="2335775548086533065">"S\'ha detectat un accessori d\'àudio analògic"</string>
     <string name="usb_unsupported_audio_accessory_message" msgid="1300168007129796621">"El dispositiu connectat no és compatible amb aquest telèfon. Toca per obtenir més informació."</string>
@@ -1683,10 +1683,8 @@
     <string name="kg_text_message_separator" product="default" msgid="4503708889934976866">" — "</string>
     <string name="kg_reordering_delete_drop_target_text" msgid="2034358143731750914">"Elimina"</string>
     <string name="safe_media_volume_warning" product="default" msgid="3751676824423049994">"Vols apujar el volum per sobre del nivell recomanat?\n\nSi escoltes música a un volum alt durant períodes llargs, pots danyar-te l\'oïda."</string>
-    <string name="csd_dose_reached_warning" product="default" msgid="1032473160590983236">"Advertiment:\nHas superat la quantitat de senyals sonors forts que una persona pot escoltar de manera segura amb els auriculars en una setmana.\n\nSi superes aquest límit, danyaràs la teva audició permanentment."</string>
-    <string name="csd_dose_repeat_warning" product="default" msgid="6765471037071089401">"Advertiment:\nHas superat 5 vegades la quantitat de senyals sonors forts que una persona pot escoltar de manera segura amb els auriculars en una setmana.\n\nS\'ha abaixat el volum per protegir la teva audició."</string>
-    <string name="csd_entering_RS2_warning" product="default" msgid="3699509945325496807">"El nivell al qual estàs escoltant contingut multimèdia pot provocar danys auditius si es manté durant períodes llargs.\n\nSi continues reproduint-lo en aquest nivell durant períodes llargs, podria danyar la teva audició."</string>
-    <string name="csd_momentary_exposure_warning" product="default" msgid="7861896191081176454">"Advertiment:\nActualment, estàs escoltant i reproduint contingut a un volum alt i a un nivell no segur.\n\nSi continues escoltant-lo amb aquest volum, causarà danys a la teva audició permanentment."</string>
+    <string name="csd_dose_reached_warning" product="default" msgid="491875107583931974">"Vols continuar escoltant a un volum elevat?\n\nEl volum dels auriculars ha estat elevat durant més temps del recomanat, i això pot danyar la teva audició"</string>
+    <string name="csd_momentary_exposure_warning" product="default" msgid="7730840903435405501">"S\'ha detectat un so fort\n\nEl volum dels auriculars ha estat elevat durant més temps del recomanat, i això pot danyar la teva audició"</string>
     <string name="accessibility_shortcut_warning_dialog_title" msgid="4017995837692622933">"Vols fer servir la drecera d\'accessibilitat?"</string>
     <string name="accessibility_shortcut_toogle_warning" msgid="4161716521310929544">"Si la drecera està activada, prem els dos botons de volum durant 3 segons per iniciar una funció d\'accessibilitat."</string>
     <string name="accessibility_shortcut_multiple_service_warning_title" msgid="3135860819356676426">"Vols desactivar la drecera de les funcions d\'accessibilitat?"</string>
@@ -2165,10 +2163,17 @@
     <string name="resolver_switch_on_work" msgid="4527096360772311894">"Reactiva"</string>
     <string name="resolver_no_work_apps_available" msgid="3298291360133337270">"Cap aplicació de treball"</string>
     <string name="resolver_no_personal_apps_available" msgid="6284837227019594881">"Cap aplicació personal"</string>
-    <string name="miniresolver_open_in_personal" msgid="6499100403307136696">"Obre <xliff:g id="APP">%s</xliff:g> al perfil personal"</string>
-    <string name="miniresolver_open_in_work" msgid="7138659785478630639">"Obre <xliff:g id="APP">%s</xliff:g> al perfil de treball"</string>
+    <string name="miniresolver_open_work" msgid="6286176185835401931">"Vols obrir l\'aplicació <xliff:g id="APP">%s</xliff:g> de treball?"</string>
+    <string name="miniresolver_open_in_personal" msgid="807427577794490375">"Vols obrir el contingut a l\'aplicació <xliff:g id="APP">%s</xliff:g> personal?"</string>
+    <string name="miniresolver_open_in_work" msgid="941341494673509916">"Vols obrir el contingut a l\'aplicació <xliff:g id="APP">%s</xliff:g> de treball?"</string>
+    <string name="miniresolver_call_in_work" msgid="528779988307529039">"Vols trucar des de l\'aplicació de treball?"</string>
+    <string name="miniresolver_switch_to_work" msgid="1042640606122638596">"Vols canviar a l\'aplicació de treball?"</string>
+    <string name="miniresolver_call_information" msgid="6739417525304184083">"La teva organització només et permet fer trucades des d\'aplicacions de treball"</string>
+    <string name="miniresolver_sms_information" msgid="4311292661329483088">"La teva organització només et permet enviar missatges des d\'aplicacions de treball"</string>
     <string name="miniresolver_use_personal_browser" msgid="776072682871133308">"Utilitza el navegador personal"</string>
     <string name="miniresolver_use_work_browser" msgid="543575306251952994">"Utilitza el navegador de treball"</string>
+    <string name="miniresolver_call" msgid="6386870060423480765">"Truca"</string>
+    <string name="miniresolver_switch" msgid="8011924662117617451">"Canvia"</string>
     <string name="PERSOSUBSTATE_SIM_NETWORK_ENTRY" msgid="8050953231914637819">"PIN de desbloqueig de la xarxa SIM"</string>
     <string name="PERSOSUBSTATE_SIM_NETWORK_SUBSET_ENTRY" msgid="7164399703751688214">"PIN de desbloqueig de subconjunt de la xarxa SIM"</string>
     <string name="PERSOSUBSTATE_SIM_CORPORATE_ENTRY" msgid="4447629474818217364">"PIN de desbloqueig de la SIM corporativa"</string>

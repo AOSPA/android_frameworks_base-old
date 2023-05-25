@@ -300,6 +300,7 @@ public class BluetoothEventManager {
                 }
             }
             cachedDevice.onActiveDeviceChanged(isActive, bluetoothProfile);
+            mDeviceManager.onActiveDeviceChanged(cachedDevice);
         }
         for (BluetoothCallback callback : mCallbacks) {
             callback.onActiveDeviceChanged(activeDevice, bluetoothProfile);

@@ -386,7 +386,9 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         mPrimaryBouncerCallbackInteractor.addBouncerExpansionCallback(mExpansionCallback);
         mShadeViewController = shadeViewController;
         if (shadeExpansionStateManager != null) {
-            shadeExpansionStateManager.addExpansionListener(this);
+            ShadeExpansionChangeEvent currentState =
+                    shadeExpansionStateManager.addExpansionListener(this);
+            onPanelExpansionChanged(currentState);
         }
         mBypassController = bypassController;
         mNotificationContainer = notificationContainer;
@@ -488,7 +490,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         final boolean hideBouncerOverDream =
                 mDreamOverlayStateController.isOverlayActive()
                         && (mShadeViewController.isExpanded()
-                        || mShadeViewController.isExpanding());
+                        || mShadeViewController.isExpandingOrCollapsing());
 
         final boolean isUserTrackingStarted =
                 event.getFraction() != EXPANSION_HIDDEN && event.getTracking();

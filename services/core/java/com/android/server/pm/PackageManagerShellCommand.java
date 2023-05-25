@@ -16,6 +16,7 @@
 
 package com.android.server.pm;
 
+import static android.Manifest.permission.GET_APP_METADATA;
 import static android.content.pm.PackageInstaller.LOCATION_DATA_APP;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_REVOKED_COMPAT;
@@ -353,6 +354,10 @@ class PackageManagerShellCommand extends ShellCommand {
                     return runSetSilentUpdatesPolicy();
                 case "get-app-metadata":
                     return runGetAppMetadata();
+                case "wait-for-handler":
+                    return runWaitForHandler(/* forBackgroundHandler= */ false);
+                case "wait-for-background-handler":
+                    return runWaitForHandler(/* forBackgroundHandler= */ true);
                 default: {
                     if (ART_SERVICE_COMMANDS.contains(cmd)) {
                         if (DexOptHelper.useArtService()) {
@@ -697,7 +702,7 @@ class PackageManagerShellCommand extends ShellCommand {
                         null /* usesSplitNames */, null /* configForSplit */,
                         null /* splitApkPaths */, null /* splitRevisionCodes */,
                         apkLite.getTargetSdkVersion(), null /* requiredSplitTypes */,
-                        null /* splitTypes */, apkLite.isAllowUpdateOwnership());
+                        null /* splitTypes */);
                 sessionSize += InstallLocationUtils.calculateInstalledSize(pkgLite,
                         params.sessionParams.abiOverride, fd.getFileDescriptor());
             } catch (IOException e) {
@@ -3576,6 +3581,7 @@ class PackageManagerShellCommand extends ShellCommand {
     }
 
     private int runGetAppMetadata() {
+        mContext.enforceCallingOrSelfPermission(GET_APP_METADATA, "getAppMetadataFd");
         final PrintWriter pw = getOutPrintWriter();
         String pkgName = getNextArgRequired();
         ParcelFileDescriptor pfd = null;
@@ -3597,6 +3603,40 @@ class PackageManagerShellCommand extends ShellCommand {
             }
         }
         return 1;
+    }
+
+    private int runWaitForHandler(boolean forBackgroundHandler) {
+        final PrintWriter pw = getOutPrintWriter();
+        long timeoutMillis = 60000; // default timeout is 60 seconds
+        String opt;
+        while ((opt = getNextOption()) != null) {
+            switch (opt) {
+                case "--timeout":
+                    timeoutMillis = Long.parseLong(getNextArgRequired());
+                    break;
+                default:
+                    pw.println("Error: Unknown option: " + opt);
+                    return -1;
+            }
+        }
+        if (timeoutMillis <= 0) {
+            pw.println("Error: --timeout value must be positive: " + timeoutMillis);
+            return -1;
+        }
+        final boolean success;
+        try {
+            success = mInterface.waitForHandler(timeoutMillis, forBackgroundHandler);
+        } catch (RemoteException e) {
+            pw.println("Failure [" + e.getClass().getName() + " - " + e.getMessage() + "]");
+            return -1;
+        }
+        if (success) {
+            pw.println("Success");
+            return 0;
+        } else {
+            pw.println("Timeout. PackageManager handlers are still busy.");
+            return -1;
+        }
     }
 
     private int runArtServiceCommand() {
@@ -4424,6 +4464,18 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("      --throttle-time: update the silent updates throttle time in seconds.");
         pw.println("      --reset: restore the installer and throttle time to the default, and");
         pw.println("        clear tracks of silent updates in the system.");
+        pw.println("");
+        pw.println("  wait-for-handler --timeout <MILLIS>");
+        pw.println("    Wait for a given amount of time till the package manager handler finishes");
+        pw.println("    handling all pending messages.");
+        pw.println("      --timeout: wait for a given number of milliseconds. If the handler(s)");
+        pw.println("        fail to finish before the timeout, the command returns error.");
+        pw.println("");
+        pw.println("  wait-for-background-handler --timeout <MILLIS>");
+        pw.println("    Wait for a given amount of time till the package manager's background");
+        pw.println("    handler finishes handling all pending messages.");
+        pw.println("      --timeout: wait for a given number of milliseconds. If the handler(s)");
+        pw.println("        fail to finish before the timeout, the command returns error.");
         pw.println("");
         if (DexOptHelper.useArtService()) {
             printArtServiceHelp();
