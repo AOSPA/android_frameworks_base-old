@@ -577,6 +577,7 @@ public class CarrierTextManager {
                 return CarrierTextManager.StatusMode.SimLocked;
             case TelephonyManager.SIM_STATE_PUK_REQUIRED:
                 return CarrierTextManager.StatusMode.SimPukLocked;
+            case TelephonyManager.SIM_STATE_LOADED:
             case TelephonyManager.SIM_STATE_READY:
                 return CarrierTextManager.StatusMode.Normal;
             case TelephonyManager.SIM_STATE_PERM_DISABLED:
