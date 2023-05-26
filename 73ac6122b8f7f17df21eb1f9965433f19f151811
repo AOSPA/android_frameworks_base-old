@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "48d440e6_c7e31b48",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 4
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000062
+      },
+      "writtenOn": "2023-05-26T13:20:12Z",
+      "side": 1,
+      "message": "I\u0027ve set doze_double_tap_proximity_check to true by default.\n\nIt seems to make sense to disable this on an opt-in basis.",
+      "revId": "73ac6122b8f7f17df21eb1f9965433f19f151811",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
