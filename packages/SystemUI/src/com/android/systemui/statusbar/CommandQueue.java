@@ -33,7 +33,6 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.graphics.drawable.Icon;
 import android.hardware.biometrics.BiometricAuthenticator.Modality;
-import android.hardware.biometrics.BiometricManager.BiometricMultiSensorMode;
 import android.hardware.biometrics.IBiometricContextListener;
 import android.hardware.biometrics.IBiometricSysuiReceiver;
 import android.hardware.biometrics.PromptInfo;
@@ -321,7 +320,7 @@ public class CommandQueue extends IStatusBar.Stub implements
                 IBiometricSysuiReceiver receiver,
                 int[] sensorIds, boolean credentialAllowed,
                 boolean requireConfirmation, int userId, long operationId, String opPackageName,
-                long requestId, @BiometricMultiSensorMode int multiSensorConfig) {
+                long requestId) {
         }
 
         /** @see IStatusBar#onBiometricAuthenticated(int) */
@@ -967,8 +966,7 @@ public class CommandQueue extends IStatusBar.Stub implements
     @Override
     public void showAuthenticationDialog(PromptInfo promptInfo, IBiometricSysuiReceiver receiver,
             int[] sensorIds, boolean credentialAllowed, boolean requireConfirmation,
-            int userId, long operationId, String opPackageName, long requestId,
-            @BiometricMultiSensorMode int multiSensorConfig) {
+            int userId, long operationId, String opPackageName, long requestId) {
         synchronized (mLock) {
             SomeArgs args = SomeArgs.obtain();
             args.arg1 = promptInfo;
@@ -980,7 +978,6 @@ public class CommandQueue extends IStatusBar.Stub implements
             args.arg6 = opPackageName;
             args.argl1 = operationId;
             args.argl2 = requestId;
-            args.argi2 = multiSensorConfig;
             mHandler.obtainMessage(MSG_BIOMETRIC_SHOW, args)
                     .sendToTarget();
         }
@@ -1585,8 +1582,7 @@ public class CommandQueue extends IStatusBar.Stub implements
                                 someArgs.argi1 /* userId */,
                                 someArgs.argl1 /* operationId */,
                                 (String) someArgs.arg6 /* opPackageName */,
-                                someArgs.argl2 /* requestId */,
-                                someArgs.argi2 /* multiSensorConfig */);
+                                someArgs.argl2 /* requestId */);
                     }
                     someArgs.recycle();
                     break;
