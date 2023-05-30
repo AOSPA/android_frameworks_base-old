@@ -91,11 +91,12 @@ constructor(
     /** Whether or not to show the error state of [SignalDrawable] */
     private val showExclamationMark: StateFlow<Boolean> =
         combine(
-                iconInteractor.isDefaultDataEnabled,
-                iconInteractor.isDefaultConnectionFailed,
+                iconInteractor.isDataEnabled,
+                iconInteractor.isDataConnected,
+                iconInteractor.isConnectionFailed,
                 iconInteractor.isInService,
-            ) { isDefaultDataEnabled, isDefaultConnectionFailed, isInService ->
-                !isDefaultDataEnabled || isDefaultConnectionFailed || !isInService
+            ) { isDataEnabled, isDataConnected, isConnectionFailed, isInService ->
+                !isDataEnabled || (isDataConnected && isConnectionFailed) || !isInService
             }
             .stateIn(scope, SharingStarted.WhileSubscribed(), true)
 
