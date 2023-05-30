@@ -46,10 +46,9 @@ public final class VibratorHelper {
     private static final long[] DEFAULT_VIBRATE_PATTERN = {0, 250, 250, 250};
     private static final int VIBRATE_PATTERN_MAXLEN = 8 * 2 + 1; // up to eight bumps
 
-    private static final long[] DZZZ_DA_VIBRATION_PATTERN = {0, 500, 200, 70, 720};
-    private static final long[] MM_MM_MM_VIBRATION_PATTERN = {0, 300, 400, 300, 400, 300, 1400};
-    private static final long[] DA_DA_DZZZ_VIBRATION_PATTERN = {0, 70, 80, 70, 180, 600, 1050};
-    private static final long[] DA_DZZZ_DA_VIBRATION_PATTERN = {0, 80, 200, 600, 150, 60, 1050};
+    private static final long[] DZZZ_VIBRATION_PATTERN = {0, 500, 720};
+    private static final long[] MM_MM_VIBRATION_PATTERN = {0, 300, 400, 300, 1400};
+    private static final long[] DA_DA_VIBRATION_PATTERN = {0, 70, 80, 70, 1050};
 
     private final Vibrator mVibrator;
     private final long[] mDefaultPattern;
@@ -77,16 +76,13 @@ public final class VibratorHelper {
                 Settings.System.NOTIFICATION_VIBRATION_PATTERN, 0);
         switch (value) {
             case 1:
-                mCustomPattern = DZZZ_DA_VIBRATION_PATTERN;
+                mCustomPattern = DZZZ_VIBRATION_PATTERN;
                 break;
             case 2:
-                mCustomPattern = MM_MM_MM_VIBRATION_PATTERN;
+                mCustomPattern = MM_MM_VIBRATION_PATTERN;
                 break;
             case 3:
-                mCustomPattern = DA_DA_DZZZ_VIBRATION_PATTERN;
-                break;
-            case 4:
-                mCustomPattern = DA_DZZZ_DA_VIBRATION_PATTERN;
+                mCustomPattern = DA_DA_VIBRATION_PATTERN;
                 break;
             default:
                 mCustomPattern = null;

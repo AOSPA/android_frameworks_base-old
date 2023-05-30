@@ -5713,10 +5713,9 @@ public final class Settings {
         /**
          * Which notification Vibration Pattern to use
          * 0: default provided value
-         * 1: dzzz-da
-         * 2: mm-mm-mm
-         * 3: da-da-dzzz
-         * 4: da-dzzz-da
+         * 1: dzzz
+         * 2: mm-mm
+         * 3: da-da
          * @hide
          */
         @Readable
