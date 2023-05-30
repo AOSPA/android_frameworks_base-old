@@ -105,6 +105,9 @@ class FakeMobileIconInteractor(
     private val _voWifiAvailable = MutableStateFlow(false)
     override val voWifiAvailable = _voWifiAvailable
 
+    private val _isConnectionFailed = MutableStateFlow(false)
+    override val isConnectionFailed = _isConnectionFailed
+
     fun setIsEmergencyOnly(emergency: Boolean) {
         _isEmergencyOnly.value = emergency
     }
