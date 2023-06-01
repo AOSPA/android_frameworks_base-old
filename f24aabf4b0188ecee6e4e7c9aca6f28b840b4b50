@@ -20,6 +20,24 @@
     {
       "unresolved": true,
       "key": {
+        "uuid": "1a3bb42d_ec7af112",
+        "filename": "core/java/android/os/RichTapVibrationEffect.java",
+        "patchSetId": 25
+      },
+      "lineNbr": 35,
+      "author": {
+        "id": 1000143
+      },
+      "writtenOn": "2023-06-01T12:39:12Z",
+      "side": 1,
+      "message": "Android handles then with their ID, but we could add their names as comments.",
+      "parentUuid": "6ac75d18_38291a34",
+      "revId": "f24aabf4b0188ecee6e4e7c9aca6f28b840b4b50",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
         "uuid": "96ebd69e_b9ef52b3",
         "filename": "core/java/android/os/RichTapVibrationEffect.java",
         "patchSetId": 25
@@ -37,6 +55,24 @@
     {
       "unresolved": true,
       "key": {
+        "uuid": "5bd39e70_c805e7b2",
+        "filename": "core/java/android/os/RichTapVibrationEffect.java",
+        "patchSetId": 25
+      },
+      "lineNbr": 47,
+      "author": {
+        "id": 1000143
+      },
+      "writtenOn": "2023-06-01T12:39:12Z",
+      "side": 1,
+      "message": "\"TEXTURE_TICK\" has this ID, there are some other effects we don\u0027t support in between.",
+      "parentUuid": "96ebd69e_b9ef52b3",
+      "revId": "f24aabf4b0188ecee6e4e7c9aca6f28b840b4b50",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
         "uuid": "96067cbd_4c9f9b0f",
         "filename": "services/core/java/com/android/server/vibrator/RichTapVibratorService.java",
         "patchSetId": 25
@@ -48,6 +84,24 @@
       "writtenOn": "2023-06-01T02:32:57Z",
       "side": 1,
       "message": "do these log frequently? is e too high?",
+      "revId": "f24aabf4b0188ecee6e4e7c9aca6f28b840b4b50",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "33aa0b99_26dde7e8",
+        "filename": "services/core/java/com/android/server/vibrator/RichTapVibratorService.java",
+        "patchSetId": 25
+      },
+      "lineNbr": 96,
+      "author": {
+        "id": 1000143
+      },
+      "writtenOn": "2023-06-01T12:39:12Z",
+      "side": 1,
+      "message": "Shouldn\u0027t happen at all, so if it happens e seems fine to me.",
+      "parentUuid": "96067cbd_4c9f9b0f",
       "revId": "f24aabf4b0188ecee6e4e7c9aca6f28b840b4b50",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
