@@ -1911,6 +1911,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
     }
 
     /**
+     * Flag to track whether BT_SCO=on is already set in native audio layer.
+     */
+    private boolean mScoStateSet = false;
+
+    /**
      * Configures audio policy manager and audio HAL according to active communication route.
      * Always called from message Handler.
      */
@@ -1929,8 +1934,20 @@ import java.util.concurrent.atomic.AtomicBoolean;
         if (preferredCommunicationDevice == null
                 || preferredCommunicationDevice.getType() != AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
             AudioSystem.setParameters("BT_SCO=off");
+            mScoStateSet = false;
         } else {
-            AudioSystem.setParameters("BT_SCO=on");
+            /**
+             * Checking if BT_SCO=on param is already sent, to decide whether to send it or not.
+             * This is done to avoid extra processing in APM while setting BT_SCO=on multiple
+             * times in native layer.
+             */
+            if (!mScoStateSet) {
+                AudioSystem.setParameters("BT_SCO=on");
+                mScoStateSet = true;
+            } else {
+                onUpdatePhoneStrategyDevice(preferredCommunicationDevice);
+                return;
+            }
         }
         if (preferredCommunicationDevice == null) {
             AudioDeviceAttributes defaultDevice = getDefaultCommunicationDevice();
