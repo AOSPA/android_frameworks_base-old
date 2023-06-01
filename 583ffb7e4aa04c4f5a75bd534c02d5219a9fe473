@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "9667bffb_63166a7b",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2023-06-01T17:23:15Z",
+      "side": 1,
+      "message": "this kinda sucks but so does lag so go for it",
+      "revId": "583ffb7e4aa04c4f5a75bd534c02d5219a9fe473",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
