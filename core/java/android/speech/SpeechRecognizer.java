@@ -813,7 +813,7 @@ public class SpeechRecognizer {
             Intent recognizerIntent,
             Executor callbackExecutor,
             RecognitionSupportCallback recognitionSupportCallback) {
-        if (!maybeInitializeManagerService()) {
+        if (!maybeInitializeManagerService() || !checkOpenConnection()) {
             return;
         }
         try {
@@ -832,7 +832,7 @@ public class SpeechRecognizer {
             Intent recognizerIntent,
             @Nullable Executor callbackExecutor,
             @Nullable ModelDownloadListener modelDownloadListener) {
-        if (!maybeInitializeManagerService()) {
+        if (!maybeInitializeManagerService() || !checkOpenConnection()) {
             return;
         }
 

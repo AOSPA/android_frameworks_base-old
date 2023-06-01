@@ -7715,6 +7715,15 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         @Override
+        public void onDisplayManagerReceivedDeviceState(int deviceState) {
+            mH.post(() -> {
+                synchronized (mGlobalLock) {
+                    mRoot.onDisplayManagerReceivedDeviceState(deviceState);
+                }
+            });
+        }
+
+        @Override
         public void setMagnificationSpec(int displayId, MagnificationSpec spec) {
             synchronized (mGlobalLock) {
                 if (mAccessibilityController.hasCallbacks()) {

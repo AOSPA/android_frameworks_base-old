@@ -2218,6 +2218,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         // TODO: non-linearly transform progress fraction into squish amount (ease-in, linear out)
         mCurrentBackProgress = progressFraction;
         applyBackScaling(progressFraction);
+        mQsController.setClippingBounds();
     }
 
     /** Resets back progress. */

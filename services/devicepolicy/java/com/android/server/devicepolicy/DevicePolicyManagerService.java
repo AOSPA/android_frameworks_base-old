@@ -139,6 +139,7 @@ import static android.app.admin.DevicePolicyManager.ID_TYPE_INDIVIDUAL_ATTESTATI
 import static android.app.admin.DevicePolicyManager.ID_TYPE_MEID;
 import static android.app.admin.DevicePolicyManager.ID_TYPE_SERIAL;
 import static android.app.admin.DevicePolicyManager.LEAVE_ALL_SYSTEM_APPS_ENABLED;
+import static android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_BLOCK_ACTIVITY_START_IN_TASK;
 import static android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_GLOBAL_ACTIONS;
 import static android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_HOME;
 import static android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_KEYGUARD;
@@ -2191,7 +2192,7 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
 
     private void suspendAppsForQuietProfiles(boolean toSuspend) {
         PackageManagerInternal pmi = mInjector.getPackageManagerInternal();
-        List<UserInfo> users = mUserManager.getUsers();
+        List<UserInfo> users = mUserManagerInternal.getUsers(true /* excludeDying */);
         for (UserInfo user : users) {
             if (user.isManagedProfile() && user.isQuietModeEnabled()) {
                 pmi.setPackagesSuspendedForQuietMode(user.id, toSuspend);
@@ -10117,6 +10118,7 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
         mOwners.clearDeviceOwner();
         mOwners.writeDeviceOwner();
 
+        updateAdminCanGrantSensorsPermissionCache(userId);
         clearDeviceOwnerUserRestriction(UserHandle.of(userId));
         mInjector.securityLogSetLoggingEnabledProperty(false);
         mSecurityLogMonitor.stop();
@@ -11112,7 +11114,7 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
                 || hasCallingOrSelfPermission(permission.INTERACT_ACROSS_USERS);
     }
 
-    private boolean canUserUseLockTaskLocked(int userId) {
+    private boolean canDPCManagedUserUseLockTaskLocked(int userId) {
         if (isUserAffiliatedWithDeviceLocked(userId)) {
             return true;
         }
@@ -11121,19 +11123,16 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
         if (mOwners.hasDeviceOwner()) {
             return false;
         }
-
-        if (!isPermissionCheckFlagEnabled() && !isPolicyEngineForFinanceFlagEnabled()) {
-            final ComponentName profileOwner = getProfileOwnerAsUser(userId);
-            if (profileOwner == null) {
-                return false;
-            }
+        
+        final ComponentName profileOwner = getProfileOwnerAsUser(userId);
+        if (profileOwner == null) {
+            return false;
         }
-
         // Managed profiles are not allowed to use lock task
         if (isManagedProfile(userId)) {
             return false;
         }
-
+        
         return true;
     }
     private void enforceCanQueryLockTaskLocked(ComponentName who, String callerPackageName) {
@@ -11141,7 +11140,8 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
         final int userId = caller.getUserId();
 
         enforceCanQuery(MANAGE_DEVICE_POLICY_LOCK_TASK, caller.getPackageName(), userId);
-        if (!canUserUseLockTaskLocked(userId)) {
+        if ((isDeviceOwner(caller) || isProfileOwner(caller))
+                && !canDPCManagedUserUseLockTaskLocked(userId)) {
             throw new SecurityException("User " + userId + " is not allowed to use lock task");
         }
     }
@@ -11157,7 +11157,8 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
                 caller.getPackageName(),
                 userId
         );
-        if (!canUserUseLockTaskLocked(userId)) {
+        if ((isDeviceOwner(caller) || isProfileOwner(caller))
+                && !canDPCManagedUserUseLockTaskLocked(userId)) {
             throw new SecurityException("User " + userId + " is not allowed to use lock task");
         }
         return enforcingAdmin;
@@ -11168,7 +11169,7 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
                 || isDefaultDeviceOwner(caller) || isFinancedDeviceOwner(caller));
 
         final int userId =  caller.getUserId();
-        if (!canUserUseLockTaskLocked(userId)) {
+        if (!canDPCManagedUserUseLockTaskLocked(userId)) {
             throw new SecurityException("User " + userId + " is not allowed to use lock task");
         }
     }
@@ -14906,8 +14907,7 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
                 policy = new LockTaskPolicy(currentPolicy);
                 policy.setPackages(Set.of(packages));
             }
-            if (policy.getPackages().isEmpty()
-                    && policy.getFlags() == DevicePolicyManager.LOCK_TASK_FEATURE_NONE) {
+            if (policy.getPackages().isEmpty()) {
                 mDevicePolicyEngine.removeLocalPolicy(
                         PolicyDefinition.LOCK_TASK,
                         enforcingAdmin,
@@ -15100,7 +15100,7 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
             final List<UserInfo> userInfos = mUserManager.getAliveUsers();
             for (int i = userInfos.size() - 1; i >= 0; i--) {
                 int userId = userInfos.get(i).id;
-                if (canUserUseLockTaskLocked(userId)) {
+                if (canDPCManagedUserUseLockTaskLocked(userId)) {
                     continue;
                 }
 
@@ -15140,7 +15140,7 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
     private void enforceCanSetLockTaskFeaturesOnFinancedDevice(CallerIdentity caller, int flags) {
         int allowedFlags = LOCK_TASK_FEATURE_SYSTEM_INFO | LOCK_TASK_FEATURE_KEYGUARD
                 | LOCK_TASK_FEATURE_HOME | LOCK_TASK_FEATURE_GLOBAL_ACTIONS
-                | LOCK_TASK_FEATURE_NOTIFICATIONS;
+                | LOCK_TASK_FEATURE_NOTIFICATIONS | LOCK_TASK_FEATURE_BLOCK_ACTIVITY_START_IN_TASK;
 
         if (!isFinancedDeviceOwner(caller)) {
             return;
@@ -15151,7 +15151,8 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
                     "Permitted lock task features when managing a financed device: "
                             + "LOCK_TASK_FEATURE_SYSTEM_INFO, LOCK_TASK_FEATURE_KEYGUARD, "
                             + "LOCK_TASK_FEATURE_HOME, LOCK_TASK_FEATURE_GLOBAL_ACTIONS, "
-                            + "or LOCK_TASK_FEATURE_NOTIFICATIONS");
+                            + "LOCK_TASK_FEATURE_NOTIFICATIONS"
+                            + " or LOCK_TASK_FEATURE_BLOCK_ACTIVITY_START_IN_TASK");
         }
     }
 
@@ -20689,7 +20690,7 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
 
     private void addUserControlDisabledPackages(CallerIdentity caller,
             EnforcingAdmin enforcingAdmin, Set<String> packages) {
-        if (isCallerDeviceOwner(caller)) {
+        if (isDeviceOwner(caller)) {
             mDevicePolicyEngine.setGlobalPolicy(
                     PolicyDefinition.USER_CONTROLLED_DISABLED_PACKAGES,
                     enforcingAdmin,
@@ -20705,7 +20706,7 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
 
     private void removeUserControlDisabledPackages(CallerIdentity caller,
             EnforcingAdmin enforcingAdmin) {
-        if (isCallerDeviceOwner(caller)) {
+        if (isDeviceOwner(caller)) {
             mDevicePolicyEngine.removeGlobalPolicy(
                     PolicyDefinition.USER_CONTROLLED_DISABLED_PACKAGES,
                     enforcingAdmin);
@@ -20714,12 +20715,6 @@ public class DevicePolicyManagerService extends IDevicePolicyManager.Stub {
                     PolicyDefinition.USER_CONTROLLED_DISABLED_PACKAGES,
                     enforcingAdmin,
                     caller.getUserId());
-        }
-    }
-
-    private boolean isCallerDeviceOwner(CallerIdentity caller) {
-        synchronized (getLockObject()) {
-            return getDeviceOwnerUserIdUncheckedLocked() == caller.getUserId();
         }
     }
 

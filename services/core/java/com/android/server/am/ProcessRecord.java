@@ -1230,26 +1230,7 @@ class ProcessRecord implements WindowProcessListener {
                 EventLog.writeEvent(EventLogTags.AM_KILL,
                         userId, mPid, processName, mState.getSetAdj(), reason);
                 Process.killProcessQuiet(mPid);
-                final boolean killProcessGroup;
-                if (mHostingRecord != null
-                        && (mHostingRecord.usesWebviewZygote() || mHostingRecord.usesAppZygote())) {
-                    synchronized (ProcessRecord.this) {
-                        killProcessGroup = mProcessGroupCreated;
-                        if (!killProcessGroup) {
-                            // The process group hasn't been created, request to skip it.
-                            mSkipProcessGroupCreation = true;
-                        }
-                    }
-                } else {
-                    killProcessGroup = true;
-                }
-                if (killProcessGroup) {
-                    if (asyncKPG) {
-                        ProcessList.killProcessGroup(uid, mPid);
-                    } else {
-                        Process.sendSignalToProcessGroup(uid, mPid, OsConstants.SIGKILL);
-                    }
-                }
+                killProcessGroupIfNecessaryLocked(asyncKPG);
             } else {
                 mPendingStart = false;
             }
@@ -1276,6 +1257,30 @@ class ProcessRecord implements WindowProcessListener {
             // Device Integartion: If the app is died during the remote task status,
             // we need to inform RemoteTaskManager to clear the references and dirty data.
             mService.mActivityTaskManager.getRemoteTaskManager().handleProcessDied(getWindowProcessController(), reason);
+        }
+    }
+
+    @GuardedBy("mService")
+    void killProcessGroupIfNecessaryLocked(boolean async) {
+        final boolean killProcessGroup;
+        if (mHostingRecord != null
+                && (mHostingRecord.usesWebviewZygote() || mHostingRecord.usesAppZygote())) {
+            synchronized (ProcessRecord.this) {
+                killProcessGroup = mProcessGroupCreated;
+                if (!killProcessGroup) {
+                    // The process group hasn't been created, request to skip it.
+                    mSkipProcessGroupCreation = true;
+                }
+            }
+        } else {
+            killProcessGroup = true;
+        }
+        if (killProcessGroup) {
+            if (async) {
+                ProcessList.killProcessGroup(uid, mPid);
+            } else {
+                Process.sendSignalToProcessGroup(uid, mPid, OsConstants.SIGKILL);
+            }
         }
     }
 

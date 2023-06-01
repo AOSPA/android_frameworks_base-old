@@ -447,8 +447,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         mTaskSupervisor = mService.mTaskSupervisor;
         mTaskSupervisor.mRootWindowContainer = this;
         mDisplayOffTokenAcquirer = mService.new SleepTokenAcquirerImpl(DISPLAY_OFF_SLEEP_TOKEN_TAG);
-        mDeviceStateController = new DeviceStateController(service.mContext, service.mH,
-                service.mGlobalLock);
+        mDeviceStateController = new DeviceStateController(service.mContext, service.mGlobalLock);
         mDisplayRotationCoordinator = new DisplayRotationCoordinator();
     }
 
@@ -1290,6 +1289,15 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         defaultTaskDisplayArea.getOrCreateRootHomeTask(ON_TOP);
         positionChildAt(POSITION_TOP, defaultTaskDisplayArea.mDisplayContent,
                 false /* includingParents */);
+    }
+
+    /**
+     * Called just before display manager has applied the device state to the displays
+     * @param deviceState device state as defined by
+     *        {@link android.hardware.devicestate.DeviceStateManager}
+     */
+    void onDisplayManagerReceivedDeviceState(int deviceState) {
+        mDeviceStateController.onDeviceStateReceivedByDisplayManager(deviceState);
     }
 
     // TODO(multi-display): Look at all callpoints to make sure they make sense in multi-display.
@@ -2496,6 +2504,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             if (!displayShouldSleep && display.mTransitionController.isShellTransitionsEnabled()
                     && !display.mTransitionController.isCollecting()) {
                 int transit = TRANSIT_NONE;
+                Task startTask = null;
                 if (!display.getDisplayPolicy().isAwake()) {
                     // Note that currently this only happens on default display because non-default
                     // display is always awake.
@@ -2503,12 +2512,12 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 } else if (display.isKeyguardOccluded()) {
                     // The display was awake so this is resuming activity for occluding keyguard.
                     transit = WindowManager.TRANSIT_KEYGUARD_OCCLUDE;
+                    startTask = display.getTaskOccludingKeyguard();
                 }
                 if (transit != TRANSIT_NONE) {
                     display.mTransitionController.requestStartTransition(
                             display.mTransitionController.createTransition(transit),
-                            null /* startTask */, null /* remoteTransition */,
-                            null /* displayChange */);
+                            startTask, null /* remoteTransition */, null /* displayChange */);
                 }
             }
             // Set the sleeping state of the root tasks on the display.

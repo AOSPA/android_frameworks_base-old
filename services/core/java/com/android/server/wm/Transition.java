@@ -702,7 +702,11 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
             // All windows are synced already.
             return;
         }
-        if (!isInTransition(wc)) return;
+        if (wc.mDisplayContent == null || !isInTransition(wc)) return;
+        if (!wc.mDisplayContent.getDisplayPolicy().isScreenOnFully()
+                || wc.mDisplayContent.getDisplayInfo().state == Display.STATE_OFF) {
+            mFlags |= WindowManager.TRANSIT_FLAG_INVISIBLE;
+        }
 
         if (mContainerFreezer == null) {
             mContainerFreezer = new ScreenshotFreezer();
@@ -2264,8 +2268,10 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
             while (leashReference.getParent() != ancestor) {
                 leashReference = leashReference.getParent();
             }
+
             final SurfaceControl rootLeash = leashReference.makeAnimationLeash().setName(
                     "Transition Root: " + leashReference.getName()).build();
+            rootLeash.setUnreleasedWarningCallSite("Transition.calculateTransitionRoots");
             startT.setLayer(rootLeash, leashReference.getLastLayer());
             outInfo.addRootLeash(endDisplayId, rootLeash,
                     ancestor.getBounds().left, ancestor.getBounds().top);
