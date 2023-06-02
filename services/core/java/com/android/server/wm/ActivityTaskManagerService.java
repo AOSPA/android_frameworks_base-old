@@ -299,6 +299,7 @@ import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
@@ -655,7 +656,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
      */
     float mMinPercentageMultiWindowSupportWidth;
 
-    final List<ActivityTaskManagerInternal.ScreenObserver> mScreenObservers = new ArrayList<>();
+    final List<ActivityTaskManagerInternal.ScreenObserver> mScreenObservers =
+            Collections.synchronizedList(new ArrayList<>());
 
     // VR Vr2d Display Id.
     int mVr2dDisplayId = INVALID_DISPLAY;
@@ -3576,10 +3578,10 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 mRootWindowContainer.forAllDisplays(displayContent -> {
                     mKeyguardController.keyguardGoingAway(displayContent.getDisplayId(), flags);
                 });
-                WallpaperManagerInternal wallpaperManagerInternal = getWallpaperManagerInternal();
-                if (wallpaperManagerInternal != null) {
-                    wallpaperManagerInternal.onKeyguardGoingAway();
-                }
+            }
+            WallpaperManagerInternal wallpaperManagerInternal = getWallpaperManagerInternal();
+            if (wallpaperManagerInternal != null) {
+                wallpaperManagerInternal.onKeyguardGoingAway();
             }
         } finally {
             Binder.restoreCallingIdentity(token);
@@ -3676,6 +3678,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     Slog.e(TAG, "Skip enterPictureInPictureMode, destroyed " + r);
                     return;
                 }
+                EventLogTags.writeWmEnterPip(r.mUserId, System.identityHashCode(r),
+                        r.shortComponentName, Boolean.toString(isAutoEnter));
                 r.setPictureInPictureParams(params);
                 r.mAutoEnteringPip = isAutoEnter;
                 mRootWindowContainer.moveActivityToPinnedRootTask(r,
@@ -5891,6 +5895,11 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         @Override
         public void registerScreenObserver(ScreenObserver observer) {
             mScreenObservers.add(observer);
+        }
+
+        @Override
+        public void unregisterScreenObserver(ScreenObserver observer) {
+            mScreenObservers.remove(observer);
         }
 
         @Override

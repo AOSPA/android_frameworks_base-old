@@ -5663,11 +5663,18 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             setClientVisible(visible);
         }
 
+        final DisplayContent displayContent = getDisplayContent();
         if (!visible) {
             mImeInsetsFrozenUntilStartInput = true;
+            if (usingShellTransitions) {
+                final WindowState wallpaperTarget =
+                        displayContent.mWallpaperController.getWallpaperTarget();
+                if (wallpaperTarget != null && wallpaperTarget.mActivityRecord == this) {
+                    displayContent.mWallpaperController.hideWallpapers(wallpaperTarget);
+                }
+            }
         }
 
-        final DisplayContent displayContent = getDisplayContent();
         if (!displayContent.mClosingApps.contains(this)
                 && !displayContent.mOpeningApps.contains(this)
                 && !fromTransition) {

@@ -1511,12 +1511,10 @@ public class ActivityManagerService extends IActivityManager.Stub
     static final class ProcessChangeItem {
         static final int CHANGE_ACTIVITIES = 1<<0;
         static final int CHANGE_FOREGROUND_SERVICES = 1<<1;
-        static final int CHANGE_CAPABILITY = 1<<2;
         int changes;
         int uid;
         int pid;
         int processState;
-        int capability;
         boolean foregroundActivities;
         int foregroundServiceTypes;
     }
@@ -3456,7 +3454,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 mProcessList.noteAppKill(app, ApplicationExitInfo.REASON_OTHER,
                         ApplicationExitInfo.SUBREASON_UNKNOWN, reason);
             }
-            ProcessList.killProcessGroup(app.uid, pid);
+            app.killProcessGroupIfNecessaryLocked(true);
             synchronized (mProcLock) {
                 app.setKilled(true);
             }
@@ -4941,7 +4939,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     }
                     checkTime(startTime, "finishAttachApplicationInner: "
                             + "after dispatching broadcasts");
-                } catch (Exception e) {
+                } catch (BroadcastDeliveryFailedException e) {
                     // If the app died trying to launch the receiver we declare it 'bad'
                     Slog.wtf(TAG, "Exception thrown dispatching broadcasts in " + app, e);
                     badApp = true;
