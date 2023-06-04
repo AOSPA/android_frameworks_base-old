@@ -38,6 +38,24 @@
     {
       "unresolved": true,
       "key": {
+        "uuid": "98bb550a_744adfb0",
+        "filename": "core/java/android/os/RichTapVibrationEffect.java",
+        "patchSetId": 25
+      },
+      "lineNbr": 35,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2023-06-04T02:22:05Z",
+      "side": 1,
+      "message": "I think that would be good.  I guess we should consider making these overlayable too.",
+      "parentUuid": "1a3bb42d_ec7af112",
+      "revId": "f24aabf4b0188ecee6e4e7c9aca6f28b840b4b50",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
         "uuid": "96ebd69e_b9ef52b3",
         "filename": "core/java/android/os/RichTapVibrationEffect.java",
         "patchSetId": 25
@@ -67,6 +85,23 @@
       "side": 1,
       "message": "\"TEXTURE_TICK\" has this ID, there are some other effects we don\u0027t support in between.",
       "parentUuid": "96ebd69e_b9ef52b3",
+      "revId": "f24aabf4b0188ecee6e4e7c9aca6f28b840b4b50",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "5a72b34a_d8902f85",
+        "filename": "core/java/android/os/RichTapVibrationEffect.java",
+        "patchSetId": 25
+      },
+      "lineNbr": 57,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2023-06-04T02:22:05Z",
+      "side": 1,
+      "message": "can you comment these too",
       "revId": "f24aabf4b0188ecee6e4e7c9aca6f28b840b4b50",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
