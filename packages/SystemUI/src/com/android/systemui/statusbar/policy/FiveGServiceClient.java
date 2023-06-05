@@ -46,6 +46,7 @@ import com.android.internal.annotations.VisibleForTesting;
 
 import java.lang.Exception;
 import java.util.ArrayList;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.lang.ref.WeakReference;
 import javax.inject.Inject;
 
@@ -79,7 +80,8 @@ public class FiveGServiceClient {
     private final ArrayList<WeakReference<KeyguardUpdateMonitorCallback>>
             mKeyguardUpdateMonitorCallbacks = Lists.newArrayList();
     @VisibleForTesting
-    final SparseArray<ArrayList<IFiveGStateListener>> mStatesListeners = new SparseArray<>();
+    final SparseArray<CopyOnWriteArrayList<IFiveGStateListener>> mStatesListeners =
+            new SparseArray<>();
     private final SparseArray<FiveGServiceState> mCurrentServiceStates = new SparseArray<>();
     private final SparseArray<FiveGServiceState> mLastServiceStates = new SparseArray<>();
 
@@ -165,9 +167,10 @@ public class FiveGServiceClient {
     public void registerListener(int phoneId, IFiveGStateListener listener) {
         Log.d(TAG, "registerListener phoneId=" + phoneId + "  listener: " + listener);
         resetState(phoneId);
-        ArrayList<IFiveGStateListener> statesListenersForPhone = mStatesListeners.get(phoneId);
+        CopyOnWriteArrayList<IFiveGStateListener> statesListenersForPhone =
+                mStatesListeners.get(phoneId);
         if (statesListenersForPhone == null) {
-            statesListenersForPhone = new ArrayList<>();
+            statesListenersForPhone = new CopyOnWriteArrayList<>();
             mStatesListeners.put(phoneId, statesListenersForPhone);
         }
         statesListenersForPhone.add(listener);
@@ -192,7 +195,8 @@ public class FiveGServiceClient {
 
     public void unregisterListener(int phoneId, IFiveGStateListener fiveGStateListener) {
         Log.d(TAG, "unregisterListener phoneId=" + phoneId + " listener: " + fiveGStateListener);
-        ArrayList<IFiveGStateListener> statesListenersForPhone = mStatesListeners.get(phoneId);
+        CopyOnWriteArrayList<IFiveGStateListener> statesListenersForPhone =
+                mStatesListeners.get(phoneId);
         if (statesListenersForPhone != null) {
             statesListenersForPhone.remove(fiveGStateListener);
             if (statesListenersForPhone.size() == 0) {
@@ -273,7 +277,8 @@ public class FiveGServiceClient {
             }
 
             lastState.copyFrom(currentState);
-            ArrayList<IFiveGStateListener> statesListenersForPhone = mStatesListeners.get(phoneId);
+            CopyOnWriteArrayList<IFiveGStateListener> statesListenersForPhone =
+                    mStatesListeners.get(phoneId);
             if (statesListenersForPhone != null) {
                 for (IFiveGStateListener listener: statesListenersForPhone) {
                     if (listener != null) {
