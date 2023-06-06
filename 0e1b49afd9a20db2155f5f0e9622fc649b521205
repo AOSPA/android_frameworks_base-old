@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "aaddb063_af8c5b98",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000825
+      },
+      "writtenOn": "2023-06-06T04:12:07Z",
+      "side": 1,
+      "message": "I rewrite translate.",
+      "revId": "0e1b49afd9a20db2155f5f0e9622fc649b521205",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
