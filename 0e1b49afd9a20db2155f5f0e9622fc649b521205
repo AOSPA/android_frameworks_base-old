@@ -16,6 +16,29 @@
       "message": "I rewrite translate.",
       "revId": "0e1b49afd9a20db2155f5f0e9622fc649b521205",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "f8224d54_f98daa12",
+        "filename": "core/res/res/values-ru/aospa_strings.xml",
+        "patchSetId": 2
+      },
+      "lineNbr": 3,
+      "author": {
+        "id": 1000509
+      },
+      "writtenOn": "2023-06-06T17:12:53Z",
+      "side": 1,
+      "message": "2023",
+      "range": {
+        "startLine": 3,
+        "startChar": 14,
+        "endLine": 3,
+        "endChar": 19
+      },
+      "revId": "0e1b49afd9a20db2155f5f0e9622fc649b521205",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
