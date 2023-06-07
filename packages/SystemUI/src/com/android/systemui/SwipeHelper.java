@@ -20,6 +20,7 @@ import static androidx.dynamicanimation.animation.DynamicAnimation.TRANSLATION_X
 import static androidx.dynamicanimation.animation.FloatPropertyCompat.createFloatPropertyCompat;
 
 import static com.android.systemui.classifier.Classifier.NOTIFICATION_DISMISS;
+import static com.android.systemui.statusbar.notification.NotificationUtils.logKey;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
@@ -54,9 +55,10 @@ import com.android.wm.shell.animation.FlingAnimationUtils;
 import com.android.wm.shell.animation.PhysicsAnimator;
 import com.android.wm.shell.animation.PhysicsAnimator.SpringConfig;
 
+import java.io.PrintWriter;
 import java.util.function.Consumer;
 
-public class SwipeHelper implements Gefingerpoken {
+public class SwipeHelper implements Gefingerpoken, Dumpable {
     static final String TAG = "com.android.systemui.SwipeHelper";
     private static final boolean DEBUG_INVALIDATE = false;
     private static final boolean CONSTRAIN_SWIPE = true;
@@ -546,6 +548,10 @@ public class SwipeHelper implements Gefingerpoken {
             if (!cancelled) {
                 updateSwipeProgressFromOffset(animView, canBeDismissed);
                 resetSwipeOfView(animView);
+                // Clear the snapped view after success, assuming it's not being swiped now
+                if (animView == mTouchedView && !mIsSwiping) {
+                    mTouchedView = null;
+                }
             }
             onChildSnappedBack(animView, targetLeft);
         });
@@ -811,13 +817,39 @@ public class SwipeHelper implements Gefingerpoken {
         }
     }
 
-    public void resetSwipeState() {
-        View swipedView = getSwipedView();
+    private void resetSwipeState() {
+        resetSwipeStates(/* resetAll= */ false);
+    }
+
+    public void resetTouchState() {
+        resetSwipeStates(/* resetAll= */ true);
+    }
+
+    /** This method resets the swipe state, and if `resetAll` is true, also resets the snap state */
+    private void resetSwipeStates(boolean resetAll) {
+        final View touchedView = mTouchedView;
+        final boolean wasSnapping = mSnappingChild;
+        final boolean wasSwiping = mIsSwiping;
         mTouchedView = null;
         mIsSwiping = false;
-        if (swipedView != null) {
-            snapChildIfNeeded(swipedView, false, 0);
-            onChildSnappedBack(swipedView, 0);
+        // If we were swiping, then we resetting swipe requires resetting everything.
+        resetAll |= wasSwiping;
+        if (resetAll) {
+            mSnappingChild = false;
+        }
+        if (touchedView == null) return;  // No view to reset visually
+        // When snap needs to be reset, first thing is to cancel any translation animation
+        final boolean snapNeedsReset = resetAll && wasSnapping;
+        if (snapNeedsReset) {
+            cancelTranslateAnimation(touchedView);
+        }
+        // actually reset the view to default state
+        if (resetAll) {
+            snapChildIfNeeded(touchedView, false, 0);
+        }
+        // report if a swipe or snap was reset.
+        if (wasSwiping || snapNeedsReset) {
+            onChildSnappedBack(touchedView, 0);
         }
     }
 
@@ -842,6 +874,31 @@ public class SwipeHelper implements Gefingerpoken {
             }
         }
         return false;
+    }
+
+    @Override
+    public void dump(@NonNull PrintWriter pw, @NonNull String[] args) {
+        pw.append("mTouchedView=").print(mTouchedView);
+        if (mTouchedView instanceof ExpandableNotificationRow) {
+            pw.append(" key=").println(logKey((ExpandableNotificationRow) mTouchedView));
+        } else {
+            pw.println();
+        }
+        pw.append("mIsSwiping=").println(mIsSwiping);
+        pw.append("mSnappingChild=").println(mSnappingChild);
+        pw.append("mLongPressSent=").println(mLongPressSent);
+        pw.append("mInitialTouchPos=").println(mInitialTouchPos);
+        pw.append("mTranslation=").println(mTranslation);
+        pw.append("mCanCurrViewBeDimissed=").println(mCanCurrViewBeDimissed);
+        pw.append("mMenuRowIntercepting=").println(mMenuRowIntercepting);
+        pw.append("mDisableHwLayers=").println(mDisableHwLayers);
+        pw.append("mDismissPendingMap: ").println(mDismissPendingMap.size());
+        if (!mDismissPendingMap.isEmpty()) {
+            mDismissPendingMap.forEach((view, animator) -> {
+                pw.append("  ").print(view);
+                pw.append(": ").println(animator);
+            });
+        }
     }
 
     public interface Callback {

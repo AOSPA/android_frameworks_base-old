@@ -47,6 +47,8 @@ class FakeMobileIconInteractor(
             )
         )
 
+    override val carrierNetworkChangeActive = MutableStateFlow(false)
+
     override val mobileIsDefault = MutableStateFlow(true)
 
     override val networkTypeIconGroup =

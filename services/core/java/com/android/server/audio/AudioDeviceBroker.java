@@ -2260,8 +2260,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
                 mDeviceInventory.setPreferredDevicesForStrategyInt(
                         mAccessibilityStrategyId, Arrays.asList(defaultDevice));
             } else {
-                mDeviceInventory.removePreferredDevicesForStrategInt(mCommunicationStrategyId);
-                mDeviceInventory.removePreferredDevicesForStrategInt(mAccessibilityStrategyId);
+                mDeviceInventory.removePreferredDevicesForStrategyInt(mCommunicationStrategyId);
+                mDeviceInventory.removePreferredDevicesForStrategyInt(mAccessibilityStrategyId);
             }
             mDeviceInventory.applyConnectedDevicesRoles();
         } else {

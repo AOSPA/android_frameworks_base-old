@@ -34,6 +34,7 @@ import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.database.ContentObserver;
 import android.graphics.Bitmap;
 import android.graphics.BlendMode;
 import android.graphics.Color;
@@ -54,6 +55,7 @@ import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.os.Process;
 import android.os.Trace;
+import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.Pair;
@@ -74,7 +76,6 @@ import androidx.constraintlayout.widget.ConstraintSet;
 
 import com.android.app.animation.Interpolators;
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.graphics.ColorUtils;
 import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.logging.InstanceId;
 import com.android.internal.widget.CachingIconView;
@@ -121,6 +122,7 @@ import com.android.systemui.surfaceeffects.turbulencenoise.TurbulenceNoiseContro
 import com.android.systemui.util.ColorUtilKt;
 import com.android.systemui.util.animation.TransitionLayout;
 import com.android.systemui.util.concurrency.DelayableExecutor;
+import com.android.systemui.util.settings.GlobalSettings;
 import com.android.systemui.util.time.SystemClock;
 
 import dagger.Lazy;
@@ -244,10 +246,18 @@ public class MediaControlPanel {
     private MultiRippleController mMultiRippleController;
     private TurbulenceNoiseController mTurbulenceNoiseController;
     private final FeatureFlags mFeatureFlags;
+    private final GlobalSettings mGlobalSettings;
 
     // TODO(b/281032715): Consider making this as a final variable. For now having a null check
     //  due to unit test failure. (Perhaps missing some setup)
     private TurbulenceNoiseAnimationConfig mTurbulenceNoiseAnimationConfig;
+
+    private ContentObserver mAnimationScaleObserver = new ContentObserver(null) {
+        @Override
+        public void onChange(boolean selfChange) {
+            updateAnimatorDurationScale();
+        }
+    };
 
     /**
      * Initialize a new control panel
@@ -276,7 +286,8 @@ public class MediaControlPanel {
             ActivityIntentHelper activityIntentHelper,
             NotificationLockscreenUserManager lockscreenUserManager,
             BroadcastDialogController broadcastDialogController,
-            FeatureFlags featureFlags
+            FeatureFlags featureFlags,
+            GlobalSettings globalSettings
     ) {
         mContext = context;
         mBackgroundExecutor = backgroundExecutor;
@@ -305,6 +316,13 @@ public class MediaControlPanel {
         });
 
         mFeatureFlags = featureFlags;
+
+        mGlobalSettings = globalSettings;
+        mGlobalSettings.registerContentObserver(
+                Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE),
+                mAnimationScaleObserver
+        );
+        updateAnimatorDurationScale();
     }
 
     /**
@@ -385,6 +403,13 @@ public class MediaControlPanel {
         }
         this.mIsSeekBarEnabled = isSeekBarEnabled;
         updateSeekBarVisibility();
+    }
+
+    private void updateAnimatorDurationScale() {
+        if (mSeekBarObserver != null) {
+            mSeekBarObserver.setAnimationEnabled(
+                    mGlobalSettings.getFloat(Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f);
+        }
     }
 
     /**
@@ -1185,24 +1210,24 @@ public class MediaControlPanel {
 
     private TurbulenceNoiseAnimationConfig createTurbulenceNoiseAnimation() {
         return new TurbulenceNoiseAnimationConfig(
-                TurbulenceNoiseAnimationConfig.DEFAULT_NOISE_GRID_COUNT,
+                /* gridCount= */ 2.14f,
                 TurbulenceNoiseAnimationConfig.DEFAULT_LUMINOSITY_MULTIPLIER,
-                /* noiseMoveSpeedX= */ 0f,
+                /* noiseMoveSpeedX= */ 0.42f,
                 /* noiseMoveSpeedY= */ 0f,
                 TurbulenceNoiseAnimationConfig.DEFAULT_NOISE_SPEED_Z,
                 /* color= */ mColorSchemeTransition.getAccentPrimary().getCurrentColor(),
-                // We want to add (BlendMode.PLUS) the turbulence noise on top of the album art.
-                // Thus, set the background color with alpha 0.
-                /* backgroundColor= */ ColorUtils.setAlphaComponent(Color.BLACK, 0),
-                TurbulenceNoiseAnimationConfig.DEFAULT_OPACITY,
+                /* backgroundColor= */ Color.BLACK,
+                /* opacity= */ 51,
                 /* width= */ mMediaViewHolder.getMultiRippleView().getWidth(),
                 /* height= */ mMediaViewHolder.getMultiRippleView().getHeight(),
                 TurbulenceNoiseAnimationConfig.DEFAULT_MAX_DURATION_IN_MILLIS,
-                /* easeInDuration= */ 2500f,
-                /* easeOutDuration= */ 2500f,
+                /* easeInDuration= */ 1350f,
+                /* easeOutDuration= */ 1350f,
                 this.getContext().getResources().getDisplayMetrics().density,
-                BlendMode.PLUS,
-                /* onAnimationEnd= */ null
+                BlendMode.SCREEN,
+                /* onAnimationEnd= */ null,
+                /* lumaMatteBlendFactor= */ 0.26f,
+                /* lumaMatteOverallBrightness= */ 0.09f
         );
     }
     private void clearButton(final ImageButton button) {
