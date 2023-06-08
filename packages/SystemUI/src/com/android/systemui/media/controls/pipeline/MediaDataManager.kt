@@ -774,6 +774,16 @@ class MediaDataManager(
         val metadata = mediaController.metadata
         val notif: Notification = sbn.notification
 
+        val appInfo =
+            notif.extras.getParcelable(
+                Notification.EXTRA_BUILDER_APPLICATION_INFO,
+                ApplicationInfo::class.java
+            )
+                ?: getAppInfoFromPackage(sbn.packageName)
+
+        // App name
+        val appName = getAppName(sbn, appInfo)
+
         // Song name
         var song: CharSequence? = metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
         if (song == null) {
@@ -782,32 +792,30 @@ class MediaDataManager(
         if (song == null) {
             song = HybridGroupManager.resolveTitle(notif)
         }
-        // Media data must have a title.
         if (song.isNullOrBlank()) {
-            try {
-                statusBarService.onNotificationError(
-                    sbn.packageName,
-                    sbn.tag,
-                    sbn.id,
-                    sbn.uid,
-                    sbn.initialPid,
-                    MEDIA_TITLE_ERROR_MESSAGE,
-                    sbn.user.identifier
-                )
-            } catch (e: RemoteException) {
-                Log.e(TAG, "cancelNotification failed: $e")
+            if (mediaFlags.isMediaTitleRequired(sbn.packageName, sbn.user)) {
+                // App is required to provide a title: cancel the underlying notification
+                try {
+                    statusBarService.onNotificationError(
+                        sbn.packageName,
+                        sbn.tag,
+                        sbn.id,
+                        sbn.uid,
+                        sbn.initialPid,
+                        MEDIA_TITLE_ERROR_MESSAGE,
+                        sbn.user.identifier
+                    )
+                } catch (e: RemoteException) {
+                    Log.e(TAG, "cancelNotification failed: $e")
+                }
+                // Only add log for media removed if active media is updated with invalid title.
+                foregroundExecutor.execute { removeEntry(key, !isNewlyActiveEntry) }
+                return
+            } else {
+                // For apps that don't have the title requirement yet, add a placeholder
+                song = context.getString(R.string.controls_media_empty_title, appName)
             }
-            // Only add log for media removed if active media is updated with invalid title.
-            foregroundExecutor.execute { removeEntry(key, !isNewlyActiveEntry) }
-            return
         }
-
-        val appInfo =
-            notif.extras.getParcelable(
-                Notification.EXTRA_BUILDER_APPLICATION_INFO,
-                ApplicationInfo::class.java
-            )
-                ?: getAppInfoFromPackage(sbn.packageName)
 
         // Album art
         var artworkBitmap = metadata?.let { loadBitmapFromUri(it) }
@@ -823,9 +831,6 @@ class MediaDataManager(
             } else {
                 Icon.createWithBitmap(artworkBitmap)
             }
-
-        // App name
-        val appName = getAppName(sbn, appInfo)
 
         // App Icon
         val smallIcon = sbn.notification.smallIcon

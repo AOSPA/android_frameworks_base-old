@@ -164,14 +164,16 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     @VisibleForTesting
     /** Should be accessible only to the main thread. */
     final Map<Integer, TelephonyDisplayInfo> mSubIdTelephonyDisplayInfoMap = new HashMap<>();
+    @VisibleForTesting
+    /** Should be accessible only to the main thread. */
+    final Map<Integer, TelephonyManager> mSubIdTelephonyManagerMap = new HashMap<>();
+    @VisibleForTesting
+    /** Should be accessible only to the main thread. */
+    final Map<Integer, TelephonyCallback> mSubIdTelephonyCallbackMap = new HashMap<>();
 
     private WifiManager mWifiManager;
     private Context mContext;
     private SubscriptionManager mSubscriptionManager;
-    /** Should be accessible only to the main thread. */
-    private Map<Integer, TelephonyManager> mSubIdTelephonyManagerMap = new HashMap<>();
-    /** Should be accessible only to the main thread. */
-    private Map<Integer, TelephonyCallback> mSubIdTelephonyCallbackMap = new HashMap<>();
     private TelephonyManager mTelephonyManager;
     private ConnectivityManager mConnectivityManager;
     private CarrierConfigTracker mCarrierConfigTracker;
@@ -385,6 +387,9 @@ public class InternetDialogController implements AccessPointController.AccessPoi
                 Log.e(TAG, "Unexpected null telephony call back for Sub " + tm.getSubscriptionId());
             }
         }
+        mSubIdTelephonyManagerMap.clear();
+        mSubIdTelephonyCallbackMap.clear();
+        mSubIdTelephonyDisplayInfoMap.clear();
         mSubscriptionManager.removeOnSubscriptionsChangedListener(
                 mOnSubscriptionsChangedListener);
         mAccessPointController.removeAccessPointCallback(this);
@@ -775,6 +780,8 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         }
 
         String summary = networkTypeDescription;
+        boolean isSmartDdsEnabled = Settings.Global.getInt(context.getContentResolver(),
+                Settings.Global.SMART_DDS_SWITCH, 0) == 1;
         boolean isForDds = subId == mDefaultDataSubId;
         int activeSubId = getActiveAutoSwitchNonDdsSubId();
         boolean isOnNonDds = activeSubId != SubscriptionManager.INVALID_SUBSCRIPTION_ID;
@@ -783,8 +790,10 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         if (activeNetworkIsCellular() || isCarrierNetworkActive()) {
             summary = context.getString(R.string.preference_summary_default_combination,
                     context.getString(
-                            isForDds // if nonDds is active, explains Dds status as poor connection
-                                    ? (isOnNonDds ? R.string.mobile_data_poor_connection
+                            // if nonDds is active, explains Dds status as poor connection
+                            isForDds || isSmartDdsEnabled
+                                    ? (isOnNonDds && !isSmartDdsEnabled
+                                            ? R.string.mobile_data_poor_connection
                                             : R.string.mobile_data_connection_active)
                             : R.string.mobile_data_temp_connection_active),
                     networkTypeDescription);

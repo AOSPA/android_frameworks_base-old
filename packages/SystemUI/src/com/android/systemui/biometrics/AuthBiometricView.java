@@ -28,6 +28,7 @@ import android.annotation.Nullable;
 import android.annotation.StringRes;
 import android.content.Context;
 import android.content.res.Configuration;
+import android.graphics.Insets;
 import android.hardware.biometrics.BiometricAuthenticator.Modality;
 import android.hardware.biometrics.BiometricPrompt;
 import android.hardware.biometrics.PromptInfo;
@@ -124,6 +125,7 @@ public abstract class AuthBiometricView extends LinearLayout {
     protected final int mTextColorHint;
 
     private AuthPanelController mPanelController;
+
     private PromptInfo mPromptInfo;
     private boolean mRequireConfirmation;
     private int mUserId;
@@ -266,11 +268,9 @@ public abstract class AuthBiometricView extends LinearLayout {
     /** Create the controller for managing the icons transitions during the prompt.*/
     @NonNull
     protected abstract AuthIconController createIconController();
-
     void setPanelController(AuthPanelController panelController) {
         mPanelController = panelController;
     }
-
     void setPromptInfo(PromptInfo promptInfo) {
         mPromptInfo = promptInfo;
     }
@@ -299,9 +299,25 @@ public abstract class AuthBiometricView extends LinearLayout {
         mJankListener = jankListener;
     }
 
+    private void updatePaddings(int size) {
+        final Insets navBarInsets = Utils.getNavbarInsets(mContext);
+        if (size != AuthDialog.SIZE_LARGE) {
+            if (mPanelController.getPosition() == AuthPanelController.POSITION_LEFT) {
+                setPadding(navBarInsets.left, 0, 0, 0);
+            } else if (mPanelController.getPosition() == AuthPanelController.POSITION_RIGHT) {
+                setPadding(0, 0, navBarInsets.right, 0);
+            } else {
+                setPadding(0, 0, 0, navBarInsets.bottom);
+            }
+        } else {
+            setPadding(0, 0, 0, 0);
+        }
+    }
+
     @VisibleForTesting
     final void updateSize(@AuthDialog.DialogSize int newSize) {
         Log.v(TAG, "Current size: " + mSize + " New size: " + newSize);
+        updatePaddings(newSize);
         if (newSize == AuthDialog.SIZE_SMALL) {
             mTitleView.setVisibility(View.GONE);
             mSubtitleView.setVisibility(View.GONE);
@@ -463,9 +479,16 @@ public abstract class AuthBiometricView extends LinearLayout {
         return false;
     }
 
+    /**
+     * Updates mIconView animation on updates to fold state, device rotation, or rear display mode
+     * @param animation new asset to use for iconw
+     */
+    public void updateIconViewAnimation(int animation) {
+        mIconView.setAnimation(animation);
+    }
+
     public void updateState(@BiometricState int newState) {
         Log.v(TAG, "newState: " + newState);
-
         mIconController.updateState(mState, newState);
 
         switch (newState) {
@@ -519,6 +542,11 @@ public abstract class AuthBiometricView extends LinearLayout {
 
         Utils.notifyAccessibilityContentChanged(mAccessibilityManager, this);
         mState = newState;
+    }
+
+    void onOrientationChanged() {
+        // Update padding and AuthPanel outline by calling updateSize when the orientation changed.
+        updateSize(mSize);
     }
 
     public void onDialogAnimatedIn() {
@@ -625,7 +653,6 @@ public abstract class AuthBiometricView extends LinearLayout {
     public void restoreState(@Nullable Bundle savedState) {
         mSavedState = savedState;
     }
-
     private void setTextOrHide(TextView view, CharSequence charSequence) {
         if (TextUtils.isEmpty(charSequence)) {
             view.setVisibility(View.GONE);
@@ -658,7 +685,6 @@ public abstract class AuthBiometricView extends LinearLayout {
     @Override
     protected void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
-        mIconController.onConfigurationChanged(newConfig);
         if (mSavedState != null) {
             updateState(mSavedState.getInt(AuthDialog.KEY_BIOMETRIC_STATE));
         }
@@ -737,10 +763,10 @@ public abstract class AuthBiometricView extends LinearLayout {
 
         mTitleView.setText(mPromptInfo.getTitle());
 
-        //setSelected could make marguee work
+        // setSelected could make marquee work
         mTitleView.setSelected(true);
         mSubtitleView.setSelected(true);
-        //make description view become scrollable
+        // make description view become scrollable
         mDescriptionView.setMovementMethod(new ScrollingMovementMethod());
 
         if (isDeviceCredentialAllowed()) {
@@ -864,6 +890,25 @@ public abstract class AuthBiometricView extends LinearLayout {
         }
 
         mLayoutParams = onMeasureInternal(width, height);
+
+        final Insets navBarInsets = Utils.getNavbarInsets(mContext);
+        final int navBarHeight = navBarInsets.bottom;
+        final int navBarWidth;
+        if (mPanelController.getPosition() == AuthPanelController.POSITION_LEFT) {
+            navBarWidth = navBarInsets.left;
+        } else if (mPanelController.getPosition() == AuthPanelController.POSITION_RIGHT) {
+            navBarWidth = navBarInsets.right;
+        } else {
+            navBarWidth = 0;
+        }
+
+        // The actual auth dialog w/h should include navigation bar size.
+        if (navBarWidth != 0 || navBarHeight != 0) {
+            mLayoutParams = new AuthDialog.LayoutParams(
+                    mLayoutParams.mMediumWidth + navBarWidth,
+                    mLayoutParams.mMediumHeight + navBarInsets.bottom);
+        }
+
         setMeasuredDimension(mLayoutParams.mMediumWidth, mLayoutParams.mMediumHeight);
     }
 

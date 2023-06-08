@@ -28,13 +28,17 @@ import com.android.internal.graphics.ColorUtils
 import java.lang.Math.max
 
 /** Provide text style linear interpolation for plain text. */
-class TextInterpolator(layout: Layout) {
-
+class TextInterpolator(
+    layout: Layout,
+    var typefaceCache: TypefaceVariantCache,
+) {
     /**
      * Returns base paint used for interpolation.
      *
      * Once you modified the style parameters, you have to call reshapeText to recalculate base text
      * layout.
+     *
+     * Do not bypass the cache and update the typeface or font variation directly.
      *
      * @return a paint object
      */
@@ -45,6 +49,8 @@ class TextInterpolator(layout: Layout) {
      *
      * Once you modified the style parameters, you have to call reshapeText to recalculate target
      * text layout.
+     *
+     * Do not bypass the cache and update the typeface or font variation directly.
      *
      * @return a paint object
      */
@@ -215,12 +221,8 @@ class TextInterpolator(layout: Layout) {
                 run.fontRuns.forEach { fontRun ->
                     fontRun.baseFont =
                         fontInterpolator.lerp(fontRun.baseFont, fontRun.targetFont, progress)
-                    val tmpFontVariationsArray = mutableListOf<FontVariationAxis>()
-                    fontRun.baseFont.axes.forEach {
-                        tmpFontVariationsArray.add(FontVariationAxis(it.tag, it.styleValue))
-                    }
-                    basePaint.fontVariationSettings =
-                        FontVariationAxis.toFontVariationSettings(tmpFontVariationsArray)
+                    val fvar = FontVariationAxis.toFontVariationSettings(fontRun.baseFont.axes)
+                    basePaint.typeface = typefaceCache.getTypefaceForVariant(fvar)
                 }
             }
         }

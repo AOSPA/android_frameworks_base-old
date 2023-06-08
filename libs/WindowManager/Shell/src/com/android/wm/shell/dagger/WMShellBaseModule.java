@@ -77,6 +77,8 @@ import com.android.wm.shell.pip.PipMediaController;
 import com.android.wm.shell.pip.PipSurfaceTransactionHelper;
 import com.android.wm.shell.pip.PipUiEventLogger;
 import com.android.wm.shell.pip.phone.PipTouchHandler;
+import com.android.wm.shell.keyguard.KeyguardTransitionHandler;
+import com.android.wm.shell.keyguard.KeyguardTransitions;
 import com.android.wm.shell.recents.RecentTasks;
 import com.android.wm.shell.recents.RecentTasksController;
 import com.android.wm.shell.recents.RecentsTransitionHandler;
@@ -186,15 +188,16 @@ public abstract class WMShellBaseModule {
 
     @WMSingleton
     @Provides
-    static DragAndDropController provideDragAndDropController(Context context,
+    static Optional<DragAndDropController> provideDragAndDropController(Context context,
             ShellInit shellInit,
             ShellController shellController,
+            ShellCommandHandler shellCommandHandler,
             DisplayController displayController,
             UiEventLogger uiEventLogger,
             IconProvider iconProvider,
             @ShellMainThread ShellExecutor mainExecutor) {
-        return new DragAndDropController(context, shellInit, shellController, displayController,
-                uiEventLogger, iconProvider, mainExecutor);
+        return Optional.ofNullable(DragAndDropController.create(context, shellInit, shellController,
+                shellCommandHandler, displayController, uiEventLogger, iconProvider, mainExecutor));
     }
 
     @WMSingleton
@@ -544,19 +547,42 @@ public abstract class WMShellBaseModule {
             DisplayController displayController,
             @ShellMainThread ShellExecutor mainExecutor,
             @ShellMainThread Handler mainHandler,
-            @ShellAnimationThread ShellExecutor animExecutor) {
+            @ShellAnimationThread ShellExecutor animExecutor,
+            ShellCommandHandler shellCommandHandler) {
         if (!context.getResources().getBoolean(R.bool.config_registerShellTransitionsOnInit)) {
             // TODO(b/238217847): Force override shell init if registration is disabled
             shellInit = new ShellInit(mainExecutor);
         }
         return new Transitions(context, shellInit, shellController, organizer, pool,
-                displayController, mainExecutor, mainHandler, animExecutor);
+                displayController, mainExecutor, mainHandler, animExecutor, shellCommandHandler);
     }
 
     @WMSingleton
     @Provides
     static TaskViewTransitions provideTaskViewTransitions(Transitions transitions) {
         return new TaskViewTransitions(transitions);
+    }
+
+    //
+    // Keyguard transitions (optional feature)
+    //
+
+    @WMSingleton
+    @Provides
+    static KeyguardTransitionHandler provideKeyguardTransitionHandler(
+            ShellInit shellInit,
+            Transitions transitions,
+            @ShellMainThread Handler mainHandler,
+            @ShellMainThread ShellExecutor mainExecutor) {
+        return new KeyguardTransitionHandler(
+                    shellInit, transitions, mainHandler, mainExecutor);
+    }
+
+    @WMSingleton
+    @Provides
+    static KeyguardTransitions provideKeyguardTransitions(
+            KeyguardTransitionHandler handler) {
+        return handler.asKeyguardTransitions();
     }
 
     //
@@ -796,7 +822,7 @@ public abstract class WMShellBaseModule {
             DisplayController displayController,
             DisplayImeController displayImeController,
             DisplayInsetsController displayInsetsController,
-            DragAndDropController dragAndDropController,
+            Optional<DragAndDropController> dragAndDropControllerOptional,
             ShellTaskOrganizer shellTaskOrganizer,
             Optional<BubbleController> bubblesOptional,
             Optional<SplitScreenController> splitScreenOptional,

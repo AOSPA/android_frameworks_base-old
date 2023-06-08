@@ -500,10 +500,11 @@ public class AppProfiler {
                 mLatestFrozenTimestamp = 0L;
                 mTotalFrozenDurations = 0L;
                 mNumOfFrozenApps = 0;
+                final int lruSize = mService.mProcessList.getLruSizeLOSP();
                 if (mCachedAppFrozenDurations == null
-                        || mCachedAppFrozenDurations.length < mCachedAppHighWatermark) {
+                        || mCachedAppFrozenDurations.length < lruSize) {
                     mCachedAppFrozenDurations = new long[Math.max(
-                            mCachedAppHighWatermark, mService.mConstants.CUR_MAX_CACHED_PROCESSES)];
+                            lruSize, mService.mConstants.CUR_MAX_CACHED_PROCESSES)];
                 }
                 mService.mProcessList.forEachLruProcessesLOSP(true, app -> {
                     if (app.mOptRecord.isFrozen()) {
@@ -1204,6 +1205,9 @@ public class AppProfiler {
                     .sendToTarget();
         }
 
+        mCachedAppsWatermarkData.updateCachedAppsHighWatermarkIfNecessaryLocked(
+                numCached + numEmpty, now);
+
         if (mService.mConstants.USE_MODERN_TRIM) {
             // Modern trim is not sent based on lowmem state
             // Dispatch UI_HIDDEN to processes that need it
@@ -1321,8 +1325,6 @@ public class AppProfiler {
                 profile.setTrimMemoryLevel(0);
             });
         }
-        mCachedAppsWatermarkData.updateCachedAppsHighWatermarkIfNecessaryLocked(
-                numCached + numEmpty, now);
         return allChanged;
     }
 

@@ -300,6 +300,8 @@
     <string name="android_system_label" msgid="5974767339591067210">"Сістэма Android"</string>
     <string name="user_owner_label" msgid="8628726904184471211">"Пераключыцца на асабісты профіль"</string>
     <string name="managed_profile_label" msgid="7316778766973512382">"Пераключыцца на працоўны профіль"</string>
+    <string name="user_owner_app_label" msgid="1553595155465750298">"Пераключыцца на асабісты профіль <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
+    <string name="managed_profile_app_label" msgid="367401088383965725">"Пераключыцца на працоўны профіль <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
     <string name="permgrouplab_contacts" msgid="4254143639307316920">"Кантакты"</string>
     <string name="permgroupdesc_contacts" msgid="9163927941244182567">"атрымліваць доступ да вашых кантактаў"</string>
     <string name="permgrouplab_location" msgid="1858277002233964394">"Месцазнаходжанне"</string>
@@ -465,10 +467,6 @@
     <string name="permdesc_bodySensors" product="default" msgid="7652650410295512140">"Праграма ў час яе выкарыстання будзе мець доступ да даных датчыкаў цела, такіх як пульс, тэмпература і працэнт утрымання ў крыві кіслароду."</string>
     <string name="permlab_bodySensors_background" msgid="4912560779957760446">"Доступ да даных датчыкаў цела, такіх як пульс, у фонавым рэжыме"</string>
     <string name="permdesc_bodySensors_background" product="default" msgid="8870726027557749417">"Праграма ў час яе працы ў фонавым рэжыме будзе мець доступ да даных датчыкаў цела, такіх як пульс, тэмпература і працэнт утрымання ў крыві кіслароду."</string>
-    <string name="permlab_bodySensorsWristTemperature" msgid="5007987988922337657">"Доступ праграмы ў час яе выкарыстання да даных пра тэмпературу з датчыка цела, які знаходзіцца на запясці."</string>
-    <string name="permdesc_bodySensorsWristTemperature" product="default" msgid="4978345709781045181">"Праграма ў час яе выкарыстання будзе мець доступ да даных пра тэмпературу з датчыка цела, які знаходзіцца на запясці."</string>
-    <string name="permlab_bodySensors_wristTemperature_background" msgid="7692772783509074356">"Доступ праграмы ў фонавым рэжыме да даных пра тэмпературу з датчыка цела, які знаходзіцца на запясці."</string>
-    <string name="permdesc_bodySensors_wristTemperature_background" product="default" msgid="3170369705518699219">"Праграма ў час яе працы ў фонавым рэжыме будзе мець доступ да даных пра тэмпературу з датчыка цела, які знаходзіцца на запясці."</string>
     <string name="permlab_readCalendar" msgid="6408654259475396200">"Чытаць падзеі календара і падрабязныя звесткі"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"Гэта праграма можа чытаць усе падзеі календара, захаваныя на вашым планшэце, і абагульваць ці захоўваць даныя календара."</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"Гэта праграма можа счытваць усе падзеі календара, захаваныя на прыладзе Android TV, і абагульваць ці захоўваць яго даныя."</string>
@@ -509,7 +507,7 @@
     <string name="permdesc_vibrate" msgid="8733343234582083721">"Дазваляе прыкладанням кіраваць вібрацыяй."</string>
     <string name="permdesc_vibrator_state" msgid="7050024956594170724">"Дазваляе праграме атрымліваць доступ да вібрасігналу."</string>
     <string name="permlab_callPhone" msgid="1798582257194643320">"непасрэдна набіраць тэлефонныя нумары"</string>
-    <string name="permdesc_callPhone" msgid="5439809516131609109">"Дазваляе прыкладанням званiць на тэлефонныя нумары без вашага ўмяшання. Гэта можа прывесці да нечаканага спагнання сродкаў або званкоў. Звярніце ўвагу, што прыкладанне не можа рабiць экстраныя выклікi. Шкоднасныя прыкладаннi могуць спаганяць з вас сродкi, робячы званкі без вашага пацверджання."</string>
+    <string name="permdesc_callPhone" msgid="7892422187827695656">"Дазваляе праграме тэлефанаваць на тэлефонныя нумары без вашага ўдзелу. У выніку вы можаце пабачыць нечаканыя плацяжы і званкі. Аднак праграма не зможа рабіць выклікі на нумары экстранных службаў. Шкодныя праграмы могуць прыносіць выдаткі, робячы выклікі без вашага пацвярджэння, або набіраючы коды аператараў, з якімі ўваходныя выклікі аўтаматычна перанакіроўваюцца на іншы нумар."</string>
     <string name="permlab_accessImsCallService" msgid="442192920714863782">"атрымліваць доступ да сэрвісу выклікаў IMS"</string>
     <string name="permdesc_accessImsCallService" msgid="6328551241649687162">"Дазваляе праграмам выкарыстоўваць службу IMS, каб рабіць выклікі без вашага ўмяшання."</string>
     <string name="permlab_readPhoneState" msgid="8138526903259297969">"чытанне статусу тэлефона і ідэнтыфікацыя"</string>
@@ -677,7 +675,7 @@
     <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"Каб выкарыстоўваць распазнаванне твару, уключыце "<b>"доступ да камеры"</b>" праз раздзел \"Налады &gt; Прыватнасць\""</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"Наладзьце дадатковыя спосабы разблакіроўкі"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"Націсніце, каб дадаць адбітак пальца"</string>
-    <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"Разблакіраванне адбіткам пальца"</string>
+    <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"Разблакіроўка адбіткам пальца"</string>
     <string name="fingerprint_recalibrate_notification_title" msgid="2406561052064558497">"Не ўдалося скарыстаць сканер адбіткаў пальцаў"</string>
     <string name="fingerprint_recalibrate_notification_content" msgid="8519935717822194943">"Звярніцеся ў сэрвісны цэнтр."</string>
     <string name="face_acquired_insufficient" msgid="6889245852748492218">"Не ўдалося стварыць мадэль твару. Паўтарыце."</string>
@@ -715,7 +713,7 @@
     <string name="face_error_canceled" msgid="2164434737103802131">"Распазнаванне твару скасавана."</string>
     <string name="face_error_user_canceled" msgid="5766472033202928373">"Распазнаванне твару скасавана карыстальнікам"</string>
     <string name="face_error_lockout" msgid="7864408714994529437">"Занадта шмат спроб. Паўтарыце спробу пазней."</string>
-    <string name="face_error_lockout_permanent" msgid="3277134834042995260">"Занадта шмат спроб. Распазнаванне твару выключана."</string>
+    <string name="face_error_lockout_permanent" msgid="8533257333130473422">"Занадта шмат спроб. Распазнаванне твару недаступна."</string>
     <string name="face_error_lockout_screen_lock" msgid="5062609811636860928">"Занадта шмат спроб. Разблакіруйце экран іншым спосабам."</string>
     <string name="face_error_unable_to_process" msgid="5723292697366130070">"Не ўдалося спраўдзіць твар. Паўтарыце спробу."</string>
     <string name="face_error_not_enrolled" msgid="1134739108536328412">"Вы не наладзілі распазнаванне твару"</string>
@@ -802,10 +800,8 @@
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"Дазваляе трымальніку запусціць прагляд інфармацыі пра функцыі для праграмы."</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"атрымліваць даныя датчыка з высокай частатой дыскрэтызацыі"</string>
     <string name="permdesc_highSamplingRateSensors" msgid="8430061978931155995">"Праграма зможа распазнаваць даныя датчыка з частатой звыш 200 Гц"</string>
-    <!-- no translation found for permlab_updatePackagesWithoutUserAction (3363272609642618551) -->
-    <skip />
-    <!-- no translation found for permdesc_updatePackagesWithoutUserAction (4567739631260526366) -->
-    <skip />
+    <string name="permlab_updatePackagesWithoutUserAction" msgid="3363272609642618551">"абнаўленне праграмы без удзелу карыстальніка"</string>
+    <string name="permdesc_updatePackagesWithoutUserAction" msgid="4567739631260526366">"Раней усталяваная праграма будзе абнаўляцца без удзелу карыстальніка"</string>
     <string name="policylab_limitPassword" msgid="4851829918814422199">"Устанавіць правілы паролю"</string>
     <string name="policydesc_limitPassword" msgid="4105491021115793793">"Кіраваць даўжынёй і сімваламі, дазволенымі пры ўводзе пароляў і PIN-кодаў блакіроўкі экрана."</string>
     <string name="policylab_watchLogin" msgid="7599669460083719504">"Сачыць за спробамі разблакіроўкі экрана"</string>
@@ -1688,10 +1684,8 @@
     <string name="kg_text_message_separator" product="default" msgid="4503708889934976866">" — "</string>
     <string name="kg_reordering_delete_drop_target_text" msgid="2034358143731750914">"Выдалiць"</string>
     <string name="safe_media_volume_warning" product="default" msgid="3751676824423049994">"Павялiчыць гук вышэй рэкамендаванага ўзроўню?\n\nДоўгае праслухоўванне музыкi на вялiкай гучнасцi можа пашкодзiць ваш слых."</string>
-    <string name="csd_dose_reached_warning" product="default" msgid="1032473160590983236">"Папярэджанне.\nВы перавысілі колькасць моцных гукаў, якая лічыцца бяспечнай для слухання праз навушнікі на працягу тыдня.\n\nПеравышэнне гэтага значэння можа незваротна пашкодзіць ваш слых."</string>
-    <string name="csd_dose_repeat_warning" product="default" msgid="6765471037071089401">"Папярэджанне.\nВы ў 5 разоў перавысілі колькасць гукаў, якая лічыцца бяспечнай для слухання праз навушнікі на працягу тыдня.\n\nКаб зберагчы ваш слых, гучнасць паменшана."</string>
-    <string name="csd_entering_RS2_warning" product="default" msgid="3699509945325496807">"Выбраны вамі ўзровень гучнасці можа быць шкодным для слыху пры працяглым слуханні мультымедыя.\n\nДоўгае праслухванне на такім узроўні гучнасці можа пашкодзіць ваш слых."</string>
-    <string name="csd_momentary_exposure_warning" product="default" msgid="7861896191081176454">"Папярэджанне.\nЗмесціва, якое вы слухаеце, прайграецца на небяспечным узроўні гучнасці.\n\nПрацяг праслухвання на такой гучнасцi незваротна пашкодзiць ваш слых."</string>
+    <string name="csd_dose_reached_warning" product="default" msgid="491875107583931974">"Працягнуць праслухоўваць на вялікай гучнасці?\n\nГучнасць у навушніках была вялікай даўжэй, чым рэкамендавана, гэта можа пашкодзіць ваш слых"</string>
+    <string name="csd_momentary_exposure_warning" product="default" msgid="7730840903435405501">"Выяўлены моцны гук\n\nГучнасць у навушніках была большай, чым рэкамендавана, гэта можа пашкодзіць ваш слых"</string>
     <string name="accessibility_shortcut_warning_dialog_title" msgid="4017995837692622933">"Выкарыстоўваць камбінацыю хуткага доступу для спецыяльных магчымасцей?"</string>
     <string name="accessibility_shortcut_toogle_warning" msgid="4161716521310929544">"Калі хуткі доступ уключаны, вы можаце націснуць абедзве кнопкі гучнасці і ўтрымліваць іх 3 секунды, каб запусціць функцыю спецыяльных магчымасцей."</string>
     <string name="accessibility_shortcut_multiple_service_warning_title" msgid="3135860819356676426">"Уключыць хуткі доступ да спецыяльных магчымасцей?"</string>
@@ -1878,8 +1872,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"Абноўлены вашым адміністратарам"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Выдалены вашым адміністратарам"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"ОК"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5444908404021316250">"У рэжыме эканоміі зараду ўключаецца цёмная тэма і выключаюцца ці абмяжоўваюцца дзеянні ў фонавым рэжыме, некаторыя візуальныя эфекты, пэўныя функцыі і падключэнні да сетак."</string>
-    <string name="battery_saver_description" msgid="8518809702138617167">"У рэжыме эканоміі зараду ўключаецца цёмная тэма і выключаюцца ці абмяжоўваюцца дзеянні ў фонавым рэжыме, некаторыя візуальныя эфекты, пэўныя функцыі і падключэнні да сетак."</string>
+    <string name="battery_saver_description_with_learn_more" msgid="5444908404021316250">"У рэжыме энергазберажэння ўключаецца цёмная тэма і выключаюцца ці абмяжоўваюцца дзеянні ў фонавым рэжыме, некаторыя візуальныя эфекты, пэўныя функцыі і падключэнні да сетак."</string>
+    <string name="battery_saver_description" msgid="8518809702138617167">"У рэжыме энергазберажэння ўключаецца цёмная тэма і выключаюцца ці абмяжоўваюцца дзеянні ў фонавым рэжыме, некаторыя візуальныя эфекты, пэўныя функцыі і падключэнні да сетак."</string>
     <string name="data_saver_description" msgid="4995164271550590517">"У рэжыме \"Эканомія трафіка\" фонавая перадача для некаторых праграмам адключана. Праграма, якую вы зараз выкарыстоўваеце, можа атрымліваць доступ да даных, але радзей, чым звычайна. Напрыклад, відарысы могуць не загружацца, пакуль вы не націсніце на іх."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"Уключыць Эканомію трафіка?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"Уключыць"</string>
@@ -1958,11 +1952,9 @@
     <string name="app_suspended_default_message" msgid="6451215678552004172">"Праграма \"<xliff:g id="APP_NAME_0">%1$s</xliff:g>\" цяпер недаступная. Яна кіруецца праграмай \"<xliff:g id="APP_NAME_1">%2$s</xliff:g>\"."</string>
     <string name="app_suspended_more_details" msgid="211260942831587014">"Даведацца больш"</string>
     <string name="app_suspended_unsuspend_message" msgid="1665438589450555459">"Скасаваць прыпыненне для праграмы"</string>
-    <string name="work_mode_off_title" msgid="961171256005852058">"Уключыць працоўныя праграмы?"</string>
-    <string name="work_mode_off_message" msgid="7319580997683623309">"Атрымаць доступ да працоўных праграм і апавяшчэнняў"</string>
-    <string name="work_mode_turn_on" msgid="3662561662475962285">"Уключыць"</string>
+    <string name="work_mode_off_title" msgid="6367463960165135829">"Уключыць працоўныя праграмы?"</string>
+    <string name="work_mode_turn_on" msgid="5316648862401307800">"Уключыць"</string>
     <string name="work_mode_emergency_call_button" msgid="6818855962881612322">"Экстранны выпадак"</string>
-    <string name="work_mode_dialer_off_message" msgid="2193299184850387465">"Запытайце доступ да працоўных праграм і выклікаў"</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"Праграма недаступная"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"Праграма \"<xliff:g id="APP_NAME">%1$s</xliff:g>\" цяпер недаступная."</string>
     <string name="app_streaming_blocked_title" msgid="6090945835898766139">"Недаступна: <xliff:g id="ACTIVITY">%1$s</xliff:g>"</string>
@@ -2168,14 +2160,21 @@
     <string name="resolver_cant_access_work_apps_explanation" msgid="1129960195389373279">"Не ўдалося адкрыць гэта змесціва з дапамогай працоўных праграм"</string>
     <string name="resolver_cant_share_with_personal_apps_explanation" msgid="6349766201904601544">"Не ўдалося абагуліць гэта змесціва з асабістымі праграмамі"</string>
     <string name="resolver_cant_access_personal_apps_explanation" msgid="1679399548862724359">"Не ўдалося адкрыць гэта змесціва з дапамогай асабістых праграм"</string>
-    <string name="resolver_turn_on_work_apps" msgid="884910835250037247">"Працоўны профіль прыпынены"</string>
-    <string name="resolver_switch_on_work" msgid="463709043650610420">"Націсніце, каб уключыць"</string>
+    <string name="resolver_turn_on_work_apps" msgid="1535946298236678122">"Працоўныя праграмы прыпынены"</string>
+    <string name="resolver_switch_on_work" msgid="4527096360772311894">"Уключыць"</string>
     <string name="resolver_no_work_apps_available" msgid="3298291360133337270">"Няма працоўных праграм"</string>
     <string name="resolver_no_personal_apps_available" msgid="6284837227019594881">"Няма асабістых праграм"</string>
-    <string name="miniresolver_open_in_personal" msgid="3874522693661065566">"Адкрыць праграму \"<xliff:g id="APP">%s</xliff:g>\" з выкарыстаннем асабістага профілю?"</string>
-    <string name="miniresolver_open_in_work" msgid="4415223793669536559">"Адкрыць праграму \"<xliff:g id="APP">%s</xliff:g>\" з выкарыстаннем працоўнага профілю?"</string>
+    <string name="miniresolver_open_work" msgid="6286176185835401931">"Адкрыць працоўную праграму <xliff:g id="APP">%s</xliff:g>?"</string>
+    <string name="miniresolver_open_in_personal" msgid="807427577794490375">"Адкрыць у асабістым профілі <xliff:g id="APP">%s</xliff:g>?"</string>
+    <string name="miniresolver_open_in_work" msgid="941341494673509916">"Адкрыць у працоўным профілі <xliff:g id="APP">%s</xliff:g>?"</string>
+    <string name="miniresolver_call_in_work" msgid="528779988307529039">"Зрабіць выклік з працоўнай праграмы?"</string>
+    <string name="miniresolver_switch_to_work" msgid="1042640606122638596">"Пераключыцца на працоўную праграму?"</string>
+    <string name="miniresolver_call_information" msgid="6739417525304184083">"Ваша арганізацыя дазваляе рабіць выклікі толькі з працоўных праграм"</string>
+    <string name="miniresolver_sms_information" msgid="4311292661329483088">"Ваша арганізацыя дазваляе адпраўляць паведамленні толькі з працоўных праграм"</string>
     <string name="miniresolver_use_personal_browser" msgid="776072682871133308">"Скарыстаць асабісты браўзер"</string>
     <string name="miniresolver_use_work_browser" msgid="543575306251952994">"Скарыстаць працоўны браўзер"</string>
+    <string name="miniresolver_call" msgid="6386870060423480765">"Выклікаць"</string>
+    <string name="miniresolver_switch" msgid="8011924662117617451">"Пераключальнік"</string>
     <string name="PERSOSUBSTATE_SIM_NETWORK_ENTRY" msgid="8050953231914637819">"PIN-код разблакіроўкі сеткі для SIM-карты"</string>
     <string name="PERSOSUBSTATE_SIM_NETWORK_SUBSET_ENTRY" msgid="7164399703751688214">"PIN-код разблакіроўкі падмноства сеткі для SIM-карты"</string>
     <string name="PERSOSUBSTATE_SIM_CORPORATE_ENTRY" msgid="4447629474818217364">"PIN-код разблакіроўкі карпаратыўнай SIM-карты"</string>

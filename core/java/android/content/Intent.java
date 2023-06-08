@@ -6919,7 +6919,7 @@ public class Intent implements Parcelable, Cloneable {
      *
      * @hide
      */
-    public static final int FLAG_IGNORE_EPHEMERAL = 0x00000200;
+    public static final int FLAG_IGNORE_EPHEMERAL = 0x80000000;
 
     /**
      * If set, the new activity is not kept in the history stack.  As soon as
@@ -12362,7 +12362,9 @@ public class Intent implements Parcelable, Cloneable {
                             null, new String[] { getType() },
                             new ClipData.Item(text, htmlText, null, stream));
                     setClipData(clipData);
-                    addFlags(FLAG_GRANT_READ_URI_PERMISSION);
+                    if (stream != null) {
+                        addFlags(FLAG_GRANT_READ_URI_PERMISSION);
+                    }
                     return true;
                 }
             } catch (ClassCastException e) {
@@ -12401,7 +12403,9 @@ public class Intent implements Parcelable, Cloneable {
                     }
 
                     setClipData(clipData);
-                    addFlags(FLAG_GRANT_READ_URI_PERMISSION);
+                    if (streams != null) {
+                        addFlags(FLAG_GRANT_READ_URI_PERMISSION);
+                    }
                     return true;
                 }
             } catch (ClassCastException e) {

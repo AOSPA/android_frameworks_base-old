@@ -188,13 +188,6 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
                 .thenReturn(mNotificationRoundnessManager);
         mStackScroller.setController(mStackScrollLayoutController);
 
-        // Stub out functionality that isn't necessary to test.
-        doNothing().when(mCentralSurfaces)
-                .executeRunnableDismissingKeyguard(any(Runnable.class),
-                        any(Runnable.class),
-                        anyBoolean(),
-                        anyBoolean(),
-                        anyBoolean());
         doNothing().when(mGroupExpansionManager).collapseGroups();
         doNothing().when(mExpandHelper).cancelImmediately();
         doNothing().when(mNotificationShelf).setAnimationsEnabled(anyBoolean());
@@ -798,6 +791,34 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
 
         // Then: mAmbientState.scrollY should be set to be 0
         assertEquals(mAmbientState.getScrollY(), 0);
+    }
+
+    @Test
+    public void onShadeClosesWithAnimationWillResetSwipeState() {
+        // GIVEN shade is expanded
+        mStackScroller.setIsExpanded(true);
+        clearInvocations(mNotificationSwipeHelper);
+
+        // WHEN closing the shade with the animations
+        mStackScroller.onExpansionStarted();
+        mStackScroller.setIsExpanded(false);
+        mStackScroller.onExpansionStopped();
+
+        // VERIFY swipe is reset
+        verify(mNotificationSwipeHelper).resetSwipeState();
+    }
+
+    @Test
+    public void onShadeClosesWithoutAnimationWillResetSwipeState() {
+        // GIVEN shade is expanded
+        mStackScroller.setIsExpanded(true);
+        clearInvocations(mNotificationSwipeHelper);
+
+        // WHEN closing the shade without the animation
+        mStackScroller.setIsExpanded(false);
+
+        // VERIFY swipe is reset
+        verify(mNotificationSwipeHelper).resetSwipeState();
     }
 
     @Test

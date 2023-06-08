@@ -16,6 +16,7 @@
 
 package com.android.credentialmanager
 
+import android.app.Activity
 import android.content.Intent
 import android.credentials.ui.BaseDialogResult
 import android.credentials.ui.RequestInfo
@@ -24,6 +25,7 @@ import android.os.Bundle
 import android.os.ResultReceiver
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -40,9 +42,7 @@ import com.android.credentialmanager.common.ui.Snackbar
 import com.android.credentialmanager.createflow.CreateCredentialScreen
 import com.android.credentialmanager.createflow.hasContentToDisplay
 import com.android.credentialmanager.getflow.GetCredentialScreen
-import com.android.credentialmanager.getflow.GetGenericCredentialScreen
 import com.android.credentialmanager.getflow.hasContentToDisplay
-import com.android.credentialmanager.getflow.isFallbackScreen
 import com.android.credentialmanager.ui.theme.PlatformTheme
 
 @ExperimentalMaterialApi
@@ -50,6 +50,11 @@ class CredentialSelectorActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d(Constants.LOG_TAG, "Creating new CredentialSelectorActivity")
+        overrideActivityTransition(Activity.OVERRIDE_TRANSITION_OPEN,
+            0, 0)
+        overrideActivityTransition(Activity.OVERRIDE_TRANSITION_CLOSE,
+            0, 0)
+
         try {
             val (isCancellationRequest, shouldShowCancellationUi, _) =
                 maybeCancelUIUponRequest(intent)
@@ -57,7 +62,20 @@ class CredentialSelectorActivity : ComponentActivity() {
                 return
             }
             val userConfigRepo = UserConfigRepo(this)
-            val credManRepo = CredentialManagerRepo(this, intent, userConfigRepo)
+            val credManRepo = CredentialManagerRepo(
+                this, intent, userConfigRepo, isNewActivity = true)
+
+            val backPressedCallback = object : OnBackPressedCallback(
+                true // default to enabled
+            ) {
+                override fun handleOnBackPressed() {
+                    credManRepo.onUserCancel()
+                    Log.d(Constants.LOG_TAG, "Activity back triggered: finish the activity.")
+                    this@CredentialSelectorActivity.finish()
+                }
+            }
+            onBackPressedDispatcher.addCallback(this, backPressedCallback)
+
             setContent {
                 PlatformTheme {
                     CredentialManagerBottomSheet(
@@ -86,7 +104,8 @@ class CredentialSelectorActivity : ComponentActivity() {
                 }
             } else {
                 val userConfigRepo = UserConfigRepo(this)
-                val credManRepo = CredentialManagerRepo(this, intent, userConfigRepo)
+                val credManRepo = CredentialManagerRepo(
+                    this, intent, userConfigRepo, isNewActivity = false)
                 viewModel.onNewCredentialManagerRepo(credManRepo)
             }
         } catch (e: Exception) {
@@ -161,19 +180,11 @@ class CredentialSelectorActivity : ComponentActivity() {
                 providerActivityLauncher = launcher
             )
         } else if (getCredentialUiState != null && hasContentToDisplay(getCredentialUiState)) {
-            if (isFallbackScreen(getCredentialUiState)) {
-                GetGenericCredentialScreen(
-                    viewModel = viewModel,
-                    getCredentialUiState = getCredentialUiState,
-                    providerActivityLauncher = launcher
-                )
-            } else {
-                GetCredentialScreen(
-                    viewModel = viewModel,
-                    getCredentialUiState = getCredentialUiState,
-                    providerActivityLauncher = launcher
-                )
-            }
+            GetCredentialScreen(
+                viewModel = viewModel,
+                getCredentialUiState = getCredentialUiState,
+                providerActivityLauncher = launcher
+            )
         } else {
             Log.d(Constants.LOG_TAG, "UI wasn't able to render neither get nor create flow")
             reportInstantiationErrorAndFinishActivity(credManRepo)

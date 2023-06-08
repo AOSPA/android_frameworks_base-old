@@ -17,6 +17,7 @@
 package com.android.wm.shell.taskview;
 
 import static android.view.WindowManager.TRANSIT_CHANGE;
+import static android.view.WindowManager.TRANSIT_CLOSE;
 import static android.view.WindowManager.TRANSIT_OPEN;
 import static android.view.WindowManager.TRANSIT_TO_BACK;
 import static android.view.WindowManager.TRANSIT_TO_FRONT;
@@ -26,6 +27,7 @@ import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.graphics.Rect;
 import android.os.IBinder;
+import android.util.ArrayMap;
 import android.util.Slog;
 import android.view.SurfaceControl;
 import android.view.WindowManager;
@@ -33,10 +35,13 @@ import android.window.TransitionInfo;
 import android.window.TransitionRequestInfo;
 import android.window.WindowContainerTransaction;
 
+import androidx.annotation.VisibleForTesting;
+
 import com.android.wm.shell.transition.Transitions;
 import com.android.wm.shell.util.TransitionUtil;
 
 import java.util.ArrayList;
+import java.util.Objects;
 
 /**
  * Handles Shell Transitions that involve TaskView tasks.
@@ -44,7 +49,8 @@ import java.util.ArrayList;
 public class TaskViewTransitions implements Transitions.TransitionHandler {
     static final String TAG = "TaskViewTransitions";
 
-    private final ArrayList<TaskViewTaskController> mTaskViews = new ArrayList<>();
+    private final ArrayMap<TaskViewTaskController, TaskViewRequestedState> mTaskViews =
+            new ArrayMap<>();
     private final ArrayList<PendingTransition> mPending = new ArrayList<>();
     private final Transitions mTransitions;
     private final boolean[] mRegistered = new boolean[]{ false };
@@ -54,7 +60,8 @@ public class TaskViewTransitions implements Transitions.TransitionHandler {
      * in-flight (collecting) at a time (because otherwise, the operations could get merged into
      * a single transition). So, keep a queue here until we add a queue in server-side.
      */
-    private static class PendingTransition {
+    @VisibleForTesting
+    static class PendingTransition {
         final @WindowManager.TransitionType int mType;
         final WindowContainerTransaction mWct;
         final @NonNull TaskViewTaskController mTaskView;
@@ -78,6 +85,14 @@ public class TaskViewTransitions implements Transitions.TransitionHandler {
         }
     }
 
+    /**
+     * Visibility and bounds state that has been requested for a {@link TaskViewTaskController}.
+     */
+    private static class TaskViewRequestedState {
+        boolean mVisible;
+        Rect mBounds = new Rect();
+    }
+
     public TaskViewTransitions(Transitions transitions) {
         mTransitions = transitions;
         // Defer registration until the first TaskView because we want this to be the "first" in
@@ -92,7 +107,7 @@ public class TaskViewTransitions implements Transitions.TransitionHandler {
                 mTransitions.addHandler(this);
             }
         }
-        mTaskViews.add(tv);
+        mTaskViews.put(tv, new TaskViewRequestedState());
     }
 
     void removeTaskView(TaskViewTaskController tv) {
@@ -105,27 +120,61 @@ public class TaskViewTransitions implements Transitions.TransitionHandler {
     }
 
     /**
-     * Looks through the pending transitions for one matching `taskView`.
+     * Looks through the pending transitions for a closing transaction that matches the provided
+     * `taskView`.
      * @param taskView the pending transition should be for this.
-     * @param closing When true, this only returns a pending transition of the close/hide type.
-     *                Otherwise it selects open/show.
-     * @param latest When true, this will only check the most-recent pending transition for the
-     *               specified taskView. If it doesn't match `closing`, this will return null even
-     *               if there is a match earlier. The idea behind this is to check the state of
-     *               the taskviews "as if all transitions already happened".
      */
-    private PendingTransition findPending(TaskViewTaskController taskView, boolean closing,
-            boolean latest) {
+    private PendingTransition findPendingCloseTransition(TaskViewTaskController taskView) {
         for (int i = mPending.size() - 1; i >= 0; --i) {
             if (mPending.get(i).mTaskView != taskView) continue;
-            if (TransitionUtil.isClosingType(mPending.get(i).mType) == closing) {
+            if (TransitionUtil.isClosingType(mPending.get(i).mType)) {
                 return mPending.get(i);
-            }
-            if (latest) {
-                return null;
             }
         }
         return null;
+    }
+
+    /**
+     * Looks through the pending transitions for a opening transaction that matches the provided
+     * `taskView`.
+     * @param taskView the pending transition should be for this.
+     */
+    private PendingTransition findPendingOpeningTransition(TaskViewTaskController taskView) {
+        for (int i = mPending.size() - 1; i >= 0; --i) {
+            if (mPending.get(i).mTaskView != taskView) continue;
+            if (TransitionUtil.isOpeningType(mPending.get(i).mType)) {
+                return mPending.get(i);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Looks through the pending transitions for one matching `taskView`.
+     * @param taskView the pending transition should be for this.
+     * @param type the type of transition it's looking for
+     */
+    PendingTransition findPending(TaskViewTaskController taskView, int type) {
+        for (int i = mPending.size() - 1; i >= 0; --i) {
+            if (mPending.get(i).mTaskView != taskView) continue;
+            if (mPending.get(i).mType == type) {
+                return mPending.get(i);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns all the pending transitions for a given `taskView`.
+     * @param taskView the pending transition should be for this.
+     */
+    ArrayList<PendingTransition> findAllPending(TaskViewTaskController taskView) {
+        ArrayList<PendingTransition> list = new ArrayList<>();
+        for (int i = mPending.size() - 1; i >= 0; --i) {
+            if (mPending.get(i).mTaskView != taskView) continue;
+            list.add(mPending.get(i));
+        }
+        return list;
     }
 
     private PendingTransition findPending(IBinder claimed) {
@@ -152,7 +201,7 @@ public class TaskViewTransitions implements Transitions.TransitionHandler {
         if (taskView == null) return null;
         // Opening types should all be initiated by shell
         if (!TransitionUtil.isClosingType(request.getType())) return null;
-        PendingTransition pending = findPending(taskView, true /* closing */, false /* latest */);
+        PendingTransition pending = findPendingCloseTransition(taskView);
         if (pending == null) {
             pending = new PendingTransition(request.getType(), null, taskView, null /* cookie */);
         }
@@ -166,9 +215,9 @@ public class TaskViewTransitions implements Transitions.TransitionHandler {
 
     private TaskViewTaskController findTaskView(ActivityManager.RunningTaskInfo taskInfo) {
         for (int i = 0; i < mTaskViews.size(); ++i) {
-            if (mTaskViews.get(i).getTaskInfo() == null) continue;
-            if (taskInfo.token.equals(mTaskViews.get(i).getTaskInfo().token)) {
-                return mTaskViews.get(i);
+            if (mTaskViews.keyAt(i).getTaskInfo() == null) continue;
+            if (taskInfo.token.equals(mTaskViews.keyAt(i).getTaskInfo().token)) {
+                return mTaskViews.keyAt(i);
             }
         }
         return null;
@@ -176,30 +225,64 @@ public class TaskViewTransitions implements Transitions.TransitionHandler {
 
     void startTaskView(@NonNull WindowContainerTransaction wct,
             @NonNull TaskViewTaskController taskView, @NonNull IBinder launchCookie) {
+        updateVisibilityState(taskView, true /* visible */);
         mPending.add(new PendingTransition(TRANSIT_OPEN, wct, taskView, launchCookie));
         startNextTransition();
     }
 
+    void closeTaskView(@NonNull WindowContainerTransaction wct,
+            @NonNull TaskViewTaskController taskView) {
+        updateVisibilityState(taskView, false /* visible */);
+        mPending.add(new PendingTransition(TRANSIT_CLOSE, wct, taskView, null /* cookie */));
+        startNextTransition();
+    }
+
     void setTaskViewVisible(TaskViewTaskController taskView, boolean visible) {
-        PendingTransition pending = findPending(taskView, !visible, true /* latest */);
-        if (pending != null) {
-            // Already opening or creating a task, so no need to do anything here.
-            return;
-        }
+        if (mTaskViews.get(taskView) == null) return;
+        if (mTaskViews.get(taskView).mVisible == visible) return;
         if (taskView.getTaskInfo() == null) {
             // Nothing to update, task is not yet available
             return;
         }
+        mTaskViews.get(taskView).mVisible = visible;
         final WindowContainerTransaction wct = new WindowContainerTransaction();
         wct.setHidden(taskView.getTaskInfo().token, !visible /* hidden */);
-        pending = new PendingTransition(
+        wct.setBounds(taskView.getTaskInfo().token, mTaskViews.get(taskView).mBounds);
+        PendingTransition pending = new PendingTransition(
                 visible ? TRANSIT_TO_FRONT : TRANSIT_TO_BACK, wct, taskView, null /* cookie */);
         mPending.add(pending);
         startNextTransition();
         // visibility is reported in transition.
     }
 
+    void updateBoundsState(TaskViewTaskController taskView, Rect boundsOnScreen) {
+        TaskViewRequestedState state = mTaskViews.get(taskView);
+        if (state == null) return;
+        state.mBounds.set(boundsOnScreen);
+    }
+
+    void updateVisibilityState(TaskViewTaskController taskView, boolean visible) {
+        TaskViewRequestedState state = mTaskViews.get(taskView);
+        if (state == null) return;
+        state.mVisible = visible;
+    }
+
     void setTaskBounds(TaskViewTaskController taskView, Rect boundsOnScreen) {
+        TaskViewRequestedState state = mTaskViews.get(taskView);
+        if (state == null || Objects.equals(boundsOnScreen, state.mBounds)) {
+            return;
+        }
+        state.mBounds.set(boundsOnScreen);
+        if (!state.mVisible) {
+            // Task view isn't visible, the bounds will next visibility update.
+            return;
+        }
+        PendingTransition pendingOpen = findPendingOpeningTransition(taskView);
+        if (pendingOpen != null) {
+            // There is already an opening transition in-flight, the window bounds will be
+            // set in prepareOpenAnimation (via the window crop) if needed.
+            return;
+        }
         WindowContainerTransaction wct = new WindowContainerTransaction();
         wct.setBounds(taskView.getTaskInfo().token, boundsOnScreen);
         mPending.add(new PendingTransition(TRANSIT_CHANGE, wct, taskView, null /* cookie */));
@@ -251,6 +334,11 @@ public class TaskViewTransitions implements Transitions.TransitionHandler {
             if (TransitionUtil.isClosingType(chg.getMode())) {
                 final boolean isHide = chg.getMode() == TRANSIT_TO_BACK;
                 TaskViewTaskController tv = findTaskView(chg.getTaskInfo());
+                if (tv == null && !isHide) {
+                    // TaskView can be null when closing
+                    changesHandled++;
+                    continue;
+                }
                 if (tv == null) {
                     if (pending != null) {
                         Slog.w(TAG, "Found a non-TaskView task in a TaskView Transition. This "
@@ -293,6 +381,20 @@ public class TaskViewTransitions implements Transitions.TransitionHandler {
                 tv.prepareOpenAnimation(taskIsNew, startTransaction, finishTransaction,
                         chg.getTaskInfo(), chg.getLeash(), wct);
                 changesHandled++;
+            } else if (chg.getMode() == TRANSIT_CHANGE) {
+                TaskViewTaskController tv = findTaskView(chg.getTaskInfo());
+                if (tv == null) {
+                    if (pending != null) {
+                        Slog.w(TAG, "Found a non-TaskView task in a TaskView Transition. This "
+                                + "shouldn't happen, so there may be a visual artifact: "
+                                + chg.getTaskInfo().taskId);
+                    }
+                    continue;
+                }
+                startTransaction.reparent(chg.getLeash(), tv.getSurfaceControl());
+                finishTransaction.reparent(chg.getLeash(), tv.getSurfaceControl())
+                    .setPosition(chg.getLeash(), 0, 0);
+                changesHandled++;
             }
         }
         if (stillNeedsMatchingLaunch) {
@@ -305,7 +407,6 @@ public class TaskViewTransitions implements Transitions.TransitionHandler {
         }
         // No animation, just show it immediately.
         startTransaction.apply();
-        finishTransaction.apply();
         finishCallback.onTransitionFinished(wct, null /* wctCB */);
         startNextTransition();
         return true;

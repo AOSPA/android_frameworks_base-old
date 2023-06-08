@@ -19,7 +19,6 @@ package com.android.server.biometrics;
 import static android.hardware.biometrics.BiometricAuthenticator.TYPE_FINGERPRINT;
 import static android.hardware.biometrics.BiometricManager.Authenticators;
 import static android.hardware.biometrics.BiometricManager.BIOMETRIC_MULTI_SENSOR_DEFAULT;
-import static android.hardware.biometrics.SensorProperties.STRENGTH_STRONG;
 import static android.view.DisplayAdjustments.DEFAULT_DISPLAY_ADJUSTMENTS;
 
 import static com.android.server.biometrics.BiometricServiceStateProto.STATE_AUTHENTICATED_PENDING_SYSUI;
@@ -48,6 +47,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import android.app.IActivityManager;
@@ -55,26 +55,25 @@ import android.app.admin.DevicePolicyManager;
 import android.app.trust.ITrustManager;
 import android.content.ContentResolver;
 import android.content.Context;
+import android.content.pm.UserInfo;
 import android.content.res.Resources;
 import android.hardware.biometrics.BiometricAuthenticator;
 import android.hardware.biometrics.BiometricConstants;
 import android.hardware.biometrics.BiometricManager;
 import android.hardware.biometrics.BiometricPrompt;
 import android.hardware.biometrics.IBiometricAuthenticator;
+import android.hardware.biometrics.IBiometricEnabledOnKeyguardCallback;
 import android.hardware.biometrics.IBiometricSensorReceiver;
 import android.hardware.biometrics.IBiometricService;
 import android.hardware.biometrics.IBiometricServiceReceiver;
 import android.hardware.biometrics.IBiometricSysuiReceiver;
 import android.hardware.biometrics.PromptInfo;
 import android.hardware.display.DisplayManagerGlobal;
-import android.hardware.face.FaceSensorProperties;
-import android.hardware.face.FaceSensorPropertiesInternal;
 import android.hardware.fingerprint.FingerprintManager;
-import android.hardware.fingerprint.FingerprintSensorProperties;
-import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.os.UserManager;
 import android.platform.test.annotations.Presubmit;
 import android.security.KeyStore;
 import android.view.Display;
@@ -120,7 +119,6 @@ public class BiometricServiceTest {
 
     private static final int SENSOR_ID_FINGERPRINT = 0;
     private static final int SENSOR_ID_FACE = 1;
-    private FingerprintSensorPropertiesInternal mFingerprintProps;
 
     private BiometricService mBiometricService;
 
@@ -152,6 +150,8 @@ public class BiometricServiceTest {
     private ISessionListener mSessionListener;
     @Mock
     private AuthSessionCoordinator mAuthSessionCoordinator;
+    @Mock
+    private UserManager mUserManager;
 
     BiometricContextProvider mBiometricContextProvider;
 
@@ -177,6 +177,7 @@ public class BiometricServiceTest {
         when(mInjector.getTrustManager()).thenReturn(mTrustManager);
         when(mInjector.getDevicePolicyManager(any())).thenReturn(mDevicePolicyManager);
         when(mInjector.getRequestGenerator()).thenReturn(() -> TEST_REQUEST_ID);
+        when(mInjector.getUserManager(any())).thenReturn(mUserManager);
 
         when(mResources.getString(R.string.biometric_error_hw_unavailable))
                 .thenReturn(ERROR_HW_UNAVAILABLE);
@@ -200,11 +201,6 @@ public class BiometricServiceTest {
         };
 
         when(mInjector.getConfiguration(any())).thenReturn(config);
-
-        mFingerprintProps = new FingerprintSensorPropertiesInternal(SENSOR_ID_FINGERPRINT,
-                STRENGTH_STRONG, 5 /* maxEnrollmentsPerUser */, List.of() /* componentInfo */,
-                FingerprintSensorProperties.TYPE_UNKNOWN,
-                false /* resetLockoutRequiresHardwareAuthToken */);
     }
 
     @Test
@@ -340,7 +336,8 @@ public class BiometricServiceTest {
 
         mBiometricService = new BiometricService(mContext, mInjector);
         mBiometricService.onStart();
-        mBiometricService.mImpl.registerAuthenticator(TYPE_FINGERPRINT, mFingerprintProps,
+        mBiometricService.mImpl.registerAuthenticator(0 /* id */,
+                TYPE_FINGERPRINT, Authenticators.BIOMETRIC_STRONG,
                 mFingerprintAuthenticator);
 
         invokeAuthenticate(mBiometricService.mImpl, mReceiver1, false /* requireConfirmation */,
@@ -412,7 +409,8 @@ public class BiometricServiceTest {
 
         mBiometricService = new BiometricService(mContext, mInjector);
         mBiometricService.onStart();
-        mBiometricService.mImpl.registerAuthenticator(TYPE_FINGERPRINT, mFingerprintProps,
+        mBiometricService.mImpl.registerAuthenticator(0 /* id */,
+                TYPE_FINGERPRINT, Authenticators.BIOMETRIC_STRONG,
                 mFingerprintAuthenticator);
 
         invokeAuthenticate(mBiometricService.mImpl, mReceiver1, false /* requireConfirmation */,
@@ -1344,13 +1342,9 @@ public class BiometricServiceTest {
 
         for (int i = 0; i < testCases.length; i++) {
             final BiometricSensor sensor =
-                    new BiometricSensor(mContext,
+                    new BiometricSensor(mContext, 0 /* id */,
                             TYPE_FINGERPRINT,
-                            new FingerprintSensorPropertiesInternal(i /* id */,
-                                    Utils.authenticatorStrengthToPropertyStrength(testCases[i][0]),
-                                    5 /* maxEnrollmentsPerUser */, List.of() /* componentInfo */,
-                                    FingerprintSensorProperties.TYPE_UNKNOWN,
-                                    false /* resetLockoutRequiresHardwareAuthToken */),
+                            testCases[i][0],
                             mock(IBiometricAuthenticator.class)) {
                         @Override
                         boolean confirmationAlwaysRequired(int userId) {
@@ -1378,7 +1372,8 @@ public class BiometricServiceTest {
         when(mFingerprintAuthenticator.hasEnrolledTemplates(anyInt(), any()))
                 .thenReturn(true);
         when(mFingerprintAuthenticator.isHardwareDetected(any())).thenReturn(true);
-        mBiometricService.mImpl.registerAuthenticator(TYPE_FINGERPRINT, mFingerprintProps,
+        mBiometricService.mImpl.registerAuthenticator(0 /* testId */,
+                TYPE_FINGERPRINT, Authenticators.BIOMETRIC_STRONG,
                 mFingerprintAuthenticator);
 
         verify(mBiometricService.mBiometricStrengthController).updateStrengths();
@@ -1389,14 +1384,15 @@ public class BiometricServiceTest {
         mBiometricService = new BiometricService(mContext, mInjector);
         mBiometricService.onStart();
 
+        final int testId = 0;
+
         when(mBiometricService.mSettingObserver.getEnabledForApps(anyInt())).thenReturn(true);
 
         when(mFingerprintAuthenticator.hasEnrolledTemplates(anyInt(), any()))
                 .thenReturn(true);
         when(mFingerprintAuthenticator.isHardwareDetected(any())).thenReturn(true);
-
-        final int testId = SENSOR_ID_FINGERPRINT;
-        mBiometricService.mImpl.registerAuthenticator(TYPE_FINGERPRINT, mFingerprintProps,
+        mBiometricService.mImpl.registerAuthenticator(testId /* id */,
+                TYPE_FINGERPRINT, Authenticators.BIOMETRIC_STRONG,
                 mFingerprintAuthenticator);
 
         // Downgrade the authenticator
@@ -1496,9 +1492,11 @@ public class BiometricServiceTest {
         mBiometricService.onStart();
 
         mBiometricService.mImpl.registerAuthenticator(
-                2 /* modality */, mFingerprintProps, mFingerprintAuthenticator);
+                0 /* id */, 2 /* modality */, 15 /* strength */,
+                mFingerprintAuthenticator);
         mBiometricService.mImpl.registerAuthenticator(
-                2 /* modality */, mFingerprintProps, mFingerprintAuthenticator);
+                0 /* id */, 2 /* modality */, 15 /* strength */,
+                mFingerprintAuthenticator);
     }
 
     @Test(expected = IllegalArgumentException.class)
@@ -1508,7 +1506,9 @@ public class BiometricServiceTest {
         mBiometricService.onStart();
 
         mBiometricService.mImpl.registerAuthenticator(
-                2 /* modality */, mFingerprintProps, null /* authenticator */);
+                0 /* id */, 2 /* modality */,
+                Authenticators.BIOMETRIC_STRONG /* strength */,
+                null /* authenticator */);
     }
 
     @Test
@@ -1519,13 +1519,8 @@ public class BiometricServiceTest {
 
         for (String s : mInjector.getConfiguration(null)) {
             SensorConfig config = new SensorConfig(s);
-            mBiometricService.mImpl.registerAuthenticator(config.modality,
-                    new FingerprintSensorPropertiesInternal(config.id,
-                            Utils.authenticatorStrengthToPropertyStrength(config.strength),
-                            5 /* maxEnrollmentsPerUser */, List.of() /* componentInfo */,
-                            FingerprintSensorProperties.TYPE_UNKNOWN,
-                            false /* resetLockoutRequiresHardwareAuthToken */),
-                    mFingerprintAuthenticator);
+            mBiometricService.mImpl.registerAuthenticator(config.id, config.modality,
+                config.strength, mFingerprintAuthenticator);
         }
     }
 
@@ -1597,6 +1592,33 @@ public class BiometricServiceTest {
         verify(mReceiver2, never()).onError(anyInt(), anyInt(), anyInt());
     }
 
+    @Test
+    public void testRegisterEnabledOnKeyguardCallback() throws RemoteException {
+        final UserInfo userInfo1 = new UserInfo(0 /* userId */, "user1" /* name */, 0 /* flags */);
+        final UserInfo userInfo2 = new UserInfo(10 /* userId */, "user2" /* name */, 0 /* flags */);
+        final List<UserInfo> aliveUsers = List.of(userInfo1, userInfo2);
+        final IBiometricEnabledOnKeyguardCallback callback =
+                mock(IBiometricEnabledOnKeyguardCallback.class);
+
+        mBiometricService = new BiometricService(mContext, mInjector);
+
+        when(mUserManager.getAliveUsers()).thenReturn(aliveUsers);
+        when(mBiometricService.mSettingObserver.getEnabledOnKeyguard(userInfo1.id))
+                .thenReturn(true);
+        when(mBiometricService.mSettingObserver.getEnabledOnKeyguard(userInfo2.id))
+                .thenReturn(false);
+        when(callback.asBinder()).thenReturn(mock(IBinder.class));
+
+        mBiometricService.mImpl.registerEnabledOnKeyguardCallback(callback);
+
+        waitForIdle();
+
+        verify(callback).asBinder();
+        verify(callback).onChanged(true, userInfo1.id);
+        verify(callback).onChanged(false, userInfo2.id);
+        verifyNoMoreInteractions(callback);
+    }
+
     // Helper methods
 
     private int invokeCanAuthenticate(BiometricService service, int authenticators)
@@ -1622,12 +1644,7 @@ public class BiometricServiceTest {
             when(mFingerprintAuthenticator.isHardwareDetected(any())).thenReturn(true);
             when(mFingerprintAuthenticator.getLockoutModeForUser(anyInt()))
                     .thenReturn(LockoutTracker.LOCKOUT_NONE);
-            mBiometricService.mImpl.registerAuthenticator(modality,
-                    new FingerprintSensorPropertiesInternal(SENSOR_ID_FINGERPRINT,
-                            Utils.authenticatorStrengthToPropertyStrength(strength),
-                            5 /* maxEnrollmentsPerUser */, List.of() /* componentInfo */,
-                            FingerprintSensorProperties.TYPE_UNKNOWN,
-                            false /* resetLockoutRequiresHardwareAuthToken */),
+            mBiometricService.mImpl.registerAuthenticator(SENSOR_ID_FINGERPRINT, modality, strength,
                     mFingerprintAuthenticator);
         }
 
@@ -1636,13 +1653,7 @@ public class BiometricServiceTest {
             when(mFaceAuthenticator.isHardwareDetected(any())).thenReturn(true);
             when(mFaceAuthenticator.getLockoutModeForUser(anyInt()))
                     .thenReturn(LockoutTracker.LOCKOUT_NONE);
-            mBiometricService.mImpl.registerAuthenticator(modality,
-                    new FaceSensorPropertiesInternal(SENSOR_ID_FACE,
-                            Utils.authenticatorStrengthToPropertyStrength(strength),
-                            5 /* maxEnrollmentsPerUser */, List.of() /* componentInfo */,
-                            FaceSensorProperties.TYPE_UNKNOWN, true /* supportsFace Detection */,
-                            true /* supportsSelfIllumination */,
-                            false /* resetLockoutRequiresHardwareAuthToken */),
+            mBiometricService.mImpl.registerAuthenticator(SENSOR_ID_FACE, modality, strength,
                     mFaceAuthenticator);
         }
     }
@@ -1665,27 +1676,15 @@ public class BiometricServiceTest {
                 when(mFingerprintAuthenticator.hasEnrolledTemplates(anyInt(), any()))
                         .thenReturn(true);
                 when(mFingerprintAuthenticator.isHardwareDetected(any())).thenReturn(true);
-                mBiometricService.mImpl.registerAuthenticator(modality,
-                        new FingerprintSensorPropertiesInternal(SENSOR_ID_FINGERPRINT,
-                                Utils.authenticatorStrengthToPropertyStrength(strength),
-                                5 /* maxEnrollmentsPerUser */, List.of() /* componentInfo */,
-                                FingerprintSensorProperties.TYPE_UNKNOWN,
-                                false /* resetLockoutRequiresHardwareAuthToken */),
-                        mFingerprintAuthenticator);
+                mBiometricService.mImpl.registerAuthenticator(SENSOR_ID_FINGERPRINT, modality,
+                        strength, mFingerprintAuthenticator);
             }
 
             if ((modality & BiometricAuthenticator.TYPE_FACE) != 0) {
                 when(mFaceAuthenticator.hasEnrolledTemplates(anyInt(), any())).thenReturn(true);
                 when(mFaceAuthenticator.isHardwareDetected(any())).thenReturn(true);
-                mBiometricService.mImpl.registerAuthenticator(modality,
-                        new FaceSensorPropertiesInternal(SENSOR_ID_FACE,
-                                Utils.authenticatorStrengthToPropertyStrength(strength),
-                                5 /* maxEnrollmentsPerUser */, List.of() /* componentInfo */,
-                                FaceSensorProperties.TYPE_UNKNOWN,
-                                true /* supportsFace Detection */,
-                                true /* supportsSelfIllumination */,
-                                false /* resetLockoutRequiresHardwareAuthToken */),
-                        mFaceAuthenticator);
+                mBiometricService.mImpl.registerAuthenticator(SENSOR_ID_FACE, modality,
+                        strength, mFaceAuthenticator);
             }
         }
     }

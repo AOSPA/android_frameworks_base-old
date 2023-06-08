@@ -17,28 +17,39 @@
 package android.view.stylus;
 
 import static android.view.MotionEvent.ACTION_DOWN;
+import static android.view.MotionEvent.ACTION_HOVER_MOVE;
 import static android.view.MotionEvent.ACTION_MOVE;
 import static android.view.MotionEvent.ACTION_UP;
 import static android.view.stylus.HandwritingTestUtil.createView;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyFloat;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import android.app.Instrumentation;
 import android.content.Context;
+import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.platform.test.annotations.Presubmit;
 import android.view.HandwritingInitiator;
 import android.view.InputDevice;
 import android.view.MotionEvent;
+import android.view.PointerIcon;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.EditText;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.SmallTest;
@@ -47,6 +58,7 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
 
 /**
  * Tests for {@link HandwritingInitiator}
@@ -106,6 +118,7 @@ public class HandwritingInitiatorTest {
                 HW_BOUNDS_OFFSETS_BOTTOM_PX);
         mHandwritingInitiator.updateHandwritingAreasForView(mTestView1);
         mHandwritingInitiator.updateHandwritingAreasForView(mTestView2);
+        doReturn(true).when(mHandwritingInitiator).tryAcceptStylusHandwritingDelegation(any());
     }
 
     @Test
@@ -477,6 +490,112 @@ public class HandwritingInitiatorTest {
     }
 
     @Test
+    public void onResolvePointerIcon_withinHWArea_showPointerIcon() {
+        MotionEvent hoverEvent = createStylusHoverEvent(sHwArea1.centerX(), sHwArea1.centerY());
+        PointerIcon icon = mHandwritingInitiator.onResolvePointerIcon(mContext, hoverEvent);
+        assertThat(icon.getType()).isEqualTo(PointerIcon.TYPE_HANDWRITING);
+    }
+
+    @Test
+    public void onResolvePointerIcon_withinExtendedHWArea_showPointerIcon() {
+        int x = sHwArea1.left - HW_BOUNDS_OFFSETS_LEFT_PX / 2;
+        int y = sHwArea1.top - HW_BOUNDS_OFFSETS_TOP_PX / 2;
+        MotionEvent hoverEvent = createStylusHoverEvent(x, y);
+
+        PointerIcon icon = mHandwritingInitiator.onResolvePointerIcon(mContext, hoverEvent);
+        assertThat(icon.getType()).isEqualTo(PointerIcon.TYPE_HANDWRITING);
+    }
+
+    @Test
+    public void onResolvePointerIcon_afterHandwriting_hidePointerIconForConnectedView() {
+        // simulate the case where sTestView1 is focused.
+        mHandwritingInitiator.onInputConnectionCreated(mTestView1);
+        injectStylusEvent(mHandwritingInitiator, sHwArea1.centerX(), sHwArea1.centerY(),
+                /* exceedsHWSlop */ true);
+        // Verify that handwriting started for sTestView1.
+        verify(mHandwritingInitiator, times(1)).startHandwriting(mTestView1);
+
+        MotionEvent hoverEvent1 = createStylusHoverEvent(sHwArea1.centerX(), sHwArea1.centerY());
+        PointerIcon icon1 = mHandwritingInitiator.onResolvePointerIcon(mContext, hoverEvent1);
+        // After handwriting is initiated for the connected view, hide the hover icon.
+        assertThat(icon1).isNull();
+
+        MotionEvent hoverEvent2 = createStylusHoverEvent(sHwArea2.centerX(), sHwArea2.centerY());
+        PointerIcon icon2 = mHandwritingInitiator.onResolvePointerIcon(mContext, hoverEvent2);
+        // Now stylus is hovering on another editor, show the hover icon.
+        assertThat(icon2.getType()).isEqualTo(PointerIcon.TYPE_HANDWRITING);
+
+        // After the hover icon is displayed again, it will show hover icon for the connected view
+        // again.
+        PointerIcon icon3 = mHandwritingInitiator.onResolvePointerIcon(mContext, hoverEvent1);
+        assertThat(icon3.getType()).isEqualTo(PointerIcon.TYPE_HANDWRITING);
+    }
+
+    @Test
+    public void onResolvePointerIcon_afterHandwriting_hidePointerIconForDelegatorView() {
+        // Set mTextView2 to be the delegate of mTestView1.
+        mTestView2.setIsHandwritingDelegate(true);
+
+        mTestView1.setHandwritingDelegatorCallback(
+                () -> mHandwritingInitiator.onInputConnectionCreated(mTestView2));
+
+        injectStylusEvent(mHandwritingInitiator, sHwArea1.centerX(), sHwArea1.centerY(),
+                /* exceedsHWSlop */ true);
+        // Prerequisite check, verify that handwriting started for delegateView.
+        verify(mHandwritingInitiator, times(1)).tryAcceptStylusHandwritingDelegation(mTestView2);
+
+        MotionEvent hoverEvent = createStylusHoverEvent(sHwArea2.centerX(), sHwArea2.centerY());
+        PointerIcon icon = mHandwritingInitiator.onResolvePointerIcon(mContext, hoverEvent);
+        // After handwriting is initiated for the connected view, hide the hover icon.
+        assertThat(icon).isNull();
+    }
+
+    @Test
+    public void onResolvePointerIcon_showHoverIconAfterTap() {
+        // Simulate the case where sTestView1 is focused.
+        mHandwritingInitiator.onInputConnectionCreated(mTestView1);
+        injectStylusEvent(mHandwritingInitiator, sHwArea1.centerX(), sHwArea1.centerY(),
+                /* exceedsHWSlop */ true);
+        // Verify that handwriting started for sTestView1.
+        verify(mHandwritingInitiator, times(1)).startHandwriting(mTestView1);
+
+        MotionEvent hoverEvent1 = createStylusHoverEvent(sHwArea1.centerX(), sHwArea1.centerY());
+        PointerIcon icon1 = mHandwritingInitiator.onResolvePointerIcon(mContext, hoverEvent1);
+        // After handwriting is initiated for the connected view, hide the hover icon.
+        assertThat(icon1).isNull();
+
+        // When exceedsHwSlop is false, it simulates a tap.
+        injectStylusEvent(mHandwritingInitiator, sHwArea1.centerX(), sHwArea1.centerY(),
+                /* exceedsHWSlop */ false);
+
+        PointerIcon icon2 = mHandwritingInitiator.onResolvePointerIcon(mContext, hoverEvent1);
+        assertThat(icon2.getType()).isEqualTo(PointerIcon.TYPE_HANDWRITING);
+    }
+
+    @Test
+    public void onResolvePointerIcon_showHoverIconAfterFocusChange() {
+        // Simulate the case where sTestView1 is focused.
+        mHandwritingInitiator.onInputConnectionCreated(mTestView1);
+        injectStylusEvent(mHandwritingInitiator, sHwArea1.centerX(), sHwArea1.centerY(),
+                /* exceedsHWSlop */ true);
+        // Verify that handwriting started for sTestView1.
+        verify(mHandwritingInitiator, times(1)).startHandwriting(mTestView1);
+
+        MotionEvent hoverEvent1 = createStylusHoverEvent(sHwArea1.centerX(), sHwArea1.centerY());
+        PointerIcon icon1 = mHandwritingInitiator.onResolvePointerIcon(mContext, hoverEvent1);
+        // After handwriting is initiated for the connected view, hide the hover icon.
+        assertThat(icon1).isNull();
+
+        // Simulate that focus is switched to mTestView2 first and then switched back.
+        mHandwritingInitiator.onInputConnectionCreated(mTestView2);
+        mHandwritingInitiator.onInputConnectionCreated(mTestView1);
+
+        PointerIcon icon2 = mHandwritingInitiator.onResolvePointerIcon(mContext, hoverEvent1);
+        // After the change of focus, hover icon shows again.
+        assertThat(icon2.getType()).isEqualTo(PointerIcon.TYPE_HANDWRITING);
+    }
+
+    @Test
     public void autoHandwriting_whenDisabled_wontStartHW() {
         View mockView = createView(sHwArea1, false /* autoHandwritingEnabled */,
                 true /* isStylusHandwritingAvailable */);
@@ -543,6 +662,140 @@ public class HandwritingInitiatorTest {
         assertThat(mHandwritingInitiator.mConnectedView.get()).isEqualTo(mTestView1);
     }
 
+    @Test
+    public void startHandwriting_hidesHint() {
+        EditText editText =
+                new EditText(InstrumentationRegistry.getInstrumentation().getTargetContext());
+        editText.setHint("hint");
+        editText.setLayoutParams(new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        verifyEditTextDrawsText(editText, "hint");
+
+        mHandwritingInitiator.onTouchEvent(createStylusEvent(ACTION_DOWN, 0, 0, 0));
+        mHandwritingInitiator.startHandwriting(editText);
+
+        verifyEditTextDrawsText(editText, null);
+    }
+
+    @Test
+    public void startHandwriting_clearFocus_restoresHint() {
+        EditText editText =
+                new EditText(InstrumentationRegistry.getInstrumentation().getTargetContext());
+        editText.setHint("hint");
+        editText.setLayoutParams(new ViewGroup.LayoutParams(1024, 1024));
+        editText.requestFocus();
+
+        verifyEditTextDrawsText(editText, "hint");
+
+        mHandwritingInitiator.onTouchEvent(createStylusEvent(ACTION_DOWN, 0, 0, 0));
+        mHandwritingInitiator.startHandwriting(editText);
+
+        verifyEditTextDrawsText(editText, null);
+
+        editText.clearFocus();
+
+        verifyEditTextDrawsText(editText, "hint");
+    }
+
+    @Test
+    public void startHandwriting_setHint_restoresHint() {
+        EditText editText =
+                new EditText(InstrumentationRegistry.getInstrumentation().getTargetContext());
+        editText.setHint("hint");
+        editText.setLayoutParams(new ViewGroup.LayoutParams(1024, 1024));
+
+        verifyEditTextDrawsText(editText, "hint");
+
+        mHandwritingInitiator.onTouchEvent(createStylusEvent(ACTION_DOWN, 0, 0, 0));
+        mHandwritingInitiator.startHandwriting(editText);
+
+        verifyEditTextDrawsText(editText, null);
+
+        editText.setHint("new hint");
+
+        verifyEditTextDrawsText(editText, "new hint");
+    }
+
+    @Test
+    public void startHandwriting_setText_restoresHint() {
+        EditText editText =
+                new EditText(InstrumentationRegistry.getInstrumentation().getTargetContext());
+        editText.setHint("hint");
+        editText.setLayoutParams(new ViewGroup.LayoutParams(1024, 1024));
+
+        verifyEditTextDrawsText(editText, "hint");
+
+        mHandwritingInitiator.onTouchEvent(createStylusEvent(ACTION_DOWN, 0, 0, 0));
+        mHandwritingInitiator.startHandwriting(editText);
+
+        verifyEditTextDrawsText(editText, null);
+
+        editText.setText("a");
+        editText.setText("");
+
+        verifyEditTextDrawsText(editText, "hint");
+    }
+
+    private void verifyEditTextDrawsText(EditText editText, String text) {
+        editText.measure(
+                View.MeasureSpec.makeMeasureSpec(1024, View.MeasureSpec.AT_MOST),
+                View.MeasureSpec.makeMeasureSpec(1024, View.MeasureSpec.AT_MOST));
+        Canvas canvas = prepareMockCanvas(editText);
+        editText.draw(canvas);
+        if (text != null) {
+            ArgumentCaptor<CharSequence> textCaptor = ArgumentCaptor.forClass(CharSequence.class);
+            verify(canvas).drawText(
+                    textCaptor.capture(), anyInt(), anyInt(), anyFloat(), anyFloat(), any());
+            assertThat(textCaptor.getValue().toString()).isEqualTo(text);
+        } else {
+            verify(canvas, never()).drawText(
+                    any(CharSequence.class), anyInt(), anyInt(), anyFloat(), anyFloat(), any());
+        }
+    }
+
+    private Canvas prepareMockCanvas(View view) {
+        Canvas canvas = mock(Canvas.class);
+        when(canvas.getClipBounds(any())).thenAnswer(invocation -> {
+            Rect outRect = invocation.getArgument(0);
+            outRect.top = 0;
+            outRect.left = 0;
+            outRect.right = view.getMeasuredWidth();
+            outRect.bottom = view.getMeasuredHeight();
+            return true;
+        });
+        return canvas;
+    }
+
+    /**
+     * Inject {@link MotionEvent}s to the {@link HandwritingInitiator}.
+     * @param x the x coordinate of the first {@link MotionEvent}.
+     * @param y the y coordinate of the first {@link MotionEvent}.
+     * @param exceedsHWSlop whether the injected {@link MotionEvent} movements exceed the
+     *                     handwriting slop. If true, it simulates handwriting. Otherwise, it
+     *                     simulates a tap/click,
+     */
+    private void injectStylusEvent(HandwritingInitiator handwritingInitiator, int x, int y,
+            boolean exceedsHWSlop) {
+        MotionEvent event1 = createStylusEvent(ACTION_DOWN, x, y, 0);
+
+        if (exceedsHWSlop) {
+            x += mHandwritingSlop * 2;
+        } else {
+            x += mHandwritingSlop / 2;
+        }
+        MotionEvent event2 = createStylusEvent(ACTION_MOVE, x, y, 0);
+        MotionEvent event3 = createStylusEvent(ACTION_UP, x, y, 0);
+
+        handwritingInitiator.onTouchEvent(event1);
+        handwritingInitiator.onTouchEvent(event2);
+        handwritingInitiator.onTouchEvent(event3);
+    }
+
+    private MotionEvent createStylusHoverEvent(int x, int y) {
+        return createStylusEvent(ACTION_HOVER_MOVE, x, y, /* eventTime */ 0);
+    }
+
     private MotionEvent createStylusEvent(int action, int x, int y, long eventTime) {
         MotionEvent.PointerProperties[] properties = MotionEvent.PointerProperties.createArray(1);
         properties[0].toolType = MotionEvent.TOOL_TYPE_STYLUS;
@@ -554,6 +807,6 @@ public class HandwritingInitiatorTest {
         return MotionEvent.obtain(0 /* downTime */, eventTime /* eventTime */, action, 1,
                 properties, coords, 0 /* metaState */, 0 /* buttonState */, 1 /* xPrecision */,
                 1 /* yPrecision */, 0 /* deviceId */, 0 /* edgeFlags */,
-                InputDevice.SOURCE_TOUCHSCREEN, 0 /* flags */);
+                InputDevice.SOURCE_STYLUS, 0 /* flags */);
     }
 }

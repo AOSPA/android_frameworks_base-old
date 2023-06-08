@@ -1479,9 +1479,8 @@ class ActivityStarter {
         // transition based on a sub-action.
         // Only do the create here (and defer requestStart) since startActivityInner might abort.
         final TransitionController transitionController = r.mTransitionController;
-        Transition newTransition = (!transitionController.isCollecting()
-                && transitionController.getTransitionPlayer() != null)
-                ? transitionController.createTransition(TRANSIT_OPEN) : null;
+        Transition newTransition = transitionController.isShellTransitionsEnabled()
+                ? transitionController.createAndStartCollecting(TRANSIT_OPEN) : null;
         RemoteTransition remoteTransition = r.takeRemoteTransition();
         try {
             mService.deferWindowLayout();
@@ -2964,6 +2963,9 @@ class ActivityStarter {
     private void setTargetRootTaskIfNeeded(ActivityRecord intentActivity) {
         intentActivity.getTaskFragment().clearLastPausedActivity();
         Task intentTask = intentActivity.getTask();
+        // The intent task might be reparented while in getOrCreateRootTask, caches the original
+        // root task to distinguish if it is moving to front or not.
+        final Task origRootTask = intentTask != null ? intentTask.getRootTask() : null;
 
         if (mTargetRootTask == null) {
             // Update launch target task when it is not indicated.
@@ -2980,9 +2982,9 @@ class ActivityStarter {
         // If the matching task is already in the adjacent task of the launch target. Adjust to use
         // the adjacent task as its launch target. So the existing task will be launched into the
         // closer one and won't be reparent redundantly.
-        final Task adjacentTargetTask = mTargetRootTask.getAdjacentTaskFragment() != null
-                ? mTargetRootTask.getAdjacentTaskFragment().asTask() : null;
-        if (adjacentTargetTask != null && intentActivity.isDescendantOf(adjacentTargetTask)) {
+        final Task adjacentTargetTask = mTargetRootTask.getAdjacentTask();
+        if (adjacentTargetTask != null && intentActivity.isDescendantOf(adjacentTargetTask)
+                && intentTask.isOnTop()) {
             mTargetRootTask = adjacentTargetTask;
         }
 
@@ -2997,7 +2999,8 @@ class ActivityStarter {
                     ? null : focusRootTask.topRunningNonDelayedActivityLocked(mNotTop);
             final Task topTask = curTop != null ? curTop.getTask() : null;
             differentTopTask = topTask != intentTask
-                    || (focusRootTask != null && topTask != focusRootTask.getTopMostTask());
+                    || (focusRootTask != null && topTask != focusRootTask.getTopMostTask())
+                    || (focusRootTask != null && focusRootTask != origRootTask);
         } else {
             // The existing task should always be different from those in other displays.
             differentTopTask = true;

@@ -447,7 +447,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         mTaskSupervisor = mService.mTaskSupervisor;
         mTaskSupervisor.mRootWindowContainer = this;
         mDisplayOffTokenAcquirer = mService.new SleepTokenAcquirerImpl(DISPLAY_OFF_SLEEP_TOKEN_TAG);
-        mDeviceStateController = new DeviceStateController(service.mContext, service.mH);
+        mDeviceStateController = new DeviceStateController(service.mContext, service.mH,
+                service.mGlobalLock);
         mDisplayRotationCoordinator = new DisplayRotationCoordinator();
     }
 
@@ -1383,7 +1384,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     void startHomeOnEmptyDisplays(String reason) {
         forAllTaskDisplayAreas(taskDisplayArea -> {
             if (taskDisplayArea.topRunningActivity() == null) {
-                startHomeOnTaskDisplayArea(mCurrentUser, reason, taskDisplayArea,
+                int userId = mWmService.getUserAssignedToDisplay(taskDisplayArea.getDisplayId());
+                startHomeOnTaskDisplayArea(userId, reason, taskDisplayArea,
                         false /* allowInstrumenting */, false /* fromHomeKey */);
             }
         });
@@ -1431,7 +1433,9 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
         Intent homeIntent = null;
         ActivityInfo aInfo = null;
-        if (taskDisplayArea == getDefaultTaskDisplayArea()) {
+        if (taskDisplayArea == getDefaultTaskDisplayArea()
+                || mWmService.shouldPlacePrimaryHomeOnDisplay(
+                        taskDisplayArea.getDisplayId(), userId)) {
             homeIntent = mService.getHomeIntent();
             aInfo = resolveHomeActivity(userId, homeIntent);
         } else if (shouldPlaceSecondaryHomeOnDisplayArea(taskDisplayArea)) {
@@ -1598,7 +1602,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             r.moveFocusableActivityToTop(myReason);
             return resumeFocusedTasksTopActivities(r.getRootTask(), prev, null);
         }
-        return startHomeOnTaskDisplayArea(mCurrentUser, myReason, taskDisplayArea,
+        int userId = mWmService.getUserAssignedToDisplay(taskDisplayArea.getDisplayId());
+        return startHomeOnTaskDisplayArea(userId, myReason, taskDisplayArea,
                 false /* allowInstrumenting */, false /* fromHomeKey */);
     }
 
@@ -1676,8 +1681,9 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         final int displayId = taskDisplayArea != null ? taskDisplayArea.getDisplayId()
                 : INVALID_DISPLAY;
         if (displayId == DEFAULT_DISPLAY || (displayId != INVALID_DISPLAY
-                && displayId == mService.mVr2dDisplayId)) {
-            // No restrictions to default display or vr 2d display.
+                && (displayId == mService.mVr2dDisplayId
+                || mWmService.shouldPlacePrimaryHomeOnDisplay(displayId)))) {
+            // No restrictions to default display, vr 2d display or main display for visible users.
             return true;
         }
 
@@ -1750,9 +1756,13 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     /**
      * @return a list of pairs, containing activities and their task id which are the top ones in
      * each visible root task. The first entry will be the focused activity.
+     *
+     * <p>NOTE: If the top activity is in the split screen, the other activities in the same split
+     * screen will also be returned.
      */
     List<ActivityAssistInfo> getTopVisibleActivities() {
         final ArrayList<ActivityAssistInfo> topVisibleActivities = new ArrayList<>();
+        final ArrayList<ActivityAssistInfo> activityAssistInfos = new ArrayList<>();
         final Task topFocusedRootTask = getTopDisplayFocusedRootTask();
         // Traverse all displays.
         forAllRootTasks(rootTask -> {
@@ -1760,11 +1770,21 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             if (rootTask.shouldBeVisible(null /* starting */)) {
                 final ActivityRecord top = rootTask.getTopNonFinishingActivity();
                 if (top != null) {
-                    ActivityAssistInfo visibleActivity = new ActivityAssistInfo(top);
+                    activityAssistInfos.clear();
+                    activityAssistInfos.add(new ActivityAssistInfo(top));
+                    // Check if the activity on the split screen.
+                    final Task adjacentTask = top.getTask().getAdjacentTask();
+                    if (adjacentTask != null) {
+                        final ActivityRecord adjacentActivityRecord =
+                                adjacentTask.getTopNonFinishingActivity();
+                        if (adjacentActivityRecord != null) {
+                            activityAssistInfos.add(new ActivityAssistInfo(adjacentActivityRecord));
+                        }
+                    }
                     if (rootTask == topFocusedRootTask) {
-                        topVisibleActivities.add(0, visibleActivity);
+                        topVisibleActivities.addAll(0, activityAssistInfos);
                     } else {
-                        topVisibleActivities.add(visibleActivity);
+                        topVisibleActivities.addAll(activityAssistInfos);
                     }
                 }
             }
@@ -2721,6 +2741,10 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     SleepToken createSleepToken(String tag, int displayId) {
+        return createSleepToken(tag, displayId, false /* isSwappingDisplay */);
+    }
+
+    SleepToken createSleepToken(String tag, int displayId, boolean isSwappingDisplay) {
         final DisplayContent display = getDisplayContent(displayId);
         if (display == null) {
             throw new IllegalArgumentException("Invalid display: " + displayId);
@@ -2729,7 +2753,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         final int tokenKey = makeSleepTokenKey(tag, displayId);
         SleepToken token = mSleepTokens.get(tokenKey);
         if (token == null) {
-            token = new SleepToken(tag, displayId);
+            token = new SleepToken(tag, displayId, isSwappingDisplay);
             mSleepTokens.put(tokenKey, token);
             display.mAllSleepTokens.add(token);
             ProtoLog.d(WM_DEBUG_STATES, "Create sleep token: tag=%s, displayId=%d", tag, displayId);
@@ -3355,7 +3379,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             if (task.getActivity(activity -> !activity.finishing && activity.mUserId == userId)
                     != null) {
                 mService.getTaskChangeNotificationController().notifyTaskProfileLocked(
-                        task.getTaskInfo());
+                        task.getTaskInfo(), userId);
             }
         }, true /* traverseTopToBottom */);
     }
@@ -3638,18 +3662,34 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         private final String mTag;
         private final long mAcquireTime;
         private final int mDisplayId;
+        private final boolean mIsSwappingDisplay;
         final int mHashKey;
 
-        SleepToken(String tag, int displayId) {
+        // The display could remain in sleep after the physical display swapped, adding a 1
+        // seconds display swap timeout to prevent activities staying in PAUSED state.
+        // Otherwise, the sleep token should be removed once display turns back on after swapped.
+        private static final long DISPLAY_SWAP_TIMEOUT = 1000;
+
+        SleepToken(String tag, int displayId, boolean isSwappingDisplay) {
             mTag = tag;
             mDisplayId = displayId;
             mAcquireTime = SystemClock.uptimeMillis();
+            mIsSwappingDisplay = isSwappingDisplay;
             mHashKey = makeSleepTokenKey(mTag, mDisplayId);
+        }
+
+        public boolean isDisplaySwapping() {
+            long now = SystemClock.uptimeMillis();
+            if (now - mAcquireTime > DISPLAY_SWAP_TIMEOUT) {
+                return false;
+            }
+            return mIsSwappingDisplay;
         }
 
         @Override
         public String toString() {
             return "{\"" + mTag + "\", display " + mDisplayId
+                    + (mIsSwappingDisplay ? " is swapping " : "")
                     + ", acquire at " + TimeUtils.formatUptime(mAcquireTime) + "}";
         }
 

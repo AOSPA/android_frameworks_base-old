@@ -5,22 +5,23 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.content.Context;
+import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.FrameLayout;
 import android.widget.RelativeLayout;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.VisibleForTesting;
 
+import com.android.app.animation.Interpolators;
 import com.android.keyguard.dagger.KeyguardStatusViewScope;
 import com.android.systemui.R;
-import com.android.systemui.animation.Interpolators;
+import com.android.systemui.log.LogBuffer;
+import com.android.systemui.log.LogLevel;
 import com.android.systemui.plugins.ClockController;
-import com.android.systemui.plugins.log.LogBuffer;
-import com.android.systemui.plugins.log.LogLevel;
+import com.android.systemui.shared.clocks.DefaultClockController;
 
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
@@ -46,6 +47,9 @@ public class KeyguardClockSwitch extends RelativeLayout {
 
     public static final int LARGE = 0;
     public static final int SMALL = 1;
+    // compensate for translation of parents subject to device screen
+    // In this case, the translation comes from KeyguardStatusView
+    public int screenOffsetYPadding = 0;
 
     /** Returns a region for the large clock to position itself, based on the given parent. */
     public static Rect getLargeClockRegion(ViewGroup parent) {
@@ -65,12 +69,13 @@ public class KeyguardClockSwitch extends RelativeLayout {
     /**
      * Frame for small/large clocks
      */
-    private FrameLayout mSmallClockFrame;
-    private FrameLayout mLargeClockFrame;
+    private KeyguardClockFrame mSmallClockFrame;
+    private KeyguardClockFrame mLargeClockFrame;
     private ClockController mClock;
 
     private View mStatusArea;
     private int mSmartspaceTopOffset;
+    private int mDrawAlpha = 255;
 
     /**
      * Maintain state so that a newly connected plugin can be initialized.
@@ -117,6 +122,22 @@ public class KeyguardClockSwitch extends RelativeLayout {
         onDensityOrFontScaleChanged();
     }
 
+    @Override
+    protected boolean onSetAlpha(int alpha) {
+        mDrawAlpha = alpha;
+        return true;
+    }
+
+    @Override
+    protected void dispatchDraw(Canvas canvas) {
+        KeyguardClockFrame.saveCanvasAlpha(
+                this, canvas, mDrawAlpha,
+                c -> {
+                    super.dispatchDraw(c);
+                    return kotlin.Unit.INSTANCE;
+                });
+    }
+
     public void setLogBuffer(LogBuffer logBuffer) {
         mLogBuffer = logBuffer;
     }
@@ -161,8 +182,18 @@ public class KeyguardClockSwitch extends RelativeLayout {
             }
 
             if (mLargeClockFrame.isLaidOut()) {
-                mClock.getLargeClock().getEvents().onTargetRegionChanged(
-                        getLargeClockRegion(mLargeClockFrame));
+                Rect targetRegion = getLargeClockRegion(mLargeClockFrame);
+                if (mClock instanceof DefaultClockController) {
+                    mClock.getLargeClock().getEvents().onTargetRegionChanged(
+                            targetRegion);
+                } else {
+                    mClock.getLargeClock().getEvents().onTargetRegionChanged(
+                            new Rect(
+                                    targetRegion.left,
+                                    targetRegion.top - screenOffsetYPadding,
+                                    targetRegion.right,
+                                    targetRegion.bottom - screenOffsetYPadding));
+                }
             }
         }
     }

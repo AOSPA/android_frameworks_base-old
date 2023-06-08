@@ -18,6 +18,7 @@ package com.android.server.am;
 
 import static android.app.ActivityManager.RESTRICTION_LEVEL_RESTRICTED_BUCKET;
 import static android.app.ActivityManagerInternal.OOM_ADJ_REASON_START_RECEIVER;
+import static android.os.PowerExemptionManager.TEMPORARY_ALLOW_LIST_TYPE_APP_FREEZING_DELAYED;
 import static android.os.Process.ZYGOTE_POLICY_FLAG_EMPTY;
 import static android.os.Process.ZYGOTE_POLICY_FLAG_LATENCY_SENSITIVE;
 import static android.text.TextUtils.formatSimple;
@@ -67,7 +68,6 @@ import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.Trace;
 import android.os.UserHandle;
-import android.os.UserManager;
 import android.text.TextUtils;
 import android.util.EventLog;
 import android.util.IndentingPrintWriter;
@@ -78,6 +78,7 @@ import android.util.proto.ProtoOutputStream;
 import com.android.internal.os.TimeoutRecord;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.LocalServices;
+import com.android.server.pm.UserJourneyLogger;
 import com.android.server.pm.UserManagerInternal;
 
 import dalvik.annotation.optimization.NeverCompile;
@@ -383,6 +384,16 @@ public class BroadcastQueueImpl extends BroadcastQueue {
         // Tell the application to launch this receiver.
         maybeReportBroadcastDispatchedEventLocked(r, r.curReceiver.applicationInfo.uid);
         r.intent.setComponent(r.curComponent);
+
+        // See if we need to delay the freezer based on BroadcastOptions
+        if (r.options != null
+                && r.options.getTemporaryAppAllowlistDuration() > 0
+                && r.options.getTemporaryAppAllowlistType()
+                    == TEMPORARY_ALLOW_LIST_TYPE_APP_FREEZING_DELAYED) {
+            mService.mOomAdjuster.mCachedAppOptimizer.unfreezeTemporarily(app,
+                    CachedAppOptimizer.UNFREEZE_REASON_START_RECEIVER,
+                    r.options.getTemporaryAppAllowlistDuration());
+        }
 
         boolean started = false;
         try {
@@ -930,8 +941,13 @@ public class BroadcastQueueImpl extends BroadcastQueue {
             Slog.v(TAG, "Broadcast temp allowlist uid=" + uid + " duration=" + duration
                     + " type=" + type + " : " + b.toString());
         }
-        mService.tempAllowlistUidLocked(uid, duration, reasonCode, b.toString(), type,
-                r.callingUid);
+
+        // Only add to temp allowlist if it's not the APP_FREEZING_DELAYED type. That will be
+        // handled when the broadcast is actually being scheduled on the app thread.
+        if (type != TEMPORARY_ALLOW_LIST_TYPE_APP_FREEZING_DELAYED) {
+            mService.tempAllowlistUidLocked(uid, duration, reasonCode, b.toString(), type,
+                    r.callingUid);
+        }
     }
 
     private void processNextBroadcast(boolean fromMsg) {
@@ -1518,7 +1534,7 @@ public class BroadcastQueueImpl extends BroadcastQueue {
             final UserInfo userInfo =
                     (umInternal != null) ? umInternal.getUserInfo(r.userId) : null;
             if (userInfo != null) {
-                userType = UserManager.getUserTypeForStatsd(userInfo.userType);
+                userType = UserJourneyLogger.getUserTypeForStatsd(userInfo.userType);
             }
             Slog.i(TAG_BROADCAST,
                     "BOOT_COMPLETED_BROADCAST_COMPLETION_LATENCY_REPORTED action:"
@@ -1793,6 +1809,23 @@ public class BroadcastQueueImpl extends BroadcastQueue {
         return mDispatcher.isBeyondBarrier(barrierTime);
     }
 
+    public boolean isDispatchedLocked(Intent intent) {
+        if (isIdleLocked()) return true;
+
+        for (int i = 0; i < mParallelBroadcasts.size(); i++) {
+            if (intent.filterEquals(mParallelBroadcasts.get(i).intent)) {
+                return false;
+            }
+        }
+
+        final BroadcastRecord pending = getPendingBroadcastLocked();
+        if ((pending != null) && intent.filterEquals(pending.intent)) {
+            return false;
+        }
+
+        return mDispatcher.isDispatched(intent);
+    }
+
     public void waitForIdle(PrintWriter pw) {
         waitFor(() -> isIdleLocked(), pw, "idle");
     }
@@ -1800,6 +1833,10 @@ public class BroadcastQueueImpl extends BroadcastQueue {
     public void waitForBarrier(PrintWriter pw) {
         final long barrierTime = SystemClock.uptimeMillis();
         waitFor(() -> isBeyondBarrierLocked(barrierTime), pw, "barrier");
+    }
+
+    public void waitForDispatched(Intent intent, PrintWriter pw) {
+        waitFor(() -> isDispatchedLocked(intent), pw, "dispatch");
     }
 
     private void waitFor(BooleanSupplier condition, PrintWriter pw, String conditionName) {

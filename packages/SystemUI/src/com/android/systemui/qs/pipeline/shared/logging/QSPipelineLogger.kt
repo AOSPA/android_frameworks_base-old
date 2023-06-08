@@ -17,8 +17,8 @@
 package com.android.systemui.qs.pipeline.shared.logging
 
 import android.annotation.UserIdInt
-import com.android.systemui.plugins.log.LogBuffer
-import com.android.systemui.plugins.log.LogLevel
+import com.android.systemui.log.LogBuffer
+import com.android.systemui.log.LogLevel
 import com.android.systemui.qs.pipeline.dagger.QSTileListLog
 import com.android.systemui.qs.pipeline.shared.TileSpec
 import javax.inject.Inject
@@ -118,6 +118,10 @@ constructor(
             },
             { "User changed to $int1 for tile $str1" }
         )
+    }
+
+    fun logUsingRetailTiles() {
+        tileListLogBuffer.log(TILE_LIST_TAG, LogLevel.DEBUG, {}, { "Using retail tiles" })
     }
 
     /** Reasons for destroying an existing tile. */

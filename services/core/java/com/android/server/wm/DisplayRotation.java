@@ -125,6 +125,7 @@ public class DisplayRotation {
 
     public final boolean isDefaultDisplay;
     private final boolean mSupportAutoRotation;
+    private final boolean mAllowRotationResolver;
     private final int mLidOpenRotation;
     private final int mCarDockRotation;
     private final int mDeskDockRotation;
@@ -299,6 +300,8 @@ public class DisplayRotation {
 
         mSupportAutoRotation =
                 mContext.getResources().getBoolean(R.bool.config_supportAutoRotation);
+        mAllowRotationResolver =
+                mContext.getResources().getBoolean(R.bool.config_allowRotationResolver);
         mLidOpenRotation = readRotation(R.integer.config_lidOpenRotation);
         mCarDockRotation = readRotation(R.integer.config_carDockRotation);
         mDeskDockRotation = readRotation(R.integer.config_deskDockRotation);
@@ -1017,6 +1020,10 @@ public class DisplayRotation {
     }
 
     void freezeRotation(int rotation) {
+        if (mDeviceStateController.shouldReverseRotationDirectionAroundZAxis()) {
+            rotation = RotationUtils.reverseRotationDirectionAroundZAxis(rotation);
+        }
+
         rotation = (rotation == -1) ? mRotation : rotation;
         setUserRotation(WindowManagerPolicy.USER_ROTATION_LOCKED, rotation);
     }
@@ -1303,10 +1310,6 @@ public class DisplayRotation {
                 mDisplayPolicy.isCarDockEnablesAccelerometer();
         final boolean deskDockEnablesAccelerometer =
                 mDisplayPolicy.isDeskDockEnablesAccelerometer();
-        final boolean deskDockRespectsNoSensorAndLockedWithoutAccelerometer =
-                mDisplayPolicy.isDeskDockRespectsNoSensorAndLockedWithoutAccelerometer()
-                        && (orientation == ActivityInfo.SCREEN_ORIENTATION_LOCKED
-                                || orientation == ActivityInfo.SCREEN_ORIENTATION_NOSENSOR);
 
         @Surface.Rotation
         final int preferredRotation;
@@ -1327,10 +1330,10 @@ public class DisplayRotation {
                 || dockMode == Intent.EXTRA_DOCK_STATE_LE_DESK
                 || dockMode == Intent.EXTRA_DOCK_STATE_HE_DESK)
                 && (deskDockEnablesAccelerometer || mDeskDockRotation >= 0)
-                && !deskDockRespectsNoSensorAndLockedWithoutAccelerometer) {
+                && !(orientation == ActivityInfo.SCREEN_ORIENTATION_LOCKED
+                        || orientation == ActivityInfo.SCREEN_ORIENTATION_NOSENSOR)) {
             // Ignore sensor when in desk dock unless explicitly enabled.
-            // This case can override the behavior of NOSENSOR, and can also
-            // enable 180 degree rotation while docked.
+            // This case can enable 180 degree rotation while docked.
             preferredRotation = deskDockEnablesAccelerometer ? sensorRotation : mDeskDockRotation;
         } else if ((hdmiPlugged || mWifiDisplayConnected) && mDemoHdmiRotationLock) {
             // Ignore sensor when plugged into HDMI when demo HDMI rotation lock enabled.
@@ -2111,7 +2114,8 @@ public class DisplayRotation {
 
         @Override
         public boolean isRotationResolverEnabled() {
-            return mUserRotationMode == WindowManagerPolicy.USER_ROTATION_FREE
+            return mAllowRotationResolver
+                    && mUserRotationMode == WindowManagerPolicy.USER_ROTATION_FREE
                     && mCameraRotationMode == CAMERA_ROTATION_ENABLED
                     && !mService.mPowerManager.isPowerSaveMode();
         }

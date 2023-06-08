@@ -444,6 +444,24 @@ public abstract class WindowManagerInternal {
     public abstract IBinder getFocusedWindowTokenFromWindowStates();
 
     /**
+     * Moves the given display to the top.
+     */
+    public abstract void moveDisplayToTopIfAllowed(int displayId);
+
+    /**
+     * Request to move window input focus to the window with the provided window token.
+     *
+     * <p>
+     * It is necessary to move window input focus before certain actions on views in a window can
+     * be performed, such as opening an IME. Input normally requests to move focus on window touch
+     * so this method should not be necessary in most cases; only features that bypass normal touch
+     * behavior (like Accessibility actions) require this method.
+     * </p>
+     * @param windowToken The window token.
+     */
+    public abstract void requestWindowFocus(IBinder windowToken);
+
+    /**
      * @return Whether the keyguard is engaged.
      */
     public abstract boolean isKeyguardLocked();
@@ -846,6 +864,16 @@ public abstract class WindowManagerInternal {
             this.imeSurfaceParentName = imeSurfaceParentName;
         }
     }
+
+    /**
+     * Sets by the {@link com.android.server.inputmethod.InputMethodManagerService} to monitor
+     * the visibility change of the IME targeted windows.
+     *
+     * @see ImeTargetChangeListener#onImeTargetOverlayVisibilityChanged
+     * @see ImeTargetChangeListener#onImeInputTargetVisibilityChanged
+     */
+    public abstract void setInputMethodTargetChangeListener(
+            @NonNull ImeTargetChangeListener listener);
 
     /**
      * Moves the {@link WindowToken} {@code binder} to the display specified by {@code displayId}.

@@ -47,6 +47,7 @@ import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_FREEZER;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 
 import android.annotation.IntDef;
+import android.annotation.UptimeMillisLong;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal.OomAdjReason;
 import android.app.ActivityThread;
@@ -1120,6 +1121,12 @@ public final class CachedAppOptimizer {
     private static native String getFreezerCheckPath();
 
     /**
+     * Check if task_profiles.json includes valid freezer profiles and actions
+     * @return false if there are invalid profiles or actions
+     */
+    private static native boolean isFreezerProfileValid();
+
+    /**
      * Determines whether the freezer is supported by this system
      */
     public static boolean isFreezerSupported() {
@@ -1136,16 +1143,19 @@ public final class CachedAppOptimizer {
                 // Also check freezer binder ioctl
                 Slog.d(TAG_AM, "Checking binder freezer ioctl");
                 getBinderFreezeInfo(Process.myPid());
-                supported = true;
+
+                // Check if task_profiles.json contains invalid profiles
+                Slog.d(TAG_AM, "Checking freezer profiles");
+                supported = isFreezerProfileValid();
             } else {
-                Slog.e(TAG_AM, "unexpected value in cgroup.freeze");
+                Slog.e(TAG_AM, "Unexpected value in cgroup.freeze");
             }
         } catch (java.io.FileNotFoundException e) {
-            Slog.w(TAG_AM, "cgroup.freeze not present");
+            Slog.w(TAG_AM, "File cgroup.freeze not present");
         } catch (RuntimeException e) {
-            Slog.w(TAG_AM, "unable to read freezer info");
+            Slog.w(TAG_AM, "Unable to read freezer info");
         } catch (Exception e) {
-            Slog.w(TAG_AM, "unable to read cgroup.freeze: " + e.toString());
+            Slog.w(TAG_AM, "Unable to read cgroup.freeze: " + e.toString());
         }
 
         if (fr != null) {
@@ -1375,14 +1385,35 @@ public final class CachedAppOptimizer {
         return true;
     }
 
+    /**
+     * Returns the earliest time (relative) from now that the app can be frozen.
+     * @param app The app to update
+     * @param delayMillis How much to delay freezing by
+     */
+    @GuardedBy("mProcLock")
+    private long updateEarliestFreezableTime(ProcessRecord app, long delayMillis) {
+        final long now = SystemClock.uptimeMillis();
+        app.mOptRecord.setEarliestFreezableTime(
+                Math.max(app.mOptRecord.getEarliestFreezableTime(), now + delayMillis));
+        return app.mOptRecord.getEarliestFreezableTime() - now;
+    }
+
     // This will ensure app will be out of the freezer for at least mFreezerDebounceTimeout.
     @GuardedBy("mAm")
     void unfreezeTemporarily(ProcessRecord app, @UnfreezeReason int reason) {
+        unfreezeTemporarily(app, reason, mFreezerDebounceTimeout);
+    }
+
+    // This will ensure app will be out of the freezer for at least mFreezerDebounceTimeout.
+    @GuardedBy("mAm")
+    void unfreezeTemporarily(ProcessRecord app, @UnfreezeReason int reason, long delayMillis) {
         if (mUseFreezer) {
             synchronized (mProcLock) {
+                // Move the earliest freezable time further, if necessary
+                final long delay = updateEarliestFreezableTime(app, delayMillis);
                 if (app.mOptRecord.isFrozen() || app.mOptRecord.isPendingFreeze()) {
                     unfreezeAppLSP(app, reason);
-                    freezeAppAsyncLSP(app);
+                    freezeAppAsyncLSP(app, delay);
                 }
             }
         }
@@ -1390,11 +1421,17 @@ public final class CachedAppOptimizer {
 
     @GuardedBy({"mAm", "mProcLock"})
     void freezeAppAsyncLSP(ProcessRecord app) {
-        freezeAppAsyncInternalLSP(app, mFreezerDebounceTimeout, false);
+        freezeAppAsyncLSP(app, updateEarliestFreezableTime(app, mFreezerDebounceTimeout));
     }
 
     @GuardedBy({"mAm", "mProcLock"})
-    void freezeAppAsyncInternalLSP(ProcessRecord app, long delayMillis, boolean force) {
+    private void freezeAppAsyncLSP(ProcessRecord app, @UptimeMillisLong long delayMillis) {
+        freezeAppAsyncInternalLSP(app, delayMillis, false);
+    }
+
+    @GuardedBy({"mAm", "mProcLock"})
+    void freezeAppAsyncInternalLSP(ProcessRecord app, @UptimeMillisLong long delayMillis,
+            boolean force) {
         final ProcessCachedOptimizerRecord opt = app.mOptRecord;
         if (opt.isPendingFreeze()) {
             // Skip redundant DO_FREEZE message
@@ -2209,9 +2246,12 @@ public final class CachedAppOptimizer {
             final boolean frozen;
             final ProcessCachedOptimizerRecord opt = proc.mOptRecord;
 
-            opt.setPendingFreeze(false);
-
             synchronized (mProcLock) {
+                // someone has canceled this freeze
+                if (!opt.isPendingFreeze()) {
+                    return;
+                }
+                opt.setPendingFreeze(false);
                 pid = proc.getPid();
 
                 if (mFreezerOverride) {
@@ -2257,7 +2297,6 @@ public final class CachedAppOptimizer {
                 try {
                     traceAppFreeze(proc.processName, pid, -1);
                     Process.setProcessFrozen(pid, proc.uid, true);
-
                     opt.setFreezeUnfreezeTime(SystemClock.uptimeMillis());
                     opt.setFrozen(true);
                     opt.setHasCollectedFrozenPSS(false);

@@ -62,7 +62,6 @@ public final class ProviderClearSession extends ProviderSession<ClearCredentialS
             android.credentials.ClearCredentialStateRequest clientRequest,
             CallingAppInfo callingAppInfo
     ) {
-        // TODO: Determine if provider needs to declare clear capability in manifest
         return new ClearCredentialStateRequest(
                 callingAppInfo,
                 clientRequest.getData());
@@ -80,7 +79,7 @@ public final class ProviderClearSession extends ProviderSession<ClearCredentialS
 
     @Override
     public void onProviderResponseSuccess(@Nullable Void response) {
-        Slog.d(TAG, "Remote provider responded with a valid response: " + mComponentName);
+        Slog.i(TAG, "Remote provider responded with a valid response: " + mComponentName);
         mProviderResponseSet = true;
         updateStatusAndInvokeCallback(Status.COMPLETE,
                 /*source=*/ CredentialsSource.REMOTE_PROVIDER);
@@ -91,9 +90,11 @@ public final class ProviderClearSession extends ProviderSession<ClearCredentialS
     public void onProviderResponseFailure(int errorCode, Exception exception) {
         if (exception instanceof ClearCredentialStateException) {
             mProviderException = (ClearCredentialStateException) exception;
+            // TODO(b/271135048) : Decide on exception type length
+            mProviderSessionMetric.collectCandidateFrameworkException(mProviderException.getType());
         }
         mProviderSessionMetric.collectCandidateExceptionStatus(/*hasException=*/true);
-        updateStatusAndInvokeCallback(toStatus(errorCode),
+        updateStatusAndInvokeCallback(Status.CANCELED,
                 /*source=*/ CredentialsSource.REMOTE_PROVIDER);
     }
 
@@ -131,7 +132,8 @@ public final class ProviderClearSession extends ProviderSession<ClearCredentialS
     protected void invokeSession() {
         if (mRemoteCredentialService != null) {
             startCandidateMetrics();
-            mRemoteCredentialService.onClearCredentialState(mProviderRequest, this);
+            mRemoteCredentialService.setCallback(this);
+            mRemoteCredentialService.onClearCredentialState(mProviderRequest);
         }
     }
 }

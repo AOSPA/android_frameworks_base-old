@@ -202,8 +202,10 @@ import android.view.contentcapture.MainContentCaptureSession;
 import android.view.inputmethod.ImeTracker;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Scroller;
+import android.window.BackEvent;
 import android.window.ClientWindowFrames;
 import android.window.CompatOnBackInvokedCallback;
+import android.window.OnBackAnimationCallback;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 import android.window.ScreenCapture;
@@ -301,6 +303,14 @@ public final class ViewRootImpl implements ViewParent,
      */
     public static final boolean CAPTION_ON_SHELL =
             SystemProperties.getBoolean("persist.wm.debug.caption_on_shell", true);
+
+    /**
+     * Whether the client (system UI) is handling the transient gesture and the corresponding
+     * animation.
+     * @hide
+     */
+    public static final boolean CLIENT_TRANSIENT =
+            SystemProperties.getBoolean("persist.wm.debug.client_transient", false);
 
     /**
      * Whether the client should compute the window frame on its own.
@@ -649,11 +659,18 @@ public final class ViewRootImpl implements ViewParent,
     boolean mForceNextWindowRelayout;
     CountDownLatch mWindowDrawCountDown;
 
-    // Whether we have used applyTransactionOnDraw to schedule an RT
-    // frame callback consuming a passed in transaction. In this case
-    // we also need to schedule a commit callback so we can observe
-    // if the draw was skipped, and the BBQ pending transactions.
+    /**
+     * Value to indicate whether someone has called {@link #applyTransactionOnDraw}before the
+     * traversal. This is used to determine whether a RT frame callback needs to be registered to
+     * merge the transaction with the next frame. The value is cleared after the VRI has run a
+     * traversal pass.
+     */
     boolean mHasPendingTransactions;
+    /**
+     * The combined transactions passed in from {@link #applyTransactionOnDraw}
+     */
+    private Transaction mPendingTransaction = new Transaction();
+
 
     boolean mIsDrawing;
     int mLastSystemUiVisibility;
@@ -887,6 +904,16 @@ public final class ViewRootImpl implements ViewParent,
      */
     private SurfaceSyncGroup mActiveSurfaceSyncGroup;
 
+
+    private final Object mPreviousSyncSafeguardLock = new Object();
+
+    /**
+     * Wraps the TransactionCommitted callback for the previous SSG so it can be added to the next
+     * SSG if started before previous has completed.
+     */
+    @GuardedBy("mPreviousSyncSafeguardLock")
+    private SurfaceSyncGroup mPreviousSyncSafeguard;
+
     private static final Object sSyncProgressLock = new Object();
     // The count needs to be static since it's used to enable or disable RT animations which is
     // done at a global level per process. If any VRI syncs are in progress, we can't enable RT
@@ -946,12 +973,20 @@ public final class ViewRootImpl implements ViewParent,
                 }
 
                 sAnrReported = true;
+                // If we're making an in-process call to ActivityManagerService
+                // and the previous binder call on this thread was oneway, the
+                // calling PID will be 0. Clearing the calling identity fixes
+                // this and ensures ActivityManager gets the correct calling
+                // pid.
+                final long identityToken = Binder.clearCallingIdentity();
                 try {
                     ActivityManager.getService().appNotResponding(reason);
                 } catch (RemoteException e) {
                     // We asked the system to crash us, but the system
                     // already crashed. Unfortunately things may be
                     // out of control.
+                } finally {
+                    Binder.restoreCallingIdentity(identityToken);
                 }
             }
         };
@@ -3765,6 +3800,16 @@ public final class ViewRootImpl implements ViewParent,
             createSyncIfNeeded();
             notifyDrawStarted(isInWMSRequestedSync());
             mDrewOnceForSync = true;
+
+            // If the active SSG is also requesting to sync a buffer, the following needs to happen
+            // 1. Ensure we keep track of the number of active syncs to know when to disable RT
+            //    RT animations that conflict with syncing a buffer.
+            // 2. Add a safeguard SSG to prevent multiple SSG that sync buffers from being submitted
+            //    out of order.
+            if (mActiveSurfaceSyncGroup != null && mSyncBuffer) {
+                updateSyncInProgressCount(mActiveSurfaceSyncGroup);
+                safeguardOverlappingSyncs(mActiveSurfaceSyncGroup);
+            }
         }
 
         if (!isViewVisible) {
@@ -3829,14 +3874,11 @@ public final class ViewRootImpl implements ViewParent,
             mWmsRequestSyncGroupState = WMS_SYNC_MERGED;
             reportDrawFinished(t, seqId);
         });
-        Trace.traceBegin(Trace.TRACE_TAG_VIEW,
-                "create WMS Sync group=" + mWmsRequestSyncGroup.getName());
         if (DEBUG_BLAST) {
             Log.d(mTag, "Setup new sync=" + mWmsRequestSyncGroup.getName());
         }
 
         mWmsRequestSyncGroup.add(this, null /* runnable */);
-        Trace.traceEnd(Trace.TRACE_TAG_VIEW);
     }
 
     private void notifyContentCaptureEvents() {
@@ -4497,6 +4539,9 @@ public final class ViewRootImpl implements ViewParent,
             Log.d(mTag, "reportDrawFinished");
         }
 
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
+            Trace.instant(Trace.TRACE_TAG_VIEW, "reportDrawFinished " + mTag + " seqId=" + seqId);
+        }
         try {
             mWindowSession.finishDrawing(mWindow, t, seqId);
         } catch (RemoteException e) {
@@ -4556,9 +4601,13 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     private void registerCallbackForPendingTransactions() {
+        Transaction t = new Transaction();
+        t.merge(mPendingTransaction);
+
         registerRtFrameCallback(new FrameDrawingCallback() {
             @Override
             public HardwareRenderer.FrameCommitCallback onFrameDraw(int syncResult, long frame) {
+                mergeWithNextTransaction(t, frame);
                 if ((syncResult
                         & (SYNC_LOST_SURFACE_REWARD_IF_FOUND | SYNC_CONTEXT_IS_STOPPED)) != 0) {
                     mBlastBufferQueue.applyPendingTransactions(frame);
@@ -6497,6 +6546,7 @@ public final class ViewRootImpl implements ViewParent,
      */
     final class NativePreImeInputStage extends AsyncInputStage
             implements InputQueue.FinishedInputEventCallback {
+
         public NativePreImeInputStage(InputStage next, String traceCounter) {
             super(next, traceCounter);
         }
@@ -6504,32 +6554,62 @@ public final class ViewRootImpl implements ViewParent,
         @Override
         protected int onProcess(QueuedInputEvent q) {
             if (q.mEvent instanceof KeyEvent) {
-                final KeyEvent event = (KeyEvent) q.mEvent;
+                final KeyEvent keyEvent = (KeyEvent) q.mEvent;
 
                 // If the new back dispatch is enabled, intercept KEYCODE_BACK before it reaches the
                 // view tree or IME, and invoke the appropriate {@link OnBackInvokedCallback}.
-                if (isBack(event)
+                if (isBack(keyEvent)
                         && mContext != null
                         && mOnBackInvokedDispatcher.isOnBackInvokedCallbackEnabled()) {
-                    OnBackInvokedCallback topCallback =
-                            getOnBackInvokedDispatcher().getTopCallback();
-                    if (event.getAction() == KeyEvent.ACTION_UP) {
-                        if (topCallback != null) {
+                    return doOnBackKeyEvent(keyEvent);
+                }
+
+                if (mInputQueue != null) {
+                    mInputQueue.sendInputEvent(q.mEvent, q, true, this);
+                    return DEFER;
+                }
+            }
+            return FORWARD;
+        }
+
+        private int doOnBackKeyEvent(KeyEvent keyEvent) {
+            OnBackInvokedCallback topCallback = getOnBackInvokedDispatcher().getTopCallback();
+            if (topCallback instanceof OnBackAnimationCallback) {
+                final OnBackAnimationCallback animationCallback =
+                        (OnBackAnimationCallback) topCallback;
+                switch (keyEvent.getAction()) {
+                    case KeyEvent.ACTION_DOWN:
+                        // ACTION_DOWN is emitted twice: once when the user presses the button,
+                        // and again a few milliseconds later.
+                        // Based on the result of `keyEvent.getRepeatCount()` we have:
+                        // - 0 means the button was pressed.
+                        // - 1 means the button continues to be pressed (long press).
+                        if (keyEvent.getRepeatCount() == 0) {
+                            animationCallback.onBackStarted(
+                                    new BackEvent(0, 0, 0f, BackEvent.EDGE_LEFT));
+                        }
+                        break;
+                    case KeyEvent.ACTION_UP:
+                        if (keyEvent.isCanceled()) {
+                            animationCallback.onBackCancelled();
+                        } else {
                             topCallback.onBackInvoked();
                             return FINISH_HANDLED;
                         }
+                        break;
+                }
+            } else if (topCallback != null) {
+                if (keyEvent.getAction() == KeyEvent.ACTION_UP) {
+                    if (!keyEvent.isCanceled()) {
+                        topCallback.onBackInvoked();
+                        return FINISH_HANDLED;
                     } else {
-                        // Drop other actions such as {@link KeyEvent.ACTION_DOWN}.
-                        return FINISH_NOT_HANDLED;
+                        Log.d(mTag, "Skip onBackInvoked(), reason: keyEvent.isCanceled=true");
                     }
                 }
             }
 
-            if (mInputQueue != null && q.mEvent instanceof KeyEvent) {
-                mInputQueue.sendInputEvent(q.mEvent, q, true, this);
-                return DEFER;
-            }
-            return FORWARD;
+            return FINISH_NOT_HANDLED;
         }
 
         @Override
@@ -6907,10 +6987,10 @@ public final class ViewRootImpl implements ViewParent,
 
             if (event.getAction() == KeyEvent.ACTION_DOWN
                     && event.getKeyCode() == KeyEvent.KEYCODE_TAB) {
-                if (KeyEvent.metaStateHasModifiers(event.getMetaState(), KeyEvent.META_META_ON)) {
+                if (KeyEvent.metaStateHasModifiers(event.getMetaState(), KeyEvent.META_CTRL_ON)) {
                     groupNavigationDirection = View.FOCUS_FORWARD;
                 } else if (KeyEvent.metaStateHasModifiers(event.getMetaState(),
-                        KeyEvent.META_META_ON | KeyEvent.META_SHIFT_ON)) {
+                        KeyEvent.META_CTRL_ON | KeyEvent.META_SHIFT_ON)) {
                     groupNavigationDirection = View.FOCUS_BACKWARD;
                 }
             }
@@ -8791,6 +8871,9 @@ public final class ViewRootImpl implements ViewParent,
         if (mActiveSurfaceSyncGroup != null) {
             mActiveSurfaceSyncGroup.markSyncReady();
             mActiveSurfaceSyncGroup = null;
+        }
+        if (mHasPendingTransactions) {
+            mPendingTransaction.apply();
         }
         WindowManagerGlobal.getInstance().doRemoveView(this);
     }
@@ -11142,12 +11225,11 @@ public final class ViewRootImpl implements ViewParent,
         } else {
             // Copy and clear the passed in transaction for thread safety. The new transaction is
             // accessed on the render thread.
-            var localTransaction = new Transaction();
-            localTransaction.merge(t);
+            mPendingTransaction.merge(t);
             mHasPendingTransactions = true;
-            registerRtFrameCallback(frame -> {
-                mergeWithNextTransaction(localTransaction, frame);
-            });
+            // Schedule the traversal to ensure there's an attempt to draw a frame and apply the
+            // pending transactions. This is also where the registerFrameCallback will be scheduled.
+            scheduleTraversals();
         }
         return true;
     }
@@ -11288,6 +11370,10 @@ public final class ViewRootImpl implements ViewParent,
         if (DEBUG_BLAST) {
             Log.d(mTag, "registerCallbacksForSync syncBuffer=" + syncBuffer);
         }
+
+        Transaction t = new Transaction();
+        t.merge(mPendingTransaction);
+
         mAttachInfo.mThreadedRenderer.registerRtFrameCallback(new FrameDrawingCallback() {
             @Override
             public void onFrameDraw(long frame) {
@@ -11301,6 +11387,7 @@ public final class ViewRootImpl implements ViewParent,
                                     + frame + ".");
                 }
 
+                mergeWithNextTransaction(t, frame);
                 // If the syncResults are SYNC_LOST_SURFACE_REWARD_IF_FOUND or
                 // SYNC_CONTEXT_IS_STOPPED it means nothing will draw. There's no need to set up
                 // any blast sync or commit callback, and the code should directly call
@@ -11327,7 +11414,7 @@ public final class ViewRootImpl implements ViewParent,
                         // to sync the same frame in the same BBQ. That shouldn't be possible, but
                         // if it did happen, invoke markSyncReady so the active SSG doesn't get
                         // stuck.
-                        Log.e(mTag, "Unable to syncNextTransaction. Possibly something else is"
+                        Log.w(mTag, "Unable to syncNextTransaction. Possibly something else is"
                                 + " trying to sync?");
                         surfaceSyncGroup.markSyncReady();
                     }
@@ -11367,6 +11454,61 @@ public final class ViewRootImpl implements ViewParent,
         });
     }
 
+    /**
+     * This code will ensure that if multiple SurfaceSyncGroups are created for the same
+     * ViewRootImpl the SurfaceSyncGroups will maintain an order. The scenario that could occur
+     * is the following:
+     * <p>
+     * 1. SSG1 is created that includes the target VRI. There could be other VRIs in SSG1
+     * 2. The target VRI draws its frame and marks its own active SSG as ready, but SSG1 is still
+     *    waiting on other things in the SSG
+     * 3. Another SSG2 is created for the target VRI. The second frame renders and marks its own
+     *    second SSG as complete. SSG2 has nothing else to wait on, so it will apply at this point,
+     *    even though SSG1 has not finished.
+     * 4. Frame2 will get to SF first and Frame1 will later get to SF when SSG1 completes.
+     * <p>
+     * The code below ensures the SSGs that contains the VRI maintain an order. We create a new SSG
+     * that's a safeguard SSG. Its only job is to prevent the next active SSG from completing.
+     * The current active SSG for VRI will add a transaction committed callback and when that's
+     * invoked, it will mark the safeguard SSG as ready. If a new request to create a SSG comes
+     * in and the safeguard SSG is not null, it's added as part of the new active SSG. A new
+     * safeguard SSG is created to correspond to the new active SSG. This creates a chain to
+     * ensure the latter SSG always waits for the former SSG's transaction to get to SF.
+     */
+    private void safeguardOverlappingSyncs(SurfaceSyncGroup activeSurfaceSyncGroup) {
+        SurfaceSyncGroup safeguardSsg = new SurfaceSyncGroup("Safeguard-" + mTag);
+        // Always disable timeout on the safeguard sync
+        safeguardSsg.toggleTimeout(false /* enable */);
+        synchronized (mPreviousSyncSafeguardLock) {
+            if (mPreviousSyncSafeguard != null) {
+                activeSurfaceSyncGroup.add(mPreviousSyncSafeguard, null /* runnable */);
+                // Temporarily disable the timeout on the SSG that will contain the buffer. This
+                // is to ensure we don't timeout the active SSG before the previous one completes to
+                // ensure the order is maintained. The previous SSG has a timeout on its own SSG
+                // so it's guaranteed to complete.
+                activeSurfaceSyncGroup.toggleTimeout(false /* enable */);
+                mPreviousSyncSafeguard.addSyncCompleteCallback(mSimpleExecutor, () -> {
+                    // Once we receive that the previous sync guard has been invoked, we can re-add
+                    // the timeout on the active sync to ensure we eventually complete so it's not
+                    // stuck permanently.
+                    activeSurfaceSyncGroup.toggleTimeout(true /*enable */);
+                });
+            }
+            mPreviousSyncSafeguard = safeguardSsg;
+        }
+
+        Transaction t = new Transaction();
+        t.addTransactionCommittedListener(mSimpleExecutor, () -> {
+            safeguardSsg.markSyncReady();
+            synchronized (mPreviousSyncSafeguardLock) {
+                if (mPreviousSyncSafeguard == safeguardSsg) {
+                    mPreviousSyncSafeguard = null;
+                }
+            }
+        });
+        activeSurfaceSyncGroup.addTransaction(t);
+    }
+
     @Override
     public SurfaceSyncGroup getOrCreateSurfaceSyncGroup() {
         boolean newSyncGroup = false;
@@ -11393,7 +11535,6 @@ public final class ViewRootImpl implements ViewParent,
                     mHandler.post(runnable);
                 }
             });
-            updateSyncInProgressCount(mActiveSurfaceSyncGroup);
             newSyncGroup = true;
         }
 

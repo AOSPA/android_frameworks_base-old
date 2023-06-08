@@ -656,6 +656,11 @@ class ProcessRecord implements WindowProcessListener {
         }
     }
 
+    @GuardedBy({"mService", "mProcLock"})
+    int getSetAdj() {
+        return mState.getSetAdj();
+    }
+
     @GuardedBy(anyOf = {"mService", "mProcLock"})
     IApplicationThread getThread() {
         return mThread;
@@ -1099,11 +1104,6 @@ class ProcessRecord implements WindowProcessListener {
         return mState.isCached();
     }
 
-    @GuardedBy(anyOf = {"mService", "mProcLock"})
-    public boolean hasForegroundActivities() {
-        return mState.hasForegroundActivities();
-    }
-
     boolean hasActivities() {
         return mWindowProcessController.hasActivities();
     }
@@ -1275,7 +1275,7 @@ class ProcessRecord implements WindowProcessListener {
         if (!DeviceIntegrationUtils.DISABLE_DEVICE_INTEGRATION) {
             // Device Integartion: If the app is died during the remote task status,
             // we need to inform RemoteTaskManager to clear the references and dirty data.
-            mService.mActivityTaskManager.getRemoteTaskManager().handleProcessDied(getWindowProcessController());
+            mService.mActivityTaskManager.getRemoteTaskManager().handleProcessDied(getWindowProcessController(), reason);
         }
     }
 

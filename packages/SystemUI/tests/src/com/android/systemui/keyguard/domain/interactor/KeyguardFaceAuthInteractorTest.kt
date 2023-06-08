@@ -35,12 +35,12 @@ import com.android.systemui.keyguard.data.repository.FakeDeviceEntryFaceAuthRepo
 import com.android.systemui.keyguard.data.repository.FakeDeviceEntryFingerprintAuthRepository
 import com.android.systemui.keyguard.data.repository.FakeKeyguardBouncerRepository
 import com.android.systemui.keyguard.data.repository.FakeKeyguardTransitionRepository
+import com.android.systemui.keyguard.data.repository.FakeTrustRepository
 import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.keyguard.shared.model.TransitionState
 import com.android.systemui.keyguard.shared.model.TransitionStep
 import com.android.systemui.log.FaceAuthenticationLogger
 import com.android.systemui.plugins.statusbar.StatusBarStateController
-import com.android.systemui.statusbar.phone.KeyguardBypassController
 import com.android.systemui.statusbar.policy.KeyguardStateController
 import com.android.systemui.util.time.FakeSystemClock
 import com.google.common.truth.Truth.assertThat
@@ -100,7 +100,9 @@ class KeyguardFaceAuthInteractorTest : SysuiTestCase() {
                     mock(DismissCallbackRegistry::class.java),
                     context,
                     keyguardUpdateMonitor,
-                    mock(KeyguardBypassController::class.java),
+                    FakeTrustRepository(),
+                    FakeFeatureFlags().apply { set(Flags.DELAY_BOUNCER, true) },
+                    testScope.backgroundScope,
                 ),
                 AlternateBouncerInteractor(
                     mock(StatusBarStateController::class.java),
@@ -276,6 +278,23 @@ class KeyguardFaceAuthInteractorTest : SysuiTestCase() {
                 .isEqualTo(
                     Pair(FaceAuthUiEvent.FACE_AUTH_TRIGGERED_NOTIFICATION_PANEL_CLICKED, true)
                 )
+        }
+
+    @Test
+    fun faceAuthIsCancelledWhenUserInputOnPrimaryBouncer() =
+        testScope.runTest {
+            underTest.start()
+
+            underTest.onSwipeUpOnBouncer()
+
+            runCurrent()
+            assertThat(faceAuthRepository.isAuthRunning.value).isTrue()
+
+            underTest.onPrimaryBouncerUserInput()
+
+            runCurrent()
+
+            assertThat(faceAuthRepository.isAuthRunning.value).isFalse()
         }
 
     @Test

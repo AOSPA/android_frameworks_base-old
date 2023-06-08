@@ -60,6 +60,7 @@ import android.view.accessibility.MagnificationAnimationCallback;
 import androidx.test.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
 
+import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.util.test.FakeSettingsProvider;
 import com.android.server.LocalServices;
 import com.android.server.accessibility.AccessibilityTraceManager;
@@ -160,7 +161,8 @@ public class FullScreenMagnificationControllerTest {
                         new Object(),
                         mRequestObserver,
                         mScaleProvider,
-                        () -> mMockThumbnail);
+                        () -> mMockThumbnail,
+                        ConcurrentUtils.DIRECT_EXECUTOR);
     }
 
     @After
@@ -200,7 +202,7 @@ public class FullScreenMagnificationControllerTest {
         assertFalse(mFullScreenMagnificationController.isRegistered(DISPLAY_0));
         assertFalse(mFullScreenMagnificationController.isRegistered(DISPLAY_1));
 
-        verify(mMockThumbnail, times(2)).hideThumbNail();
+        verify(mMockThumbnail, times(2)).hideThumbnail();
     }
 
     @Test
@@ -538,7 +540,10 @@ public class FullScreenMagnificationControllerTest {
                 mConfigCaptor.capture());
         assertConfigEquals(config, mConfigCaptor.getValue());
 
-        verify(mMockThumbnail).setThumbNailBounds(any(), anyFloat(), anyFloat(), anyFloat());
+        // The first time is triggered when the thumbnail is just created.
+        // The second time is triggered when the magnification region changed.
+        verify(mMockThumbnail, times(2)).setThumbnailBounds(
+                any(), anyFloat(), anyFloat(), anyFloat());
     }
 
     @Test
@@ -909,7 +914,7 @@ public class FullScreenMagnificationControllerTest {
         verifyNoMoreInteractions(mMockWindowManager);
 
         verify(mMockThumbnail)
-                .updateThumbNail(eq(scale), eq(startCenter.x), eq(startCenter.y));
+                .updateThumbnail(eq(scale), eq(startCenter.x), eq(startCenter.y));
     }
 
     @Test

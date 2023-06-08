@@ -677,7 +677,7 @@ public class PerformUnifiedRestoreTask implements BackupRestoreTask {
         // Good to go!  Set up and bind the agent...
         mAgent = backupManagerService.bindToAgentSynchronous(
                 mCurrentPackage.applicationInfo,
-                ApplicationThreadConstants.BACKUP_MODE_INCREMENTAL,
+                ApplicationThreadConstants.BACKUP_MODE_RESTORE,
                 mBackupEligibilityRules.getBackupDestination());
         if (mAgent == null) {
             Slog.w(TAG, "Can't find backup agent for " + packageName);
@@ -899,9 +899,6 @@ public class PerformUnifiedRestoreTask implements BackupRestoreTask {
                             OpType.RESTORE_WAIT);
             mAgent.doRestoreFinished(mEphemeralOpToken,
                     backupManagerService.getBackupManagerBinder());
-
-            // Ask the agent for logs after doRestoreFinished() to allow it to finalize its logs.
-            BackupManagerMonitorUtils.monitorAgentLoggingResults(mMonitor, mCurrentPackage, mAgent);
 
             // If we get this far, the callback or timeout will schedule the
             // next restore state, so we're done
@@ -1322,6 +1319,11 @@ public class PerformUnifiedRestoreTask implements BackupRestoreTask {
                 int size = (int) mBackupDataName.length();
                 EventLog.writeEvent(EventLogTags.RESTORE_PACKAGE,
                         mCurrentPackage.packageName, size);
+
+                // Ask the agent for logs after doRestoreFinished() has completed executing to allow
+                // it to finalize its logs.
+                BackupManagerMonitorUtils.monitorAgentLoggingResults(mMonitor, mCurrentPackage,
+                        mAgent);
 
                 // Just go back to running the restore queue
                 keyValueAgentCleanup();

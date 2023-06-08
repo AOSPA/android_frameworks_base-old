@@ -412,7 +412,10 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
 
     /** Releases and re-inflates {@link DividerView} on the root surface. */
     public void update(SurfaceControl.Transaction t) {
-        if (!mInitialized) return;
+        if (!mInitialized) {
+            init();
+            return;
+        }
         mSplitWindowManager.release(t);
         mImePositionProcessor.reset();
         mSplitWindowManager.init(this, mInsetsState);
@@ -706,12 +709,17 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
         return context.getSystemService(WindowManager.class)
                 .getMaximumWindowMetrics()
                 .getWindowInsets()
-                .getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout())
+                .getInsetsIgnoringVisibility(WindowInsets.Type.systemBars()
+                        | WindowInsets.Type.displayCutout())
                 .toRect();
     }
 
     private static boolean isLandscape(Rect bounds) {
         return bounds.width() > bounds.height();
+    }
+
+    public boolean isDensityChanged(int densityDpi) {
+        return mDensity != densityDpi;
     }
 
     /**
@@ -738,10 +746,6 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
         getRefBounds2(mTempRect);
         t.setPosition(leash2, mTempRect.left, mTempRect.top)
                 .setWindowCrop(leash2, mTempRect.width(), mTempRect.height());
-        // Make right or bottom side surface always higher than left or top side to avoid weird
-        // animation when dismiss split. e.g. App surface fling above on decor surface.
-        t.setLayer(leash1, 1);
-        t.setLayer(leash2, 2);
 
         if (mImePositionProcessor.adjustSurfaceLayoutForIme(
                 t, dividerLeash, leash1, leash2, dimLayer1, dimLayer2)) {

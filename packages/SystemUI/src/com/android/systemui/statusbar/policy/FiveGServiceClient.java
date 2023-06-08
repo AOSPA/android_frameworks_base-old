@@ -79,7 +79,7 @@ public class FiveGServiceClient {
     private final ArrayList<WeakReference<KeyguardUpdateMonitorCallback>>
             mKeyguardUpdateMonitorCallbacks = Lists.newArrayList();
     @VisibleForTesting
-    final SparseArray<IFiveGStateListener> mStatesListeners = new SparseArray<>();
+    final SparseArray<ArrayList<IFiveGStateListener>> mStatesListeners = new SparseArray<>();
     private final SparseArray<FiveGServiceState> mCurrentServiceStates = new SparseArray<>();
     private final SparseArray<FiveGServiceState> mLastServiceStates = new SparseArray<>();
 
@@ -163,9 +163,15 @@ public class FiveGServiceClient {
     }
 
     public void registerListener(int phoneId, IFiveGStateListener listener) {
-        Log.d(TAG, "registerListener phoneId=" + phoneId);
+        Log.d(TAG, "registerListener phoneId=" + phoneId + "  listener: " + listener);
         resetState(phoneId);
-        mStatesListeners.put(phoneId, listener);
+        ArrayList<IFiveGStateListener> statesListenersForPhone = mStatesListeners.get(phoneId);
+        if (statesListenersForPhone == null) {
+            statesListenersForPhone = new ArrayList<>();
+            mStatesListeners.put(phoneId, statesListenersForPhone);
+        }
+        statesListenersForPhone.add(listener);
+
         if ( !isServiceConnected() ) {
             connectService();
         }else{
@@ -184,11 +190,17 @@ public class FiveGServiceClient {
         lastState.mIconGroup = TelephonyIcons.UNKNOWN;
     }
 
-    public void unregisterListener(int phoneId) {
-        Log.d(TAG, "unregisterListener phoneId=" + phoneId);
-        mStatesListeners.remove(phoneId);
-        mCurrentServiceStates.remove(phoneId);
-        mLastServiceStates.remove(phoneId);
+    public void unregisterListener(int phoneId, IFiveGStateListener fiveGStateListener) {
+        Log.d(TAG, "unregisterListener phoneId=" + phoneId + " listener: " + fiveGStateListener);
+        ArrayList<IFiveGStateListener> statesListenersForPhone = mStatesListeners.get(phoneId);
+        if (statesListenersForPhone != null) {
+            statesListenersForPhone.remove(fiveGStateListener);
+            if (statesListenersForPhone.size() == 0) {
+                mStatesListeners.remove(phoneId);
+                mCurrentServiceStates.remove(phoneId);
+                mLastServiceStates.remove(phoneId);
+            }
+        }
     }
 
     public boolean isServiceConnected() {
@@ -261,13 +273,15 @@ public class FiveGServiceClient {
             }
 
             lastState.copyFrom(currentState);
-            IFiveGStateListener listener = mStatesListeners.get(phoneId);
-            if (listener != null) {
-                listener.onStateChanged(currentState);
+            ArrayList<IFiveGStateListener> statesListenersForPhone = mStatesListeners.get(phoneId);
+            if (statesListenersForPhone != null) {
+                for (IFiveGStateListener listener: statesListenersForPhone) {
+                    if (listener != null) {
+                        listener.onStateChanged(currentState);
+                    }
+                }
             }
-
             mHandler.sendEmptyMessage(MESSAGE_NOTIFIY_MONITOR_CALLBACK);
-
         }
     }
 

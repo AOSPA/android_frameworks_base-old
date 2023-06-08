@@ -18,6 +18,7 @@ package com.android.server.am;
 
 import static android.app.PendingIntent.FLAG_IMMUTABLE;
 import static android.app.PendingIntent.FLAG_UPDATE_CURRENT;
+import static android.app.ProcessMemoryState.HOSTING_COMPONENT_TYPE_BOUND_SERVICE;
 import static android.os.PowerExemptionManager.REASON_DENIED;
 import static android.os.Process.INVALID_UID;
 
@@ -25,7 +26,6 @@ import static com.android.internal.util.Preconditions.checkArgument;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_FOREGROUND_SERVICE;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
-import static com.android.server.am.ProcessProfileRecord.HOSTING_COMPONENT_TYPE_BOUND_SERVICE;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -175,7 +175,7 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
     // while-in-use permissions in FGS started from background might be restricted.
     boolean mAllowWhileInUsePermissionInFgs;
     @PowerExemptionManager.ReasonCode
-    int mAllowWhileInUsePermissionInFgsReason;
+    int mAllowWhileInUsePermissionInFgsReason = REASON_DENIED;
 
     // Integer version of mAllowWhileInUsePermissionInFgs that we keep track to compare
     // the old and new logics.
@@ -622,12 +622,13 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
             pw.println(mBackgroundStartPrivilegesByStartMerged);
         }
         pw.print(prefix); pw.print("mAllowWhileInUsePermissionInFgsReason=");
-        pw.println(mAllowWhileInUsePermissionInFgsReason);
+        pw.println(PowerExemptionManager.reasonCodeToString(mAllowWhileInUsePermissionInFgsReason));
 
         pw.print(prefix); pw.print("debugWhileInUseReasonInStartForeground=");
-        pw.println(mDebugWhileInUseReasonInStartForeground);
+        pw.println(PowerExemptionManager.reasonCodeToString(
+                mDebugWhileInUseReasonInStartForeground));
         pw.print(prefix); pw.print("debugWhileInUseReasonInBindService=");
-        pw.println(mDebugWhileInUseReasonInBindService);
+        pw.println(PowerExemptionManager.reasonCodeToString(mDebugWhileInUseReasonInBindService));
 
         pw.print(prefix); pw.print("allowUiJobScheduling="); pw.println(mAllowUiJobScheduling);
         pw.print(prefix); pw.print("recentCallingPackage=");
@@ -643,6 +644,7 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
 
         pw.print(prefix); pw.print("lastUntrustedSetFgsRestrictionAllowedTime=");
         TimeUtils.formatDuration(mLastUntrustedSetFgsRestrictionAllowedTime, now, pw);
+        pw.println();
 
         if (delayed) {
             pw.print(prefix); pw.print("delayed="); pw.println(delayed);

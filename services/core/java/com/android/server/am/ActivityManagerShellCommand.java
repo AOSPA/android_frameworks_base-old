@@ -368,6 +368,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     return runWaitForBroadcastBarrier(pw);
                 case "wait-for-application-barrier":
                     return runWaitForApplicationBarrier(pw);
+                case "wait-for-broadcast-dispatch":
+                    return runWaitForBroadcastDispatch(pw);
                 case "set-ignore-delivery-group-policy":
                     return runSetIgnoreDeliveryGroupPolicy(pw);
                 case "clear-ignore-delivery-group-policy":
@@ -916,6 +918,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
     }
 
     int runSendBroadcast(PrintWriter pw) throws RemoteException {
+        pw = new PrintWriter(new TeeWriter(LOG_WRITER_INFO, pw));
         Intent intent;
         try {
             intent = makeIntent(UserHandle.USER_CURRENT);
@@ -929,9 +932,10 @@ final class ActivityManagerShellCommand extends ShellCommand {
         pw.println("Broadcasting: " + intent);
         pw.flush();
         Bundle bundle = mBroadcastOptions == null ? null : mBroadcastOptions.toBundle();
-        mInterface.broadcastIntentWithFeature(null, null, intent, null, receiver, 0, null, null,
-                requiredPermissions, null, null, android.app.AppOpsManager.OP_NONE, bundle, true,
-                false, mUserId);
+        final int result = mInterface.broadcastIntentWithFeature(null, null, intent, null,
+                receiver, 0, null, null, requiredPermissions, null, null,
+                android.app.AppOpsManager.OP_NONE, bundle, true, false, mUserId);
+        Slogf.i(TAG, "Broadcasted %s: " + result, intent);
         if (!mAsync) {
             receiver.waitForFinish();
         }
@@ -3443,7 +3447,17 @@ final class ActivityManagerShellCommand extends ShellCommand {
 
     int runWaitForBroadcastIdle(PrintWriter pw) throws RemoteException {
         pw = new PrintWriter(new TeeWriter(LOG_WRITER_INFO, pw));
-        mInternal.waitForBroadcastIdle(pw);
+        boolean flushBroadcastLoopers = false;
+        String opt;
+        while ((opt = getNextOption()) != null) {
+            if (opt.equals("--flush-broadcast-loopers")) {
+                flushBroadcastLoopers = true;
+            } else {
+                getErrPrintWriter().println("Error: Unknown option: " + opt);
+                return -1;
+            }
+        }
+        mInternal.waitForBroadcastIdle(pw, flushBroadcastLoopers);
         return 0;
     }
 
@@ -3469,6 +3483,18 @@ final class ActivityManagerShellCommand extends ShellCommand {
     int runWaitForApplicationBarrier(PrintWriter pw) throws RemoteException {
         pw = new PrintWriter(new TeeWriter(LOG_WRITER_INFO, pw));
         mInternal.waitForApplicationBarrier(pw);
+        return 0;
+    }
+
+    int runWaitForBroadcastDispatch(PrintWriter pw) throws RemoteException {
+        pw = new PrintWriter(new TeeWriter(LOG_WRITER_INFO, pw));
+        final Intent intent;
+        try {
+            intent = makeIntent(UserHandle.USER_CURRENT);
+        } catch (URISyntaxException e) {
+            throw new RuntimeException(e.getMessage(), e);
+        }
+        mInternal.waitForBroadcastDispatch(pw, intent);
         return 0;
     }
 

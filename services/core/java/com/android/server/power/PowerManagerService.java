@@ -686,6 +686,8 @@ public final class PowerManagerService extends SystemService
         @Override
         public void onWakefulnessChangedLocked(int groupId, int wakefulness, long eventTime,
                 int reason, int uid, int opUid, String opPackageName, String details) {
+            mWakefulnessChanging = true;
+            mDirty |= DIRTY_WAKEFULNESS;
             if (wakefulness == WAKEFULNESS_AWAKE) {
                 // Kick user activity to prevent newly awake group from timing out instantly.
                 // The dream may end without user activity if the dream app crashes / is updated,
@@ -696,9 +698,8 @@ public final class PowerManagerService extends SystemService
                         PowerManager.USER_ACTIVITY_EVENT_OTHER, flags, uid);
             }
             mDirty |= DIRTY_DISPLAY_GROUP_WAKEFULNESS;
+            mNotifier.onGroupWakefulnessChangeStarted(groupId, wakefulness, reason, eventTime);
             updateGlobalWakefulnessLocked(eventTime, reason, uid, opUid, opPackageName, details);
-            mNotifier.onPowerGroupWakefulnessChanged(groupId, wakefulness, reason,
-                    getGlobalWakefulnessLocked());
             updatePowerStateLocked();
         }
     }
@@ -2078,6 +2079,7 @@ public final class PowerManagerService extends SystemService
             int opUid, String opPackageName, String details) {
         mPowerGroups.get(groupId).setWakefulnessLocked(wakefulness, eventTime, uid, reason, opUid,
                 opPackageName, details);
+        mInjector.invalidateIsInteractiveCaches();
     }
 
     @SuppressWarnings("deprecation")
@@ -2152,7 +2154,7 @@ public final class PowerManagerService extends SystemService
             mDozeStartInProgress &= (newWakefulness == WAKEFULNESS_DOZING);
 
             if (mNotifier != null) {
-                mNotifier.onWakefulnessChangeStarted(newWakefulness, reason, eventTime);
+                mNotifier.onGlobalWakefulnessChangeStarted(newWakefulness, reason, eventTime);
             }
             mAttentionDetector.onWakefulnessChangeStarted(newWakefulness);
 
@@ -2162,15 +2164,6 @@ public final class PowerManagerService extends SystemService
                     mNotifier.onWakeUp(reason, details, uid, opPackageName, opUid);
                     if (sQuiescent) {
                         mDirty |= DIRTY_QUIESCENT;
-                    }
-                    PowerGroup defaultGroup = mPowerGroups.get(Display.DEFAULT_DISPLAY_GROUP);
-                    if (defaultGroup.getWakefulnessLocked() == WAKEFULNESS_DOZING) {
-                        // Workaround for b/187231320 where the AOD can get stuck in a "half on /
-                        // half off" state when a non-default-group VirtualDisplay causes the global
-                        // wakefulness to change to awake, even though the default display is
-                        // dozing. We set sandman summoned to restart dreaming to get it unstuck.
-                        // TODO(b/255688811) - fix this so that AOD never gets interrupted at all.
-                        defaultGroup.setSandmanSummonedLocked(true);
                     }
                     break;
 
@@ -2248,6 +2241,8 @@ public final class PowerManagerService extends SystemService
 
     @GuardedBy("mLock")
     void onPowerGroupEventLocked(int event, PowerGroup powerGroup) {
+        mWakefulnessChanging = true;
+        mDirty |= DIRTY_WAKEFULNESS;
         final int groupId = powerGroup.getGroupId();
         if (event == DisplayGroupPowerChangeListener.DISPLAY_GROUP_REMOVED) {
             mPowerGroups.delete(groupId);
@@ -2260,6 +2255,11 @@ public final class PowerManagerService extends SystemService
             // Kick user activity to prevent newly added group from timing out instantly.
             userActivityNoUpdateLocked(powerGroup, mClock.uptimeMillis(),
                     PowerManager.USER_ACTIVITY_EVENT_OTHER, /* flags= */ 0, Process.SYSTEM_UID);
+            mNotifier.onGroupWakefulnessChangeStarted(groupId,
+                    powerGroup.getWakefulnessLocked(), WAKE_REASON_DISPLAY_GROUP_ADDED,
+                    mClock.uptimeMillis());
+        } else if (event == DisplayGroupPowerChangeListener.DISPLAY_GROUP_REMOVED) {
+            mNotifier.onGroupRemoved(groupId);
         }
 
         if (oldWakefulness != newWakefulness) {
@@ -3744,9 +3744,29 @@ public final class PowerManagerService extends SystemService
         }
     }
 
-    private boolean isInteractiveInternal() {
+    private boolean isGloballyInteractiveInternal() {
         synchronized (mLock) {
             return PowerManagerInternal.isInteractive(getGlobalWakefulnessLocked());
+        }
+    }
+
+    private boolean isInteractiveInternal(int displayId, int uid) {
+        synchronized (mLock) {
+            DisplayInfo displayInfo = mDisplayManagerInternal.getDisplayInfo(displayId);
+            if (displayInfo == null) {
+                Slog.w(TAG, "Did not find DisplayInfo for displayId " + displayId);
+                return false;
+            }
+            if (!displayInfo.hasAccess(uid)) {
+                throw new SecurityException(
+                        "uid " + uid + " does not have access to display " + displayId);
+            }
+            PowerGroup powerGroup = mPowerGroups.get(displayInfo.displayGroupId);
+            if (powerGroup == null) {
+                Slog.w(TAG, "Did not find PowerGroup for displayId " + displayId);
+                return false;
+            }
+            return PowerManagerInternal.isInteractive(powerGroup.getWakefulnessLocked());
         }
     }
 
@@ -5691,8 +5711,14 @@ public final class PowerManagerService extends SystemService
             }
 
             if (eventTime > now) {
-                Slog.e(TAG, "Event time " + eventTime + " cannot be newer than " + now);
-                throw new IllegalArgumentException("event time must not be in the future");
+                Slog.wtf(TAG, "Event cannot be newer than the current time ("
+                        + "now=" + now
+                        + ", eventTime=" + eventTime
+                        + ", displayId=" + displayId
+                        + ", event=" + PowerManager.userActivityEventToString(event)
+                        + ", flags=" + flags
+                        + ")");
+                return;
             }
 
             final int uid = Binder.getCallingUid();
@@ -5800,7 +5826,18 @@ public final class PowerManagerService extends SystemService
         public boolean isInteractive() {
             final long ident = Binder.clearCallingIdentity();
             try {
-                return isInteractiveInternal();
+                return isGloballyInteractiveInternal();
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+
+        @Override // Binder call
+        public boolean isDisplayInteractive(int displayId) {
+            int uid = Binder.getCallingUid();
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                return isInteractiveInternal(displayId, uid);
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }

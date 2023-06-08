@@ -59,15 +59,14 @@ public class PrepareGetRequestSession extends GetRequestSession {
         int numTypes = (request.getCredentialOptions().stream()
                 .map(CredentialOption::getType).collect(
                         Collectors.toSet())).size(); // Dedupe type strings
-        mRequestSessionMetric.collectGetFlowInitialMetricInfo(numTypes,
-                /*origin=*/request.getOrigin() != null);
+        mRequestSessionMetric.collectGetFlowInitialMetricInfo(request);
         mPrepareGetCredentialCallback = prepareGetCredentialCallback;
     }
 
     @Override
     public void onProviderStatusChanged(ProviderSession.Status status, ComponentName componentName,
             ProviderSession.CredentialsSource source) {
-        Slog.d(TAG, "in onProviderStatusChanged with status: " + status + ", and "
+        Slog.i(TAG, "Provider Status changed with status: " + status + ", and "
                 + "source: " + source);
 
         switch (source) {
@@ -190,7 +189,9 @@ public class PrepareGetRequestSession extends GetRequestSession {
         if (!providerDataList.isEmpty()) {
             return mCredentialManagerUi.createPendingIntent(
                     RequestInfo.newGetRequestInfo(
-                            mRequestId, mClientRequest, mClientAppInfo.getPackageName()),
+                            mRequestId, mClientRequest, mClientAppInfo.getPackageName(),
+                            PermissionUtils.hasPermission(mContext, mClientAppInfo.getPackageName(),
+                                    Manifest.permission.CREDENTIAL_MANAGER_SET_ALLOWED_PROVIDERS)),
                     providerDataList);
         } else {
             return null;

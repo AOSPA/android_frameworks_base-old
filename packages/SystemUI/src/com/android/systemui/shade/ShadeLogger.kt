@@ -18,8 +18,8 @@ package com.android.systemui.shade
 
 import android.view.MotionEvent
 import com.android.systemui.log.dagger.ShadeLog
-import com.android.systemui.plugins.log.LogBuffer
-import com.android.systemui.plugins.log.LogLevel
+import com.android.systemui.log.LogBuffer
+import com.android.systemui.log.LogLevel
 import com.android.systemui.shade.ShadeViewController.Companion.FLING_COLLAPSE
 import com.android.systemui.shade.ShadeViewController.Companion.FLING_EXPAND
 import com.android.systemui.shade.ShadeViewController.Companion.FLING_HIDE
@@ -250,6 +250,31 @@ class ShadeLogger @Inject constructor(@ShadeLog private val buffer: LogBuffer) {
             LogLevel.VERBOSE,
             { bool1 = expand },
             { "NPVC mLastFlingWasExpanding set to: $bool1" }
+        )
+    }
+
+    fun logFlingExpands(
+            vel: Float,
+            vectorVel: Float,
+            interactionType: Int,
+            minVelocityPxPerSecond: Float,
+            expansionOverHalf: Boolean,
+            allowExpandForSmallExpansion: Boolean
+    ) {
+        buffer.log(
+            TAG,
+            LogLevel.VERBOSE,
+            {
+                int1 = interactionType
+                long1 = vel.toLong()
+                long2 = vectorVel.toLong()
+                double1 = minVelocityPxPerSecond.toDouble()
+                bool1 = expansionOverHalf
+                bool2 = allowExpandForSmallExpansion
+            },
+            { "NPVC flingExpands called with vel: $long1, vectorVel: $long2, " +
+                    "interactionType: $int1, minVelocityPxPerSecond: $double1 " +
+                    "expansionOverHalf: $bool1, allowExpandForSmallExpansion: $bool2" }
         )
     }
 

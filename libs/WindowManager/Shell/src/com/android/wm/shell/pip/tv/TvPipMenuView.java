@@ -31,12 +31,19 @@ import static com.android.wm.shell.pip.tv.TvPipMenuController.MODE_MOVE_MENU;
 import static com.android.wm.shell.pip.tv.TvPipMenuController.MODE_NO_MENU;
 
 import android.content.Context;
+import android.content.res.Resources;
+import android.graphics.Outline;
+import android.graphics.Path;
 import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.ShapeDrawable;
+import android.graphics.drawable.shapes.PathShape;
 import android.os.Handler;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 import android.view.accessibility.AccessibilityManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -57,7 +64,8 @@ import java.util.List;
  * A View that represents Pip Menu on TV. It's responsible for displaying the Pip menu actions from
  * the TvPipActionsProvider as well as the buttons for manually moving the PiP.
  */
-public class TvPipMenuView extends FrameLayout implements TvPipActionsProvider.Listener {
+public class TvPipMenuView extends FrameLayout implements TvPipActionsProvider.Listener,
+        TvPipMenuEduTextDrawer.Listener {
     private static final String TAG = "TvPipMenuView";
 
     private final TvPipMenuView.Listener mListener;
@@ -76,6 +84,7 @@ public class TvPipMenuView extends FrameLayout implements TvPipActionsProvider.L
     private final View mDimLayer;
 
     private final TvPipMenuEduTextDrawer mEduTextDrawer;
+    private final ViewGroup mEduTextContainer;
 
     private final int mPipMenuOuterSpace;
     private final int mPipMenuBorderWidth;
@@ -88,6 +97,8 @@ public class TvPipMenuView extends FrameLayout implements TvPipActionsProvider.L
     private final ImageView mArrowDown;
     private final ImageView mArrowLeft;
     private final TvWindowMenuActionButton mA11yDoneButton;
+
+    private final int mArrowElevation;
 
     private @TvPipMenuController.TvPipMenuMode int mCurrentMenuMode = MODE_NO_MENU;
     private final Rect mCurrentPipBounds = new Rect();
@@ -129,19 +140,68 @@ public class TvPipMenuView extends FrameLayout implements TvPipActionsProvider.L
         mArrowLeft = findViewById(R.id.tv_pip_menu_arrow_left);
         mA11yDoneButton = findViewById(R.id.tv_pip_menu_done_button);
 
-        mResizeAnimationDuration = context.getResources().getInteger(
-                R.integer.config_pipResizeAnimationDuration);
-        mPipMenuFadeAnimationDuration = context.getResources()
-                .getInteger(R.integer.tv_window_menu_fade_animation_duration);
+        final Resources res = context.getResources();
+        mResizeAnimationDuration = res.getInteger(R.integer.config_pipResizeAnimationDuration);
+        mPipMenuFadeAnimationDuration =
+                res.getInteger(R.integer.tv_window_menu_fade_animation_duration);
+        mPipMenuOuterSpace = res.getDimensionPixelSize(R.dimen.pip_menu_outer_space);
+        mPipMenuBorderWidth = res.getDimensionPixelSize(R.dimen.pip_menu_border_width);
+        mArrowElevation = res.getDimensionPixelSize(R.dimen.pip_menu_arrow_elevation);
 
-        mPipMenuOuterSpace = context.getResources()
-                .getDimensionPixelSize(R.dimen.pip_menu_outer_space);
-        mPipMenuBorderWidth = context.getResources()
-                .getDimensionPixelSize(R.dimen.pip_menu_border_width);
+        initMoveArrows();
 
-        mEduTextDrawer = new TvPipMenuEduTextDrawer(mContext, mainHandler, mListener);
-        ((FrameLayout) findViewById(R.id.tv_pip_menu_edu_text_drawer_placeholder))
-                .addView(mEduTextDrawer);
+        mEduTextDrawer = new TvPipMenuEduTextDrawer(mContext, mainHandler, this);
+        mEduTextContainer = (ViewGroup) findViewById(R.id.tv_pip_menu_edu_text_container);
+        mEduTextContainer.addView(mEduTextDrawer);
+    }
+
+    private void initMoveArrows() {
+        final int arrowSize =
+                mContext.getResources().getDimensionPixelSize(R.dimen.pip_menu_arrow_size);
+        final Path arrowPath = createArrowPath(arrowSize);
+
+        final ShapeDrawable arrowDrawable = new ShapeDrawable();
+        arrowDrawable.setShape(new PathShape(arrowPath, arrowSize, arrowSize));
+        arrowDrawable.setTint(mContext.getResources().getColor(R.color.tv_pip_menu_arrow_color));
+
+        final ViewOutlineProvider arrowOutlineProvider = new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline outline) {
+                outline.setPath(createArrowPath(view.getMeasuredHeight()));
+            }
+        };
+
+        initArrow(mArrowRight, arrowOutlineProvider, arrowDrawable, 0);
+        initArrow(mArrowDown, arrowOutlineProvider, arrowDrawable, 90);
+        initArrow(mArrowLeft, arrowOutlineProvider, arrowDrawable, 180);
+        initArrow(mArrowUp, arrowOutlineProvider, arrowDrawable, 270);
+    }
+
+    /**
+     * Creates a Path for a movement arrow in the MODE_MOVE_MENU. The resulting Path is a simple
+     * right-pointing triangle with its tip in the center of a size x size square:
+     *  _ _ _ _ _
+     * |*        |
+     * |* *      |
+     * |*   *    |
+     * |* *      |
+     * |* _ _ _ _|
+     *
+     */
+    private Path createArrowPath(int size) {
+        final Path triangle = new Path();
+        triangle.lineTo(0, size);
+        triangle.lineTo(size / 2, size / 2);
+        triangle.close();
+        return triangle;
+    }
+
+    private void initArrow(View v, ViewOutlineProvider arrowOutlineProvider, Drawable arrowDrawable,
+            int rotation) {
+        v.setOutlineProvider(arrowOutlineProvider);
+        v.setBackground(arrowDrawable);
+        v.setRotation(rotation);
+        v.setElevation(mArrowElevation);
     }
 
     void onPipTransitionToTargetBoundsStarted(Rect targetBounds) {
@@ -235,11 +295,13 @@ public class TvPipMenuView extends FrameLayout implements TvPipActionsProvider.L
      * pip menu when it gains focus.
      */
     private void updatePipFrameBounds() {
-        final ViewGroup.LayoutParams pipFrameParams = mPipFrameView.getLayoutParams();
-        if (pipFrameParams != null) {
-            pipFrameParams.width = mCurrentPipBounds.width() + 2 * mPipMenuBorderWidth;
-            pipFrameParams.height = mCurrentPipBounds.height() + 2 * mPipMenuBorderWidth;
-            mPipFrameView.setLayoutParams(pipFrameParams);
+        if (mPipFrameView.getVisibility() == VISIBLE) {
+            final ViewGroup.LayoutParams pipFrameParams = mPipFrameView.getLayoutParams();
+            if (pipFrameParams != null) {
+                pipFrameParams.width = mCurrentPipBounds.width() + 2 * mPipMenuBorderWidth;
+                pipFrameParams.height = mCurrentPipBounds.height() + 2 * mPipMenuBorderWidth;
+                mPipFrameView.setLayoutParams(pipFrameParams);
+            }
         }
 
         final ViewGroup.LayoutParams pipViewParams = mPipView.getLayoutParams();
@@ -262,7 +324,7 @@ public class TvPipMenuView extends FrameLayout implements TvPipActionsProvider.L
     Rect getPipMenuContainerBounds(Rect pipBounds) {
         final Rect menuUiBounds = new Rect(pipBounds);
         menuUiBounds.inset(-mPipMenuOuterSpace, -mPipMenuOuterSpace);
-        menuUiBounds.bottom += mEduTextDrawer.getHeight();
+        menuUiBounds.bottom += mEduTextDrawer.getEduTextDrawerHeight();
         return menuUiBounds;
     }
 
@@ -403,6 +465,17 @@ public class TvPipMenuView extends FrameLayout implements TvPipActionsProvider.L
         } else if (added < 0) {
             mRecyclerViewAdapter.notifyItemRangeRemoved(startIndex + updated, -added);
         }
+    }
+
+    @Override
+    public void onCloseEduTextAnimationStart() {
+        mListener.onCloseEduText();
+    }
+
+    @Override
+    public void onCloseEduTextAnimationEnd() {
+        mPipFrameView.setVisibility(GONE);
+        mEduTextContainer.setVisibility(GONE);
     }
 
     @Override
@@ -551,7 +624,7 @@ public class TvPipMenuView extends FrameLayout implements TvPipActionsProvider.L
         }
     }
 
-    interface Listener extends TvPipMenuEduTextDrawer.Listener {
+    interface Listener {
 
         void onBackPress();
 
@@ -573,5 +646,11 @@ public class TvPipMenuView extends FrameLayout implements TvPipActionsProvider.L
          * has lost focus.
          */
         void onPipWindowFocusChanged(boolean focused);
+
+        /**
+         *  The edu text closing impacts the size of the Picture-in-Picture window and influences
+         *  how it is positioned on the screen.
+         */
+        void onCloseEduText();
     }
 }

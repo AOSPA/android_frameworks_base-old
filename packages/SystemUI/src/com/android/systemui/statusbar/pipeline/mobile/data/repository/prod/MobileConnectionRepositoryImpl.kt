@@ -154,6 +154,7 @@ class MobileConnectionRepositoryImpl(
      */
     private val callbackEvents: StateFlow<TelephonyCallbackState> = run {
         val initial = TelephonyCallbackState()
+        val slotIndex = getSlotIndex(subId)
         callbackFlow {
                 val callback =
                     object :
@@ -212,7 +213,7 @@ class MobileConnectionRepositoryImpl(
                         }
                     }
                 telephonyManager.registerTelephonyCallback(bgDispatcher.asExecutor(), callback)
-                fiveGServiceClient.registerListener(getSlotIndex(subId), callback)
+                fiveGServiceClient.registerListener(slotIndex, callback)
                 try {
                     imsMmTelManager.registerImsStateCallback(
                                 bgDispatcher.asExecutor(), imsStateCallback)
@@ -221,7 +222,7 @@ class MobileConnectionRepositoryImpl(
                 }
                 awaitClose {
                     telephonyManager.unregisterTelephonyCallback(callback)
-                    fiveGServiceClient.unregisterListener(getSlotIndex(subId))
+                    fiveGServiceClient.unregisterListener(slotIndex, callback)
                     try {
                         imsMmTelManager.unregisterImsStateCallback(imsStateCallback)
                         imsMmTelManager.unregisterMmTelCapabilityCallback(capabilityCallback)

@@ -24,6 +24,7 @@ import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_TOKEN_TRANSFO
 import android.annotation.IntDef;
 import android.os.HandlerExecutor;
 import android.util.ArrayMap;
+import android.util.BoostFramework;
 import android.util.Slog;
 import android.view.SurfaceControl;
 import android.view.WindowManager;
@@ -103,11 +104,16 @@ class AsyncRotationController extends FadeAnimationController implements Consume
 
     private final int mOriginalRotation;
     private final boolean mHasScreenRotationAnimation;
+    private BoostFramework mPerf = null;
+    private boolean mIsLatencyPerfLockAcquired = false;
 
     AsyncRotationController(DisplayContent displayContent) {
         super(displayContent);
         mService = displayContent.mWmService;
         mOriginalRotation = displayContent.getWindowConfiguration().getRotation();
+        if (mPerf == null) {
+            mPerf = new BoostFramework();
+        }
         final int transitionType =
                 displayContent.mTransitionController.getCollectingTransitionType();
         if (transitionType == WindowManager.TRANSIT_CHANGE) {
@@ -267,7 +273,12 @@ class AsyncRotationController extends FadeAnimationController implements Consume
             op.mDrawTransaction = null;
             if (DEBUG) Slog.d(TAG, "finishOp merge transaction " + windowToken.getTopChild());
         }
-        if (op.mAction == Operation.ACTION_FADE) {
+        if (op.mAction == Operation.ACTION_TOGGLE_IME) {
+            if (DEBUG) Slog.d(TAG, "finishOp fade-in IME " + windowToken.getTopChild());
+            fadeWindowToken(true /* show */, windowToken, ANIMATION_TYPE_TOKEN_TRANSFORM,
+                    (type, anim) -> mDisplayContent.getInsetsStateController()
+                            .getImeSourceProvider().reportImeDrawnForOrganizer());
+        } else if (op.mAction == Operation.ACTION_FADE) {
             if (DEBUG) Slog.d(TAG, "finishOp fade-in " + windowToken.getTopChild());
             // The previous animation leash will be dropped when preparing fade-in animation, so
             // simply apply new animation without restoring the transformation.
@@ -327,6 +338,11 @@ class AsyncRotationController extends FadeAnimationController implements Consume
             if (DEBUG) Slog.d(TAG, "Complete directly " + token.getTopChild());
             finishOp(token);
             if (mTargetWindowTokens.isEmpty()) {
+                if (mPerf != null && mIsLatencyPerfLockAcquired) {
+                    mPerf.perfLockRelease();
+                    mIsLatencyPerfLockAcquired = false;
+                }
+
                 if (mTimeoutRunnable != null) mService.mH.removeCallbacks(mTimeoutRunnable);
                 return true;
             }
@@ -341,10 +357,14 @@ class AsyncRotationController extends FadeAnimationController implements Consume
      * be seamlessly rotated later.
      */
     void start() {
+         if (mPerf != null) {
+             mPerf.perfHint(BoostFramework.VENDOR_HINT_ROTATION_LATENCY_BOOST, null);
+             mIsLatencyPerfLockAcquired = true;
+         }
         for (int i = mTargetWindowTokens.size() - 1; i >= 0; i--) {
             final WindowToken windowToken = mTargetWindowTokens.keyAt(i);
             final Operation op = mTargetWindowTokens.valueAt(i);
-            if (op.mAction == Operation.ACTION_FADE) {
+            if (op.mAction == Operation.ACTION_FADE || op.mAction == Operation.ACTION_TOGGLE_IME) {
                 fadeWindowToken(false /* show */, windowToken, ANIMATION_TYPE_TOKEN_TRANSFORM);
                 op.mLeash = windowToken.getAnimationLeash();
                 if (DEBUG) Slog.d(TAG, "Start fade-out " + windowToken.getTopChild());
@@ -374,17 +394,19 @@ class AsyncRotationController extends FadeAnimationController implements Consume
                 WindowManagerService.WINDOW_FREEZE_TIMEOUT_DURATION);
     }
 
-    /** Hides the window immediately until it is drawn in new rotation. */
-    void hideImmediately(WindowToken windowToken) {
-        if (isTargetToken(windowToken)) return;
+    /** Hides the IME window immediately until it is drawn in new rotation. */
+    void hideImeImmediately() {
+        if (mDisplayContent.mInputMethodWindow == null) return;
+        final WindowToken imeWindowToken = mDisplayContent.mInputMethodWindow.mToken;
+        if (isTargetToken(imeWindowToken)) return;
         final boolean original = mHideImmediately;
         mHideImmediately = true;
-        final Operation op = new Operation(Operation.ACTION_FADE);
-        mTargetWindowTokens.put(windowToken, op);
-        fadeWindowToken(false /* show */, windowToken, ANIMATION_TYPE_TOKEN_TRANSFORM);
-        op.mLeash = windowToken.getAnimationLeash();
+        final Operation op = new Operation(Operation.ACTION_TOGGLE_IME);
+        mTargetWindowTokens.put(imeWindowToken, op);
+        fadeWindowToken(false /* show */, imeWindowToken, ANIMATION_TYPE_TOKEN_TRANSFORM);
+        op.mLeash = imeWindowToken.getAnimationLeash();
         mHideImmediately = original;
-        if (DEBUG) Slog.d(TAG, "hideImmediately " + windowToken.getTopChild());
+        if (DEBUG) Slog.d(TAG, "hideImeImmediately " + imeWindowToken.getTopChild());
     }
 
     /** Returns {@code true} if the window will rotate independently. */
@@ -586,11 +608,13 @@ class AsyncRotationController extends FadeAnimationController implements Consume
     /** The operation to control the rotation appearance associated with window token. */
     private static class Operation {
         @Retention(RetentionPolicy.SOURCE)
-        @IntDef(value = { ACTION_SEAMLESS, ACTION_FADE })
+        @IntDef(value = { ACTION_SEAMLESS, ACTION_FADE, ACTION_TOGGLE_IME })
         @interface Action {}
 
         static final int ACTION_SEAMLESS = 1;
         static final int ACTION_FADE = 2;
+        /** The action to toggle the IME window appearance */
+        static final int ACTION_TOGGLE_IME = 3;
         final @Action int mAction;
         /** The leash of window token. It can be animation leash or the token itself. */
         SurfaceControl mLeash;

@@ -27,8 +27,11 @@ import static android.view.WindowManager.LayoutParams.SOFT_INPUT_IS_FORWARD_NAVI
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_MASK_STATE;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_UNSPECIFIED;
 import static android.view.WindowManager.LayoutParams.SoftInputModeFlags;
+import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 
 import static com.android.internal.inputmethod.InputMethodDebug.softInputModeToString;
+import static com.android.internal.inputmethod.SoftInputShowHideReason.REMOVE_IME_SCREENSHOT_FROM_IMMS;
+import static com.android.internal.inputmethod.SoftInputShowHideReason.SHOW_IME_SCREENSHOT_FROM_IMMS;
 import static com.android.server.inputmethod.InputMethodManagerService.computeImeDisplayIdForTarget;
 
 import android.accessibilityservice.AccessibilityService;
@@ -49,6 +52,7 @@ import android.view.inputmethod.InputMethodManager;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.inputmethod.SoftInputShowHideReason;
 import com.android.server.LocalServices;
+import com.android.server.wm.ImeTargetChangeListener;
 import com.android.server.wm.WindowManagerInternal;
 
 import java.io.PrintWriter;
@@ -99,6 +103,18 @@ public final class ImeVisibilityStateComputer {
      */
     private boolean mInputShown;
 
+    /**
+     * Set if we called
+     * {@link com.android.server.wm.ImeTargetVisibilityPolicy#showImeScreenshot(IBinder, int)}.
+     */
+    private boolean mRequestedImeScreenshot;
+
+    /** The window token of the current visible IME layering target overlay. */
+    private IBinder mCurVisibleImeLayeringOverlay;
+
+    /** The window token of the current visible IME input target. */
+    private IBinder mCurVisibleImeInputTarget;
+
     /** Represent the invalid IME visibility state */
     public static final int STATE_INVALID = -1;
 
@@ -122,6 +138,10 @@ public final class ImeVisibilityStateComputer {
     public static final int STATE_HIDE_IME_NOT_ALWAYS = 6;
 
     public static final int STATE_SHOW_IME_IMPLICIT = 7;
+
+    /** State to handle removing an IME preview surface when necessary. */
+    public static final int STATE_REMOVE_IME_SNAPSHOT = 8;
+
     @IntDef({
             STATE_INVALID,
             STATE_HIDE_IME,
@@ -132,6 +152,7 @@ public final class ImeVisibilityStateComputer {
             STATE_HIDE_IME_EXPLICIT,
             STATE_HIDE_IME_NOT_ALWAYS,
             STATE_SHOW_IME_IMPLICIT,
+            STATE_REMOVE_IME_SNAPSHOT,
     })
     @interface VisibilityState {}
 
@@ -172,6 +193,30 @@ public final class ImeVisibilityStateComputer {
         mWindowManagerInternal = wmService;
         mImeDisplayValidator = imeDisplayValidator;
         mPolicy = imePolicy;
+        mWindowManagerInternal.setInputMethodTargetChangeListener(new ImeTargetChangeListener() {
+            @Override
+            public void onImeTargetOverlayVisibilityChanged(IBinder overlayWindowToken,
+                    @WindowManager.LayoutParams.WindowType int windowType, boolean visible,
+                    boolean removed) {
+                mCurVisibleImeLayeringOverlay =
+                        // Ignoring the starting window since it's ok to cover the IME target
+                        // window in temporary without affecting the IME visibility.
+                        (visible && !removed && windowType != TYPE_APPLICATION_STARTING)
+                                ? overlayWindowToken : null;
+            }
+
+            @Override
+            public void onImeInputTargetVisibilityChanged(IBinder imeInputTarget,
+                    boolean visibleRequested, boolean removed) {
+                if (mCurVisibleImeInputTarget == imeInputTarget && (!visibleRequested || removed)
+                        && mCurVisibleImeLayeringOverlay != null) {
+                    mService.onApplyImeVisibilityFromComputer(imeInputTarget,
+                            new ImeVisibilityResult(STATE_HIDE_IME_EXPLICIT,
+                                    SoftInputShowHideReason.HIDE_WHEN_INPUT_TARGET_INVISIBLE));
+                }
+                mCurVisibleImeInputTarget = (visibleRequested && !removed) ? imeInputTarget : null;
+            }
+        });
     }
 
     /**
@@ -449,6 +494,21 @@ public final class ImeVisibilityStateComputer {
             if (DEBUG) Slog.v(TAG, "Window without editor will hide input");
             return new ImeVisibilityResult(STATE_HIDE_IME_EXPLICIT,
                     SoftInputShowHideReason.HIDE_WINDOW_GAINED_FOCUS_WITHOUT_EDITOR);
+        }
+        return null;
+    }
+
+    @VisibleForTesting
+    ImeVisibilityResult onInteractiveChanged(IBinder windowToken, boolean interactive) {
+        final ImeTargetWindowState state = getWindowStateOrNull(windowToken);
+        if (state != null && state.isRequestedImeVisible() && mInputShown && !interactive) {
+            mRequestedImeScreenshot = true;
+            return new ImeVisibilityResult(STATE_SHOW_IME_SNAPSHOT, SHOW_IME_SCREENSHOT_FROM_IMMS);
+        }
+        if (interactive && mRequestedImeScreenshot) {
+            mRequestedImeScreenshot = false;
+            return new ImeVisibilityResult(STATE_REMOVE_IME_SNAPSHOT,
+                    REMOVE_IME_SCREENSHOT_FROM_IMMS);
         }
         return null;
     }

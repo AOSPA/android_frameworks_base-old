@@ -19,14 +19,19 @@ package com.android.systemui.keyguard.domain.interactor
 
 import android.app.AlertDialog
 import android.app.admin.DevicePolicyManager
+import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.android.internal.widget.LockPatternUtils
+import com.android.systemui.R
 import com.android.systemui.animation.DialogLaunchAnimator
 import com.android.systemui.animation.Expandable
 import com.android.systemui.dagger.SysUISingleton
+import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.devicepolicy.areKeyguardShortcutsDisabled
+import com.android.systemui.dock.DockManager
+import com.android.systemui.dock.retrieveIsDocked
 import com.android.systemui.flags.FeatureFlags
 import com.android.systemui.flags.Flags
 import com.android.systemui.keyguard.data.quickaffordance.KeyguardQuickAffordanceConfig
@@ -71,7 +76,9 @@ constructor(
     private val launchAnimator: DialogLaunchAnimator,
     private val logger: KeyguardQuickAffordancesMetricsLogger,
     private val devicePolicyManager: DevicePolicyManager,
+    private val dockManager: DockManager,
     @Background private val backgroundDispatcher: CoroutineDispatcher,
+    @Application private val appContext: Context,
 ) {
     private val isUsingRepository: Boolean
         get() = featureFlags.isEnabled(Flags.CUSTOMIZABLE_LOCK_SCREEN_QUICK_AFFORDANCES)
@@ -81,8 +88,12 @@ constructor(
      *
      * If `false`, the UI goes back to using single taps.
      */
-    val useLongPress: Boolean
-        get() = featureFlags.isEnabled(Flags.CUSTOMIZABLE_LOCK_SCREEN_QUICK_AFFORDANCES)
+    fun useLongPress(): Flow<Boolean> =
+        if (featureFlags.isEnabled(Flags.CUSTOMIZABLE_LOCK_SCREEN_QUICK_AFFORDANCES)) {
+            dockManager.retrieveIsDocked().map { !it }
+        } else {
+            flowOf(false)
+        }
 
     /** Returns an observable for the quick affordance at the given position. */
     suspend fun quickAffordance(
@@ -401,7 +412,8 @@ constructor(
                 name = Contract.FlagsTable.FLAG_NAME_CUSTOM_LOCK_SCREEN_QUICK_AFFORDANCES_ENABLED,
                 value =
                     !isFeatureDisabledByDevicePolicy() &&
-                        featureFlags.isEnabled(Flags.CUSTOMIZABLE_LOCK_SCREEN_QUICK_AFFORDANCES),
+                        featureFlags.isEnabled(Flags.CUSTOMIZABLE_LOCK_SCREEN_QUICK_AFFORDANCES) &&
+                        appContext.resources.getBoolean(R.bool.custom_lockscreen_shortcuts_enabled),
             ),
             KeyguardPickerFlag(
                 name = Contract.FlagsTable.FLAG_NAME_CUSTOM_CLOCKS_ENABLED,

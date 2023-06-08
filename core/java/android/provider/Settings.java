@@ -3037,12 +3037,21 @@ public final class Settings {
         public void destroy() {
             try {
                 // If this process is the system server process, mArray is the same object as
-                // the memory int array kept inside SetingsProvider, so skipping the close()
-                if (!Settings.isInSystemServer()) {
+                // the memory int array kept inside SettingsProvider, so skipping the close()
+                if (!Settings.isInSystemServer() && !mArray.isClosed()) {
                     mArray.close();
                 }
             } catch (IOException e) {
                 Log.e(TAG, "Error closing backing array", e);
+            }
+        }
+
+        @Override
+        protected void finalize() throws Throwable {
+            try {
+                destroy();
+            } finally {
+                super.finalize();
             }
         }
     }
@@ -3209,8 +3218,9 @@ public final class Settings {
         @UnsupportedAppUsage
         public String getStringForUser(ContentResolver cr, String name, final int userHandle) {
             final boolean isSelf = (userHandle == UserHandle.myUserId());
+            final boolean useCache = isSelf && !isInSystemServer();
             boolean needsGenerationTracker = false;
-            if (isSelf) {
+            if (useCache) {
                 synchronized (NameValueCache.this) {
                     final GenerationTracker generationTracker = mGenerationTrackers.get(name);
                     if (generationTracker != null) {
@@ -3356,9 +3366,12 @@ public final class Settings {
                                 }
                             }
                         } else {
-                            if (LOCAL_LOGV) Log.i(TAG, "call-query of user " + userHandle
-                                    + " by " + UserHandle.myUserId()
-                                    + " so not updating cache");
+                            if (DEBUG || LOCAL_LOGV) {
+                                Log.i(TAG, "call-query of user " + userHandle
+                                        + " by " + UserHandle.myUserId()
+                                        + (isInSystemServer() ? " in system_server" : "")
+                                        + " so not updating cache");
+                            }
                         }
                         return value;
                     }
@@ -5451,6 +5464,14 @@ public final class Settings {
         public static final String SHOW_TOUCHES = "show_touches";
 
         /**
+         * Show key presses and other events dispatched to focused windows on the screen.
+         * 0 = no
+         * 1 = yes
+         * @hide
+         */
+        public static final String SHOW_KEY_PRESSES = "show_key_presses";
+
+        /**
          * Log raw orientation data from
          * {@link com.android.server.policy.WindowOrientationListener} for use with the
          * orientationplot.py tool.
@@ -5840,6 +5861,7 @@ public final class Settings {
             PRIVATE_SETTINGS.add(NOTIFICATION_LIGHT_PULSE);
             PRIVATE_SETTINGS.add(POINTER_LOCATION);
             PRIVATE_SETTINGS.add(SHOW_TOUCHES);
+            PRIVATE_SETTINGS.add(SHOW_KEY_PRESSES);
             PRIVATE_SETTINGS.add(WINDOW_ORIENTATION_LISTENER_LOG);
             PRIVATE_SETTINGS.add(POWER_SOUNDS_ENABLED);
             PRIVATE_SETTINGS.add(DOCK_SOUNDS_ENABLED);
@@ -7175,6 +7197,13 @@ public final class Settings {
          * @hide
          */
         public static final String CREDENTIAL_SERVICE = "credential_service";
+
+        /**
+         * The currently selected primary credential service flattened ComponentName.
+         *
+         * @hide
+         */
+        public static final String CREDENTIAL_SERVICE_PRIMARY = "credential_service_primary";
 
         /**
          * The currently selected autofill service flattened ComponentName.
@@ -10204,9 +10233,7 @@ public final class Settings {
          *
          * Face unlock re enroll.
          *  0 = No re enrollment.
-         *  1 = Re enrollment is suggested.
-         *  2 = Re enrollment is required after a set time period.
-         *  3 = Re enrollment is required immediately.
+         *  1 = Re enrollment is required.
          *
          * @hide
          */
@@ -11506,6 +11533,8 @@ public final class Settings {
         public static final int DEVICE_STATE_ROTATION_KEY_HALF_FOLDED = 1;
         /** @hide */
         public static final int DEVICE_STATE_ROTATION_KEY_UNFOLDED = 2;
+        /** @hide */
+        public static final int DEVICE_STATE_ROTATION_KEY_REAR_DISPLAY = 3;
 
         /**
          * The different postures that can be used as keys with
@@ -11517,6 +11546,7 @@ public final class Settings {
                 DEVICE_STATE_ROTATION_KEY_FOLDED,
                 DEVICE_STATE_ROTATION_KEY_HALF_FOLDED,
                 DEVICE_STATE_ROTATION_KEY_UNFOLDED,
+                DEVICE_STATE_ROTATION_KEY_REAR_DISPLAY,
         })
         @Retention(RetentionPolicy.SOURCE)
         public @interface DeviceStateRotationLockKey {
@@ -11820,6 +11850,7 @@ public final class Settings {
          *
          * {@hide}
          */
+        @Readable
         public static final String SATELLITE_MODE_RADIOS = "satellite_mode_radios";
 
         /**
@@ -11833,6 +11864,7 @@ public final class Settings {
          *
          * {@hide}
          */
+        @Readable
         public static final String SATELLITE_MODE_ENABLED = "satellite_mode_enabled";
 
         /**
@@ -12140,6 +12172,14 @@ public final class Settings {
         public static final String ADB_WIFI_ENABLED = "adb_wifi_enabled";
 
         /**
+         * Whether existing ADB sessions over both USB and Wifi should be terminated when the user
+         * revokes debugging authorizations.
+         * @hide
+         */
+        public static final String ADB_DISCONNECT_SESSIONS_ON_REVOKE =
+                "adb_disconnect_sessions_on_revoke";
+
+        /**
          * Whether Views are allowed to save their attribute data.
          * @hide
          */
@@ -12417,6 +12457,17 @@ public final class Settings {
          */
         public static final String BYPASS_DEVICE_POLICY_MANAGEMENT_ROLE_QUALIFICATIONS =
                 "bypass_device_policy_management_role_qualifications";
+
+        /**
+         * Whether work profile telephony feature is enabled for non
+         * {@link android.app.role.RoleManager#ROLE_DEVICE_POLICY_MANAGEMENT} holders.
+         * ("0" = false, "1" = true).
+         *
+         * @hide
+         */
+        @Readable
+        public static final String ALLOW_WORK_PROFILE_TELEPHONY_FOR_NON_DPM_ROLE_HOLDERS =
+                "allow_work_profile_telephony_for_non_dpm_role_holders";
 
         /**
          * Indicates whether mobile data should be allowed while the device is being provisioned.

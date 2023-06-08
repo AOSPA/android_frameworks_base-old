@@ -946,10 +946,15 @@ public class PipController implements PipTransitionController.PipTransitionCallb
                     mPipBoundsState.getDisplayBounds().right,
                     mPipBoundsState.getDisplayBounds().bottom);
             mPipBoundsState.addNamedUnrestrictedKeepClearArea(LAUNCHER_KEEP_CLEAR_AREA_TAG, rect);
+            updatePipPositionForKeepClearAreas();
         } else {
             mPipBoundsState.removeNamedUnrestrictedKeepClearArea(LAUNCHER_KEEP_CLEAR_AREA_TAG);
+            // postpone moving in response to hide of Launcher in case there's another change
+            mMainExecutor.removeCallbacks(mMovePipInResponseToKeepClearAreasChangeCallback);
+            mMainExecutor.executeDelayed(
+                    mMovePipInResponseToKeepClearAreasChangeCallback,
+                    PIP_KEEP_CLEAR_AREAS_DELAY);
         }
-        updatePipPositionForKeepClearAreas();
     }
 
     private void setLauncherAppIconSize(int iconSizePx) {
@@ -1060,13 +1065,22 @@ public class PipController implements PipTransitionController.PipTransitionCallb
     /** Save the state to restore to on re-entry. */
     public void saveReentryState(Rect pipBounds) {
         float snapFraction = mPipBoundsAlgorithm.getSnapFraction(pipBounds);
-        if (mPipBoundsState.hasUserResizedPip()) {
-            final Rect reentryBounds = mTouchHandler.getUserResizeBounds();
-            final Size reentrySize = new Size(reentryBounds.width(), reentryBounds.height());
-            mPipBoundsState.saveReentryState(reentrySize, snapFraction);
-        } else {
+
+        if (!mPipBoundsState.hasUserResizedPip()) {
             mPipBoundsState.saveReentryState(null /* bounds */, snapFraction);
+            return;
         }
+
+        Size reentrySize = new Size(pipBounds.width(), pipBounds.height());
+
+        // TODO: b/279937014 Investigate why userResizeBounds are empty with shell transitions on
+        // fallback to using the userResizeBounds if userResizeBounds are not empty
+        if (!mTouchHandler.getUserResizeBounds().isEmpty()) {
+            Rect userResizeBounds = mTouchHandler.getUserResizeBounds();
+            reentrySize = new Size(userResizeBounds.width(), userResizeBounds.height());
+        }
+
+        mPipBoundsState.saveReentryState(reentrySize, snapFraction);
     }
 
     @Override

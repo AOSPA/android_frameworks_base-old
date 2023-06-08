@@ -129,6 +129,7 @@ cc_defaults {
                 "libandroidfw",
                 "libcrypto",
                 "libsync",
+                "libui",
             ],
             static_libs: [
                 "libEGL_blobCache",
@@ -399,7 +400,7 @@ cc_defaults {
         "libharfbuzz_ng",
         "libimage_io",
         "libjpeg",
-        "libjpegrecoverymap",
+        "libultrahdr",
         "liblog",
         "libminikin",
         "libz",

@@ -38,6 +38,7 @@ import android.view.SurfaceView;
 import android.view.WindowManagerGlobal;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -52,7 +53,6 @@ import java.util.function.Supplier;
  * This will also allow synchronization of surfaces across multiple processes. The caller can add
  * SurfaceControlViewHosts from another process to the SurfaceSyncGroup in a different process
  * and this clas will ensure all the surfaces are ready before applying everything together.
- * </p>
  * see the <a href="https://android.googlesource.com/platform/frameworks/base/+/master/core/java/android/window/SurfaceSyncGroup.md">SurfaceSyncGroup documentation</a>
  * </p>
  */
@@ -63,7 +63,12 @@ public final class SurfaceSyncGroup {
     private static final int MAX_COUNT = 100;
 
     private static final AtomicInteger sCounter = new AtomicInteger(0);
-    private static final int TRANSACTION_READY_TIMEOUT = 1000 * Build.HW_TIMEOUT_MULTIPLIER;
+
+    /**
+     * @hide
+     */
+    @VisibleForTesting
+    public static final int TRANSACTION_READY_TIMEOUT = 1000 * Build.HW_TIMEOUT_MULTIPLIER;
 
     private static Supplier<Transaction> sTransactionFactory = Transaction::new;
 
@@ -123,6 +128,15 @@ public final class SurfaceSyncGroup {
     @GuardedBy("mLock")
     private boolean mTimeoutAdded;
 
+    /**
+     * Disable the timeout for this SSG so it will never be set until there's an explicit call to
+     * add a timeout.
+     */
+    @GuardedBy("mLock")
+    private boolean mTimeoutDisabled;
+
+    private final String mTrackName;
+
     private static boolean isLocalBinder(IBinder binder) {
         return !(binder instanceof BinderProxy);
     }
@@ -178,6 +192,7 @@ public final class SurfaceSyncGroup {
         }
 
         mName = name + "#" + sCounter.getAndIncrement();
+        mTrackName = "SurfaceSyncGroup " + name;
 
         mTransactionReadyConsumer = (transaction) -> {
             if (DEBUG && transaction != null) {
@@ -185,9 +200,10 @@ public final class SurfaceSyncGroup {
                         + mName);
             }
             if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-                Trace.instant(Trace.TRACE_TAG_VIEW,
-                        "Final TransactionCallback with " + transaction + " for " + mName);
+                Trace.instantForTrack(Trace.TRACE_TAG_VIEW, mTrackName,
+                        "Final TransactionCallback with " + transaction);
             }
+            Trace.asyncTraceForTrackEnd(Trace.TRACE_TAG_VIEW, mTrackName, hashCode());
             transactionReadyConsumer.accept(transaction);
             synchronized (mLock) {
                 // If there's a registered listener with WMS, that means we aren't actually complete
@@ -199,7 +215,7 @@ public final class SurfaceSyncGroup {
         };
 
         if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-            Trace.instant(Trace.TRACE_TAG_VIEW, "new SurfaceSyncGroup " + mName);
+            Trace.asyncTraceForTrackBegin(Trace.TRACE_TAG_VIEW, mTrackName, mName, hashCode());
         }
 
         if (DEBUG) {
@@ -223,6 +239,10 @@ public final class SurfaceSyncGroup {
      */
     public void addSyncCompleteCallback(Executor executor, Runnable runnable) {
         synchronized (mLock) {
+            if (mFinished) {
+                executor.execute(runnable);
+                return;
+            }
             mSyncCompleteCallbacks.add(new Pair<>(executor, runnable));
         }
     }
@@ -239,7 +259,7 @@ public final class SurfaceSyncGroup {
             Log.d(TAG, "markSyncReady " + mName);
         }
         if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-            Trace.traceBegin(Trace.TRACE_TAG_VIEW, "markSyncReady " + mName);
+            Trace.instantForTrack(Trace.TRACE_TAG_VIEW, mTrackName, "markSyncReady");
         }
         synchronized (mLock) {
             if (mHasWMSync) {
@@ -250,9 +270,6 @@ public final class SurfaceSyncGroup {
             }
             mSyncReady = true;
             checkIfSyncIsComplete();
-        }
-        if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-            Trace.traceEnd(Trace.TRACE_TAG_VIEW);
         }
     }
 
@@ -381,14 +398,14 @@ public final class SurfaceSyncGroup {
     public boolean add(ISurfaceSyncGroup surfaceSyncGroup, boolean parentSyncGroupMerge,
             @Nullable Runnable runnable) {
         if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-            Trace.traceBegin(Trace.TRACE_TAG_VIEW,
-                    "addToSync token=" + mToken.hashCode() + " parent=" + mName);
+            Trace.asyncTraceForTrackBegin(Trace.TRACE_TAG_VIEW, mTrackName,
+                    "addToSync token=" + mToken.hashCode(), hashCode());
         }
         synchronized (mLock) {
             if (mSyncReady) {
                 Log.w(TAG, "Trying to add to sync when already marked as ready " + mName);
                 if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-                    Trace.traceEnd(Trace.TRACE_TAG_VIEW);
+                    Trace.asyncTraceForTrackEnd(Trace.TRACE_TAG_VIEW, mTrackName, hashCode());
                 }
                 return false;
             }
@@ -401,7 +418,7 @@ public final class SurfaceSyncGroup {
         if (isLocalBinder(surfaceSyncGroup.asBinder())) {
             boolean didAddLocalSync = addLocalSync(surfaceSyncGroup, parentSyncGroupMerge);
             if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-                Trace.traceEnd(Trace.TRACE_TAG_VIEW);
+                Trace.asyncTraceForTrackEnd(Trace.TRACE_TAG_VIEW, mTrackName, hashCode());
             }
             return didAddLocalSync;
         }
@@ -429,7 +446,7 @@ public final class SurfaceSyncGroup {
                         mSurfaceSyncGroupCompletedListener)) {
                     mSurfaceSyncGroupCompletedListener = null;
                     if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-                        Trace.traceEnd(Trace.TRACE_TAG_VIEW);
+                        Trace.asyncTraceForTrackEnd(Trace.TRACE_TAG_VIEW, mTrackName, hashCode());
                     }
                     return false;
                 }
@@ -441,13 +458,13 @@ public final class SurfaceSyncGroup {
             surfaceSyncGroup.onAddedToSyncGroup(mToken, parentSyncGroupMerge);
         } catch (RemoteException e) {
             if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-                Trace.traceEnd(Trace.TRACE_TAG_VIEW);
+                Trace.asyncTraceForTrackEnd(Trace.TRACE_TAG_VIEW, mTrackName, hashCode());
             }
             return false;
         }
 
         if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-            Trace.traceEnd(Trace.TRACE_TAG_VIEW);
+            Trace.asyncTraceForTrackEnd(Trace.TRACE_TAG_VIEW, mTrackName, hashCode());
         }
         return true;
     }
@@ -492,15 +509,15 @@ public final class SurfaceSyncGroup {
                         + ". Setting up Sync in WindowManager.");
             }
             if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-                Trace.traceBegin(Trace.TRACE_TAG_VIEW,
-                        "addSyncToWm=" + token.hashCode() + " group=" + mName);
+                Trace.asyncTraceForTrackBegin(Trace.TRACE_TAG_VIEW, mTrackName,
+                        "addSyncToWm=" + token.hashCode(), hashCode());
             }
             AddToSurfaceSyncGroupResult addToSyncGroupResult = new AddToSurfaceSyncGroupResult();
             if (!WindowManagerGlobal.getWindowManagerService().addToSurfaceSyncGroup(token,
                     parentSyncGroupMerge, surfaceSyncGroupCompletedListener,
                     addToSyncGroupResult)) {
                 if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-                    Trace.traceEnd(Trace.TRACE_TAG_VIEW);
+                    Trace.asyncTraceForTrackEnd(Trace.TRACE_TAG_VIEW, mTrackName, hashCode());
                 }
                 return false;
             }
@@ -509,12 +526,12 @@ public final class SurfaceSyncGroup {
                     addToSyncGroupResult.mTransactionReadyCallback);
         } catch (RemoteException e) {
             if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-                Trace.traceEnd(Trace.TRACE_TAG_VIEW);
+                Trace.asyncTraceForTrackEnd(Trace.TRACE_TAG_VIEW, mTrackName, hashCode());
             }
             return false;
         }
         if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-            Trace.traceEnd(Trace.TRACE_TAG_VIEW);
+            Trace.asyncTraceForTrackEnd(Trace.TRACE_TAG_VIEW, mTrackName, hashCode());
         }
         return true;
     }
@@ -532,8 +549,8 @@ public final class SurfaceSyncGroup {
         }
 
         if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-            Trace.traceBegin(Trace.TRACE_TAG_VIEW,
-                    "addLocalSync=" + childSurfaceSyncGroup.mName + " parent=" + mName);
+            Trace.asyncTraceForTrackBegin(Trace.TRACE_TAG_VIEW, mTrackName,
+                    "addLocalSync=" + childSurfaceSyncGroup.mName, hashCode());
         }
         ITransactionReadyCallback callback =
                 createTransactionReadyCallback(parentSyncGroupMerge);
@@ -544,7 +561,7 @@ public final class SurfaceSyncGroup {
 
         childSurfaceSyncGroup.setTransactionCallbackFromParent(mISurfaceSyncGroup, callback);
         if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-            Trace.traceEnd(Trace.TRACE_TAG_VIEW);
+            Trace.asyncTraceForTrackEnd(Trace.TRACE_TAG_VIEW, mTrackName, hashCode());
         }
         return true;
     }
@@ -556,9 +573,9 @@ public final class SurfaceSyncGroup {
         }
 
         if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-            Trace.traceBegin(Trace.TRACE_TAG_VIEW,
+            Trace.asyncTraceForTrackBegin(Trace.TRACE_TAG_VIEW, mTrackName,
                     "setTransactionCallbackFromParent " + mName + " callback="
-                            + transactionReadyCallback.hashCode());
+                            + transactionReadyCallback.hashCode(), hashCode());
         }
 
         // Start the timeout when this SurfaceSyncGroup has been added to a parent SurfaceSyncGroup.
@@ -599,9 +616,9 @@ public final class SurfaceSyncGroup {
                 mParentSyncGroup = parentSyncGroup;
                 mTransactionReadyConsumer = (transaction) -> {
                     if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-                        Trace.traceBegin(Trace.TRACE_TAG_VIEW,
-                                "transactionReadyCallback " + mName + " callback="
-                                        + transactionReadyCallback.hashCode());
+                        Trace.asyncTraceForTrackBegin(Trace.TRACE_TAG_VIEW, mTrackName,
+                                "Invoke transactionReadyCallback="
+                                        + transactionReadyCallback.hashCode(), hashCode());
                     }
                     lastCallback.accept(null);
 
@@ -611,7 +628,7 @@ public final class SurfaceSyncGroup {
                         transaction.apply();
                     }
                     if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-                        Trace.traceEnd(Trace.TRACE_TAG_VIEW);
+                        Trace.asyncTraceForTrackEnd(Trace.TRACE_TAG_VIEW, mTrackName, hashCode());
                     }
                 };
                 addedToSyncListener = mAddedToSyncListener;
@@ -629,7 +646,7 @@ public final class SurfaceSyncGroup {
             addedToSyncListener.run();
         }
         if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-            Trace.traceEnd(Trace.TRACE_TAG_VIEW);
+            Trace.asyncTraceForTrackEnd(Trace.TRACE_TAG_VIEW, mTrackName, hashCode());
         }
     }
 
@@ -651,8 +668,8 @@ public final class SurfaceSyncGroup {
         }
 
         if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-            Trace.instant(Trace.TRACE_TAG_VIEW,
-                    "checkIfSyncIsComplete " + mName + " mSyncReady=" + mSyncReady
+            Trace.instantForTrack(Trace.TRACE_TAG_VIEW, mTrackName,
+                    "checkIfSyncIsComplete mSyncReady=" + mSyncReady
                             + " mPendingSyncs=" + mPendingSyncs.size());
         }
 
@@ -697,6 +714,7 @@ public final class SurfaceSyncGroup {
                     public void onTransactionReady(Transaction t) {
                         synchronized (mLock) {
                             if (t != null) {
+                                t.sanitize(Binder.getCallingPid(), Binder.getCallingUid());
                                 // When an older parent sync group is added due to a child syncGroup
                                 // getting added to multiple groups, we need to maintain merge order
                                 // so the older parentSyncGroup transactions are overwritten by
@@ -708,9 +726,8 @@ public final class SurfaceSyncGroup {
                             }
                             mPendingSyncs.remove(this);
                             if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-                                Trace.instant(Trace.TRACE_TAG_VIEW,
-                                        "onTransactionReady group=" + mName + " callback="
-                                                + hashCode());
+                                Trace.instantForTrack(Trace.TRACE_TAG_VIEW, mTrackName,
+                                        "onTransactionReady callback=" + hashCode());
                             }
                             checkIfSyncIsComplete();
                         }
@@ -725,8 +742,8 @@ public final class SurfaceSyncGroup {
             }
             mPendingSyncs.add(transactionReadyCallback);
             if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-                Trace.instant(Trace.TRACE_TAG_VIEW,
-                        "createTransactionReadyCallback " + mName + " mPendingSyncs="
+                Trace.instantForTrack(Trace.TRACE_TAG_VIEW, mTrackName,
+                        "createTransactionReadyCallback mPendingSyncs="
                                 + mPendingSyncs.size() + " transactionReady="
                                 + transactionReadyCallback.hashCode());
             }
@@ -746,13 +763,12 @@ public final class SurfaceSyncGroup {
         public boolean onAddedToSyncGroup(IBinder parentSyncGroupToken,
                 boolean parentSyncGroupMerge) {
             if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-                Trace.traceBegin(Trace.TRACE_TAG_VIEW,
-                        "onAddedToSyncGroup token=" + parentSyncGroupToken.hashCode() + " child="
-                                + mName);
+                Trace.asyncTraceForTrackBegin(Trace.TRACE_TAG_VIEW, mTrackName,
+                        "onAddedToSyncGroup token=" + parentSyncGroupToken.hashCode(), hashCode());
             }
             boolean didAdd = addSyncToWm(parentSyncGroupToken, parentSyncGroupMerge, null);
             if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
-                Trace.traceEnd(Trace.TRACE_TAG_VIEW);
+                Trace.asyncTraceForTrackEnd(Trace.TRACE_TAG_VIEW, mTrackName, hashCode());
             }
             return didAdd;
         }
@@ -768,6 +784,21 @@ public final class SurfaceSyncGroup {
         }
     }
 
+    /**
+     * @hide
+     */
+    public void toggleTimeout(boolean enable) {
+        synchronized (mLock) {
+            mTimeoutDisabled = !enable;
+            if (mTimeoutAdded && !enable) {
+                mHandler.removeCallbacksAndMessages(this);
+                mTimeoutAdded = false;
+            } else if (!mTimeoutAdded && enable) {
+                addTimeout();
+            }
+        }
+    }
+
     private void addTimeout() {
         synchronized (sHandlerThreadLock) {
             if (sHandlerThread == null) {
@@ -777,7 +808,7 @@ public final class SurfaceSyncGroup {
         }
 
         synchronized (mLock) {
-            if (mTimeoutAdded) {
+            if (mTimeoutAdded || mTimeoutDisabled) {
                 // We only need one timeout for the entire SurfaceSyncGroup since we just want to
                 // ensure it doesn't stay stuck forever.
                 return;

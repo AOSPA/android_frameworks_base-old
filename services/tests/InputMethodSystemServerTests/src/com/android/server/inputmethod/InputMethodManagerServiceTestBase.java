@@ -62,6 +62,7 @@ import com.android.server.SystemServerInitThreadPool;
 import com.android.server.SystemService;
 import com.android.server.input.InputManagerInternal;
 import com.android.server.pm.UserManagerInternal;
+import com.android.server.wm.ImeTargetVisibilityPolicy;
 import com.android.server.wm.WindowManagerInternal;
 
 import org.junit.After;
@@ -113,6 +114,7 @@ public class InputMethodManagerServiceTestBase {
     @Mock protected IInputMethod mMockInputMethod;
     @Mock protected IBinder mMockInputMethodBinder;
     @Mock protected IInputManager mMockIInputManager;
+    @Mock protected ImeTargetVisibilityPolicy mMockImeTargetVisibilityPolicy;
 
     protected Context mContext;
     protected MockitoSession mMockingSession;
@@ -166,6 +168,8 @@ public class InputMethodManagerServiceTestBase {
                 .when(() -> LocalServices.getService(DisplayManagerInternal.class));
         doReturn(mMockUserManagerInternal)
                 .when(() -> LocalServices.getService(UserManagerInternal.class));
+        doReturn(mMockImeTargetVisibilityPolicy)
+                .when(() -> LocalServices.getService(ImeTargetVisibilityPolicy.class));
         doReturn(mMockIInputMethodManager)
                 .when(() -> ServiceManager.getServiceOrThrow(Context.INPUT_METHOD_SERVICE));
         doReturn(mMockIPlatformCompat)
@@ -203,6 +207,8 @@ public class InputMethodManagerServiceTestBase {
         when(mMockActivityManagerInternal.isSystemReady()).thenReturn(true);
         when(mMockPackageManagerInternal.getPackageUid(anyString(), anyLong(), anyInt()))
                 .thenReturn(Binder.getCallingUid());
+        when(mMockPackageManagerInternal.isSameApp(anyString(), anyLong(), anyInt(), anyInt()))
+            .thenReturn(true);
         when(mMockWindowManagerInternal.onToggleImeRequested(anyBoolean(), any(), any(), anyInt()))
                 .thenReturn(TEST_IME_TARGET_INFO);
         when(mMockInputMethodClient.asBinder()).thenReturn(mMockInputMethodBinder);
@@ -218,6 +224,7 @@ public class InputMethodManagerServiceTestBase {
                         false);
         mInputMethodManagerService = new InputMethodManagerService(mContext, mServiceThread,
                 mMockInputMethodBindingController);
+        spyOn(mInputMethodManagerService);
 
         // Start a InputMethodManagerService.Lifecycle to publish and manage the lifecycle of
         // InputMethodManagerService, which is closer to the real situation.

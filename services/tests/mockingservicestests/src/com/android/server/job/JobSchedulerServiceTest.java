@@ -402,13 +402,15 @@ public class JobSchedulerServiceTest {
         JobStatus rescheduledJob = mService.getRescheduleJobForFailureLocked(originalJob,
                 JobParameters.STOP_REASON_DEVICE_STATE,
                 JobParameters.INTERNAL_STOP_REASON_DEVICE_THERMAL);
-        assertEquals(nowElapsed + initialBackoffMs, rescheduledJob.getEarliestRunTime());
+        assertEquals(JobStatus.NO_EARLIEST_RUNTIME, rescheduledJob.getEarliestRunTime());
         assertEquals(JobStatus.NO_LATEST_RUNTIME, rescheduledJob.getLatestRunTimeElapsed());
 
         // failure = 0, systemStop = 2
         rescheduledJob = mService.getRescheduleJobForFailureLocked(rescheduledJob,
                 JobParameters.STOP_REASON_DEVICE_STATE,
                 JobParameters.INTERNAL_STOP_REASON_PREEMPT);
+        assertEquals(JobStatus.NO_EARLIEST_RUNTIME, rescheduledJob.getEarliestRunTime());
+        assertEquals(JobStatus.NO_LATEST_RUNTIME, rescheduledJob.getLatestRunTimeElapsed());
         // failure = 0, systemStop = 3
         rescheduledJob = mService.getRescheduleJobForFailureLocked(rescheduledJob,
                 JobParameters.STOP_REASON_CONSTRAINT_CHARGING,
@@ -437,6 +439,13 @@ public class JobSchedulerServiceTest {
                 JobParameters.STOP_REASON_UNDEFINED,
                 JobParameters.INTERNAL_STOP_REASON_SUCCESSFUL_FINISH);
         assertEquals(nowElapsed + 4 * initialBackoffMs, rescheduledJob.getEarliestRunTime());
+        assertEquals(JobStatus.NO_LATEST_RUNTIME, rescheduledJob.getLatestRunTimeElapsed());
+
+        // failure = 3, systemStop = 2 * SYSTEM_STOP_TO_FAILURE_RATIO
+        rescheduledJob = mService.getRescheduleJobForFailureLocked(rescheduledJob,
+                JobParameters.STOP_REASON_UNDEFINED,
+                JobParameters.INTERNAL_STOP_REASON_ANR);
+        assertEquals(nowElapsed + 5 * initialBackoffMs, rescheduledJob.getEarliestRunTime());
         assertEquals(JobStatus.NO_LATEST_RUNTIME, rescheduledJob.getLatestRunTimeElapsed());
     }
 
@@ -1132,7 +1141,7 @@ public class JobSchedulerServiceTest {
     @Test
     public void testRareJobBatching() {
         spyOn(mService);
-        doNothing().when(mService).evaluateControllerStatesLocked(any());
+        doReturn(false).when(mService).evaluateControllerStatesLocked(any());
         doNothing().when(mService).noteJobsPending(any());
         doReturn(true).when(mService).isReadyToBeExecutedLocked(any(), anyBoolean());
         advanceElapsedClock(24 * HOUR_IN_MILLIS);

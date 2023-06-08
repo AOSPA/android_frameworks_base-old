@@ -44,7 +44,6 @@ import static android.app.ActivityManagerInternal.ALLOW_FULL_ONLY;
 import static android.app.ActivityManagerInternal.ALLOW_NON_FULL;
 import static android.app.ActivityManagerInternal.MEDIA_PROJECTION_TOKEN_EVENT_CREATED;
 import static android.app.ActivityManagerInternal.MEDIA_PROJECTION_TOKEN_EVENT_DESTROYED;
-import static android.app.ActivityManagerInternal.OOM_ADJ_REASON_ACTIVITY;
 import static android.app.ActivityManagerInternal.OOM_ADJ_REASON_BACKUP;
 import static android.app.ActivityManagerInternal.OOM_ADJ_REASON_FINISH_RECEIVER;
 import static android.app.ActivityManagerInternal.OOM_ADJ_REASON_PROCESS_BEGIN;
@@ -54,6 +53,10 @@ import static android.app.ActivityManagerInternal.OOM_ADJ_REASON_SYSTEM_INIT;
 import static android.app.ActivityManagerInternal.OOM_ADJ_REASON_UI_VISIBILITY;
 import static android.app.AppOpsManager.MODE_ALLOWED;
 import static android.app.AppOpsManager.OP_NONE;
+import static android.app.ProcessMemoryState.HOSTING_COMPONENT_TYPE_BACKUP;
+import static android.app.ProcessMemoryState.HOSTING_COMPONENT_TYPE_INSTRUMENTATION;
+import static android.app.ProcessMemoryState.HOSTING_COMPONENT_TYPE_PERSISTENT;
+import static android.app.ProcessMemoryState.HOSTING_COMPONENT_TYPE_SYSTEM;
 import static android.content.pm.ApplicationInfo.HIDDEN_API_ENFORCEMENT_DEFAULT;
 import static android.content.pm.PackageManager.GET_SHARED_LIBRARY_FILES;
 import static android.content.pm.PackageManager.MATCH_ALL;
@@ -159,10 +162,6 @@ import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.am.MemoryStatUtil.hasMemcg;
 import static com.android.server.am.ProcessList.ProcStartHandler;
-import static com.android.server.am.ProcessProfileRecord.HOSTING_COMPONENT_TYPE_BACKUP;
-import static com.android.server.am.ProcessProfileRecord.HOSTING_COMPONENT_TYPE_INSTRUMENTATION;
-import static com.android.server.am.ProcessProfileRecord.HOSTING_COMPONENT_TYPE_PERSISTENT;
-import static com.android.server.am.ProcessProfileRecord.HOSTING_COMPONENT_TYPE_SYSTEM;
 import static com.android.server.net.NetworkPolicyManagerInternal.updateBlockedReasonsWithProcState;
 import static com.android.server.pm.PackageManagerService.PLATFORM_PACKAGE_NAME;
 import static com.android.server.pm.UserManagerInternal.USER_START_MODE_BACKGROUND;
@@ -1191,8 +1190,30 @@ public class ActivityManagerService extends IActivityManager.Stub
      * for stickies that are sent to all users.
      */
     @GuardedBy("this")
-    final SparseArray<ArrayMap<String, ArrayList<Intent>>> mStickyBroadcasts =
-            new SparseArray<ArrayMap<String, ArrayList<Intent>>>();
+    final SparseArray<ArrayMap<String, ArrayList<StickyBroadcast>>> mStickyBroadcasts =
+            new SparseArray<>();
+
+    @VisibleForTesting
+    static final class StickyBroadcast {
+        public Intent intent;
+        public boolean deferUntilActive;
+        public int originalCallingUid;
+
+        public static StickyBroadcast create(Intent intent, boolean deferUntilActive,
+                int originalCallingUid) {
+            final StickyBroadcast b = new StickyBroadcast();
+            b.intent = intent;
+            b.deferUntilActive = deferUntilActive;
+            b.originalCallingUid = originalCallingUid;
+            return b;
+        }
+
+        @Override
+        public String toString() {
+            return "{intent=" + intent + ", defer=" + deferUntilActive + ", originalCallingUid="
+                    + originalCallingUid + "}";
+        }
+    }
 
     final ActiveServices mServices;
 
@@ -2371,6 +2392,13 @@ public class ActivityManagerService extends IActivityManager.Stub
     /** Provides the basic functionality for unit tests. */
     @VisibleForTesting
     ActivityManagerService(Injector injector, @NonNull ServiceThread handlerThread) {
+        this(injector, handlerThread, null);
+    }
+
+    /** Provides the basic functionality for unit tests. */
+    @VisibleForTesting
+    ActivityManagerService(Injector injector, @NonNull ServiceThread handlerThread,
+            @Nullable UserController userController) {
         mInjector = injector;
         mContext = mInjector.getContext();
         mUiContext = null;
@@ -2397,7 +2425,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         mSystemThread = null;
         mUiHandler = injector.getUiHandler(null /* service */);
         mUidObserverController = new UidObserverController(mUiHandler);
-        mUserController = new UserController(this);
+        mUserController = userController == null ? new UserController(this) : userController;
         mInjector.mUserController = mUserController;
         mPendingIntentController =
                 new PendingIntentController(handlerThread.getLooper(), mUserController, mConstants);
@@ -2495,13 +2523,10 @@ public class ActivityManagerService extends IActivityManager.Stub
         final File systemDir = SystemServiceManager.ensureSystemDir();
 
         // TODO: Move creation of battery stats service outside of activity manager service.
-        mBatteryStatsService = new BatteryStatsService(systemContext, systemDir,
-                BackgroundThread.get().getHandler());
-        mBatteryStatsService.getActiveStatistics().readLocked();
-        mBatteryStatsService.scheduleWriteToDisk();
+        mBatteryStatsService = BatteryStatsService.create(systemContext, systemDir,
+                BackgroundThread.getHandler(), this);
         mOnBattery = DEBUG_POWER ? true
                 : mBatteryStatsService.getActiveStatistics().getIsOnBattery();
-        mBatteryStatsService.getActiveStatistics().setCallback(this);
         mOomAdjProfiler.batteryPowerChanged(mOnBattery);
 
         mProcessStats = new ProcessStatsService(this, new File(systemDir, "procstats"));
@@ -3812,6 +3837,15 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public void forceStopPackage(final String packageName, int userId) {
+        forceStopPackage(packageName, userId, /*flags=*/ 0);
+    }
+
+    @Override
+    public void forceStopPackageEvenWhenStopping(final String packageName, int userId) {
+        forceStopPackage(packageName, userId, ActivityManager.FLAG_OR_STOPPED);
+    }
+
+    private void forceStopPackage(final String packageName, int userId, int userRunningFlags) {
         if (checkCallingPermission(android.Manifest.permission.FORCE_STOP_PACKAGES)
                 != PackageManager.PERMISSION_GRANTED) {
             String msg = "Permission Denial: forceStopPackage() from pid="
@@ -3827,7 +3861,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         final long callingId = Binder.clearCallingIdentity();
         try {
             IPackageManager pm = AppGlobals.getPackageManager();
-            synchronized(this) {
+            synchronized (this) {
                 int[] users = userId == UserHandle.USER_ALL
                         ? mUserController.getUsers() : new int[] { userId };
                 for (int user : users) {
@@ -3855,7 +3889,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         Slog.w(TAG, "Failed trying to unstop package "
                                 + packageName + ": " + e);
                     }
-                    if (mUserController.isUserRunning(user, 0)) {
+                    if (mUserController.isUserRunning(user, userRunningFlags)) {
                         forceStopPackageLocked(packageName, pkgUid, "from pid " + callingPid);
                         finishForceStopPackageLocked(packageName, pkgUid);
                     }
@@ -4690,8 +4724,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             boolean isRestrictedBackupMode = false;
             if (backupTarget != null && backupTarget.appInfo.packageName.equals(processName)) {
                 isRestrictedBackupMode = backupTarget.appInfo.uid >= FIRST_APPLICATION_UID
-                        && ((backupTarget.backupMode == BackupRecord.RESTORE)
-                                || (backupTarget.backupMode == BackupRecord.RESTORE_FULL)
+                        && ((backupTarget.backupMode == BackupRecord.RESTORE_FULL)
                                 || (backupTarget.backupMode == BackupRecord.BACKUP_FULL));
             }
 
@@ -5279,10 +5312,13 @@ public class ActivityManagerService extends IActivityManager.Stub
                         throw new IllegalArgumentException(
                                 "Can't use FLAG_RECEIVER_BOOT_UPGRADE here");
                     }
-                    if (PendingIntent.isNewMutableDisallowedImplicitPendingIntent(flags, intent)) {
+                    boolean isActivityResultType =
+                            type == ActivityManager.INTENT_SENDER_ACTIVITY_RESULT;
+                    if (PendingIntent.isNewMutableDisallowedImplicitPendingIntent(flags, intent,
+                            isActivityResultType)) {
                         boolean isChangeEnabled = CompatChanges.isChangeEnabled(
                                         PendingIntent.BLOCK_MUTABLE_IMPLICIT_PENDING_INTENT,
-                                        owningUid);
+                                        packageName, UserHandle.of(userId));
                         String resolvedType = resolvedTypes == null
                                 || i >= resolvedTypes.length ? null : resolvedTypes[i];
                         ActivityManagerUtils.logUnsafeIntentEvent(
@@ -7004,7 +7040,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         mActivityTaskManager.unhandledBack();
     }
 
-    // TODO: Move to ContentProviderHelper?
+    // TODO: Replace this method with one that returns a bound IContentProvider.
     public ParcelFileDescriptor openContentUri(String uriString) throws RemoteException {
         enforceNotIsolatedCaller("openContentUri");
         final int userId = UserHandle.getCallingUserId();
@@ -7033,6 +7069,16 @@ public class ActivityManagerService extends IActivityManager.Stub
                     Log.e(TAG, "Cannot find package for uid: " + uid);
                     return null;
                 }
+
+                final ApplicationInfo appInfo = mPackageManagerInt.getApplicationInfo(
+                        androidPackage.getPackageName(), /*flags*/0, Process.SYSTEM_UID,
+                        UserHandle.USER_SYSTEM);
+                if (!appInfo.isVendor() && !appInfo.isSystemApp() && !appInfo.isSystemExt()
+                        && !appInfo.isProduct()) {
+                    Log.e(TAG, "openContentUri may only be used by vendor/system/product.");
+                    return null;
+                }
+
                 final AttributionSource attributionSource = new AttributionSource(
                         Binder.getCallingUid(), androidPackage.getPackageName(), null);
                 pfd = cph.provider.openFile(attributionSource, uri, "r", null);
@@ -7114,7 +7160,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public void notifyLockedProfile(@UserIdInt int userId) {
-        mAtmInternal.notifyLockedProfile(userId, mUserController.getCurrentUserId());
+        mAtmInternal.notifyLockedProfile(userId);
     }
 
     @Override
@@ -7566,12 +7612,70 @@ public class ActivityManagerService extends IActivityManager.Stub
                     "registerUidObserver");
         }
         mUidObserverController.register(observer, which, cutpoint, callingPackage,
-                Binder.getCallingUid());
+                Binder.getCallingUid(), /*uids*/null);
+    }
+
+    /**
+     * Registers a UidObserver with a uid filter.
+     *
+     * @param observer The UidObserver implementation to register.
+     * @param which    A bitmask of events to observe. See ActivityManager.UID_OBSERVER_*.
+     * @param cutpoint The cutpoint for onUidStateChanged events. When the state crosses this
+     *                 threshold in either direction, onUidStateChanged will be called.
+     * @param callingPackage The name of the calling package.
+     * @param uids     A list of uids to watch. If all uids are to be watched, use
+     *                 registerUidObserver instead.
+     * @throws RemoteException
+     * @return Returns A binder token identifying the UidObserver registration.
+     */
+    @Override
+    public IBinder registerUidObserverForUids(IUidObserver observer, int which, int cutpoint,
+            String callingPackage, int[] uids) {
+        if (!hasUsageStatsPermission(callingPackage)) {
+            enforceCallingPermission(android.Manifest.permission.PACKAGE_USAGE_STATS,
+                    "registerUidObserver");
+        }
+        return mUidObserverController.register(observer, which, cutpoint, callingPackage,
+                Binder.getCallingUid(), uids);
     }
 
     @Override
     public void unregisterUidObserver(IUidObserver observer) {
         mUidObserverController.unregister(observer);
+    }
+
+    /**
+     * Adds a uid to the list of uids that a UidObserver will receive updates about.
+     *
+     * @param observerToken  The binder token identifying the UidObserver registration.
+     * @param callingPackage The name of the calling package.
+     * @param uid            The uid to watch.
+     * @throws RemoteException
+     */
+    @Override
+    public void addUidToObserver(IBinder observerToken, String callingPackage, int uid) {
+        if (!hasUsageStatsPermission(callingPackage)) {
+            enforceCallingPermission(android.Manifest.permission.PACKAGE_USAGE_STATS,
+                    "registerUidObserver");
+        }
+        mUidObserverController.addUidToObserver(observerToken, uid);
+    }
+
+    /**
+     * Removes a uid from the list of uids that a UidObserver will receive updates about.
+     *
+     * @param observerToken  The binder token identifying the UidObserver registration.
+     * @param callingPackage The name of the calling package.
+     * @param uid            The uid to stop watching.
+     * @throws RemoteException
+     */
+    @Override
+    public void removeUidFromObserver(IBinder observerToken, String callingPackage, int uid) {
+        if (!hasUsageStatsPermission(callingPackage)) {
+            enforceCallingPermission(android.Manifest.permission.PACKAGE_USAGE_STATS,
+                    "registerUidObserver");
+        }
+        mUidObserverController.removeUidFromObserver(observerToken, uid);
     }
 
     @Override
@@ -9554,11 +9658,20 @@ public class ActivityManagerService extends IActivityManager.Stub
      * Check if the calling process has the permission to dump given package,
      * throw SecurityException if it doesn't have the permission.
      *
-     * @return The UID of the given package, or {@link android.os.Process#INVALID_UID}
+     * @return The real UID of process that can be dumped, or {@link android.os.Process#INVALID_UID}
      *         if the package is not found.
      */
     int enforceDumpPermissionForPackage(String packageName, int userId, int callingUid,
             String function) {
+        // Allow SDK sandbox process to dump for its own process (under SDK sandbox package)
+        try {
+            if (Process.isSdkSandboxUid(callingUid)
+                    && getPackageManager().getSdkSandboxPackageName().equals(packageName)) {
+                return callingUid;
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "Could not get SDK sandbox package name");
+        }
         final long identity = Binder.clearCallingIdentity();
         int uid = INVALID_UID;
         try {
@@ -10920,12 +11033,12 @@ public class ActivityManagerService extends IActivityManager.Stub
         for (int user=0; user<mStickyBroadcasts.size(); user++) {
             long token = proto.start(ActivityManagerServiceDumpBroadcastsProto.STICKY_BROADCASTS);
             proto.write(StickyBroadcastProto.USER, mStickyBroadcasts.keyAt(user));
-            for (Map.Entry<String, ArrayList<Intent>> ent
+            for (Map.Entry<String, ArrayList<StickyBroadcast>> ent
                     : mStickyBroadcasts.valueAt(user).entrySet()) {
                 long actionToken = proto.start(StickyBroadcastProto.ACTIONS);
                 proto.write(StickyBroadcastProto.StickyAction.NAME, ent.getKey());
-                for (Intent intent : ent.getValue()) {
-                    intent.dumpDebug(proto, StickyBroadcastProto.StickyAction.INTENTS,
+                for (StickyBroadcast broadcast : ent.getValue()) {
+                    broadcast.intent.dumpDebug(proto, StickyBroadcastProto.StickyAction.INTENTS,
                             false, true, true, false);
                 }
                 proto.end(actionToken);
@@ -11080,22 +11193,31 @@ public class ActivityManagerService extends IActivityManager.Stub
                 pw.print("  Sticky broadcasts for user ");
                         pw.print(mStickyBroadcasts.keyAt(user)); pw.println(":");
                 StringBuilder sb = new StringBuilder(128);
-                for (Map.Entry<String, ArrayList<Intent>> ent
+                for (Map.Entry<String, ArrayList<StickyBroadcast>> ent
                         : mStickyBroadcasts.valueAt(user).entrySet()) {
                     pw.print("  * Sticky action "); pw.print(ent.getKey());
                     if (dumpAll) {
                         pw.println(":");
-                        ArrayList<Intent> intents = ent.getValue();
-                        final int N = intents.size();
+                        ArrayList<StickyBroadcast> broadcasts = ent.getValue();
+                        final int N = broadcasts.size();
                         for (int i=0; i<N; i++) {
+                            final Intent intent = broadcasts.get(i).intent;
+                            final boolean deferUntilActive = broadcasts.get(i).deferUntilActive;
                             sb.setLength(0);
                             sb.append("    Intent: ");
-                            intents.get(i).toShortString(sb, false, true, false, false);
-                            pw.println(sb.toString());
-                            Bundle bundle = intents.get(i).getExtras();
+                            intent.toShortString(sb, false, true, false, false);
+                            pw.print(sb);
+                            if (deferUntilActive) {
+                                pw.print(" [D]");
+                            }
+                            pw.println();
+                            pw.print("      originalCallingUid: ");
+                            pw.println(broadcasts.get(i).originalCallingUid);
+                            pw.println();
+                            Bundle bundle = intent.getExtras();
                             if (bundle != null) {
-                                pw.print("      ");
-                                pw.println(bundle.toString());
+                                pw.print("      extras: ");
+                                pw.println(bundle);
                             }
                         }
                     } else {
@@ -13504,7 +13626,8 @@ public class ActivityManagerService extends IActivityManager.Stub
 
             BackupRecord r = new BackupRecord(app, backupMode, targetUserId, backupDestination);
             ComponentName hostingName =
-                    (backupMode == ApplicationThreadConstants.BACKUP_MODE_INCREMENTAL)
+                    (backupMode == ApplicationThreadConstants.BACKUP_MODE_INCREMENTAL
+                            || backupMode == ApplicationThreadConstants.BACKUP_MODE_RESTORE)
                             ? new ComponentName(app.packageName, app.backupAgentName)
                             : new ComponentName("android", "FullBackupAgent");
 
@@ -13732,7 +13855,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             String callerFeatureId, String receiverId, IIntentReceiver receiver,
             IntentFilter filter, String permission, int userId, int flags) {
         enforceNotIsolatedCaller("registerReceiver");
-        ArrayList<Intent> stickyIntents = null;
+        ArrayList<StickyBroadcast> stickyBroadcasts = null;
         ProcessRecord callerApp = null;
         final boolean visibleToInstantApps
                 = (flags & Context.RECEIVER_VISIBLE_TO_INSTANT_APPS) != 0;
@@ -13808,14 +13931,15 @@ public class ActivityManagerService extends IActivityManager.Stub
             while (actions.hasNext()) {
                 String action = actions.next();
                 for (int id : userIds) {
-                    ArrayMap<String, ArrayList<Intent>> stickies = mStickyBroadcasts.get(id);
+                    ArrayMap<String, ArrayList<StickyBroadcast>> stickies =
+                            mStickyBroadcasts.get(id);
                     if (stickies != null) {
-                        ArrayList<Intent> intents = stickies.get(action);
-                        if (intents != null) {
-                            if (stickyIntents == null) {
-                                stickyIntents = new ArrayList<Intent>();
+                        ArrayList<StickyBroadcast> broadcasts = stickies.get(action);
+                        if (broadcasts != null) {
+                            if (stickyBroadcasts == null) {
+                                stickyBroadcasts = new ArrayList<>();
                             }
-                            stickyIntents.addAll(intents);
+                            stickyBroadcasts.addAll(broadcasts);
                         }
                     }
                 }
@@ -13898,12 +14022,13 @@ public class ActivityManagerService extends IActivityManager.Stub
         // Dynamic receivers are exported by default for versions prior to T
         final boolean exported = (flags & Context.RECEIVER_EXPORTED) != 0;
 
-        ArrayList<Intent> allSticky = null;
-        if (stickyIntents != null) {
+        ArrayList<StickyBroadcast> allSticky = null;
+        if (stickyBroadcasts != null) {
             final ContentResolver resolver = mContext.getContentResolver();
             // Look for any matching sticky broadcasts...
-            for (int i = 0, N = stickyIntents.size(); i < N; i++) {
-                Intent intent = stickyIntents.get(i);
+            for (int i = 0, N = stickyBroadcasts.size(); i < N; i++) {
+                final StickyBroadcast broadcast = stickyBroadcasts.get(i);
+                Intent intent = broadcast.intent;
                 // Don't provided intents that aren't available to instant apps.
                 if (instantApp &&
                         (intent.getFlags() & Intent.FLAG_RECEIVER_VISIBLE_TO_INSTANT_APPS) == 0) {
@@ -13915,15 +14040,15 @@ public class ActivityManagerService extends IActivityManager.Stub
                 // cannot lock ActivityManagerService here.
                 if (filter.match(resolver, intent, true, TAG) >= 0) {
                     if (allSticky == null) {
-                        allSticky = new ArrayList<Intent>();
+                        allSticky = new ArrayList<>();
                     }
-                    allSticky.add(intent);
+                    allSticky.add(broadcast);
                 }
             }
         }
 
         // The first sticky in the list is returned directly back to the client.
-        Intent sticky = allSticky != null ? allSticky.get(0) : null;
+        Intent sticky = allSticky != null ? allSticky.get(0).intent : null;
         if (DEBUG_BROADCAST) Slog.v(TAG_BROADCAST, "Register receiver " + filter + ": " + sticky);
         if (receiver == null) {
             return sticky;
@@ -14002,15 +14127,25 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (allSticky != null) {
                 ArrayList receivers = new ArrayList();
                 receivers.add(bf);
+                sticky = null;
 
                 final int stickyCount = allSticky.size();
                 for (int i = 0; i < stickyCount; i++) {
-                    Intent intent = allSticky.get(i);
-                    BroadcastQueue queue = broadcastQueueForIntent(intent);
-                    BroadcastRecord r = new BroadcastRecord(queue, intent, null,
-                            null, null, -1, -1, false, null, null, null, null, OP_NONE, null,
+                    final StickyBroadcast broadcast = allSticky.get(i);
+                    final int originalStickyCallingUid = allSticky.get(i).originalCallingUid;
+                    // TODO(b/281889567): consider using checkComponentPermission instead of
+                    //  canAccessUnexportedComponents
+                    if (sticky == null && (exported || originalStickyCallingUid == callingUid
+                            || ActivityManager.canAccessUnexportedComponents(
+                            originalStickyCallingUid))) {
+                        sticky = broadcast.intent;
+                    }
+                    BroadcastQueue queue = broadcastQueueForIntent(broadcast.intent);
+                    BroadcastRecord r = new BroadcastRecord(queue, broadcast.intent, null,
+                            null, null, -1, -1, false, null, null, null, null, OP_NONE,
+                            BroadcastOptions.makeWithDeferUntilActive(broadcast.deferUntilActive),
                             receivers, null, null, 0, null, null, false, true, true, -1,
-                            BackgroundStartPrivileges.NONE,
+                            originalStickyCallingUid, BackgroundStartPrivileges.NONE,
                             false /* only PRE_BOOT_COMPLETED should be exempt, no stickies */,
                             null /* filterExtrasForReceiver */);
                     queue.enqueueBroadcastLocked(r);
@@ -14346,7 +14481,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 throw new SecurityException(
                         "Intent " + intent.getAction() + " may not be broadcast from an SDK sandbox"
                         + " uid. Given caller package " + callerPackage + " (pid=" + callingPid
-                        + ", uid=" + callingUid + ")");
+                        + ", realCallingUid=" + realCallingUid + ", callingUid= " + callingUid
+                        + ")");
             }
         }
 
@@ -14386,7 +14522,8 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         if (DEBUG_BROADCAST_LIGHT) Slog.v(TAG_BROADCAST,
                 (sticky ? "Broadcast sticky: ": "Broadcast: ") + intent
-                + " ordered=" + ordered + " userid=" + userId);
+                        + " ordered=" + ordered + " userid=" + userId
+                        + " options=" + (brOptions == null ? "null" : brOptions.toBundle()));
         if ((resultTo != null) && !ordered) {
             if (!mEnableModernQueue) {
                 Slog.w(TAG, "Broadcast " + intent + " not ordered but result callback requested!");
@@ -14851,15 +14988,15 @@ public class ActivityManagerService extends IActivityManager.Stub
                 // But first, if this is not a broadcast to all users, then
                 // make sure it doesn't conflict with an existing broadcast to
                 // all users.
-                ArrayMap<String, ArrayList<Intent>> stickies = mStickyBroadcasts.get(
+                ArrayMap<String, ArrayList<StickyBroadcast>> stickies = mStickyBroadcasts.get(
                         UserHandle.USER_ALL);
                 if (stickies != null) {
-                    ArrayList<Intent> list = stickies.get(intent.getAction());
+                    ArrayList<StickyBroadcast> list = stickies.get(intent.getAction());
                     if (list != null) {
                         int N = list.size();
                         int i;
                         for (i=0; i<N; i++) {
-                            if (intent.filterEquals(list.get(i))) {
+                            if (intent.filterEquals(list.get(i).intent)) {
                                 throw new IllegalArgumentException(
                                         "Sticky broadcast " + intent + " for user "
                                         + userId + " conflicts with existing global broadcast");
@@ -14868,27 +15005,31 @@ public class ActivityManagerService extends IActivityManager.Stub
                     }
                 }
             }
-            ArrayMap<String, ArrayList<Intent>> stickies = mStickyBroadcasts.get(userId);
+            ArrayMap<String, ArrayList<StickyBroadcast>> stickies = mStickyBroadcasts.get(userId);
             if (stickies == null) {
                 stickies = new ArrayMap<>();
                 mStickyBroadcasts.put(userId, stickies);
             }
-            ArrayList<Intent> list = stickies.get(intent.getAction());
+            ArrayList<StickyBroadcast> list = stickies.get(intent.getAction());
             if (list == null) {
                 list = new ArrayList<>();
                 stickies.put(intent.getAction(), list);
             }
+            final boolean deferUntilActive = BroadcastRecord.calculateDeferUntilActive(
+                    callingUid, brOptions, resultTo, ordered,
+                    BroadcastRecord.calculateUrgent(intent, brOptions));
             final int stickiesCount = list.size();
             int i;
             for (i = 0; i < stickiesCount; i++) {
-                if (intent.filterEquals(list.get(i))) {
+                if (intent.filterEquals(list.get(i).intent)) {
                     // This sticky already exists, replace it.
-                    list.set(i, new Intent(intent));
+                    list.set(i, StickyBroadcast.create(new Intent(intent), deferUntilActive,
+                            callingUid));
                     break;
                 }
             }
             if (i >= stickiesCount) {
-                list.add(new Intent(intent));
+                list.add(StickyBroadcast.create(new Intent(intent), deferUntilActive, callingUid));
             }
         }
 
@@ -15082,6 +15223,16 @@ public class ActivityManagerService extends IActivityManager.Stub
         return ActivityManager.BROADCAST_SUCCESS;
     }
 
+    @VisibleForTesting
+    ArrayList<StickyBroadcast> getStickyBroadcasts(String action, int userId) {
+        final ArrayMap<String, ArrayList<StickyBroadcast>> stickyBroadcasts =
+                mStickyBroadcasts.get(userId);
+        if (stickyBroadcasts == null) {
+            return null;
+        }
+        return stickyBroadcasts.get(action);
+    }
+
     /**
      * @return uid from the extra field {@link Intent#EXTRA_UID} if present, Otherwise -1
      */
@@ -15263,14 +15414,14 @@ public class ActivityManagerService extends IActivityManager.Stub
                 Slog.w(TAG, msg);
                 throw new SecurityException(msg);
             }
-            ArrayMap<String, ArrayList<Intent>> stickies = mStickyBroadcasts.get(userId);
+            ArrayMap<String, ArrayList<StickyBroadcast>> stickies = mStickyBroadcasts.get(userId);
             if (stickies != null) {
-                ArrayList<Intent> list = stickies.get(intent.getAction());
+                ArrayList<StickyBroadcast> list = stickies.get(intent.getAction());
                 if (list != null) {
                     int N = list.size();
                     int i;
                     for (i=0; i<N; i++) {
-                        if (intent.filterEquals(list.get(i))) {
+                        if (intent.filterEquals(list.get(i).intent)) {
                             list.remove(i);
                             break;
                         }
@@ -16159,6 +16310,8 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         final int procState = uidRec != null
                 ? uidRec.getSetProcState() : PROCESS_STATE_NONEXISTENT;
+        final int procAdj = uidRec != null
+                ? uidRec.getMinProcAdj() : ProcessList.INVALID_ADJ;
         final long procStateSeq = uidRec != null ? uidRec.curProcStateSeq : 0;
         final int capability = uidRec != null ? uidRec.getSetCapability() : 0;
         final boolean ephemeral = uidRec != null ? uidRec.isEphemeral() : isEphemeralLocked(uid);
@@ -16174,7 +16327,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
         final int enqueuedChange = mUidObserverController.enqueueUidChange(
                 uidRec == null ? null : uidRec.pendingChange,
-                uid, change, procState, procStateSeq, capability, ephemeral);
+                uid, change, procState, procAdj, procStateSeq, capability, ephemeral);
         if (uidRec != null) {
             uidRec.setLastReportedChange(enqueuedChange);
         }
@@ -16819,6 +16972,11 @@ public class ActivityManagerService extends IActivityManager.Stub
             pw.println(String.format("Resources History for %s (%s)",
                     app.processName,
                     app.info.packageName));
+            if (app.mOptRecord.isFrozen()) {
+                pw.println("  Skipping frozen process");
+                pw.flush();
+                continue;
+            }
             pw.flush();
             try {
                 TransferPipe tp = new TransferPipe("  ");
@@ -17672,7 +17830,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                     final ProcessRecord r = mPidsSelfLocked.valueAt(i);
                     processMemoryStates.add(new ProcessMemoryState(
                             r.uid, r.getPid(), r.processName, r.mState.getCurAdj(),
-                            r.mServices.hasForegroundServices()));
+                            r.mServices.hasForegroundServices(),
+                            r.mProfile.getCurrentHostingComponentTypes(),
+                            r.mProfile.getHistoricalHostingComponentTypes()));
                 }
             }
             return processMemoryStates;
@@ -18656,7 +18816,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 int which, int cutpoint, @NonNull String callingPackage) {
             mNetworkPolicyUidObserver = observer;
             mUidObserverController.register(observer, which, cutpoint, callingPackage,
-                    Binder.getCallingUid());
+                    Binder.getCallingUid(), /*uids*/null);
         }
 
         @Override
@@ -18851,12 +19011,14 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public void waitForBroadcastIdle() {
-        waitForBroadcastIdle(LOG_WRITER_INFO);
+        waitForBroadcastIdle(LOG_WRITER_INFO, false);
     }
 
-    public void waitForBroadcastIdle(@NonNull PrintWriter pw) {
+    void waitForBroadcastIdle(@NonNull PrintWriter pw, boolean flushBroadcastLoopers) {
         enforceCallingPermission(permission.DUMP, "waitForBroadcastIdle()");
-        BroadcastLoopers.waitForIdle(pw);
+        if (flushBroadcastLoopers) {
+            BroadcastLoopers.waitForIdle(pw);
+        }
         for (BroadcastQueue queue : mBroadcastQueues) {
             queue.waitForIdle(pw);
         }
@@ -18869,7 +19031,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         waitForBroadcastBarrier(LOG_WRITER_INFO, false, false);
     }
 
-    public void waitForBroadcastBarrier(@NonNull PrintWriter pw,
+    void waitForBroadcastBarrier(@NonNull PrintWriter pw,
             boolean flushBroadcastLoopers, boolean flushApplicationThreads) {
         enforceCallingPermission(permission.DUMP, "waitForBroadcastBarrier()");
         if (flushBroadcastLoopers) {
@@ -18887,7 +19049,7 @@ public class ActivityManagerService extends IActivityManager.Stub
      * Wait for all pending {@link IApplicationThread} events to be processed in
      * all currently running apps.
      */
-    public void waitForApplicationBarrier(@NonNull PrintWriter pw) {
+    void waitForApplicationBarrier(@NonNull PrintWriter pw) {
         final CountDownLatch finishedLatch = new CountDownLatch(1);
         final AtomicInteger pingCount = new AtomicInteger(0);
         final AtomicInteger pongCount = new AtomicInteger(0);
@@ -18949,6 +19111,13 @@ public class ActivityManagerService extends IActivityManager.Stub
         pw.flush();
     }
 
+    void waitForBroadcastDispatch(@NonNull PrintWriter pw, @NonNull Intent intent) {
+        enforceCallingPermission(permission.DUMP, "waitForBroadcastDispatch");
+        for (BroadcastQueue queue : mBroadcastQueues) {
+            queue.waitForDispatched(intent, pw);
+        }
+    }
+
     void setIgnoreDeliveryGroupPolicy(@NonNull String broadcastAction) {
         Objects.requireNonNull(broadcastAction);
         enforceCallingPermission(permission.DUMP, "waitForBroadcastBarrier()");
@@ -18985,8 +19154,11 @@ public class ActivityManagerService extends IActivityManager.Stub
             long delayedDurationMs) {
         Objects.requireNonNull(targetPackage);
         Preconditions.checkArgumentNonnegative(delayedDurationMs);
-        Preconditions.checkState(mEnableModernQueue, "Not valid in legacy queue");
         enforceCallingPermission(permission.DUMP, "forceDelayBroadcastDelivery()");
+        // Ignore request if modern queue is not enabled
+        if (!mEnableModernQueue) {
+            return;
+        }
 
         for (BroadcastQueue queue : mBroadcastQueues) {
             queue.forceDelayBroadcastDelivery(targetPackage, delayedDurationMs);
@@ -19160,8 +19332,8 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @Override
-    public int restartUserInBackground(final int userId) {
-        return mUserController.restartUser(userId, USER_START_MODE_BACKGROUND);
+    public int restartUserInBackground(int userId, int userStartMode) {
+        return mUserController.restartUser(userId, userStartMode);
     }
 
     @Override

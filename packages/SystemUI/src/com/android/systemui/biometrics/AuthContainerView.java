@@ -19,6 +19,7 @@ package com.android.systemui.biometrics;
 import static android.hardware.biometrics.BiometricManager.BIOMETRIC_MULTI_SENSOR_DEFAULT;
 import static android.hardware.biometrics.BiometricManager.BiometricMultiSensorMode;
 import static android.hardware.biometrics.SensorProperties.STRENGTH_STRONG;
+import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
 
 import static com.android.internal.jank.InteractionJankMonitor.CUJ_BIOMETRIC_PROMPT_TRANSITION;
 
@@ -59,14 +60,16 @@ import android.widget.ScrollView;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 
+import com.android.app.animation.Interpolators;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.systemui.R;
-import com.android.systemui.animation.Interpolators;
 import com.android.systemui.biometrics.AuthController.ScaleFactorProvider;
 import com.android.systemui.biometrics.domain.interactor.BiometricPromptCredentialInteractor;
 import com.android.systemui.biometrics.ui.CredentialView;
+import com.android.systemui.biometrics.ui.binder.AuthBiometricFingerprintViewBinder;
+import com.android.systemui.biometrics.ui.viewmodel.AuthBiometricFingerprintViewModel;
 import com.android.systemui.biometrics.ui.viewmodel.CredentialViewModel;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
@@ -126,6 +129,8 @@ public class AuthContainerView extends LinearLayout
 
     // TODO: these should be migrated out once ready
     private final Provider<BiometricPromptCredentialInteractor> mBiometricPromptInteractor;
+    private final Provider<AuthBiometricFingerprintViewModel>
+            mAuthBiometricFingerprintViewModelProvider;
     private final Provider<CredentialViewModel> mCredentialViewModelProvider;
 
     @VisibleForTesting final BiometricCallback mBiometricCallback;
@@ -241,12 +246,14 @@ public class AuthContainerView extends LinearLayout
                 @NonNull LockPatternUtils lockPatternUtils,
                 @NonNull InteractionJankMonitor jankMonitor,
                 @NonNull Provider<BiometricPromptCredentialInteractor> biometricPromptInteractor,
+                @NonNull Provider<AuthBiometricFingerprintViewModel>
+                        authBiometricFingerprintViewModelProvider,
                 @NonNull Provider<CredentialViewModel> credentialViewModelProvider) {
             mConfig.mSensorIds = sensorIds;
             return new AuthContainerView(mConfig, fpProps, faceProps, wakefulnessLifecycle,
                     panelInteractionDetector, userManager, lockPatternUtils, jankMonitor,
-                    biometricPromptInteractor, credentialViewModelProvider,
-                    new Handler(Looper.getMainLooper()), bgExecutor);
+                    biometricPromptInteractor, authBiometricFingerprintViewModelProvider,
+                    credentialViewModelProvider, new Handler(Looper.getMainLooper()), bgExecutor);
         }
     }
 
@@ -339,6 +346,8 @@ public class AuthContainerView extends LinearLayout
             @NonNull LockPatternUtils lockPatternUtils,
             @NonNull InteractionJankMonitor jankMonitor,
             @NonNull Provider<BiometricPromptCredentialInteractor> biometricPromptInteractor,
+            @NonNull Provider<AuthBiometricFingerprintViewModel>
+                    authBiometricFingerprintViewModelProvider,
             @NonNull Provider<CredentialViewModel> credentialViewModelProvider,
             @NonNull Handler mainHandler,
             @NonNull @Background DelayableExecutor bgExecutor) {
@@ -368,6 +377,7 @@ public class AuthContainerView extends LinearLayout
         mBackgroundExecutor = bgExecutor;
         mInteractionJankMonitor = jankMonitor;
         mBiometricPromptInteractor = biometricPromptInteractor;
+        mAuthBiometricFingerprintViewModelProvider = authBiometricFingerprintViewModelProvider;
         mCredentialViewModelProvider = credentialViewModelProvider;
 
         // Inflate biometric view only if necessary.
@@ -386,6 +396,9 @@ public class AuthContainerView extends LinearLayout
                 fingerprintAndFaceView.updateOverrideIconLayoutParamsSize();
                 fingerprintAndFaceView.setFaceClass3(
                         faceProperties.sensorStrength == STRENGTH_STRONG);
+                final AuthBiometricFingerprintViewModel fpAndFaceViewModel =
+                        mAuthBiometricFingerprintViewModelProvider.get();
+                AuthBiometricFingerprintViewBinder.bind(fingerprintAndFaceView, fpAndFaceViewModel);
                 mBiometricView = fingerprintAndFaceView;
             } else if (fpProperties != null) {
                 final AuthBiometricFingerprintView fpView =
@@ -394,6 +407,9 @@ public class AuthContainerView extends LinearLayout
                 fpView.setSensorProperties(fpProperties);
                 fpView.setScaleFactorProvider(config.mScaleProvider);
                 fpView.updateOverrideIconLayoutParamsSize();
+                final AuthBiometricFingerprintViewModel fpViewModel =
+                        mAuthBiometricFingerprintViewModelProvider.get();
+                AuthBiometricFingerprintViewBinder.bind(fpView, fpViewModel);
                 mBiometricView = fpView;
             } else if (faceProperties != null) {
                 mBiometricView = (AuthBiometricFaceView) layoutInflater.inflate(
@@ -497,6 +513,9 @@ public class AuthContainerView extends LinearLayout
     @Override
     public void onOrientationChanged() {
         maybeUpdatePositionForUdfps(true /* invalidate */);
+        if (mBiometricView != null) {
+            mBiometricView.onOrientationChanged();
+        }
     }
 
     @Override
@@ -884,7 +903,9 @@ public class AuthContainerView extends LinearLayout
                 windowFlags,
                 PixelFormat.TRANSLUCENT);
         lp.privateFlags |= WindowManager.LayoutParams.SYSTEM_FLAG_SHOW_FOR_ALL_USERS;
-        lp.setFitInsetsTypes(lp.getFitInsetsTypes() & ~WindowInsets.Type.ime());
+        lp.setFitInsetsTypes(lp.getFitInsetsTypes() & ~WindowInsets.Type.ime()
+                & ~WindowInsets.Type.systemBars());
+        lp.layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
         lp.setTitle("BiometricPrompt");
         lp.accessibilityTitle = title;
         lp.dimAmount = BACKGROUND_DIM_AMOUNT;

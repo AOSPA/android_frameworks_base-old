@@ -541,6 +541,24 @@ public class DisplayRotationTests {
                 SCREEN_ORIENTATION_UNSPECIFIED, Surface.ROTATION_180));
     }
 
+    @Test
+    public void testFreezeRotation_reverseRotationDirectionAroundZAxis_yes() throws Exception {
+        mBuilder.build();
+        when(mDeviceStateController.shouldReverseRotationDirectionAroundZAxis()).thenReturn(true);
+
+        freezeRotation(Surface.ROTATION_90);
+        assertEquals(Surface.ROTATION_270, mTarget.getUserRotation());
+    }
+
+    @Test
+    public void testFreezeRotation_reverseRotationDirectionAroundZAxis_no() throws Exception {
+        mBuilder.build();
+        when(mDeviceStateController.shouldReverseRotationDirectionAroundZAxis()).thenReturn(false);
+
+        freezeRotation(Surface.ROTATION_90);
+        assertEquals(Surface.ROTATION_90, mTarget.getUserRotation());
+    }
+
     private boolean waitForUiHandler() {
         final CountDownLatch latch = new CountDownLatch(1);
         UiThread.getHandler().post(latch::countDown);
@@ -922,8 +940,6 @@ public class DisplayRotationTests {
     @Test
     public void testIgnoresDeskDockRotation_whenNoSensorAndLockedRespected() throws Exception {
         mBuilder.setDeskDockRotation(Surface.ROTATION_270).build();
-        when(mMockDisplayPolicy.isDeskDockRespectsNoSensorAndLockedWithoutAccelerometer())
-                .thenReturn(true);
         configureDisplayRotation(SCREEN_ORIENTATION_LANDSCAPE, false, false);
 
         when(mMockDisplayPolicy.getDockMode()).thenReturn(Intent.EXTRA_DOCK_STATE_DESK);

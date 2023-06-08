@@ -21,6 +21,8 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.ROTATION_UNDEFINED;
+import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
+import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
@@ -55,6 +57,7 @@ import static android.window.TransitionInfo.FLAG_SHOW_WALLPAPER;
 import static android.window.TransitionInfo.FLAG_TASK_LAUNCHING_BEHIND;
 import static android.window.TransitionInfo.FLAG_TRANSLUCENT;
 import static android.window.TransitionInfo.FLAG_WILL_IME_SHOWN;
+import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_PENDING_INTENT;
 
 import static com.android.server.wm.ActivityRecord.State.RESUMED;
 import static com.android.server.wm.ActivityTaskManagerInternal.APP_TRANSITION_RECENTS_ANIM;
@@ -65,12 +68,14 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
+import android.app.ActivityOptions;
 import android.app.IApplicationThread;
 import android.content.pm.ActivityInfo;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.hardware.HardwareBuffer;
 import android.os.Binder;
+import android.os.Bundle;
 import android.os.IBinder;
 import android.os.IRemoteCallback;
 import android.os.RemoteException;
@@ -78,6 +83,7 @@ import android.os.SystemClock;
 import android.os.Trace;
 import android.util.ArrayMap;
 import android.util.ArraySet;
+import android.util.BoostFramework;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.view.Display;
@@ -85,6 +91,7 @@ import android.view.SurfaceControl;
 import android.view.WindowManager;
 import android.window.ScreenCapture;
 import android.window.TransitionInfo;
+import android.window.WindowContainerTransaction;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.graphics.ColorUtils;
@@ -104,8 +111,14 @@ import java.util.Objects;
 import java.util.function.Predicate;
 
 /**
- * Represents a logical transition.
+ * Represents a logical transition. This keeps track of all the changes associated with a logical
+ * WM state -> state transition.
  * @see TransitionController
+ *
+ * In addition to tracking individual container changes, this also tracks ordering-changes (just
+ * on-top for now). However, since order is a "global" property, the mechanics of order-change
+ * detection/reporting is non-trivial when transitions are collecting in parallel. See
+ * {@link #collectOrderChanges} for more details.
  */
 class Transition implements BLASTSyncEngine.TransactionReadyListener {
     private static final String TAG = "Transition";
@@ -165,6 +178,10 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
     private SurfaceControl.Transaction mStartTransaction = null;
     private SurfaceControl.Transaction mFinishTransaction = null;
 
+    /** Perf **/
+    private BoostFramework mPerf = null;
+    private boolean mIsAnimationPerfLockAcquired = false;
+
     /** Used for failsafe clean-up to prevent leaks due to misbehaving player impls. */
     private SurfaceControl.Transaction mCleanupTransaction = null;
 
@@ -179,7 +196,7 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
     final ArraySet<WindowContainer> mParticipants = new ArraySet<>();
 
     /** The final animation targets derived from participants after promotion. */
-    private ArrayList<ChangeInfo> mTargets;
+    ArrayList<ChangeInfo> mTargets;
 
     /** The displays that this transition is running on. */
     private final ArrayList<DisplayContent> mTargetDisplays = new ArrayList<>();
@@ -189,6 +206,12 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
      * tasks are nested, all the tasks that are parents of the on-top task are also included.
      */
     private final ArrayList<Task> mOnTopTasksStart = new ArrayList<>();
+
+    /**
+     * The (non alwaysOnTop) tasks which were on-top of their display when this transition became
+     * ready (via setReady, not animation-ready).
+     */
+    private final ArrayList<Task> mOnTopTasksAtReady = new ArrayList<>();
 
     /**
      * Set of participating windowtokens (activity/wallpaper) which are visible at the end of
@@ -232,6 +255,16 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
     private IContainerFreezer mContainerFreezer = null;
     private final SurfaceControl.Transaction mTmpTransaction = new SurfaceControl.Transaction();
 
+    /**
+     * {@code true} if some other operation may have caused the originally-recorded state (in
+     * mChanges) to be dirty. This is usually due to finishTransition being called mid-collect;
+     * and, the reason that finish can alter the "start" state of other transitions is because
+     * setVisible(false) is deferred until then.
+     * Instead of adding this conditional, we could re-check always; but, this situation isn't
+     * common so it'd be wasted work.
+     */
+    boolean mPriorVisibilityMightBeDirty = false;
+
     final TransitionController.Logger mLogger = new TransitionController.Logger();
 
     /** Whether this transition was forced to play early (eg for a SLEEP signal). */
@@ -243,6 +276,41 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
      */
     boolean mIsPlayerEnabled = true;
 
+    /** This transition doesn't run in parallel. */
+    static final int PARALLEL_TYPE_NONE = 0;
+
+    /** Any 2 transitions of this type can run in parallel with each other. Used for testing. */
+    static final int PARALLEL_TYPE_MUTUAL = 1;
+
+    /** This is a recents transition. */
+    static final int PARALLEL_TYPE_RECENTS = 2;
+
+
+    @IntDef(prefix = { "PARALLEL_TYPE_" }, value = {
+            PARALLEL_TYPE_NONE,
+            PARALLEL_TYPE_MUTUAL,
+            PARALLEL_TYPE_RECENTS
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    @interface ParallelType {}
+
+    /**
+     * What category of parallel-collect support this transition has. The value of this is used
+     * by {@link TransitionController} to determine which transitions can collect in parallel. If
+     * a transition can collect in parallel, it means that it will start collecting as soon as the
+     * prior collecting transition is {@link #isPopulated}. This is a shortcut for supporting
+     * a couple specific situations before we have full-fledged support for parallel transitions.
+     */
+    @ParallelType int mParallelCollectType = PARALLEL_TYPE_NONE;
+
+    /**
+     * A "Track" is a set of animations which must cooperate with each other to play smoothly. If
+     * animations can play independently of each other, then they can be in different tracks. If
+     * a transition must cooperate with transitions in >1 other track, then it must be marked
+     * FLAG_SYNC and it will end-up flushing all animations before it starts.
+     */
+    int mAnimationTrack = 0;
+
     Transition(@TransitionType int type, @TransitionFlags int flags,
             TransitionController controller, BLASTSyncEngine syncEngine) {
         mType = type;
@@ -253,7 +321,10 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
 
         mLogger.mCreateWallTimeMs = System.currentTimeMillis();
         mLogger.mCreateTimeNs = SystemClock.elapsedRealtimeNanos();
-        controller.mTransitionTracer.logState(this);
+
+        if (mPerf == null) {
+            mPerf = new BoostFramework();
+        }
     }
 
     @Nullable
@@ -274,6 +345,21 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
 
     void addFlag(int flag) {
         mFlags |= flag;
+    }
+
+    void calcParallelCollectType(WindowContainerTransaction wct) {
+        for (int i = 0; i < wct.getHierarchyOps().size(); ++i) {
+            final WindowContainerTransaction.HierarchyOp hop = wct.getHierarchyOps().get(i);
+            if (hop.getType() != HIERARCHY_OP_TYPE_PENDING_INTENT) continue;
+            final Bundle b = hop.getLaunchOptions();
+            if (b == null || b.isEmpty()) continue;
+            final boolean transientLaunch = b.getBoolean(ActivityOptions.KEY_TRANSIENT_LAUNCH);
+            if (transientLaunch) {
+                ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS,
+                        "Starting a Recents transition which can be parallel.");
+                mParallelCollectType = PARALLEL_TYPE_RECENTS;
+            }
+        }
     }
 
     /** Records an activity as transient-launch. This activity must be already collected. */
@@ -326,6 +412,10 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
             }
         }
         return false;
+    }
+
+    boolean hasTransientLaunch() {
+        return mTransientLaunches != null && !mTransientLaunches.isEmpty();
     }
 
     boolean isTransientLaunch(@NonNull ActivityRecord activity) {
@@ -416,6 +506,10 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
         return mFinishTransaction;
     }
 
+    boolean isPending() {
+        return mState == STATE_PENDING;
+    }
+
     boolean isCollecting() {
         return mState == STATE_COLLECTING || mState == STATE_STARTED;
     }
@@ -442,12 +536,12 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
             throw new IllegalStateException("Attempting to re-use a transition");
         }
         mState = STATE_COLLECTING;
-        mSyncId = mSyncEngine.startSyncSet(this, timeoutMs, TAG);
+        mSyncId = mSyncEngine.startSyncSet(this, timeoutMs, TAG,
+                mParallelCollectType != PARALLEL_TYPE_NONE);
         mSyncEngine.setSyncMethod(mSyncId, TransitionController.SYNC_METHOD);
 
         mLogger.mSyncId = mSyncId;
         mLogger.mCollectTimeNs = SystemClock.elapsedRealtimeNanos();
-        mController.mTransitionTracer.logState(this);
     }
 
     /**
@@ -465,12 +559,17 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
             return;
         }
         mState = STATE_STARTED;
+
+        if (mPerf != null) {
+            mPerf.perfHint(BoostFramework.VENDOR_HINT_ROTATION_ANIM_BOOST, null);
+            mIsAnimationPerfLockAcquired = true;
+        }
+
         ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Starting Transition %d",
                 mSyncId);
         applyReady();
 
         mLogger.mStartTimeNs = SystemClock.elapsedRealtimeNanos();
-        mController.mTransitionTracer.logState(this);
 
         mController.updateAnimatingState(mTmpTransaction);
         // merge into the next-time the global transaction is applied. This is too-early to set
@@ -522,9 +621,10 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
         recordDisplay(wc.getDisplayContent());
         if (info.mShowWallpaper) {
             // Collect the wallpaper token (for isWallpaper(wc)) so it is part of the sync set.
-            final WindowState wallpaper =
-                    wc.getDisplayContent().mWallpaperController.getTopVisibleWallpaper();
-            if (wallpaper != null) {
+            final List<WindowState> wallpapers =
+                    wc.getDisplayContent().mWallpaperController.getAllTopWallpapers();
+            for (int i = wallpapers.size() - 1; i >= 0; i--) {
+                WindowState wallpaper = wallpapers.get(i);
                 collect(wallpaper.mToken);
             }
         }
@@ -713,8 +813,15 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
         final boolean ready = mReadyTracker.allReady();
         ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS,
                 "Set transition ready=%b %d", ready, mSyncId);
-        mSyncEngine.setReady(mSyncId, ready);
-        if (ready) mLogger.mReadyTimeNs = SystemClock.elapsedRealtimeNanos();
+        boolean changed = mSyncEngine.setReady(mSyncId, ready);
+        if (changed && ready) {
+            mLogger.mReadyTimeNs = SystemClock.elapsedRealtimeNanos();
+            mOnTopTasksAtReady.clear();
+            for (int i = 0; i < mTargetDisplays.size(); ++i) {
+                addOnTopTasks(mTargetDisplays.get(i), mOnTopTasksAtReady);
+            }
+            mController.onTransitionPopulated(this);
+        }
     }
 
     /**
@@ -730,6 +837,11 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
     @VisibleForTesting
     boolean allReady() {
         return mReadyTracker.allReady();
+    }
+
+    /** This transition has all of its expected participants. */
+    boolean isPopulated() {
+        return mState >= STATE_STARTED && mReadyTracker.allReady();
     }
 
     /**
@@ -806,6 +918,13 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
             if (c.getSnapshot() != null) {
                 t.reparent(c.getSnapshot(), null);
             }
+            // The fixed transform hint was set in DisplayContent#applyRotation(). Make sure to
+            // clear the hint in case the start transaction is not applied.
+            if (c.hasFlags(FLAG_IS_DISPLAY) && c.getStartRotation() != c.getEndRotation()
+                    && c.getContainer() != null) {
+                t.unsetFixedTransformHint(WindowContainer.fromBinder(c.getContainer().asBinder())
+                        .asDisplayContent().mSurfaceControl);
+            }
         }
         for (int i = info.getRootCount() - 1; i >= 0; --i) {
             final SurfaceControl leash = info.getRoot(i).getLeash();
@@ -850,8 +969,27 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
                 // to the transient activity.
                 ar.supportsEnterPipOnTaskSwitch = true;
             }
-            return mController.mAtm.enterPictureInPictureMode(ar, ar.pictureInPictureArgs,
-                    false /* fromClient */);
+            // Make sure this activity can enter pip under the current circumstances.
+            // `enterPictureInPicture` internally checks, but with beforeStopping=false which
+            // is specifically for non-auto-enter.
+            if (!ar.checkEnterPictureInPictureState("enterPictureInPictureMode",
+                    true /* beforeStopping */)) {
+                return false;
+            }
+            final int prevMode = ar.getTask().getWindowingMode();
+            final boolean inPip = mController.mAtm.enterPictureInPictureMode(ar,
+                    ar.pictureInPictureArgs, false /* fromClient */, true /* isAutoEnter */);
+            final int currentMode = ar.getTask().getWindowingMode();
+            if (prevMode == WINDOWING_MODE_FULLSCREEN && currentMode == WINDOWING_MODE_PINNED
+                    && mTransientLaunches != null
+                    && ar.mDisplayContent.hasTopFixedRotationLaunchingApp()) {
+                // There will be a display configuration change after finishing this transition.
+                // Skip dispatching the change for PiP task to avoid its activity drawing for the
+                // intermediate state which will cause flickering. The final PiP bounds in new
+                // rotation will be applied by PipTransition.
+                ar.mDisplayContent.mPinnedTaskController.setEnterPipTransaction(null);
+            }
+            return inPip;
         }
 
         // Legacy pip-entry (not via isAutoEnterEnabled).
@@ -900,28 +1038,37 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
         mController.mFinishingTransition = this;
 
         if (mTransientHideTasks != null && !mTransientHideTasks.isEmpty()) {
-            // Record all the now-hiding activities so that they are committed after
-            // recalculating visibilities. We just use mParticipants because we can and it will
-            // ensure proper reporting of `isInFinishTransition`.
-            for (int i = 0; i < mTransientHideTasks.size(); ++i) {
-                mTransientHideTasks.get(i).forAllActivities(r -> {
-                    // Only check leaf-tasks that were collected
-                    if (!mParticipants.contains(r.getTask())) return;
-                    // Only concern ourselves with anything that can become invisible
-                    if (!r.isVisible()) return;
-                    mParticipants.add(r);
-                });
-            }
             // The transient hide tasks could be occluded now, e.g. returning to home. So trigger
             // the update to make the activities in the tasks invisible-requested, then the next
             // step can continue to commit the visibility.
             mController.mAtm.mRootWindowContainer.ensureActivitiesVisible(null /* starting */,
                     0 /* configChanges */, true /* preserveWindows */);
+            // Record all the now-hiding activities so that they are committed. Just use
+            // mParticipants because we can avoid a new list this way.
+            for (int i = 0; i < mTransientHideTasks.size(); ++i) {
+                final Task rootTask = mTransientHideTasks.get(i);
+                rootTask.forAllActivities(r -> {
+                    // Only check leaf-tasks that were collected
+                    if (!mParticipants.contains(r.getTask())) return;
+                    if (rootTask.isVisibleRequested()) {
+                        // This transient-hide didn't hide, so don't commit anything (otherwise we
+                        // could prematurely commit invisible on unrelated activities). To be safe,
+                        // though, notify the controller to prevent degenerate cases.
+                        if (!r.isVisibleRequested()) {
+                            mController.mValidateCommitVis.add(r);
+                        }
+                        return;
+                    }
+                    // This did hide: commit immediately so that other transitions know about it.
+                    mParticipants.add(r);
+                });
+            }
         }
 
         boolean hasParticipatedDisplay = false;
         boolean hasVisibleTransientLaunch = false;
         boolean enterAutoPip = false;
+        boolean committedSomeInvisible = false;
         // Commit all going-invisible containers
         for (int i = 0; i < mParticipants.size(); ++i) {
             final WindowContainer<?> participant = mParticipants.valueAt(i);
@@ -957,6 +1104,7 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
                         }
                         ar.commitVisibility(false /* visible */, false /* performLayout */,
                                 true /* fromTransition */);
+                        committedSomeInvisible = true;
                     } else {
                         enterAutoPip = true;
                     }
@@ -1015,6 +1163,9 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
                 }
             }
         }
+        if (committedSomeInvisible) {
+            mController.onCommittedInvisibles();
+        }
 
         if (hasVisibleTransientLaunch) {
             // Notify the change about the transient-below task if entering auto-pip.
@@ -1072,6 +1223,13 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
             if (asyncRotationController != null && containsChangeFor(dc, mTargets)) {
                 asyncRotationController.onTransitionFinished();
             }
+            if (hasParticipatedDisplay && dc.mDisplayRotationCompatPolicy != null) {
+                final ChangeInfo changeInfo = mChanges.get(dc);
+                if (changeInfo != null
+                        && changeInfo.mRotation != dc.getWindowConfiguration().getRotation()) {
+                    dc.mDisplayRotationCompatPolicy.onScreenRotationAnimationFinished();
+                }
+            }
             if (mTransientLaunches != null) {
                 InsetsControlTarget prevImeTarget = dc.getImeTarget(
                         DisplayContent.IME_TARGET_CONTROL);
@@ -1107,7 +1265,10 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
         validateVisibility();
 
         mState = STATE_FINISHED;
-        mController.mTransitionTracer.logState(this);
+        if (mPerf != null && mIsAnimationPerfLockAcquired) {
+            mPerf.perfLockRelease();
+            mIsAnimationPerfLockAcquired = false;
+        }
         // Rotation change may be deferred while there is a display change transition, so check
         // again in case there is a new pending change.
         if (hasParticipatedDisplay && !mController.useShellTransitionsRotation()) {
@@ -1136,6 +1297,7 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
         }
         ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Aborting Transition: %d", mSyncId);
         mState = STATE_ABORT;
+        mLogger.mAbortTimeNs = SystemClock.elapsedRealtimeNanos();
         mController.mTransitionTracer.logAbortedTransition(this);
         // Syncengine abort will call through to onTransactionReady()
         mSyncEngine.abort(mSyncId);
@@ -1200,13 +1362,14 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
         // ActivityRecord#canShowWindows() may reject to show its window. The visibility also
         // needs to be updated for STATE_ABORT.
         commitVisibleActivities(transaction);
+        commitVisibleWallpapers();
 
         // Fall-back to the default display if there isn't one participating.
         final DisplayContent primaryDisplay = !mTargetDisplays.isEmpty() ? mTargetDisplays.get(0)
                 : mController.mAtm.mRootWindowContainer.getDefaultDisplay();
 
         if (mState == STATE_ABORT) {
-            mController.abort(this);
+            mController.onAbort(this);
             primaryDisplay.getPendingTransaction().merge(transaction);
             mSyncId = -1;
             mOverrideOptions = null;
@@ -1217,20 +1380,29 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
         mState = STATE_PLAYING;
         mStartTransaction = transaction;
         mFinishTransaction = mController.mAtm.mWindowManager.mTransactionFactory.get();
-        mController.moveToPlaying(this);
 
         // Flags must be assigned before calculateTransitionInfo. Otherwise it won't take effect.
         if (primaryDisplay.isKeyguardLocked()) {
             mFlags |= TRANSIT_FLAG_KEYGUARD_LOCKED;
         }
-        collectOrderChanges();
 
+        // This is the only (or last) transition that is collecting, so we need to report any
+        // leftover order changes.
+        collectOrderChanges(mController.mWaitingTransitions.isEmpty());
+
+        if (mPriorVisibilityMightBeDirty) {
+            updatePriorVisibility();
+        }
         // Resolve the animating targets from the participants.
         mTargets = calculateTargets(mParticipants, mChanges);
+
         // Check whether the participants were animated from back navigation.
         mController.mAtm.mBackNavigationController.onTransactionReady(this, mTargets);
         final TransitionInfo info = calculateTransitionInfo(mType, mFlags, mTargets, transaction);
         info.setDebugId(mSyncId);
+        mController.assignTrack(this, info);
+
+        mController.moveToPlaying(this);
 
         // Repopulate the displays based on the resolved targets.
         mTargetDisplays.clear();
@@ -1317,6 +1489,9 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
                 final ActivityRecord ar = mParticipants.valueAt(i).asActivityRecord();
                 if (ar == null || ar.getTask() == null
                         || ar.getTask().isVisibleRequested()) continue;
+                final ChangeInfo change = mChanges.get(ar);
+                // Intentionally skip record snapshot for changes originated from PiP.
+                if (change != null && change.mWindowingMode == WINDOWING_MODE_PINNED) continue;
                 mController.mSnapshotController.mTaskSnapshotController.recordSnapshot(
                         ar.getTask(), false /* allowSnapshotHome */);
             }
@@ -1341,7 +1516,6 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
                         "Calling onTransitionReady: %s", info);
                 mLogger.mSendTimeNs = SystemClock.elapsedRealtimeNanos();
                 mLogger.mInfo = info;
-                mController.mTransitionTracer.logSentTransition(this, mTargets, info);
                 mController.getTransitionPlayer().onTransitionReady(
                         mToken, info, transaction, mFinishTransaction);
                 if (Trace.isTagEnabled(TRACE_TAG_WINDOW_MANAGER)) {
@@ -1369,33 +1543,83 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
             }
             postCleanupOnFailure();
         }
-        mController.mLoggerHandler.post(mLogger::logOnSend);
         mOverrideOptions = null;
 
         reportStartReasonsToLogger();
 
         // Since we created root-leash but no longer reference it from core, release it now
         info.releaseAnimSurfaces();
+
+        mController.mLoggerHandler.post(mLogger::logOnSend);
+        if (mLogger.mInfo != null) {
+            mController.mTransitionTracer.logSentTransition(this, mTargets);
+        }
     }
 
-    /** Collect tasks which moved-to-top but didn't change otherwise. */
+    /**
+     * Collect tasks which moved-to-top as part of this transition. This also updates the
+     * controller's latest-reported when relevant.
+     *
+     * This is a non-trivial operation because transition can collect in parallel; however, it can
+     * be made tenable by acknowledging that the "setup" part of collection (phase 1) is still
+     * globally serial; so, we can build some reasonable rules around it.
+     *
+     * First, we record the "start" on-top state (to compare against). Then, when this becomes
+     * ready (via allReady, NOT onTransactionReady), we also record the "onReady" on-top state
+     * -- the idea here is that upon "allReady", all the actual WM changes should be done and we
+     * are now just waiting for window content to become ready (finish drawing).
+     *
+     * Then, in this function (during onTransactionReady), we compare the two orders and include
+     * any changes to the order in the reported transition-info. Unfortunately, because of parallel
+     * collection, the order can change in unexpected ways by now. To resolve this, we ALSO keep a
+     * global "latest reported order" in TransitionController and use that to make decisions.
+     */
     @VisibleForTesting
-    void collectOrderChanges() {
+    void collectOrderChanges(boolean reportCurrent) {
         if (mOnTopTasksStart.isEmpty()) return;
-        final ArrayList<Task> onTopTasksEnd = new ArrayList<>();
-        for (int i = 0; i < mTargetDisplays.size(); ++i) {
-            addOnTopTasks(mTargetDisplays.get(i), onTopTasksEnd);
-        }
-        for (int i = 0; i < onTopTasksEnd.size(); ++i) {
-            final Task task = onTopTasksEnd.get(i);
+        boolean includesOrderChange = false;
+        for (int i = 0; i < mOnTopTasksAtReady.size(); ++i) {
+            final Task task = mOnTopTasksAtReady.get(i);
             if (mOnTopTasksStart.contains(task)) continue;
-            mParticipants.add(task);
-            int changeIdx = mChanges.indexOfKey(task);
-            if (changeIdx < 0) {
-                mChanges.put(task, new ChangeInfo(task));
-                changeIdx = mChanges.indexOfKey(task);
+            includesOrderChange = true;
+            break;
+        }
+        if (!includesOrderChange && !reportCurrent) {
+            // This transition doesn't include an order change, so if it isn't required to report
+            // the current focus (eg. it's the last of a cluster of transitions), then don't
+            // report.
+            return;
+        }
+        // The transition included an order change, but it may not be up-to-date, so grab the
+        // latest state and compare with the last reported state (or our start state if no
+        // reported state exists).
+        ArrayList<Task> onTopTasksEnd = new ArrayList<>();
+        for (int d = 0; d < mTargetDisplays.size(); ++d) {
+            addOnTopTasks(mTargetDisplays.get(d), onTopTasksEnd);
+            final int displayId = mTargetDisplays.get(d).mDisplayId;
+            ArrayList<Task> reportedOnTop = mController.mLatestOnTopTasksReported.get(displayId);
+            for (int i = onTopTasksEnd.size() - 1; i >= 0; --i) {
+                final Task task = onTopTasksEnd.get(i);
+                if (task.getDisplayId() != displayId) continue;
+                // If it didn't change since last report, don't report
+                if (reportedOnTop == null) {
+                    if (mOnTopTasksStart.contains(task)) continue;
+                } else if (reportedOnTop.contains(task)) {
+                    continue;
+                }
+                // Need to report it.
+                mParticipants.add(task);
+                int changeIdx = mChanges.indexOfKey(task);
+                if (changeIdx < 0) {
+                    mChanges.put(task, new ChangeInfo(task));
+                    changeIdx = mChanges.indexOfKey(task);
+                }
+                mChanges.valueAt(changeIdx).mFlags |= ChangeInfo.FLAG_CHANGE_MOVED_TO_TOP;
             }
-            mChanges.valueAt(changeIdx).mFlags |= ChangeInfo.FLAG_CHANGE_MOVED_TO_TOP;
+            // Swap in the latest on-top tasks.
+            mController.mLatestOnTopTasksReported.put(displayId, onTopTasksEnd);
+            onTopTasksEnd = reportedOnTop != null ? reportedOnTop : new ArrayList<>();
+            onTopTasksEnd.clear();
         }
     }
 
@@ -1452,6 +1676,30 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
             }
             ar.getTask().setDeferTaskAppear(false);
         }
+    }
+
+    /**
+     * Reset waitingToshow for all wallpapers, and commit the visibility of the visible ones
+     */
+    private void commitVisibleWallpapers() {
+        boolean showWallpaper = shouldWallpaperBeVisible();
+        for (int i = mParticipants.size() - 1; i >= 0; --i) {
+            final WallpaperWindowToken wallpaper = mParticipants.valueAt(i).asWallpaperToken();
+            if (wallpaper != null) {
+                wallpaper.waitingToShow = false;
+                if (!wallpaper.isVisible() && wallpaper.isVisibleRequested()) {
+                    wallpaper.commitVisibility(showWallpaper);
+                }
+            }
+        }
+    }
+
+    private boolean shouldWallpaperBeVisible() {
+        for (int i = mParticipants.size() - 1; i >= 0; --i) {
+            WindowContainer participant = mParticipants.valueAt(i);
+            if (participant.showWallpaper()) return true;
+        }
+        return false;
     }
 
     // TODO(b/188595497): Remove after migrating to shell.
@@ -1686,6 +1934,20 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
         } else {
             // Non-filling without adjacent is considered as translucent.
             return !wc.fillsParent();
+        }
+    }
+
+    private void updatePriorVisibility() {
+        for (int i = 0; i < mChanges.size(); ++i) {
+            final ChangeInfo chg = mChanges.valueAt(i);
+            // For task/activity, recalculate the current "real" visibility.
+            if (chg.mContainer.asActivityRecord() == null && chg.mContainer.asTask() == null) {
+                continue;
+            }
+            // This ONLY works in the visible -> invisible case (and is only needed for this case)
+            // because commitVisible(false) is deferred until finish.
+            if (!chg.mVisible) continue;
+            chg.mVisible = chg.mContainer.isVisible();
         }
     }
 
@@ -2029,6 +2291,7 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
             info.mReadyMode = change.getMode();
             change.setStartAbsBounds(info.mAbsoluteBounds);
             change.setFlags(info.getChangeFlags(target));
+            info.mReadyFlags = change.getFlags();
             change.setDisplayId(info.mDisplayId, getDisplayId(target));
 
             final Task task = target.asTask();
@@ -2048,7 +2311,7 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
                         // Display won't be rotated for multi window Task, so the fixed rotation
                         // won't be applied. This can happen when the windowing mode is changed
                         // before the previous fixed rotation is applied.
-                        && !task.inMultiWindowMode()) {
+                        && (!task.inMultiWindowMode() || !topRunningActivity.inMultiWindowMode())) {
                     // If Activity is in fixed rotation, its will be applied with the next rotation,
                     // when the Task is still in the previous rotation.
                     final int taskRotation = task.getWindowConfiguration().getDisplayRotation();
@@ -2411,6 +2674,10 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
         /** The mode which is set when the transition is ready. */
         @TransitionInfo.TransitionMode
         int mReadyMode;
+
+        /** The flags which is set when the transition is ready. */
+        @TransitionInfo.ChangeFlags
+        int mReadyFlags;
 
         ChangeInfo(@NonNull WindowContainer origState) {
             mContainer = origState;
@@ -2814,11 +3081,14 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
 
             Rect cropBounds = new Rect(bounds);
             cropBounds.offsetTo(0, 0);
+            final boolean isDisplayRotation = wc.asDisplayContent() != null
+                    && wc.asDisplayContent().isRotationChanging();
             ScreenCapture.LayerCaptureArgs captureArgs =
                     new ScreenCapture.LayerCaptureArgs.Builder(wc.getSurfaceControl())
                             .setSourceCrop(cropBounds)
                             .setCaptureSecureLayers(true)
                             .setAllowProtected(true)
+                            .setHintForSeamlessTransition(isDisplayRotation)
                             .build();
             ScreenCapture.ScreenshotHardwareBuffer screenshotBuffer =
                     ScreenCapture.captureLayers(captureArgs);
@@ -2829,8 +3099,6 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
                 Slog.w(TAG, "Failed to capture screenshot for " + wc);
                 return false;
             }
-            final boolean isDisplayRotation = wc.asDisplayContent() != null
-                    && wc.asDisplayContent().isRotationChanging();
             // Some tests may check the name "RotationLayer" to detect display rotation.
             final String name = isDisplayRotation ? "RotationLayer" : "transition snapshot: " + wc;
             SurfaceControl snapshotSurface = wc.makeAnimationLeash()

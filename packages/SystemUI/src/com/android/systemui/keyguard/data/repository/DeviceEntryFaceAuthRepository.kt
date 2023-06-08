@@ -32,6 +32,8 @@ import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.dump.DumpManager
+import com.android.systemui.flags.FeatureFlags
+import com.android.systemui.flags.Flags
 import com.android.systemui.keyguard.domain.interactor.AlternateBouncerInteractor
 import com.android.systemui.keyguard.domain.interactor.KeyguardInteractor
 import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor
@@ -42,7 +44,7 @@ import com.android.systemui.keyguard.shared.model.ErrorAuthenticationStatus
 import com.android.systemui.keyguard.shared.model.FailedAuthenticationStatus
 import com.android.systemui.keyguard.shared.model.HelpAuthenticationStatus
 import com.android.systemui.keyguard.shared.model.SuccessAuthenticationStatus
-import com.android.systemui.keyguard.shared.model.WakefulnessModel
+import com.android.systemui.keyguard.shared.model.TransitionState
 import com.android.systemui.log.FaceAuthenticationLogger
 import com.android.systemui.log.SessionTracker
 import com.android.systemui.log.table.TableLogBuffer
@@ -63,6 +65,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
@@ -135,6 +138,7 @@ constructor(
     @FaceDetectTableLog private val faceDetectLog: TableLogBuffer,
     @FaceAuthTableLog private val faceAuthLog: TableLogBuffer,
     private val keyguardTransitionInteractor: KeyguardTransitionInteractor,
+    private val featureFlags: FeatureFlags,
     dumpManager: DumpManager,
 ) : DeviceEntryFaceAuthRepository, Dumpable {
     private var authCancellationSignal: CancellationSignal? = null
@@ -212,23 +216,34 @@ constructor(
                 .collect(Collectors.toSet())
         dumpManager.registerCriticalDumpable("DeviceEntryFaceAuthRepositoryImpl", this)
 
-        observeFaceAuthGatingChecks()
-        observeFaceDetectGatingChecks()
-        observeFaceAuthResettingConditions()
-        listenForSchedulingWatchdog()
+        if (featureFlags.isEnabled(Flags.FACE_AUTH_REFACTOR)) {
+            observeFaceAuthGatingChecks()
+            observeFaceDetectGatingChecks()
+            observeFaceAuthResettingConditions()
+            listenForSchedulingWatchdog()
+        }
     }
 
     private fun listenForSchedulingWatchdog() {
         keyguardTransitionInteractor.anyStateToGoneTransition
-            .onEach { faceManager?.scheduleWatchdog() }
+            .filter { it.transitionState == TransitionState.FINISHED }
+            .onEach {
+                faceAuthLogger.watchdogScheduled()
+                faceManager?.scheduleWatchdog()
+            }
             .launchIn(applicationScope)
     }
 
     private fun observeFaceAuthResettingConditions() {
-        // Clear auth status when keyguard is going away or when the user is switching.
-        merge(keyguardRepository.isKeyguardGoingAway, userRepository.userSwitchingInProgress)
-            .onEach { goingAwayOrUserSwitchingInProgress ->
-                if (goingAwayOrUserSwitchingInProgress) {
+        // Clear auth status when keyguard is going away or when the user is switching or device
+        // starts going to sleep.
+        merge(
+                keyguardRepository.wakefulness.map { it.isStartingToSleepOrAsleep() },
+                keyguardRepository.isKeyguardGoingAway,
+                userRepository.userSwitchingInProgress
+            )
+            .onEach { anyOfThemIsTrue ->
+                if (anyOfThemIsTrue) {
                     _isAuthenticated.value = false
                     retryCount = 0
                     halErrorRetryJob?.cancel()
@@ -248,8 +263,8 @@ constructor(
                     "nonStrongBiometricIsNotAllowed",
                     faceDetectLog
                 ),
-                // We don't want to run face detect if it's not possible to authenticate with FP
-                // from the bouncer. UDFPS is the only fp sensor type that won't support this.
+                // We don't want to run face detect if fingerprint can be used to unlock the device
+                // but it's not possible to authenticate with FP from the bouncer (UDFPS)
                 logAndObserve(
                     and(isUdfps(), deviceEntryFingerprintAuthRepository.isRunning).isFalse(),
                     "udfpsAuthIsNotPossibleAnymore",
@@ -297,16 +312,14 @@ constructor(
                     tableLogBuffer
                 ),
                 logAndObserve(
-                    keyguardRepository.wakefulness
-                        .map { WakefulnessModel.isSleepingOrStartingToSleep(it) }
-                        .isFalse(),
+                    keyguardRepository.wakefulness.map { it.isStartingToSleepOrAsleep() }.isFalse(),
                     "deviceNotSleepingOrNotStartingToSleep",
                     tableLogBuffer
                 ),
                 logAndObserve(
                     combine(
                         keyguardInteractor.isSecureCameraActive,
-                        alternateBouncerInteractor.isVisible,
+                        alternateBouncerInteractor.isVisible
                     ) { a, b ->
                         !a || b
                     },
@@ -334,22 +347,17 @@ constructor(
                 logAndObserve(isLockedOut.isFalse(), "isNotInLockOutState", faceAuthLog),
                 logAndObserve(
                     deviceEntryFingerprintAuthRepository.isLockedOut.isFalse(),
-                    "fpLockedOut",
+                    "fpIsNotLockedOut",
                     faceAuthLog
                 ),
                 logAndObserve(
                     trustRepository.isCurrentUserTrusted.isFalse(),
-                    "currentUserTrusted",
+                    "currentUserIsNotTrusted",
                     faceAuthLog
                 ),
                 logAndObserve(
                     biometricSettingsRepository.isNonStrongBiometricAllowed,
                     "nonStrongBiometricIsAllowed",
-                    faceAuthLog
-                ),
-                logAndObserve(
-                    userRepository.selectedUserInfo.map { it.isPrimary },
-                    "userIsPrimaryUser",
                     faceAuthLog
                 ),
             )

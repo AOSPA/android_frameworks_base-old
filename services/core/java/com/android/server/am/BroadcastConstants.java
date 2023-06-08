@@ -179,9 +179,37 @@ public class BroadcastConstants {
      * being "runnable" to give other processes a chance to run.
      */
     public int MAX_RUNNING_ACTIVE_BROADCASTS = DEFAULT_MAX_RUNNING_ACTIVE_BROADCASTS;
-    private static final String KEY_MAX_RUNNING_ACTIVE_BROADCASTS = "bcast_max_running_active_broadcasts";
+    private static final String KEY_MAX_RUNNING_ACTIVE_BROADCASTS =
+            "bcast_max_running_active_broadcasts";
     private static final int DEFAULT_MAX_RUNNING_ACTIVE_BROADCASTS =
             ActivityManager.isLowRamDeviceStatic() ? 8 : 16;
+
+    /**
+     * For {@link BroadcastQueueModernImpl}: Maximum number of active "blocking" broadcasts
+     * to dispatch to a "running" System process queue before we retire them back to
+     * being "runnable" to give other processes a chance to run. Here "blocking" refers to
+     * whether or not we are going to block on the finishReceiver() to be called before moving
+     * to the next broadcast.
+     */
+    public int MAX_CORE_RUNNING_BLOCKING_BROADCASTS = DEFAULT_MAX_CORE_RUNNING_BLOCKING_BROADCASTS;
+    private static final String KEY_CORE_MAX_RUNNING_BLOCKING_BROADCASTS =
+            "bcast_max_core_running_blocking_broadcasts";
+    private static final int DEFAULT_MAX_CORE_RUNNING_BLOCKING_BROADCASTS =
+            ActivityManager.isLowRamDeviceStatic() ? 8 : 16;
+
+    /**
+     * For {@link BroadcastQueueModernImpl}: Maximum number of active non-"blocking" broadcasts
+     * to dispatch to a "running" System process queue before we retire them back to
+     * being "runnable" to give other processes a chance to run. Here "blocking" refers to
+     * whether or not we are going to block on the finishReceiver() to be called before moving
+     * to the next broadcast.
+     */
+    public int MAX_CORE_RUNNING_NON_BLOCKING_BROADCASTS =
+            DEFAULT_MAX_CORE_RUNNING_NON_BLOCKING_BROADCASTS;
+    private static final String KEY_CORE_MAX_RUNNING_NON_BLOCKING_BROADCASTS =
+            "bcast_max_core_running_non_blocking_broadcasts";
+    private static final int DEFAULT_MAX_CORE_RUNNING_NON_BLOCKING_BROADCASTS =
+            ActivityManager.isLowRamDeviceStatic() ? 32 : 64;
 
     /**
      * For {@link BroadcastQueueModernImpl}: Maximum number of pending
@@ -217,6 +245,26 @@ public class BroadcastConstants {
     public long DELAY_URGENT_MILLIS = DEFAULT_DELAY_URGENT_MILLIS;
     private static final String KEY_DELAY_URGENT_MILLIS = "bcast_delay_urgent_millis";
     private static final long DEFAULT_DELAY_URGENT_MILLIS = -120_000;
+
+    /**
+     * For {@link BroadcastQueueModernImpl}: Delay to apply to broadcasts to
+     * foreground processes, typically a negative value to indicate they should be
+     * executed before most other pending broadcasts.
+     */
+    public long DELAY_FOREGROUND_PROC_MILLIS = DEFAULT_DELAY_FOREGROUND_PROC_MILLIS;
+    private static final String KEY_DELAY_FOREGROUND_PROC_MILLIS =
+            "bcast_delay_foreground_proc_millis";
+    private static final long DEFAULT_DELAY_FOREGROUND_PROC_MILLIS = -120_000;
+
+    /**
+     * For {@link BroadcastQueueModernImpl}: Delay to apply to broadcasts to
+     * persistent processes, typically a negative value to indicate they should be
+     * executed before most other pending broadcasts.
+     */
+    public long DELAY_PERSISTENT_PROC_MILLIS = DEFAULT_DELAY_FOREGROUND_PROC_MILLIS;
+    private static final String KEY_DELAY_PERSISTENT_PROC_MILLIS =
+            "bcast_delay_persistent_proc_millis";
+    private static final long DEFAULT_DELAY_PERSISTENT_PROC_MILLIS = -120_000;
 
     /**
      * For {@link BroadcastQueueModernImpl}: Maximum number of complete
@@ -369,6 +417,12 @@ public class BroadcastConstants {
                     DEFAULT_MAX_CONSECUTIVE_NORMAL_DISPATCHES);
             MAX_RUNNING_ACTIVE_BROADCASTS = getDeviceConfigInt(KEY_MAX_RUNNING_ACTIVE_BROADCASTS,
                     DEFAULT_MAX_RUNNING_ACTIVE_BROADCASTS);
+            MAX_CORE_RUNNING_BLOCKING_BROADCASTS = getDeviceConfigInt(
+                    KEY_CORE_MAX_RUNNING_BLOCKING_BROADCASTS,
+                    DEFAULT_MAX_CORE_RUNNING_BLOCKING_BROADCASTS);
+            MAX_CORE_RUNNING_NON_BLOCKING_BROADCASTS = getDeviceConfigInt(
+                    KEY_CORE_MAX_RUNNING_NON_BLOCKING_BROADCASTS,
+                    DEFAULT_MAX_CORE_RUNNING_NON_BLOCKING_BROADCASTS);
             MAX_PENDING_BROADCASTS = getDeviceConfigInt(KEY_MAX_PENDING_BROADCASTS,
                     DEFAULT_MAX_PENDING_BROADCASTS);
             DELAY_NORMAL_MILLIS = getDeviceConfigLong(KEY_DELAY_NORMAL_MILLIS,
@@ -377,6 +431,10 @@ public class BroadcastConstants {
                     DEFAULT_DELAY_CACHED_MILLIS);
             DELAY_URGENT_MILLIS = getDeviceConfigLong(KEY_DELAY_URGENT_MILLIS,
                     DEFAULT_DELAY_URGENT_MILLIS);
+            DELAY_FOREGROUND_PROC_MILLIS = getDeviceConfigLong(KEY_DELAY_FOREGROUND_PROC_MILLIS,
+                    DEFAULT_DELAY_FOREGROUND_PROC_MILLIS);
+            DELAY_PERSISTENT_PROC_MILLIS = getDeviceConfigLong(KEY_DELAY_PERSISTENT_PROC_MILLIS,
+                    DEFAULT_DELAY_PERSISTENT_PROC_MILLIS);
             MAX_HISTORY_COMPLETE_SIZE = getDeviceConfigInt(KEY_MAX_HISTORY_COMPLETE_SIZE,
                     DEFAULT_MAX_HISTORY_COMPLETE_SIZE);
             MAX_HISTORY_SUMMARY_SIZE = getDeviceConfigInt(KEY_MAX_HISTORY_SUMMARY_SIZE,
@@ -418,6 +476,10 @@ public class BroadcastConstants {
             pw.print(KEY_MODERN_QUEUE_ENABLED, MODERN_QUEUE_ENABLED).println();
             pw.print(KEY_MAX_RUNNING_PROCESS_QUEUES, MAX_RUNNING_PROCESS_QUEUES).println();
             pw.print(KEY_MAX_RUNNING_ACTIVE_BROADCASTS, MAX_RUNNING_ACTIVE_BROADCASTS).println();
+            pw.print(KEY_CORE_MAX_RUNNING_BLOCKING_BROADCASTS,
+                    MAX_CORE_RUNNING_BLOCKING_BROADCASTS).println();
+            pw.print(KEY_CORE_MAX_RUNNING_NON_BLOCKING_BROADCASTS,
+                    MAX_CORE_RUNNING_NON_BLOCKING_BROADCASTS).println();
             pw.print(KEY_MAX_PENDING_BROADCASTS, MAX_PENDING_BROADCASTS).println();
             pw.print(KEY_DELAY_NORMAL_MILLIS,
                     TimeUtils.formatDuration(DELAY_NORMAL_MILLIS)).println();
@@ -425,6 +487,10 @@ public class BroadcastConstants {
                     TimeUtils.formatDuration(DELAY_CACHED_MILLIS)).println();
             pw.print(KEY_DELAY_URGENT_MILLIS,
                     TimeUtils.formatDuration(DELAY_URGENT_MILLIS)).println();
+            pw.print(KEY_DELAY_FOREGROUND_PROC_MILLIS,
+                    TimeUtils.formatDuration(DELAY_FOREGROUND_PROC_MILLIS)).println();
+            pw.print(KEY_DELAY_PERSISTENT_PROC_MILLIS,
+                    TimeUtils.formatDuration(DELAY_PERSISTENT_PROC_MILLIS)).println();
             pw.print(KEY_MAX_HISTORY_COMPLETE_SIZE, MAX_HISTORY_COMPLETE_SIZE).println();
             pw.print(KEY_MAX_HISTORY_SUMMARY_SIZE, MAX_HISTORY_SUMMARY_SIZE).println();
             pw.print(KEY_MAX_CONSECUTIVE_URGENT_DISPATCHES,

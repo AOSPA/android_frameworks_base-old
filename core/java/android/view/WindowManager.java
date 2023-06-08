@@ -467,7 +467,7 @@ public interface WindowManager extends ViewManager {
      * implementation.
      * @hide
      */
-    int TRANSIT_FIRST_CUSTOM = 13;
+    int TRANSIT_FIRST_CUSTOM = 1000;
 
     /**
      * @hide
@@ -893,7 +893,7 @@ public interface WindowManager extends ViewManager {
      * &lt;application&gt;
      *   &lt;property
      *     android:name=
-     *       "android.window.PROPERTY_COMPAT_IGNORE_ORIENTATION_REQUEST_WHEN_LOOP_DETECTED"
+     *       "android.window.PROPERTY_COMPAT_ALLOW_IGNORING_ORIENTATION_REQUEST_WHEN_LOOP_DETECTED"
      *     android:value="false"/&gt;
      * &lt;/application&gt;
      * </pre>
@@ -901,8 +901,8 @@ public interface WindowManager extends ViewManager {
      * @hide
      */
     // TODO(b/274924641): Make this public API.
-    String PROPERTY_COMPAT_IGNORE_ORIENTATION_REQUEST_WHEN_LOOP_DETECTED =
-            "android.window.PROPERTY_COMPAT_IGNORE_ORIENTATION_REQUEST_WHEN_LOOP_DETECTED";
+    String PROPERTY_COMPAT_ALLOW_IGNORING_ORIENTATION_REQUEST_WHEN_LOOP_DETECTED =
+            "android.window.PROPERTY_COMPAT_ALLOW_IGNORING_ORIENTATION_REQUEST_WHEN_LOOP_DETECTED";
 
     /**
      * Application level {@link android.content.pm.PackageManager.Property PackageManager
@@ -1183,6 +1183,68 @@ public interface WindowManager extends ViewManager {
     // TODO(b/263984287): Add CTS tests.
     String PROPERTY_COMPAT_ALLOW_DISPLAY_ORIENTATION_OVERRIDE =
             "android.window.PROPERTY_COMPAT_ALLOW_DISPLAY_ORIENTATION_OVERRIDE";
+
+    /**
+     * Application level {@link android.content.pm.PackageManager.Property PackageManager
+     * .Property} for an app to inform the system that the app should be opted-out from the
+     * compatibility override that changes the min aspect ratio.
+     *
+     * <p>When this compat override is enabled the min aspect ratio given in the app's manifest can
+     * be overridden by the device manufacturer using their discretion to improve display
+     * compatibility unless the app's manifest value is higher. This treatment will also apply if
+     * no min aspect ratio value is provided in the manifest. These treatments can apply only in
+     * specific cases (e.g. device is in portrait) or each time the app is displayed on screen.
+     *
+     * <p>Setting this property to {@code false} informs the system that the app must be
+     * opted-out from the compatibility treatment even if the device manufacturer has opted the app
+     * into the treatment.
+     *
+     * <p>Not setting this property at all, or setting this property to {@code true} has no effect.
+     *
+     * <p><b>Syntax:</b>
+     * <pre>
+     * &lt;application&gt;
+     *   &lt;property
+     *     android:name="android.window.PROPERTY_COMPAT_ALLOW_MIN_ASPECT_RATIO_OVERRIDE"
+     *     android:value="true|false"/&gt;
+     * &lt;/application&gt;
+     * </pre>
+     * @hide
+     */
+    // TODO(b/279428317): Make this public API.
+    String PROPERTY_COMPAT_ALLOW_MIN_ASPECT_RATIO_OVERRIDE =
+            "android.window.PROPERTY_COMPAT_ALLOW_MIN_ASPECT_RATIO_OVERRIDE";
+
+    /**
+     * Application level {@link android.content.pm.PackageManager.Property PackageManager
+     * .Property} for an app to inform the system that the app should be opted-out from the
+     * compatibility overrides that change the resizability of the app.
+     *
+     * <p>When these compat overrides are enabled they force the packages they are applied to to be
+     * resizable / unresizable. If the app is forced to be resizable this won't change whether
+     * the app can be put into multi-windowing mode, but allow the app to resize without going into
+     * size-compat mode when the window container resizes, such as display size change or screen
+     * rotation.
+     *
+     * <p>Setting this property to {@code false} informs the system that the app must be
+     * opted-out from the compatibility treatment even if the device manufacturer has opted the app
+     * into the treatment.
+     *
+     * <p>Not setting this property at all, or setting this property to {@code true} has no effect.
+     *
+     * <p><b>Syntax:</b>
+     * <pre>
+     * &lt;application&gt;
+     *   &lt;property
+     *     android:name="android.window.PROPERTY_COMPAT_ALLOW_RESIZEABLE_ACTIVITY_OVERRIDES"
+     *     android:value="true|false"/&gt;
+     * &lt;/application&gt;
+     * </pre>
+     * @hide
+     */
+    // TODO(b/280052089): Make this public API.
+    String PROPERTY_COMPAT_ALLOW_RESIZEABLE_ACTIVITY_OVERRIDES =
+            "android.window.PROPERTY_COMPAT_ALLOW_RESIZEABLE_ACTIVITY_OVERRIDES";
 
     /**
      * @hide

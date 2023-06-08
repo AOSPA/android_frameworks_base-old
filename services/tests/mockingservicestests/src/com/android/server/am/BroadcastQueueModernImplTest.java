@@ -40,6 +40,7 @@ import static com.android.server.am.BroadcastQueueTest.PACKAGE_YELLOW;
 import static com.android.server.am.BroadcastQueueTest.getUidForPackage;
 import static com.android.server.am.BroadcastQueueTest.makeManifestReceiver;
 import static com.android.server.am.BroadcastQueueTest.withPriority;
+import static com.android.server.am.BroadcastRecord.isReceiverEquals;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -49,13 +50,16 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 
 import android.annotation.NonNull;
@@ -116,6 +120,7 @@ public final class BroadcastQueueModernImplTest {
     TestLooperManager mLooper;
 
     BroadcastConstants mConstants;
+    private BroadcastSkipPolicy mSkipPolicy;
     BroadcastQueueModernImpl mImpl;
 
     BroadcastProcessQueue mHead;
@@ -139,29 +144,18 @@ public final class BroadcastQueueModernImplTest {
         mConstants.DELAY_NORMAL_MILLIS = 10_000;
         mConstants.DELAY_CACHED_MILLIS = 120_000;
 
-        final BroadcastSkipPolicy emptySkipPolicy = new BroadcastSkipPolicy(mAms) {
-            public boolean shouldSkip(BroadcastRecord r, Object o) {
-                // Ignored
-                return false;
-            }
-            public String shouldSkipMessage(BroadcastRecord r, Object o) {
-                // Ignored
-                return null;
-            }
-            public boolean disallowBackgroundStart(BroadcastRecord r) {
-                // Ignored
-                return false;
-            }
-        };
+        mSkipPolicy = spy(new BroadcastSkipPolicy(mAms));
+        doReturn(null).when(mSkipPolicy).shouldSkipMessage(any(), any());
+        doReturn(false).when(mSkipPolicy).disallowBackgroundStart(any());
+
         final BroadcastHistory emptyHistory = new BroadcastHistory(mConstants) {
             public void addBroadcastToHistoryLocked(BroadcastRecord original) {
                 // Ignored
             }
         };
 
-
         mImpl = new BroadcastQueueModernImpl(mAms, mHandlerThread.getThreadHandler(),
-            mConstants, mConstants, emptySkipPolicy, emptyHistory);
+            mConstants, mConstants, mSkipPolicy, emptyHistory);
 
         doReturn(1L).when(mQueue1).getRunnableAt();
         doReturn(2L).when(mQueue2).getRunnableAt();
@@ -256,17 +250,12 @@ public final class BroadcastQueueModernImplTest {
 
     private void enqueueOrReplaceBroadcast(BroadcastProcessQueue queue,
             BroadcastRecord record, int recordIndex) {
-        enqueueOrReplaceBroadcast(queue, record, recordIndex, false, 42_000_000L);
+        enqueueOrReplaceBroadcast(queue, record, recordIndex, 42_000_000L);
     }
 
     private void enqueueOrReplaceBroadcast(BroadcastProcessQueue queue,
             BroadcastRecord record, int recordIndex, long enqueueTime) {
-        enqueueOrReplaceBroadcast(queue, record, recordIndex, false, enqueueTime);
-    }
-
-    private void enqueueOrReplaceBroadcast(BroadcastProcessQueue queue,
-            BroadcastRecord record, int recordIndex, boolean wouldBeSkipped, long enqueueTime) {
-        queue.enqueueOrReplaceBroadcast(record, recordIndex, wouldBeSkipped, (r, i) -> {
+        queue.enqueueOrReplaceBroadcast(record, recordIndex, (r, i) -> {
             throw new UnsupportedOperationException();
         });
         record.enqueueTime = enqueueTime;
@@ -404,9 +393,9 @@ public final class BroadcastQueueModernImplTest {
                 List.of(makeMockRegisteredReceiver()), false);
         enqueueOrReplaceBroadcast(queue, airplaneRecord, 0);
 
-        queue.setProcessAndUidCached(null, false);
+        queue.setProcessAndUidState(null, false, false);
         final long notCachedRunnableAt = queue.getRunnableAt();
-        queue.setProcessAndUidCached(null, true);
+        queue.setProcessAndUidState(null, false, true);
         final long cachedRunnableAt = queue.getRunnableAt();
         assertThat(cachedRunnableAt).isGreaterThan(notCachedRunnableAt);
         assertFalse(queue.isRunnable());
@@ -431,9 +420,9 @@ public final class BroadcastQueueModernImplTest {
                 List.of(makeMockRegisteredReceiver()), false);
         enqueueOrReplaceBroadcast(queue, airplaneRecord, 0);
 
-        queue.setProcessAndUidCached(null, false);
+        queue.setProcessAndUidState(null, false, false);
         final long notCachedRunnableAt = queue.getRunnableAt();
-        queue.setProcessAndUidCached(null, true);
+        queue.setProcessAndUidState(null, false, true);
         final long cachedRunnableAt = queue.getRunnableAt();
         assertThat(cachedRunnableAt).isGreaterThan(notCachedRunnableAt);
         assertTrue(queue.isRunnable());
@@ -463,13 +452,13 @@ public final class BroadcastQueueModernImplTest {
         // verify that:
         // (a) the queue is immediately runnable by existence of a fg-priority broadcast
         // (b) the next one up is the fg-priority broadcast despite its later enqueue time
-        queue.setProcessAndUidCached(null, false);
+        queue.setProcessAndUidState(null, false, false);
         assertTrue(queue.isRunnable());
         assertThat(queue.getRunnableAt()).isAtMost(airplaneRecord.enqueueClockTime);
         assertEquals(ProcessList.SCHED_GROUP_UNDEFINED, queue.getPreferredSchedulingGroupLocked());
         assertEquals(queue.peekNextBroadcastRecord(), airplaneRecord);
 
-        queue.setProcessAndUidCached(null, true);
+        queue.setProcessAndUidState(null, false, true);
         assertTrue(queue.isRunnable());
         assertThat(queue.getRunnableAt()).isAtMost(airplaneRecord.enqueueClockTime);
         assertEquals(ProcessList.SCHED_GROUP_UNDEFINED, queue.getPreferredSchedulingGroupLocked());
@@ -526,6 +515,52 @@ public final class BroadcastQueueModernImplTest {
         assertEquals(BroadcastProcessQueue.REASON_MAX_PENDING, queue.getRunnableAtReason());
     }
 
+    @Test
+    public void testRunnableAt_uidForeground() {
+        final BroadcastProcessQueue queue = new BroadcastProcessQueue(mConstants, PACKAGE_GREEN,
+                getUidForPackage(PACKAGE_GREEN));
+
+        final Intent timeTick = new Intent(Intent.ACTION_TIME_TICK);
+        final BroadcastRecord timeTickRecord = makeBroadcastRecord(timeTick,
+                List.of(makeMockRegisteredReceiver()));
+        enqueueOrReplaceBroadcast(queue, timeTickRecord, 0);
+
+        assertThat(queue.getRunnableAt()).isGreaterThan(timeTickRecord.enqueueTime);
+        assertEquals(BroadcastProcessQueue.REASON_NORMAL, queue.getRunnableAtReason());
+
+        queue.setProcessAndUidState(mProcess, true, false);
+        assertThat(queue.getRunnableAt()).isLessThan(timeTickRecord.enqueueTime);
+        assertEquals(BroadcastProcessQueue.REASON_FOREGROUND, queue.getRunnableAtReason());
+
+        queue.setProcessAndUidState(mProcess, false, false);
+        assertThat(queue.getRunnableAt()).isGreaterThan(timeTickRecord.enqueueTime);
+        assertEquals(BroadcastProcessQueue.REASON_NORMAL, queue.getRunnableAtReason());
+    }
+
+    @Test
+    public void testRunnableAt_persistentProc() {
+        final BroadcastProcessQueue queue = new BroadcastProcessQueue(mConstants, PACKAGE_GREEN,
+                getUidForPackage(PACKAGE_GREEN));
+
+        final Intent timeTick = new Intent(Intent.ACTION_TIME_TICK);
+        final BroadcastRecord timeTickRecord = makeBroadcastRecord(timeTick,
+                List.of(makeMockRegisteredReceiver()));
+        enqueueOrReplaceBroadcast(queue, timeTickRecord, 0);
+
+        assertThat(queue.getRunnableAt()).isGreaterThan(timeTickRecord.enqueueTime);
+        assertEquals(BroadcastProcessQueue.REASON_NORMAL, queue.getRunnableAtReason());
+
+        doReturn(true).when(mProcess).isPersistent();
+        queue.setProcessAndUidState(mProcess, false, false);
+        assertThat(queue.getRunnableAt()).isLessThan(timeTickRecord.enqueueTime);
+        assertEquals(BroadcastProcessQueue.REASON_PERSISTENT, queue.getRunnableAtReason());
+
+        doReturn(false).when(mProcess).isPersistent();
+        queue.setProcessAndUidState(mProcess, false, false);
+        assertThat(queue.getRunnableAt()).isGreaterThan(timeTickRecord.enqueueTime);
+        assertEquals(BroadcastProcessQueue.REASON_NORMAL, queue.getRunnableAtReason());
+    }
+
     /**
      * Verify that a cached process that would normally be delayed becomes
      * immediately runnable when the given broadcast is enqueued.
@@ -533,7 +568,7 @@ public final class BroadcastQueueModernImplTest {
     private void doRunnableAt_Cached(BroadcastRecord testRecord, int testRunnableAtReason) {
         final BroadcastProcessQueue queue = new BroadcastProcessQueue(mConstants,
                 PACKAGE_GREEN, getUidForPackage(PACKAGE_GREEN));
-        queue.setProcessAndUidCached(null, true);
+        queue.setProcessAndUidState(null, false, true);
 
         final BroadcastRecord lazyRecord = makeBroadcastRecord(
                 new Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED),
@@ -780,7 +815,7 @@ public final class BroadcastQueueModernImplTest {
 
         BroadcastProcessQueue queue = new BroadcastProcessQueue(mConstants,
                 PACKAGE_GREEN, getUidForPackage(PACKAGE_GREEN));
-        queue.setPrioritizeEarliest(true);
+        queue.addPrioritizeEarliestRequest();
         long timeCounter = 100;
 
         enqueueOrReplaceBroadcast(queue,
@@ -825,6 +860,28 @@ public final class BroadcastQueueModernImplTest {
         queue.makeActiveNextPending();
         assertEquals(AppWidgetManager.ACTION_APPWIDGET_UPDATE,
                 queue.getActive().intent.getAction());
+
+
+        queue.removePrioritizeEarliestRequest();
+
+        enqueueOrReplaceBroadcast(queue,
+                makeBroadcastRecord(new Intent(Intent.ACTION_BOOT_COMPLETED)
+                        .addFlags(Intent.FLAG_RECEIVER_OFFLOAD)), 0, timeCounter++);
+        enqueueOrReplaceBroadcast(queue,
+                makeBroadcastRecord(new Intent(Intent.ACTION_TIMEZONE_CHANGED)),
+                0, timeCounter++);
+        enqueueOrReplaceBroadcast(queue,
+                makeBroadcastRecord(new Intent(Intent.ACTION_LOCALE_CHANGED)
+                        .addFlags(Intent.FLAG_RECEIVER_FOREGROUND)), 0, timeCounter++);
+
+        // Once the request to prioritize earliest is removed, we should expect broadcasts
+        // to be dispatched in the order of foreground, normal and then offload.
+        queue.makeActiveNextPending();
+        assertEquals(Intent.ACTION_LOCALE_CHANGED, queue.getActive().intent.getAction());
+        queue.makeActiveNextPending();
+        assertEquals(Intent.ACTION_TIMEZONE_CHANGED, queue.getActive().intent.getAction());
+        queue.makeActiveNextPending();
+        assertEquals(Intent.ACTION_BOOT_COMPLETED, queue.getActive().intent.getAction());
     }
 
     /**
@@ -1197,6 +1254,42 @@ public final class BroadcastQueueModernImplTest {
         // Even though the active broadcast is not a foreground one, scheduling group will be
         // DEFAULT since there is a foreground broadcast waiting to be delivered.
         assertEquals(ProcessList.SCHED_GROUP_DEFAULT, queue.getPreferredSchedulingGroupLocked());
+    }
+
+    @Test
+    public void testSkipPolicy_atEnqueueTime() throws Exception {
+        final Intent userPresent = new Intent(Intent.ACTION_USER_PRESENT);
+        final Object greenReceiver = makeManifestReceiver(PACKAGE_GREEN, CLASS_GREEN);
+        final Object redReceiver = makeManifestReceiver(PACKAGE_RED, CLASS_RED);
+
+        final BroadcastRecord userPresentRecord = makeBroadcastRecord(userPresent,
+                List.of(greenReceiver, redReceiver));
+
+        final Intent timeTick = new Intent(Intent.ACTION_TIME_TICK);
+        final BroadcastRecord timeTickRecord = makeBroadcastRecord(timeTick,
+                List.of(greenReceiver, redReceiver));
+
+        doAnswer(invocation -> {
+            final BroadcastRecord r = invocation.getArgument(0);
+            final Object o = invocation.getArgument(1);
+            if (userPresent.getAction().equals(r.intent.getAction())
+                    && isReceiverEquals(o, greenReceiver)) {
+                return "receiver skipped by test";
+            }
+            return null;
+        }).when(mSkipPolicy).shouldSkipMessage(any(BroadcastRecord.class), any());
+
+        mImpl.enqueueBroadcastLocked(userPresentRecord);
+        mImpl.enqueueBroadcastLocked(timeTickRecord);
+
+        final BroadcastProcessQueue greenQueue = mImpl.getProcessQueue(PACKAGE_GREEN,
+                getUidForPackage(PACKAGE_GREEN));
+        // There should be only one broadcast for green process as the other would have
+        // been skipped.
+        verifyPendingRecords(greenQueue, List.of(timeTick));
+        final BroadcastProcessQueue redQueue = mImpl.getProcessQueue(PACKAGE_RED,
+                getUidForPackage(PACKAGE_RED));
+        verifyPendingRecords(redQueue, List.of(userPresent, timeTick));
     }
 
     private Intent createPackageChangedIntent(int uid, List<String> componentNameList) {

@@ -75,9 +75,9 @@ import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.demomode.DemoMode;
 import com.android.systemui.demomode.DemoModeController;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.log.LogBuffer;
+import com.android.systemui.log.LogLevel;
 import com.android.systemui.log.dagger.StatusBarNetworkControllerLog;
-import com.android.systemui.plugins.log.LogBuffer;
-import com.android.systemui.plugins.log.LogLevel;
 import com.android.systemui.qs.tiles.dialog.InternetDialogFactory;
 import com.android.systemui.settings.UserTracker;
 import com.android.systemui.statusbar.pipeline.StatusBarPipelineFlags;
@@ -89,6 +89,8 @@ import com.android.systemui.statusbar.policy.DeviceProvisionedController.DeviceP
 import com.android.systemui.statusbar.policy.FiveGServiceClient;
 import com.android.systemui.telephony.TelephonyListenerManager;
 import com.android.systemui.util.CarrierConfigTracker;
+
+import kotlin.Unit;
 
 import java.io.PrintWriter;
 import java.text.SimpleDateFormat;
@@ -103,8 +105,6 @@ import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
 import javax.inject.Inject;
-
-import kotlin.Unit;
 
 /** Platform implementation of the network controller. **/
 @SysUISingleton
@@ -500,9 +500,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
         for (int i = 0; i < mMobileSignalControllers.size(); i++) {
             MobileSignalController mobileSignalController = mMobileSignalControllers.valueAt(i);
             mobileSignalController.registerListener();
-            if (!mStatusBarPipelineFlags.useNewMobileIcons()) {
-                mobileSignalController.registerFiveGStateListener(mFiveGServiceClient);
-            }
+            mobileSignalController.registerFiveGStateListener(mFiveGServiceClient);
         }
         if (mSubscriptionListener == null) {
             mSubscriptionListener = new SubListener(mBgLooper);
@@ -557,9 +555,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
         for (int i = 0; i < mMobileSignalControllers.size(); i++) {
             MobileSignalController mobileSignalController = mMobileSignalControllers.valueAt(i);
             mobileSignalController.unregisterListener();
-            if (!mStatusBarPipelineFlags.useNewMobileIcons()) {
-                mobileSignalController.unregisterFiveGStateListener(mFiveGServiceClient);
-            }
+            mobileSignalController.unregisterFiveGStateListener(mFiveGServiceClient);
         }
         mSubscriptionManager.removeOnSubscriptionsChangedListener(mSubscriptionListener);
         mBroadcastDispatcher.unregisterReceiver(this);
@@ -1016,9 +1012,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 }
                 if (mListening) {
                     controller.registerListener();
-                    if (!mStatusBarPipelineFlags.useNewMobileIcons()) {
-                        controller.registerFiveGStateListener(mFiveGServiceClient);
-                    }
+                    controller.registerFiveGStateListener(mFiveGServiceClient);
                 }
             }
         }
@@ -1029,9 +1023,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
                     mDefaultSignalController = null;
                 }
                 cachedControllers.get(key).unregisterListener();
-                if (!mStatusBarPipelineFlags.useNewMobileIcons()) {
-                    cachedControllers.get(key).unregisterFiveGStateListener(mFiveGServiceClient);
-                }
+                cachedControllers.get(key).unregisterFiveGStateListener(mFiveGServiceClient);
             }
         }
         mCallbackHandler.setSubs(subscriptions);

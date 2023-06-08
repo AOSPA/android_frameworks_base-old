@@ -347,6 +347,14 @@ public class BackgroundActivityStartController {
                     /*background*/ true, callingUid, realCallingUid,
                     intent, "Device Owner");
             }
+            // don't abort if the callingUid is a affiliated profile owner
+            if (mService.isAffiliatedProfileOwner(callingUid)) {
+                return logStartAllowedAndReturnCode(
+                    BAL_ALLOW_ALLOWLISTED_COMPONENT,
+                    resultIfPiSenderAllowsBal, balAllowedByPiSender,
+                    /*background*/ true, callingUid, realCallingUid,
+                    intent, "Affiliated Profile Owner");
+            }
             // don't abort if the callingUid has companion device
             final int callingUserId = UserHandle.getUserId(callingUid);
             if (mService.isAssociatedCompanionApp(callingUserId, callingUid)) {
@@ -457,6 +465,9 @@ public class BackgroundActivityStartController {
         // If we are here, it means all exemptions not based on PI sender failed, so we'll block
         // unless resultIfPiSenderAllowsBal is an allow and the PI sender allows BAL
 
+        String realCallingPackage = callingUid == realCallingUid ? callingPackage :
+                mService.mContext.getPackageManager().getNameForUid(realCallingUid);
+
         String stateDumpLog = " [callingPackage: " + callingPackage
                 + "; callingUid: " + callingUid
                 + "; appSwitchState: " + appSwitchState
@@ -465,6 +476,7 @@ public class BackgroundActivityStartController {
                         ActivityManager.class, "PROCESS_STATE_", callingUidProcState)
                 + "; isCallingUidPersistentSystemProcess: " + isCallingUidPersistentSystemProcess
                 + "; balAllowedByPiSender: " + balAllowedByPiSender
+                + "; realCallingPackage: " + realCallingPackage
                 + "; realCallingUid: " + realCallingUid
                 + "; realCallingUidHasAnyVisibleWindow: " + realCallingUidHasAnyVisibleWindow
                 + "; realCallingUidProcState: " + DebugUtils.valueToString(

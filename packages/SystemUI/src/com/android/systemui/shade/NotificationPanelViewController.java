@@ -22,10 +22,10 @@ import static android.view.MotionEvent.CLASSIFICATION_TWO_FINGER_SWIPE;
 import static android.view.View.INVISIBLE;
 import static android.view.View.VISIBLE;
 
+import static com.android.app.animation.Interpolators.EMPHASIZED_ACCELERATE;
+import static com.android.app.animation.Interpolators.EMPHASIZED_DECELERATE;
 import static com.android.keyguard.KeyguardClockSwitch.LARGE;
 import static com.android.keyguard.KeyguardClockSwitch.SMALL;
-import static com.android.systemui.animation.Interpolators.EMPHASIZED_ACCELERATE;
-import static com.android.systemui.animation.Interpolators.EMPHASIZED_DECELERATE;
 import static com.android.systemui.classifier.Classifier.BOUNCER_UNLOCK;
 import static com.android.systemui.classifier.Classifier.GENERIC;
 import static com.android.systemui.classifier.Classifier.QUICK_SETTINGS;
@@ -59,8 +59,6 @@ import android.graphics.Color;
 import android.graphics.Insets;
 import android.graphics.Rect;
 import android.graphics.Region;
-import android.hardware.biometrics.SensorLocationInternal;
-import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.PowerManager;
@@ -90,6 +88,7 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.animation.Interpolator;
 import android.widget.FrameLayout;
 
+import com.android.app.animation.Interpolators;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.logging.MetricsLogger;
@@ -115,7 +114,6 @@ import com.android.systemui.Dumpable;
 import com.android.systemui.Gefingerpoken;
 import com.android.systemui.R;
 import com.android.systemui.animation.ActivityLaunchAnimator;
-import com.android.systemui.animation.Interpolators;
 import com.android.systemui.animation.LaunchAnimator;
 import com.android.systemui.biometrics.AuthController;
 import com.android.systemui.classifier.Classifier;
@@ -226,8 +224,6 @@ import com.android.systemui.util.Utils;
 import com.android.systemui.util.time.SystemClock;
 import com.android.wm.shell.animation.FlingAnimationUtils;
 
-import kotlin.Unit;
-
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -238,6 +234,7 @@ import java.util.function.Consumer;
 import javax.inject.Inject;
 import javax.inject.Provider;
 
+import kotlin.Unit;
 import kotlinx.coroutines.CoroutineDispatcher;
 
 @CentralSurfacesComponent.CentralSurfacesScope
@@ -416,13 +413,18 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     private int mDisplayRightInset = 0; // in pixels
     private int mDisplayLeftInset = 0; // in pixels
 
-    private final KeyguardClockPositionAlgorithm
+    @VisibleForTesting
+    KeyguardClockPositionAlgorithm
             mClockPositionAlgorithm =
             new KeyguardClockPositionAlgorithm();
     private final KeyguardClockPositionAlgorithm.Result
             mClockPositionResult =
             new KeyguardClockPositionAlgorithm.Result();
-    private boolean mIsExpanding;
+    /**
+     * Indicates shade (or just QS) is expanding or collapsing but doesn't fully cover KEYGUARD
+     * state when shade can be expanded with swipe down or swipe down from the top to full QS.
+     */
+    private boolean mIsExpandingOrCollapsing;
 
     /**
      * Indicates drag starting height when swiping down or up on heads-up notifications.
@@ -1029,9 +1031,6 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                 userAvatarContainer,
                 keyguardUserSwitcherView);
 
-        NotificationStackScrollLayout stackScrollLayout = mView.findViewById(
-                R.id.notification_stack_scroller);
-        mNotificationStackScrollLayoutController.attach(stackScrollLayout);
         mNotificationStackScrollLayoutController.setOnHeightChangedListener(
                 new NsslHeightChangedListener());
         mNotificationStackScrollLayoutController.setOnEmptySpaceClickListener(
@@ -1508,11 +1507,9 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                         ? 1.0f : mInterpolatedDarkAmount;
 
         float udfpsAodTopLocation = -1f;
-        if (mUpdateMonitor.isUdfpsEnrolled() && mAuthController.getUdfpsProps().size() > 0) {
-            FingerprintSensorPropertiesInternal props = mAuthController.getUdfpsProps().get(0);
-            final SensorLocationInternal location = props.getLocation();
-            udfpsAodTopLocation = location.sensorLocationY - location.sensorRadius
-                    - mUdfpsMaxYBurnInOffset;
+        if (mUpdateMonitor.isUdfpsEnrolled() && mAuthController.getUdfpsLocation() != null) {
+            udfpsAodTopLocation = mAuthController.getUdfpsLocation().y
+                    - mAuthController.getUdfpsRadius() - mUdfpsMaxYBurnInOffset;
         }
 
         mClockPositionAlgorithm.setup(
@@ -1531,6 +1528,8 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                 mKeyguardStatusViewController.getClockBottom(mStatusBarHeaderHeightKeyguard),
                 mKeyguardStatusViewController.isClockTopAligned());
         mClockPositionAlgorithm.run(mClockPositionResult);
+        mKeyguardStatusViewController.setLockscreenClockY(
+                mClockPositionAlgorithm.getExpandedPreferredClockY());
         mKeyguardBottomAreaInteractor.setClockPosition(
                 mClockPositionResult.clockX, mClockPositionResult.clockY);
         boolean animate = mNotificationStackScrollLayoutController.isAddOrRemoveAnimationPending();
@@ -1878,7 +1877,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
 
     @Override
     public void expandToNotifications() {
-        if (mSplitShadeEnabled && (isShadeFullyExpanded() || isExpanding())) {
+        if (mSplitShadeEnabled && (isShadeFullyExpanded() || isExpandingOrCollapsing())) {
             return;
         }
         if (mQsController.getExpanded()) {
@@ -2125,6 +2124,9 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                     ? QUICK_SETTINGS : (
                     mKeyguardStateController.canDismissLockScreen() ? UNLOCK : BOUNCER_UNLOCK);
             if (!isFalseTouch(x, y, interactionType)) {
+                mShadeLog.logFlingExpands(vel, vectorVel, interactionType,
+                        this.mFlingAnimationUtils.getMinVelocityPxPerSecond(),
+                        mExpandedFraction > 0.5f, mAllowExpandForSmallExpansion);
                 if (Math.abs(vectorVel) < this.mFlingAnimationUtils.getMinVelocityPxPerSecond()) {
                     expands = shouldExpandWhenNotFlinging();
                 } else {
@@ -2285,7 +2287,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
 
     void requestScrollerTopPaddingUpdate(boolean animate) {
         mNotificationStackScrollLayoutController.updateTopPadding(
-                mQsController.calculateNotificationsTopPadding(mIsExpanding,
+                mQsController.calculateNotificationsTopPadding(mIsExpandingOrCollapsing,
                         getKeyguardNotificationStaticPadding(), mExpandedFraction), animate);
         if (isKeyguardShowing()
                 && mKeyguardBypassController.getBypassEnabled()) {
@@ -2338,7 +2340,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         }
         int maxHeight;
         if (mQsController.isExpandImmediate() || mQsController.getExpanded()
-                || mIsExpanding && mQsController.getExpandedWhenExpandingStarted()
+                || mIsExpandingOrCollapsing && mQsController.getExpandedWhenExpandingStarted()
                 || mPulsing || mSplitShadeEnabled) {
             maxHeight = mQsController.calculatePanelHeightExpanded(
                     mClockPositionResult.stackScrollerPadding);
@@ -2358,8 +2360,11 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         return maxHeight;
     }
 
-    public boolean isExpanding() {
-        return mIsExpanding;
+    @Override
+    public boolean isExpandingOrCollapsing() {
+        float lockscreenExpansionProgress = mQsController.getLockscreenShadeDragProgress();
+        return mIsExpandingOrCollapsing
+                || (0 < lockscreenExpansionProgress && lockscreenExpansionProgress < 1);
     }
 
     private void onHeightUpdated(float expandedHeight) {
@@ -2371,7 +2376,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                     mExpandedFraction, isExpanded(), mTracking, mExpansionDragDownAmountPx);
         }
         if (!mQsController.getExpanded() || mQsController.isExpandImmediate()
-                || mIsExpanding && mQsController.getExpandedWhenExpandingStarted()) {
+                || mIsExpandingOrCollapsing && mQsController.getExpandedWhenExpandingStarted()) {
             // Updating the clock position will set the top padding which might
             // trigger a new panel height and re-position the clock.
             // This is a circular dependency and should be avoided, otherwise we'll have
@@ -2509,7 +2514,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         mNotificationStackScrollLayoutController.onExpansionStopped();
         mHeadsUpManager.onExpandingFinished();
         mConversationNotificationManager.onNotificationPanelExpandStateChanged(isFullyCollapsed());
-        mIsExpanding = false;
+        mIsExpandingOrCollapsing = false;
         mMediaHierarchyManager.setCollapsingShadeFromQS(false);
         mMediaHierarchyManager.setQsExpanded(mQsController.getExpanded());
         if (isFullyCollapsed()) {
@@ -2821,6 +2826,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     @Override
     public void setBouncerShowing(boolean bouncerShowing) {
         mBouncerShowing = bouncerShowing;
+        mNotificationStackScrollLayoutController.updateShowEmptyShadeView();
         updateVisibility();
     }
 
@@ -2921,6 +2927,10 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     private boolean isPanelVisibleBecauseOfHeadsUp() {
         return (mHeadsUpManager.hasPinnedHeadsUp() || mHeadsUpAnimatingAway)
                 && mBarState == StatusBarState.SHADE;
+    }
+
+    private boolean isPanelVisibleBecauseScrimIsAnimatingOff() {
+        return mUnlockedScreenOffAnimationController.isAnimationPlaying();
     }
 
     @Override
@@ -3214,7 +3224,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         ipw.print("mDisplayTopInset="); ipw.println(mDisplayTopInset);
         ipw.print("mDisplayRightInset="); ipw.println(mDisplayRightInset);
         ipw.print("mDisplayLeftInset="); ipw.println(mDisplayLeftInset);
-        ipw.print("mIsExpanding="); ipw.println(mIsExpanding);
+        ipw.print("mIsExpandingOrCollapsing="); ipw.println(mIsExpandingOrCollapsing);
         ipw.print("mHeadsUpStartHeight="); ipw.println(mHeadsUpStartHeight);
         ipw.print("mListenForHeadsUp="); ipw.println(mListenForHeadsUp);
         ipw.print("mNavigationBarBottomHeight="); ipw.println(mNavigationBarBottomHeight);
@@ -3427,8 +3437,9 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
             Log.d(TAG, "Updating panel sysui state flags: fullyExpanded="
                     + isFullyExpanded() + " inQs=" + mQsController.getExpanded());
         }
+        boolean isPanelVisible = mCentralSurfaces != null && mCentralSurfaces.isPanelExpanded();
         mSysUiState
-                .setFlag(SYSUI_STATE_NOTIFICATION_PANEL_VISIBLE, getExpandedFraction() > 0)
+                .setFlag(SYSUI_STATE_NOTIFICATION_PANEL_VISIBLE, isPanelVisible)
                 .setFlag(SYSUI_STATE_NOTIFICATION_PANEL_EXPANDED,
                         isFullyExpanded() && !mQsController.getExpanded())
                 .setFlag(SYSUI_STATE_QUICK_SETTINGS_EXPANDED,
@@ -3445,7 +3456,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     void notifyExpandingStarted() {
         if (!mExpanding) {
             mExpanding = true;
-            mIsExpanding = true;
+            mIsExpandingOrCollapsing = true;
             mQsController.onExpandingStarted(mQsController.getFullyExpanded());
         }
     }
@@ -3506,7 +3517,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
      *                         gesture), we always play haptic.
      */
     private void maybeVibrateOnOpening(boolean openingWithTouch) {
-        if (mVibrateOnOpening) {
+        if (mVibrateOnOpening && mBarState != KEYGUARD && mBarState != SHADE_LOCKED) {
             if (!openingWithTouch || !mHasVibratedOnOpen) {
                 mVibratorHelper.vibrate(VibrationEffect.EFFECT_TICK);
                 mHasVibratedOnOpen = true;
@@ -3806,7 +3817,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         } else if (mBarState == SHADE_LOCKED) {
             return true;
         } else {
-            // case of two finger swipe from the top of keyguard
+            // case of swipe from the top of keyguard to expanded QS
             return mQsController.computeExpansionFraction() == 1;
         }
     }
@@ -3981,6 +3992,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                 || isPanelVisibleBecauseOfHeadsUp()
                 || mTracking
                 || mHeightAnimator != null
+                || isPanelVisibleBecauseScrimIsAnimatingOff()
                 && !mIsSpringBackAnimation;
     }
 
@@ -4058,7 +4070,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
      * shade QS are always expanded
      */
     private void closeQsIfPossible() {
-        boolean openOrOpening = isShadeFullyExpanded() || isExpanding();
+        boolean openOrOpening = isShadeFullyExpanded() || isExpandingOrCollapsing();
         if (!(mSplitShadeEnabled && openOrOpening)) {
             mQsController.closeQs();
         }
@@ -4102,7 +4114,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
 
         if (!mFalsingManager.isUnlockingDisabled() && qsFullyExpanded
                 && mFalsingCollector.shouldEnforceBouncer()) {
-            mCentralSurfaces.executeRunnableDismissingKeyguard(null, null,
+            mActivityStarter.executeRunnableDismissingKeyguard(null, null,
                     false, true, false);
         }
         if (DEBUG_DRAWABLE) {
@@ -4387,7 +4399,8 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
 
                 @Override
                 public boolean shouldHeadsUpBeVisible() {
-                    return mHeadsUpAppearanceController.shouldBeVisible();
+                    return mHeadsUpAppearanceController != null &&
+                            mHeadsUpAppearanceController.shouldBeVisible();
                 }
 
                 @Override
@@ -4490,7 +4503,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         mDisplayTopInset = combinedInsets.top;
         mDisplayRightInset = combinedInsets.right;
         mDisplayLeftInset = combinedInsets.left;
-        mQsController.setDisplayInsets(mDisplayRightInset, mDisplayLeftInset);
+        mQsController.setDisplayInsets(mDisplayLeftInset, mDisplayRightInset);
 
         mNavigationBarBottomHeight = insets.getStableInsetBottom();
         updateMaxHeadsUpTranslation();
@@ -4780,7 +4793,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
 
             // If pulse is expanding already, let's give it the touch. There are situations
             // where the panel starts expanding even though we're also pulsing
-            boolean pulseShouldGetTouch = (!mIsExpanding
+            boolean pulseShouldGetTouch = (!mIsExpandingOrCollapsing
                     && !mQsController.shouldQuickSettingsIntercept(mDownX, mDownY, 0))
                     || mPulseExpansionHandler.isExpanding();
             if (pulseShouldGetTouch && mPulseExpansionHandler.onTouchEvent(event)) {
@@ -4946,7 +4959,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
                         mShadeLog.logHasVibrated(mHasVibratedOnOpen, mExpandedFraction);
                     }
                     addMovement(event);
-                    if (!isFullyCollapsed() && !isOnKeyguard()) {
+                    if (!isFullyCollapsed()) {
                         maybeVibrateOnOpening(true /* openingWithTouch */);
                     }
                     float h = y - mInitialExpandY;

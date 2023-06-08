@@ -68,7 +68,6 @@
     <string name="bubble_accessibility_action_move_bottom_right" msgid="2107626346109206352">"Přesunout vpravo dolů"</string>
     <string name="bubbles_app_settings" msgid="3617224938701566416">"Nastavení <xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g>"</string>
     <string name="bubble_dismiss_text" msgid="8816558050659478158">"Zavřít bublinu"</string>
-    <string name="bubbles_dont_bubble" msgid="3216183855437329223">"Nezobrazovat bubliny"</string>
     <string name="bubbles_dont_bubble_conversation" msgid="310000317885712693">"Nezobrazovat konverzaci v bublinách"</string>
     <string name="bubbles_user_education_title" msgid="2112319053732691899">"Chatujte pomocí bublin"</string>
     <string name="bubbles_user_education_description" msgid="4215862563054175407">"Nové konverzace se zobrazují jako plovoucí ikony, neboli bubliny. Klepnutím bublinu otevřete. Přetažením ji posunete."</string>
@@ -80,7 +79,7 @@
     <string name="notification_bubble_title" msgid="6082910224488253378">"Bublina"</string>
     <string name="manage_bubbles_text" msgid="7730624269650594419">"Spravovat"</string>
     <string name="accessibility_bubble_dismissed" msgid="8367471990421247357">"Bublina byla zavřena."</string>
-    <string name="restart_button_description" msgid="6712141648865547958">"Klepnutím tuto aplikaci kvůli lepšímu zobrazení restartujete."</string>
+    <string name="restart_button_description" msgid="6712141648865547958">"Pokud je problém se zobrazením aplikace, klepněte na ni a restartujte ji."</string>
     <string name="camera_compat_treatment_suggested_button_description" msgid="8103916969024076767">"Problémy s fotoaparátem?\nKlepnutím vyřešíte"</string>
     <string name="camera_compat_treatment_applied_button_description" msgid="2944157113330703897">"Nepomohlo to?\nKlepnutím se vrátíte"</string>
     <string name="camera_compat_dismiss_button_description" msgid="2795364433503817511">"Žádné problémy s fotoaparátem? Klepnutím zavřete."</string>

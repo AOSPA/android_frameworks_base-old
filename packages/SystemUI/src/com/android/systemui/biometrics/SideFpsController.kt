@@ -55,6 +55,7 @@ import com.airbnb.lottie.model.KeyPath
 import com.android.internal.annotations.VisibleForTesting
 import com.android.systemui.Dumpable
 import com.android.systemui.R
+import com.android.systemui.biometrics.domain.interactor.DisplayStateInteractor
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Main
@@ -84,6 +85,7 @@ constructor(
     private val activityTaskManager: ActivityTaskManager,
     overviewProxyService: OverviewProxyService,
     displayManager: DisplayManager,
+    private val displayStateInteractor: DisplayStateInteractor,
     @Main private val mainExecutor: DelayableExecutor,
     @Main private val handler: Handler,
     private val alternateBouncerInteractor: AlternateBouncerInteractor,
@@ -203,14 +205,16 @@ constructor(
         request: SideFpsUiRequestSource,
         @BiometricOverlayConstants.ShowReason reason: Int = BiometricOverlayConstants.REASON_UNKNOWN
     ) {
-        requests.add(request)
-        mainExecutor.execute {
-            if (overlayView == null) {
-                traceSection("SideFpsController#show(request=${request.name}, reason=$reason") {
-                    createOverlayForDisplay(reason)
+        if (!displayStateInteractor.isInRearDisplayMode.value) {
+            requests.add(request)
+            mainExecutor.execute {
+                if (overlayView == null) {
+                    traceSection("SideFpsController#show(request=${request.name}, reason=$reason") {
+                        createOverlayForDisplay(reason)
+                    }
+                } else {
+                    Log.v(TAG, "overlay already shown")
                 }
-            } else {
-                Log.v(TAG, "overlay already shown")
             }
         }
     }
@@ -432,25 +436,36 @@ private fun LottieAnimationView.addOverlayDynamicColor(
     fun update() {
         val isKeyguard = reason == REASON_AUTH_KEYGUARD
         if (isKeyguard) {
-            val color = context.getColor(R.color.numpad_key_color_secondary) // match bouncer color
+            val color =
+                com.android.settingslib.Utils.getColorAttrDefaultColor(
+                    context,
+                    com.android.internal.R.attr.materialColorPrimaryFixed
+                )
+            val outerRimColor =
+                com.android.settingslib.Utils.getColorAttrDefaultColor(
+                    context,
+                    com.android.internal.R.attr.materialColorPrimaryFixedDim
+                )
             val chevronFill =
                 com.android.settingslib.Utils.getColorAttrDefaultColor(
                     context,
-                    android.R.attr.textColorPrimaryInverse
+                    com.android.internal.R.attr.materialColorOnPrimaryFixed
                 )
-            for (key in listOf(".blue600", ".blue400")) {
-                addValueCallback(KeyPath(key, "**"), LottieProperty.COLOR_FILTER) {
-                    PorterDuffColorFilter(color, PorterDuff.Mode.SRC_ATOP)
-                }
+            addValueCallback(KeyPath(".blue600", "**"), LottieProperty.COLOR_FILTER) {
+                PorterDuffColorFilter(color, PorterDuff.Mode.SRC_ATOP)
+            }
+            addValueCallback(KeyPath(".blue400", "**"), LottieProperty.COLOR_FILTER) {
+                PorterDuffColorFilter(outerRimColor, PorterDuff.Mode.SRC_ATOP)
             }
             addValueCallback(KeyPath(".black", "**"), LottieProperty.COLOR_FILTER) {
                 PorterDuffColorFilter(chevronFill, PorterDuff.Mode.SRC_ATOP)
             }
-        } else if (!isDarkMode(context)) {
-            addValueCallback(KeyPath(".black", "**"), LottieProperty.COLOR_FILTER) {
-                PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_ATOP)
+        } else {
+            if (!isDarkMode(context)) {
+                addValueCallback(KeyPath(".black", "**"), LottieProperty.COLOR_FILTER) {
+                    PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_ATOP)
+                }
             }
-        } else if (isDarkMode(context)) {
             for (key in listOf(".blue600", ".blue400")) {
                 addValueCallback(KeyPath(key, "**"), LottieProperty.COLOR_FILTER) {
                     PorterDuffColorFilter(

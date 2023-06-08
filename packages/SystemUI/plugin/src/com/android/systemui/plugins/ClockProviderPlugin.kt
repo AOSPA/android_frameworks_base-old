@@ -18,8 +18,8 @@ import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.view.View
 import com.android.internal.annotations.Keep
+import com.android.systemui.log.LogBuffer
 import com.android.systemui.plugins.annotations.ProvidesInterface
-import com.android.systemui.plugins.log.LogBuffer
 import java.io.PrintWriter
 import java.util.Locale
 import java.util.TimeZone
@@ -141,14 +141,22 @@ interface ClockAnimations {
     /** Runs the battery animation (if any). */
     fun charge() {}
 
-    /** Move the clock, for example, if the notification tray appears in split-shade mode. */
-    fun onPositionUpdated(fromRect: Rect, toRect: Rect, fraction: Float) {}
+    /**
+     * Runs when the clock's position changed during the move animation.
+     *
+     * @param fromLeft the [View.getLeft] position of the clock, before it started moving.
+     * @param direction the direction in which it is moving. A positive number means right, and
+     *   negative means left.
+     * @param fraction fraction of the clock movement. 0 means it is at the beginning, and 1 means
+     *   it finished moving.
+     */
+    fun onPositionUpdated(fromLeft: Int, direction: Int, fraction: Float) {}
 
     /**
      * Runs when swiping clock picker, swipingFraction: 1.0 -> clock is scaled up in the preview,
      * 0.0 -> clock is scaled down in the shade; previewRatio is previewSize / screenSize
      */
-    fun onPickerCarouselSwiping(swipingFraction: Float, previewRatio: Float) {}
+    fun onPickerCarouselSwiping(swipingFraction: Float) {}
 }
 
 /** Events that have specific data about the related face */

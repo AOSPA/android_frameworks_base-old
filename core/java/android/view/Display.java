@@ -1638,7 +1638,7 @@ public final class Display {
      * bounds of the window.
      * <p></p>
      * Handling multi-window mode correctly is necessary since applications are not always
-     * fullscreen. A user on a large screen device, such as a tablet or Chrome OS devices, is more
+     * fullscreen. A user on a large screen device, such as a tablet or ChromeOS devices, is more
      * likely to use multi-window modes.
      * <p></p>
      * For example, consider a device with a display partitioned into two halves. The user may have
@@ -1708,7 +1708,7 @@ public final class Display {
      * bounds of the window.
      * <p></p>
      * Handling multi-window mode correctly is necessary since applications are not always
-     * fullscreen. A user on a large screen device, such as a tablet or Chrome OS devices, is more
+     * fullscreen. A user on a large screen device, such as a tablet or ChromeOS devices, is more
      * likely to use multi-window modes.
      * <p></p>
      * For example, consider a device with a display partitioned into two halves. The user may have
@@ -2188,7 +2188,7 @@ public final class Display {
          */
         @NonNull
         public float[] getAlternativeRefreshRates() {
-            return mAlternativeRefreshRates;
+            return Arrays.copyOf(mAlternativeRefreshRates, mAlternativeRefreshRates.length);
         }
 
         /**
@@ -2197,7 +2197,7 @@ public final class Display {
         @NonNull
         @HdrCapabilities.HdrType
         public int[] getSupportedHdrTypes() {
-            return mSupportedHdrTypes;
+            return Arrays.copyOf(mSupportedHdrTypes, mSupportedHdrTypes.length);
         }
 
         /**
@@ -2497,8 +2497,10 @@ public final class Display {
          * @deprecated use {@link Display#getMode()}
          * and {@link Mode#getSupportedHdrTypes()} instead
          */
-        public @HdrType int[] getSupportedHdrTypes() {
-            return mSupportedHdrTypes;
+        @Deprecated
+        @HdrType
+        public int[] getSupportedHdrTypes() {
+            return Arrays.copyOf(mSupportedHdrTypes, mSupportedHdrTypes.length);
         }
         /**
          * Returns the desired content max luminance data in cd/m2 for this display.
