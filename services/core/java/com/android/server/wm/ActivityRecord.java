@@ -4314,6 +4314,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         mTaskSupervisor.getActivityMetricsLogger().notifyActivityRemoved(this);
         mTaskSupervisor.mStoppingActivities.remove(this);
+        mLetterboxUiController.destroy();
         waitingToShow = false;
 
         // Defer removal of this activity when either a child is animating, or app transition is on
@@ -4382,8 +4383,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             dc.setFocusedApp(null);
             mWmService.updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL, true /*updateInputWindows*/);
         }
-
-        mLetterboxUiController.destroy();
 
         if (!delayed) {
             updateReportedVisibilityLocked();
