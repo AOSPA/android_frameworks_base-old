@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "363ea351_18856996",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2023-06-11T04:26:32Z",
+      "side": 1,
+      "message": "snapchat seems to work fine without this patch for me on nothing phone 1 and for timo on oneplus7 series",
+      "revId": "c9a53f78581458332072399d8fb526804bdd3a6b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
