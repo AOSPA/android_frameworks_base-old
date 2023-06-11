@@ -16,6 +16,23 @@
       "message": "looks sexy",
       "revId": "bff1d5840c75f041ed53b1708cb7e6f83e4732d6",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "2b200f09_fb485c12",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2023-06-11T15:22:10Z",
+      "side": 1,
+      "message": "should probably push upstream.  I\u0027m not sure how much 5G+ is used though.  5G UC and 5G UW or 5G UWB seem to be what the US is using.  not sure about elsewhere.",
+      "revId": "bff1d5840c75f041ed53b1708cb7e6f83e4732d6",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
