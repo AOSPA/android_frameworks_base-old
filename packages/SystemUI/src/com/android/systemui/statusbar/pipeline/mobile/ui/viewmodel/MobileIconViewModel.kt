@@ -192,7 +192,9 @@ constructor(
                 showNetworkTypeIcon,
                 iconInteractor.networkTypeIconCustomization,
                 iconInteractor.voWifiAvailable,
-            ) { networkTypeIconGroup, shouldShow, networkTypeIconCustomization, voWifiAvailable ->
+                iconInteractor.isInService,
+            ) { networkTypeIconGroup, shouldShow, networkTypeIconCustomization, voWifiAvailable,
+                isInService ->
                 val desc =
                     if (networkTypeIconGroup.contentDescription != 0)
                         ContentDescription.Resource(networkTypeIconGroup.contentDescription)
@@ -208,7 +210,8 @@ constructor(
                 return@combine when {
                     voWifiAvailable -> icon
                     networkTypeIconCustomization.isRatCustomization -> {
-                        if (shouldShowNetworkTypeIcon(networkTypeIconCustomization)) {
+                        if (shouldShowNetworkTypeIcon(networkTypeIconCustomization)
+                            && isInService) {
                             icon
                         } else {
                             null
