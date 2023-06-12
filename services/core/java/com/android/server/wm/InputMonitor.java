@@ -442,7 +442,8 @@ final class InputMonitor {
                         if (app != null) {
                             mDisplayContent.removeImeSurfaceImmediately();
                             if (app.getTask() != null) {
-                                mDisplayContent.mAtmService.takeTaskSnapshot(app.getTask().mTaskId);
+                                mDisplayContent.mAtmService.takeTaskSnapshot(app.getTask().mTaskId,
+                                        true /* updateCache */);
                             }
                         }
                     } else {

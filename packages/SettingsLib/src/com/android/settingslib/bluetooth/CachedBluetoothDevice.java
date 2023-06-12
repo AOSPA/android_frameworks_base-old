@@ -48,6 +48,7 @@ import com.android.settingslib.Utils;
 import com.android.settingslib.utils.ThreadUtils;
 import com.android.settingslib.widget.AdaptiveOutlineDrawable;
 
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -82,6 +83,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     private final Object mProfileLock = new Object();
     BluetoothDevice mDevice;
     private HearingAidInfo mHearingAidInfo;
+    private Timestamp mBondTimestamp;
 
     // Need this since there is no method for getting RSSI
     short mRssi;
@@ -974,11 +976,14 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
             mDevice.setPhonebookAccessPermission(BluetoothDevice.ACCESS_UNKNOWN);
             mDevice.setMessageAccessPermission(BluetoothDevice.ACCESS_UNKNOWN);
             mDevice.setSimAccessPermission(BluetoothDevice.ACCESS_UNKNOWN);
+
+            mBondTimestamp = null;
         }
 
         refresh();
 
         if (bondState == BluetoothDevice.BOND_BONDED) {
+            mBondTimestamp = new Timestamp(System.currentTimeMillis());
             boolean mIsBondingInitiatedLocally = mDevice.isBondingInitiatedLocally();
             Log.w(TAG, "mIsBondingInitiatedLocally" + mIsBondingInitiatedLocally);
             if (mIsTwsConnectEnabled) {
@@ -990,6 +995,10 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
                  connect();
             }
         }
+    }
+
+    public Timestamp getBondTimestamp() {
+        return mBondTimestamp;
     }
 
     public BluetoothClass getBtClass() {

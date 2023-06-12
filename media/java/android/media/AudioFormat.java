@@ -943,6 +943,9 @@ public final class AudioFormat implements Parcelable {
             case ENCODING_DTS_HD_MA:
             case ENCODING_DTS_UHD_P2:
             case ENCODING_DSD:
+            case ENCODING_AAC_ADTS_LC:
+            case ENCODING_AAC_ADTS_HE_V1:
+            case ENCODING_AAC_ADTS_HE_V2:
                 return true;
             default:
                 return false;

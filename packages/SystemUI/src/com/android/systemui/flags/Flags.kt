@@ -104,6 +104,16 @@ object Flags {
     val SENSITIVE_REVEAL_ANIM =
         unreleasedFlag(268005230, "sensitive_reveal_anim", teamfood = true)
 
+    // TODO(b/280783617): Tracking Bug
+    @Keep
+    @JvmField
+    val BUILDER_EXTRAS_OVERRIDE =
+            sysPropBooleanFlag(
+                    128,
+                    "persist.sysui.notification.builder_extras_override",
+                    default = false
+            )
+
     // 200 - keyguard/lockscreen
     // ** Flag retired **
     // public static final BooleanFlag KEYGUARD_LAYOUT =
@@ -136,7 +146,7 @@ object Flags {
      * the digits when the clock moves.
      */
     @JvmField
-    val STEP_CLOCK_ANIMATION = unreleasedFlag(212, "step_clock_animation", teamfood = true)
+    val STEP_CLOCK_ANIMATION = releasedFlag(212, "step_clock_animation")
 
     /**
      * Migration from the legacy isDozing/dozeAmount paths to the new KeyguardTransitionRepository
@@ -167,7 +177,7 @@ object Flags {
      */
     // TODO(b/281655028): Tracking bug
     @JvmField
-    val LIGHT_REVEAL_MIGRATION = unreleasedFlag(218, "light_reveal_migration", teamfood = true)
+    val LIGHT_REVEAL_MIGRATION = unreleasedFlag(218, "light_reveal_migration", teamfood = false)
 
     /** Flag to control the migration of face auth to modern architecture. */
     // TODO(b/262838215): Tracking bug
@@ -217,6 +227,7 @@ object Flags {
             )
 
     /** Whether to use a new data source for intents to run on keyguard dismissal. */
+    // TODO(b/275069969): Tracking bug.
     @JvmField
     val REFACTOR_KEYGUARD_DISMISS_INTENT = unreleasedFlag(231, "refactor_keyguard_dismiss_intent")
 
@@ -240,12 +251,17 @@ object Flags {
     /** Whether to delay showing bouncer UI when face auth or active unlock are enrolled. */
     // TODO(b/279794160): Tracking bug.
     @JvmField
-    val DELAY_BOUNCER = releasedFlag(235, "delay_bouncer")
+    val DELAY_BOUNCER = unreleasedFlag(235, "delay_bouncer")
 
     /** Migrate the indication area to the new keyguard root view. */
     // TODO(b/280067944): Tracking bug.
     @JvmField
     val MIGRATE_INDICATION_AREA = unreleasedFlag(236, "migrate_indication_area")
+
+    /** Whether to listen for fingerprint authentication over keyguard occluding activities. */
+    // TODO(b/283260512): Tracking bug.
+    @JvmField
+    val FP_LISTEN_OCCLUDING_APPS = unreleasedFlag(237, "fp_listen_occluding_apps")
 
     // 300 - power menu
     // TODO(b/254512600): Tracking Bug
@@ -319,7 +335,7 @@ object Flags {
     val NEW_STATUS_BAR_MOBILE_ICONS = releasedFlag(606, "new_status_bar_mobile_icons")
 
     // TODO(b/256614210): Tracking Bug
-    val NEW_STATUS_BAR_WIFI_ICON = releasedFlag(607, "new_status_bar_wifi_icon")
+    val NEW_STATUS_BAR_WIFI_ICON = unreleasedFlag(607, "new_status_bar_wifi_icon")
 
     // TODO(b/256614751): Tracking Bug
     val NEW_STATUS_BAR_MOBILE_ICONS_BACKEND =
@@ -519,13 +535,6 @@ object Flags {
     val ENABLE_PIP_APP_ICON_OVERLAY =
         sysPropBooleanFlag(1115, "persist.wm.debug.enable_pip_app_icon_overlay", default = true)
 
-    // TODO(b/272110828): Tracking bug
-    @Keep
-    @JvmField
-    val ENABLE_MOVE_FLOATING_WINDOW_IN_TABLETOP =
-        sysPropBooleanFlag(
-            1116, "persist.wm.debug.enable_move_floating_window_in_tabletop", default = true)
-
     // TODO(b/273443374): Tracking Bug
     @Keep
     @JvmField val LOCKSCREEN_LIVE_WALLPAPER =
@@ -609,8 +618,6 @@ object Flags {
         unreleasedFlag(1401, "quick_tap_flow_framework", teamfood = false)
 
     // 1500 - chooser aka sharesheet
-    // TODO(b/254512507): Tracking Bug
-    val CHOOSER_UNBUNDLED = releasedFlag(1500, "chooser_unbundled")
 
     // 1700 - clipboard
     @JvmField val CLIPBOARD_REMOTE_BEHAVIOR = releasedFlag(1701, "clipboard_remote_behavior")
@@ -673,6 +680,10 @@ object Flags {
     val TRIM_RESOURCES_WITH_BACKGROUND_TRIM_AT_LOCK =
             unreleasedFlag(2401, "trim_resources_with_background_trim_on_lock")
 
+    // TODO:(b/283203305): Tracking bug
+    @JvmField
+    val TRIM_FONT_CACHES_AT_UNLOCK = releasedFlag(2402, "trim_font_caches_on_unlock")
+
     // 2700 - unfold transitions
     // TODO(b/265764985): Tracking Bug
     @Keep
@@ -717,4 +728,12 @@ object Flags {
     @JvmField
     val SPLIT_SHADE_SUBPIXEL_OPTIMIZATION =
             unreleasedFlag(2805, "split_shade_subpixel_optimization", teamfood = true)
+
+    // TODO(b/278761837): Tracking Bug
+    @JvmField
+    val USE_NEW_ACTIVITY_STARTER = releasedFlag(2801, name = "use_new_activity_starter")
+
+    // TODO(b/283084712): Tracking Bug
+    @JvmField
+    val IMPROVED_HUN_ANIMATIONS = unreleasedFlag(283084712, "improved_hun_animations")
 }

@@ -3816,7 +3816,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             TaskSnapshot taskSnapshot = mWindowManager.mTaskSnapshotController.getSnapshot(taskId,
                     task.mUserId, true /* restoreFromDisk */, isLowResolution);
             if (taskSnapshot == null && takeSnapshotIfNeeded) {
-                taskSnapshot = takeTaskSnapshot(taskId);
+                taskSnapshot = takeTaskSnapshot(taskId, false /* updateCache */);
             }
             return taskSnapshot;
         } finally {
@@ -3825,7 +3825,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     @Override
-    public TaskSnapshot takeTaskSnapshot(int taskId) {
+    public TaskSnapshot takeTaskSnapshot(int taskId, boolean updateCache) {
         mAmInternal.enforceCallingPermission(READ_FRAME_BUFFER, "takeTaskSnapshot()");
         final long ident = Binder.clearCallingIdentity();
         try {
@@ -3836,8 +3836,13 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     Slog.w(TAG, "takeTaskSnapshot: taskId=" + taskId + " not found or not visible");
                     return null;
                 }
-                return mWindowManager.mTaskSnapshotController.captureSnapshot(
-                        task, true /* snapshotHome */);
+                if (updateCache) {
+                    return mWindowManager.mTaskSnapshotController.recordSnapshot(task,
+                            true /* snapshotHome */);
+                } else {
+                    return mWindowManager.mTaskSnapshotController.captureSnapshot(task,
+                            true /* snapshotHome */);
+                }
             }
         } finally {
             Binder.restoreCallingIdentity(ident);
@@ -5364,6 +5369,12 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         return null;
     }
 
+    /**
+     * Returns the {@link WindowProcessController} for the app process for the given uid and pid.
+     *
+     * If no such {@link WindowProcessController} is found, it does not belong to an app, or the
+     * pid does not match the uid {@code null} is returned.
+     */
     WindowProcessController getProcessController(int pid, int uid) {
         final WindowProcessController proc = mProcessMap.getProcess(pid);
         if (proc == null) return null;
@@ -5371,6 +5382,27 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             return proc;
         }
         return null;
+    }
+
+    /**
+     * Returns the package name if (and only if) the package name can be uniquely determined.
+     * Otherwise returns {@code null}.
+     *
+     * The provided pid must match the provided uid, otherwise this also returns null.
+     */
+    @Nullable String getPackageNameIfUnique(int uid, int pid) {
+        final WindowProcessController proc = mProcessMap.getProcess(pid);
+        if (proc == null || proc.mUid != uid) {
+            Slog.w(TAG, "callingPackage for (uid=" + uid + ", pid=" + pid + ") has no WPC");
+            return null;
+        }
+        List<String> realCallingPackages = proc.getPackageList();
+        if (realCallingPackages.size() != 1) {
+            Slog.w(TAG, "callingPackage for (uid=" + uid + ", pid=" + pid + ") is ambiguous: "
+                    + realCallingPackages);
+            return null;
+        }
+        return realCallingPackages.get(0);
     }
 
     /** A uid is considered to be foreground if it has a visible non-toast window. */
