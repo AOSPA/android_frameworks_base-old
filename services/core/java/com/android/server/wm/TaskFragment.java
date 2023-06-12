@@ -1023,8 +1023,11 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         if (isTopActivityLaunchedBehind()) {
             return TASK_FRAGMENT_VISIBILITY_VISIBLE;
         }
+        final WindowContainer<?> parent = getParent();
         final Task thisTask = asTask();
-        if (thisTask != null && mTransitionController.isTransientHide(thisTask)) {
+        if (thisTask != null && parent.asTask() == null
+                && mTransitionController.isTransientHide(thisTask)) {
+            // Keep transient-hide root tasks visible. Non-root tasks still follow standard rule.
             return TASK_FRAGMENT_VISIBILITY_VISIBLE;
         }
 
@@ -1034,7 +1037,6 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
         // This TaskFragment is only considered visible if all its parent TaskFragments are
         // considered visible, so check the visibility of all ancestor TaskFragment first.
-        final WindowContainer parent = getParent();
         if (parent.asTaskFragment() != null) {
             final int parentVisibility = parent.asTaskFragment().getVisibility(starting);
             if (parentVisibility == TASK_FRAGMENT_VISIBILITY_INVISIBLE) {
@@ -1643,6 +1645,12 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         if (mActivityTrigger != null) {
             mActivityTrigger.activityPauseTrigger(prev.intent, prev.info,
                                                   prev.info.applicationInfo);
+        }
+
+        if (mAtmService.getToastWindow() == true) {
+            // When we have a toast window, that activity will be translucent.
+            prev.translucentWindowLaunch = true;
+            mAtmService.resetToastWindow();
         }
 
         ProtoLog.v(WM_DEBUG_STATES, "Moving to PAUSING: %s", prev);
