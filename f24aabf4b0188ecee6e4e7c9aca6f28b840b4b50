@@ -54,6 +54,24 @@
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "0dcceae5_639b4585",
+        "filename": "core/java/android/os/RichTapVibrationEffect.java",
+        "patchSetId": 25
+      },
+      "lineNbr": 35,
+      "author": {
+        "id": 1000143
+      },
+      "writtenOn": "2023-06-13T09:33:35Z",
+      "side": 1,
+      "message": "Commented, will consider making it overlayable at some later point.",
+      "parentUuid": "98bb550a_744adfb0",
+      "revId": "f24aabf4b0188ecee6e4e7c9aca6f28b840b4b50",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "96ebd69e_b9ef52b3",
@@ -89,6 +107,24 @@
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "987e2463_344b32f0",
+        "filename": "core/java/android/os/RichTapVibrationEffect.java",
+        "patchSetId": 25
+      },
+      "lineNbr": 47,
+      "author": {
+        "id": 1000143
+      },
+      "writtenOn": "2023-06-13T09:33:35Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "5bd39e70_c805e7b2",
+      "revId": "f24aabf4b0188ecee6e4e7c9aca6f28b840b4b50",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "5a72b34a_d8902f85",
@@ -102,6 +138,24 @@
       "writtenOn": "2023-06-04T02:22:05Z",
       "side": 1,
       "message": "can you comment these too",
+      "revId": "f24aabf4b0188ecee6e4e7c9aca6f28b840b4b50",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "2da2554f_cfd761c5",
+        "filename": "core/java/android/os/RichTapVibrationEffect.java",
+        "patchSetId": 25
+      },
+      "lineNbr": 57,
+      "author": {
+        "id": 1000143
+      },
+      "writtenOn": "2023-06-13T09:33:35Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "5a72b34a_d8902f85",
       "revId": "f24aabf4b0188ecee6e4e7c9aca6f28b840b4b50",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
@@ -137,6 +191,24 @@
       "side": 1,
       "message": "Shouldn\u0027t happen at all, so if it happens e seems fine to me.",
       "parentUuid": "96067cbd_4c9f9b0f",
+      "revId": "f24aabf4b0188ecee6e4e7c9aca6f28b840b4b50",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "e1650aab_44a105a4",
+        "filename": "services/core/java/com/android/server/vibrator/RichTapVibratorService.java",
+        "patchSetId": 25
+      },
+      "lineNbr": 96,
+      "author": {
+        "id": 1000143
+      },
+      "writtenOn": "2023-06-13T09:33:35Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "33aa0b99_26dde7e8",
       "revId": "f24aabf4b0188ecee6e4e7c9aca6f28b840b4b50",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
