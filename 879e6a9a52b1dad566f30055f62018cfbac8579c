@@ -55,6 +55,125 @@
     {
       "unresolved": true,
       "key": {
+        "uuid": "72fe5219_127d9f8e",
+        "filename": "core/java/android/os/RichTapVibrationEffect.java",
+        "patchSetId": 27
+      },
+      "lineNbr": 35,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-06-13T14:12:38Z",
+      "side": 1,
+      "message": "VibrationEffect.EFFECT_CLICK",
+      "revId": "879e6a9a52b1dad566f30055f62018cfbac8579c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "591a2de2_0dc3009b",
+        "filename": "core/java/android/os/RichTapVibrationEffect.java",
+        "patchSetId": 27
+      },
+      "lineNbr": 37,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-06-13T14:12:38Z",
+      "side": 1,
+      "message": "VibrationEffect.EFFECT_DOUBLE_CLICK",
+      "revId": "879e6a9a52b1dad566f30055f62018cfbac8579c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "691031b2_e1e6ab28",
+        "filename": "core/java/android/os/RichTapVibrationEffect.java",
+        "patchSetId": 27
+      },
+      "lineNbr": 39,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-06-13T14:12:38Z",
+      "side": 1,
+      "message": "VibrationEffect.EFFECT_TICK",
+      "revId": "879e6a9a52b1dad566f30055f62018cfbac8579c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "59771ed9_78d3f078",
+        "filename": "core/java/android/os/RichTapVibrationEffect.java",
+        "patchSetId": 27
+      },
+      "lineNbr": 41,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-06-13T14:12:38Z",
+      "side": 1,
+      "message": "VibrationEffect.EFFECT_THUD",
+      "revId": "879e6a9a52b1dad566f30055f62018cfbac8579c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "ee946396_824cfe8a",
+        "filename": "core/java/android/os/RichTapVibrationEffect.java",
+        "patchSetId": 27
+      },
+      "lineNbr": 43,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-06-13T14:12:38Z",
+      "side": 1,
+      "message": "VibrationEffect.EFFECT_POP; Maybe merge branch with VibrationEffect.EFFECT_CLICK",
+      "revId": "879e6a9a52b1dad566f30055f62018cfbac8579c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "06cf352c_6f0da449",
+        "filename": "core/java/android/os/RichTapVibrationEffect.java",
+        "patchSetId": 27
+      },
+      "lineNbr": 45,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-06-13T14:12:38Z",
+      "side": 1,
+      "message": "VibrationEffect.EFFECT_HEAVY_CLICK",
+      "revId": "879e6a9a52b1dad566f30055f62018cfbac8579c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "d217edbf_daca0178",
+        "filename": "core/java/android/os/RichTapVibrationEffect.java",
+        "patchSetId": 27
+      },
+      "lineNbr": 47,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-06-13T14:12:38Z",
+      "side": 1,
+      "message": "VibrationEffect.EFFECT_TEXTURE_TICK",
+      "revId": "879e6a9a52b1dad566f30055f62018cfbac8579c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
         "uuid": "967578a3_58e0844f",
         "filename": "core/java/android/os/RichTapVibrationEffect.java",
         "patchSetId": 27
@@ -84,6 +203,74 @@
       "side": 1,
       "message": "Done",
       "parentUuid": "967578a3_58e0844f",
+      "revId": "879e6a9a52b1dad566f30055f62018cfbac8579c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "ca2dcbc7_473272df",
+        "filename": "core/java/android/os/RichTapVibrationEffect.java",
+        "patchSetId": 27
+      },
+      "lineNbr": 57,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-06-13T14:12:38Z",
+      "side": 1,
+      "message": "VibrationEffect.EFFECT_STRENGTH_LIGHT",
+      "revId": "879e6a9a52b1dad566f30055f62018cfbac8579c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "f5c8e7f4_2c10a0f0",
+        "filename": "core/java/android/os/RichTapVibrationEffect.java",
+        "patchSetId": 27
+      },
+      "lineNbr": 59,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-06-13T14:12:38Z",
+      "side": 1,
+      "message": "VibrationEffect.EFFECT_STRENGTH_MEDIUM",
+      "revId": "879e6a9a52b1dad566f30055f62018cfbac8579c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "b9f70641_114da590",
+        "filename": "core/java/android/os/RichTapVibrationEffect.java",
+        "patchSetId": 27
+      },
+      "lineNbr": 61,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-06-13T14:12:38Z",
+      "side": 1,
+      "message": "VibrationEffect.EFFECT_STRENGTH_STRONG",
+      "revId": "879e6a9a52b1dad566f30055f62018cfbac8579c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "971e6ac6_eb206dcb",
+        "filename": "services/core/java/com/android/server/vibrator/RichTapVibratorService.java",
+        "patchSetId": 27
+      },
+      "lineNbr": 34,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-06-13T14:12:38Z",
+      "side": 1,
+      "message": "This can be local only",
       "revId": "879e6a9a52b1dad566f30055f62018cfbac8579c",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
