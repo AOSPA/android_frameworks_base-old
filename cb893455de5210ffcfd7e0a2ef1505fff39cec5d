@@ -16,6 +16,24 @@
       "message": "why are we changing the icon files?",
       "revId": "cb893455de5210ffcfd7e0a2ef1505fff39cec5d",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "52130b95_4ae88684",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 6
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2023-06-13T09:20:56Z",
+      "side": 1,
+      "message": "removes paddings from icons and moves it to sb code \n\n```For the sake of consistency, remove this spacing using\ninsets and rely only on padding. Add space only for\nthe second SIM\u0027s mobile data type icon.```",
+      "parentUuid": "e7d741b5_87e2c8ae",
+      "revId": "cb893455de5210ffcfd7e0a2ef1505fff39cec5d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
