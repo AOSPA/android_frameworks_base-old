@@ -210,6 +210,24 @@
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "29d6beb4_0c8aeaff",
+        "filename": "core/java/android/os/RichTapVibrationEffect.java",
+        "patchSetId": 27
+      },
+      "lineNbr": 43,
+      "author": {
+        "id": 1000143
+      },
+      "writtenOn": "2023-06-13T15:30:06Z",
+      "side": 1,
+      "message": "I would prefer to keep them separate, this way we can finetune them separately in the future.",
+      "parentUuid": "ee946396_824cfe8a",
+      "revId": "879e6a9a52b1dad566f30055f62018cfbac8579c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "06cf352c_6f0da449",
@@ -437,6 +455,24 @@
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "ef2e2556_9dcb4b78",
+        "filename": "services/core/java/com/android/server/vibrator/RichTapVibratorService.java",
+        "patchSetId": 27
+      },
+      "lineNbr": 34,
+      "author": {
+        "id": 1000143
+      },
+      "writtenOn": "2023-06-13T15:30:06Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "971e6ac6_eb206dcb",
+      "revId": "879e6a9a52b1dad566f30055f62018cfbac8579c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "1e193ab7_5d0eb734",
@@ -450,6 +486,24 @@
       "writtenOn": "2023-06-13T13:39:45Z",
       "side": 1,
       "message": "maybe this can be a static field like AIDL_VIBRATOR_DESCRIPTOR, or avoid defining it altogether and just write it in getService(\"android...\") below\nalso the log seems unnecessary for a static string",
+      "revId": "879e6a9a52b1dad566f30055f62018cfbac8579c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "715afbc5_aa3999bd",
+        "filename": "services/core/java/com/android/server/vibrator/RichTapVibratorService.java",
+        "patchSetId": 27
+      },
+      "lineNbr": 39,
+      "author": {
+        "id": 1000143
+      },
+      "writtenOn": "2023-06-13T15:30:06Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "1e193ab7_5d0eb734",
       "revId": "879e6a9a52b1dad566f30055f62018cfbac8579c",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
