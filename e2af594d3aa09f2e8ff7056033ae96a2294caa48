@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "348511e7_e4fa4d5d",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2023-06-14T02:23:37Z",
+      "side": 1,
+      "message": "30809: base: Add vibration patterns from OOS [1/3] | https://gerrit.aospa.co/c/AOSPA/android_frameworks_base/+/30809 you broke change ID",
+      "revId": "e2af594d3aa09f2e8ff7056033ae96a2294caa48",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
