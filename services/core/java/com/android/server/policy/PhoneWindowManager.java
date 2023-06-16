@@ -2075,7 +2075,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             @Override
             public void onSwipeThreeFinger() {
                 interceptScreenshotChord(
-                        TAKE_SCREENSHOT_FULLSCREEN, SCREENSHOT_KEY_OTHER, 0 /*pressDelay*/);
+                        SCREENSHOT_KEY_OTHER, 0 /*pressDelay*/);
             }
         });
         mWakeGestureListener = new MyWakeGestureListener(mContext, mHandler);

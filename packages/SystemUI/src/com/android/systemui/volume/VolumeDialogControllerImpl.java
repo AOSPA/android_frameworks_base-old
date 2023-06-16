@@ -46,6 +46,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteException;
+import android.os.UserHandle;
 import android.os.VibrationEffect;
 import android.provider.Settings;
 import android.service.notification.Condition;
@@ -222,9 +223,9 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
         dumpManager.registerDumpable("VolumeDialogControllerImpl", this);
 
         mAdaptivePlaybackEnabled = Settings.System.getIntForUser(mContext.getContentResolver(),
-                Settings.System.ADAPTIVE_PLAYBACK_ENABLED, 0, UserHandle.USER_CURRENT) == 1;
+                Settings.System.ADAPTIVE_PLAYBACK_ENABLED, 0, mUserTracker.getUserId()) == 1;
         mAdaptivePlaybackTimeout = Settings.System.getIntForUser(mContext.getContentResolver(),
-                Settings.System.ADAPTIVE_PLAYBACK_TIMEOUT, 30000, UserHandle.USER_CURRENT);
+                Settings.System.ADAPTIVE_PLAYBACK_TIMEOUT, 30000, mUserTracker.getUserId());
 
         boolean accessibilityVolumeStreamActive = accessibilityManager
                 .isAccessibilityVolumeStreamActive();
@@ -1095,12 +1096,12 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
             if (ADAPTIVE_PLAYBACK_ENABLED_URI.equals(uri)) {
                 mAdaptivePlaybackEnabled = Settings.System.getIntForUser(
                         mContext.getContentResolver(), Settings.System.ADAPTIVE_PLAYBACK_ENABLED, 0,
-                        UserHandle.USER_CURRENT) == 1;
+                        mUserTracker.getUserId()) == 1;
             }
             if (ADAPTIVE_PLAYBACK_TIMEOUT_URI.equals(uri)) {
                 mAdaptivePlaybackTimeout = Settings.System.getIntForUser(
                         mContext.getContentResolver(), Settings.System.ADAPTIVE_PLAYBACK_TIMEOUT,
-                        30000, UserHandle.USER_CURRENT);
+                        30000, mUserTracker.getUserId());
             }
 
             if (changed) {
