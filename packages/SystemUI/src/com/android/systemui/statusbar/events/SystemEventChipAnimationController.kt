@@ -40,8 +40,7 @@ import javax.inject.Inject
 import kotlin.math.roundToInt
 
 /**
- * //TODO: this _probably_ doesn't control a window anymore
- * Controls the window for system event animations.
+ * Controls the view for system event animations.
  */
 class SystemEventChipAnimationController @Inject constructor(
     private val context: Context,

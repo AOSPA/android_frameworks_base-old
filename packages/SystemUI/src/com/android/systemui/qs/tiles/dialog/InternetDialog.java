@@ -865,7 +865,8 @@ public class InternetDialog extends SystemUIDialog implements
         mHandler.post(() -> updateDialog(true /* shouldUpdateMobileNetwork */));
     }
 
-    @Override+    public void onCarrierNetworkChange(boolean active) {
+    @Override
+    public void onCarrierNetworkChange(boolean active) {
         mHandler.post(() -> updateDialog(true /* shouldUpdateMobileNetwork */));
     }
 
