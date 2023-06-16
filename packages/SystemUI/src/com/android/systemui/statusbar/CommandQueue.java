@@ -1345,6 +1345,7 @@ public class CommandQueue extends IStatusBar.Stub implements
                 .sendToTarget();
     }
 
+    @Override
     public void goToFullscreenFromSplit() {
         mHandler.obtainMessage(MSG_GO_TO_FULLSCREEN_FROM_SPLIT).sendToTarget();
     }
