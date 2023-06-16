@@ -54,10 +54,11 @@ import javax.inject.Inject;
 /** Quick settings tile: Hotspot **/
 public class HotspotTile extends QSTileImpl<BooleanState> {
 
+    public static final String TILE_SPEC = "hotspot";
+
     private final Icon mWifi4EnabledStatic = ResourceIcon.get(R.drawable.ic_wifi_4_hotspot);
     private final Icon mWifi5EnabledStatic = ResourceIcon.get(R.drawable.ic_wifi_5_hotspot);
     private final Icon mWifi6EnabledStatic = ResourceIcon.get(R.drawable.ic_wifi_6_hotspot);
-
     private final HotspotController mHotspotController;
     private final DataSaverController mDataSaverController;
 

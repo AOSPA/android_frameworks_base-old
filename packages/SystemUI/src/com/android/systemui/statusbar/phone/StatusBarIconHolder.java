@@ -84,6 +84,18 @@ public class StatusBarIconHolder {
     private @IconType int mType = TYPE_ICON;
     private int mTag = 0;
 
+    /** Returns a human-readable string representing the given type. */
+    public static String getTypeString(@IconType int type) {
+        switch(type) {
+            case TYPE_ICON: return "ICON";
+            case TYPE_WIFI: return "WIFI_OLD";
+            case TYPE_MOBILE: return "MOBILE_OLD";
+            case TYPE_MOBILE_NEW: return "MOBILE_NEW";
+            case TYPE_WIFI_NEW: return "WIFI_NEW";
+            default: return "UNKNOWN";
+        }
+    }
+
     private StatusBarIconHolder() {
     }
 
@@ -257,5 +269,12 @@ public class StatusBarIconHolder {
 
     public int getTag() {
         return mTag;
+    }
+
+    @Override
+    public String toString() {
+        return "StatusBarIconHolder(type=" + getTypeString(mType)
+                + " tag=" + getTag()
+                + " visible=" + isVisible() + ")";
     }
 }
