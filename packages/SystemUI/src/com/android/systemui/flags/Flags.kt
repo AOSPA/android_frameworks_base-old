@@ -166,7 +166,7 @@ object Flags {
     // TODO(b/255618149): Tracking Bug
     @JvmField
     val CUSTOMIZABLE_LOCK_SCREEN_QUICK_AFFORDANCES =
-        unreleasedFlag(216, "customizable_lock_screen_quick_affordances", teamfood = true)
+        releasedFlag(216, "customizable_lock_screen_quick_affordances", teamfood = true)
 
     /**
      * Migrates control of the LightRevealScrim's reveal effect and amount from legacy code to the
@@ -188,7 +188,7 @@ object Flags {
 
     /** Flag to control the revamp of keyguard biometrics progress animation */
     // TODO(b/244313043): Tracking bug
-    @JvmField val BIOMETRICS_ANIMATION_REVAMP = unreleasedFlag(221, "biometrics_animation_revamp")
+    @JvmField val BIOMETRICS_ANIMATION_REVAMP = releasedFlag(221, "biometrics_animation_revamp")
 
     // TODO(b/262780002): Tracking Bug
     @JvmField
@@ -197,7 +197,7 @@ object Flags {
     // flag for controlling auto pin confirmation and material u shapes in bouncer
     @JvmField
     val AUTO_PIN_CONFIRMATION =
-        unreleasedFlag(224, "auto_pin_confirmation", "auto_pin_confirmation")
+        releasedFlag(224, "auto_pin_confirmation", "auto_pin_confirmation")
 
     // TODO(b/262859270): Tracking Bug
     @JvmField val FALSING_OFF_FOR_UNFOLDED = releasedFlag(225, "falsing_off_for_unfolded")
@@ -302,24 +302,24 @@ object Flags {
     /** Enables new QS Edit Mode visual refresh */
     // TODO(b/269787742): Tracking Bug
     @JvmField
-    val ENABLE_NEW_QS_EDIT_MODE = unreleasedFlag(510, "enable_new_qs_edit_mode", teamfood = false)
+    val ENABLE_NEW_QS_EDIT_MODE = releasedFlag(510, "enable_new_qs_edit_mode", teamfood = false)
 
     // 600- status bar
 
     // TODO(b/256614753): Tracking Bug
     val NEW_STATUS_BAR_MOBILE_ICONS =
-        unreleasedFlag(606, "new_status_bar_mobile_icons", teamfood = true)
+        releasedFlag(606, "new_status_bar_mobile_icons", teamfood = true)
 
     // TODO(b/256614210): Tracking Bug
     val NEW_STATUS_BAR_WIFI_ICON = unreleasedFlag(607, "new_status_bar_wifi_icon", teamfood = true)
 
     // TODO(b/256614751): Tracking Bug
     val NEW_STATUS_BAR_MOBILE_ICONS_BACKEND =
-        unreleasedFlag(608, "new_status_bar_mobile_icons_backend", teamfood = true)
+        releasedFlag(608, "new_status_bar_mobile_icons_backend", teamfood = true)
 
     // TODO(b/256613548): Tracking Bug
     val NEW_STATUS_BAR_WIFI_ICON_BACKEND =
-        unreleasedFlag(609, "new_status_bar_wifi_icon_backend", teamfood = true)
+        releasedFlag(609, "new_status_bar_wifi_icon_backend", teamfood = true)
 
     // TODO(b/256623670): Tracking Bug
     @JvmField
@@ -332,7 +332,7 @@ object Flags {
 
     // TODO(b/265892345): Tracking Bug
     val PLUG_IN_STATUS_BAR_CHIP =
-            unreleasedFlag(265892345, "plug_in_status_bar_chip", teamfood = true)
+            releasedFlag(265892345, "plug_in_status_bar_chip", teamfood = true)
 
     // 700 - dialer/calls
     // TODO(b/254512734): Tracking Bug
