@@ -33,6 +33,23 @@
       "message": "auto_pin_confirmation might make our own quick unlock unnecessary",
       "revId": "954100c94efc28f2d75a64c1c0803398d202a9af",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "37cc6798_437fb3b6",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2023-06-17T03:23:02Z",
+      "side": 1,
+      "message": "Tested: customizable_lock_screen_quick_affordances and plug_in_status_bar_chip\n\n\n\nplug_in_status_bar_chip needs some color adjustments",
+      "revId": "954100c94efc28f2d75a64c1c0803398d202a9af",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
