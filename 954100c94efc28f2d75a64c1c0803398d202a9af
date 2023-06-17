@@ -16,6 +16,23 @@
       "message": "adding mesquita because he likes playing with them too",
       "revId": "954100c94efc28f2d75a64c1c0803398d202a9af",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "b0e5e3b3_4ab9fb81",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2023-06-17T01:48:08Z",
+      "side": 1,
+      "message": "auto_pin_confirmation might make our own quick unlock unnecessary",
+      "revId": "954100c94efc28f2d75a64c1c0803398d202a9af",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
