@@ -4281,6 +4281,13 @@ public final class DisplayManagerService extends SystemService {
     }
 
     @VisibleForTesting
+    void overrideSensorManager(SensorManager sensorManager) {
+        synchronized (mSyncRoot) {
+            mSensorManager = sensorManager;
+        }
+    }
+
+    @VisibleForTesting
     final class LocalService extends DisplayManagerInternal {
 
         @Override
@@ -4533,7 +4540,7 @@ public final class DisplayManagerService extends SystemService {
                 }
                 final DisplayDeviceConfig config = device.getDisplayDeviceConfig();
                 SensorData sensorData = config.getProximitySensor();
-                if (sensorData.matches(sensorName, sensorType)) {
+                if (sensorData != null && sensorData.matches(sensorName, sensorType)) {
                     return new RefreshRateRange(sensorData.minRefreshRate,
                             sensorData.maxRefreshRate);
                 }

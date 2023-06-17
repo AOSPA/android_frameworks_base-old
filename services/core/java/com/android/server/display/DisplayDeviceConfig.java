@@ -1317,7 +1317,7 @@ public class DisplayDeviceConfig {
     }
 
     @Nullable
-    SensorData getProximitySensor() {
+    public SensorData getProximitySensor() {
         return mProximitySensor;
     }
 
