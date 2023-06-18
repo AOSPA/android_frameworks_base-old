@@ -33,6 +33,23 @@
       "message": "so far seems to work great",
       "revId": "974410828c7a7f58d778d87e783cda932b3e9166",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "0b3e030f_17d4ca47",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000845
+      },
+      "writtenOn": "2023-06-18T08:10:26Z",
+      "side": 1,
+      "message": "works here flawlessly too, no issues with gesture, unlike QPR2.",
+      "revId": "974410828c7a7f58d778d87e783cda932b3e9166",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
