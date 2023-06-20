@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "175c2607_8aa52ca5",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2023-06-20T16:19:47Z",
+      "side": 1,
+      "message": "Just removing updateResources() seems to have fixed it locally, but this is better.",
+      "revId": "7e1db6ab78d6834658450b75b28621bda0a1721a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
