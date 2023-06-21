@@ -811,6 +811,7 @@
     <string name="running_foreground_services_msg" msgid="3009459259222695385">"点按即可详细了解电量和流量消耗情况"</string>
     <string name="mobile_data_disable_title" msgid="5366476131671617790">"要关闭移动数据网络吗？"</string>
     <string name="mobile_data_disable_message" msgid="8604966027899770415">"您将无法通过<xliff:g id="CARRIER">%s</xliff:g>使用移动数据或互联网，只能通过 WLAN 连接到互联网。"</string>
+    <string name="mobile_data_disable_message_on_dual_data">"您将无法通过<xliff:g id="CARRIER">%s</xliff:g>使用移动数据或互联网。"</string>
     <string name="mobile_data_disable_message_default_carrier" msgid="6496033312431658238">"您的运营商"</string>
     <string name="auto_data_switch_disable_title" msgid="5146527155665190652">"是否要切换回 <xliff:g id="CARRIER">%s</xliff:g>？"</string>
     <string name="auto_data_switch_disable_message" msgid="5885533647399535852">"移动流量不会根据网络可用情况自动切换"</string>

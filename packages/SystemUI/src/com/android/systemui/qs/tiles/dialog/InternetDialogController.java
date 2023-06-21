@@ -30,10 +30,12 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.annotation.AnyThread;
 import android.content.BroadcastReceiver;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Resources;
+import android.database.ContentObserver;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.drawable.ColorDrawable;
@@ -42,6 +44,7 @@ import android.graphics.drawable.LayerDrawable;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.os.Handler;
@@ -159,6 +162,10 @@ public class InternetDialogController implements AccessPointController.AccessPoi
 
     static final int MAX_WIFI_ENTRY_COUNT = 3;
 
+    private static final String DUAL_DATA_PREFERENCE = "dual_data_preference";
+    private static final Uri DUAL_DATA_USER_PREFERENCE = Settings
+            .Global.getUriFor(DUAL_DATA_PREFERENCE);
+
     private final FeatureFlags mFeatureFlags;
 
     @VisibleForTesting
@@ -229,6 +236,9 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     private boolean mIsSmartDdsSwitchFeatureAvailable;
     private boolean mIsExtTelServiceConnected = false;
     private ExtTelephonyManager mExtTelephonyManager;
+    private boolean mHasDualDataCapability = false;
+    private ContentObserver mDualDataContentObserver;
+    private int mNddsSubId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
 
     private ServiceCallback mExtTelServiceCallback = new ServiceCallback() {
         @Override
@@ -238,17 +248,22 @@ public class InternetDialogController implements AccessPointController.AccessPoi
             try {
                 mIsSmartDdsSwitchFeatureAvailable =
                         mExtTelephonyManager.isSmartDdsSwitchFeatureAvailable();
+                mHasDualDataCapability = mExtTelephonyManager.getDualDataCapability();
                 Log.d(TAG, "isSmartDdsSwitchFeatureAvailable: " +
-                        mIsSmartDdsSwitchFeatureAvailable);
+                        mIsSmartDdsSwitchFeatureAvailable +
+                        " mHasDualDataCapability: " + mHasDualDataCapability);
             } catch (RemoteException ex) {
                 Log.e(TAG, "isSmartDdsSwitchFeatureAvailable exception " + ex);
             }
+            handleDualDataUserPerferenceListener();
         }
 
         @Override
         public void onDisconnected() {
             Log.d(TAG, "ExtTelephony service disconnected");
             mIsExtTelServiceConnected = false;
+            mHasDualDataCapability = false;
+            handleDualDataUserPerferenceListener();
         }
     };
 
@@ -371,6 +386,8 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         scanWifiAccessPoints();
         if (!mIsExtTelServiceConnected) {
             mExtTelephonyManager.connectService(mExtTelServiceCallback);
+        } else {
+            notifyDualDataEnabledStateChanged();
         }
     }
 
@@ -498,7 +515,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
             return mContext.getText(SUBTITLE_TEXT_ALL_CARRIER_NETWORK_UNAVAILABLE);
         }
 
-        if (mCanConfigWifi && !isMobileDataEnabled()) {
+        if (mCanConfigWifi && !isMobileDataEnabled(mDefaultDataSubId)) {
             if (DEBUG) {
                 Log.d(TAG, "Mobile data off");
             }
@@ -581,7 +598,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
             numLevels += 1;
         }
         return getSignalStrengthIcon(subId, mContext, level, numLevels, NO_CELL_DATA_TYPE_ICON,
-                !isMobileDataEnabled());
+                !isMobileDataEnabled(subId));
     }
 
     Drawable getSignalStrengthIcon(int subId, Context context, int level, int numLevels,
@@ -775,7 +792,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     }
 
     private String getMobileSummary(Context context, String networkTypeDescription, int subId) {
-        if (!isMobileDataEnabled()) {
+        if (!isMobileDataEnabled(subId)) {
             return context.getString(R.string.mobile_data_off_summary);
         }
 
@@ -874,7 +891,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     void connectCarrierNetwork() {
         String errorLogPrefix = "Fail to connect carrier network : ";
 
-        if (!isMobileDataEnabled()) {
+        if (!isMobileDataEnabled(mDefaultDataSubId)) {
             if (DEBUG) {
                 Log.d(TAG, errorLogPrefix + "settings OFF");
             }
@@ -990,11 +1007,11 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     /**
      * Return {@code true} if mobile data is enabled
      */
-    boolean isMobileDataEnabled() {
-        if (mTelephonyManager == null || !mTelephonyManager.isDataEnabled()) {
+    boolean isMobileDataEnabled(int subId) {
+        if (mTelephonyManager == null) {
             return false;
         }
-        return true;
+        return mTelephonyManager.createForSubscriptionId(subId).isDataEnabled();
     }
 
     /**
@@ -1017,7 +1034,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
             return;
         }
 
-        mTelephonyManager.setDataEnabledForReason(
+        mTelephonyManager.createForSubscriptionId(subId).setDataEnabledForReason(
                 TelephonyManager.DATA_ENABLED_REASON_USER, enabled);
         if (disableOtherSubscriptions) {
             final List<SubscriptionInfo> subInfoList =
@@ -1394,12 +1411,14 @@ public class InternetDialogController implements AccessPointController.AccessPoi
             if (DEBUG) {
                 Log.d(TAG, "DDS: no change");
             }
+            updateNddsSubId(defaultDataSubId);
             return;
         }
         if (DEBUG) {
             Log.d(TAG, "DDS: defaultDataSubId:" + defaultDataSubId);
         }
         if (SubscriptionManager.isUsableSubscriptionId(defaultDataSubId)) {
+            updateNddsSubId(defaultDataSubId);
             // clean up old defaultDataSubId
             TelephonyCallback oldCallback = mSubIdTelephonyCallbackMap.get(mDefaultDataSubId);
             if (oldCallback != null) {
@@ -1420,6 +1439,59 @@ public class InternetDialogController implements AccessPointController.AccessPoi
             mCallback.onSubscriptionsChanged(defaultDataSubId);
         }
         mDefaultDataSubId = defaultDataSubId;
+    }
+
+    public int getNddsSubId() {
+        return mNddsSubId;
+    }
+
+    private void handleDualDataUserPerferenceListener() {
+        if (mHasDualDataCapability) {
+            if (mDualDataContentObserver == null) {
+                mDualDataContentObserver = new ContentObserver(mHandler) {
+                    @Override
+                    public void onChange(boolean selfChange, Uri uri) {
+                        if (DUAL_DATA_USER_PREFERENCE.equals(uri)) {
+                            notifyDualDataEnabledStateChanged();
+                        }
+                    }
+                };
+            }
+            mContext.getContentResolver().registerContentObserver(DUAL_DATA_USER_PREFERENCE,
+                    false, mDualDataContentObserver);
+        } else {
+            if (mDualDataContentObserver != null) {
+                mContext.getContentResolver().unregisterContentObserver(mDualDataContentObserver);
+                mDualDataContentObserver = null;
+            }
+        }
+        notifyDualDataEnabledStateChanged();
+    }
+
+    private void notifyDualDataEnabledStateChanged() {
+        updateNddsSubId(mDefaultDataSubId);
+        final boolean isDualDataEnabled = isDualDataEnabled();
+        Log.d(TAG, "Ndds sub ID: " + mNddsSubId + " isDualDataEnabled: " + isDualDataEnabled);
+        mCallback.onDualDataEnabledStateChanged();
+    }
+
+    private void updateNddsSubId(int defaultDataSubId) {
+        // update mNddsSubId
+        mNddsSubId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+        List<SubscriptionInfo> subInfos =
+                mSubscriptionManager.getActiveSubscriptionInfoList();
+        if (subInfos != null) {
+            for (SubscriptionInfo subInfo : subInfos) {
+                if (subInfo.getSubscriptionId() != defaultDataSubId) {
+                    mNddsSubId = subInfo.getSubscriptionId();
+                }
+            }
+        }
+    }
+
+    public boolean isDualDataEnabled() {
+        return mHasDualDataCapability && Settings.Global.getInt(mContext.getContentResolver(),
+                DUAL_DATA_PREFERENCE, 0) == 1;
     }
 
     public WifiUtils.InternetIconInjector getWifiIconInjector() {
@@ -1458,6 +1530,8 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         void onNonDdsCallStateChanged(int callState);
 
         void onTempDdsSwitchHappened();
+
+        void onDualDataEnabledStateChanged();
     }
 
     void makeOverlayToast(int stringId) {
