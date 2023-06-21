@@ -1241,11 +1241,16 @@ public class AudioDeviceInventory {
                     AudioDeviceInfo device = Stream.of(connectedDevices)
                             .filter(d -> d.getInternalType() == ada.getInternalType())
                             .filter(d -> (!AudioSystem.isBluetoothDevice(d.getInternalType())
-                                            || (d.getAddress() == ada.getAddress())))
+                                            || (d.getAddress().equals(ada.getAddress()))))
                             .findFirst()
                             .orElse(null);
 
                     if (device == null) {
+                        if (AudioService.DEBUG_DEVICES) {
+                            Slog.i(TAG, "purgeRoles() removing device: " + ada.toString()
+                                    + ", for strategy: " + keyRole.first
+                                    + " and role: " + keyRole.second);
+                        }
                         asi.deviceRoleAction(keyRole.first, keyRole.second, Arrays.asList(ada));
                         itDev.remove();
                     }
@@ -1652,7 +1657,7 @@ public class AudioDeviceInventory {
         }
 
         // Reset A2DP suspend state each time a new sink is connected
-        mDeviceBroker.clearA2dpSuspended();
+        mDeviceBroker.clearA2dpSuspended(true /* internalOnly */);
 
         // The convention for head tracking sensors associated with A2DP devices is to
         // use a UUID derived from the MAC address as follows:
@@ -2089,7 +2094,7 @@ public class AudioDeviceInventory {
                         "LE Audio device addr=" + address + " now available").printLog(TAG));
             }
             // Reset LEA suspend state each time a new sink is connected
-            mDeviceBroker.clearLeAudioSuspended();
+            mDeviceBroker.clearLeAudioSuspended(true /* internalOnly */);
 
             UUID sensorUuid = UuidUtils.uuidFromAudioDeviceAttributes(ada);
             mConnectedDevices.put(DeviceInfo.makeDeviceListKey(device, address),

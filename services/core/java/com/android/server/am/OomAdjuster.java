@@ -1047,7 +1047,6 @@ public class OomAdjuster {
             mCacheOomRanker.reRankLruCachedAppsLSP(mProcessList.getLruProcessesLSP(),
                     mProcessList.getLruProcessServiceStartLOSP());
         }
-        assignCachedAdjIfNecessary(mProcessList.getLruProcessesLOSP());
 
         if (computeClients) { // There won't be cycles if we didn't compute clients above.
             // Cycle strategy:
@@ -1072,7 +1071,7 @@ public class OomAdjuster {
                     ProcessRecord app = activeProcesses.get(i);
                     final ProcessStateRecord state = app.mState;
                     if (!app.isKilledByAm() && app.getThread() != null && state.containsCycle()) {
-                        if (computeOomAdjLSP(app, state.getCurRawAdj(), topApp, true, now,
+                        if (computeOomAdjLSP(app, UNKNOWN_ADJ, topApp, true, now,
                                 true, true)) {
                             retryCycles = true;
                         }
@@ -1081,6 +1080,8 @@ public class OomAdjuster {
             }
         }
         mProcessesInCycle.clear();
+
+        assignCachedAdjIfNecessary(mProcessList.getLruProcessesLOSP());
 
         mNumNonCachedProcs = 0;
         mNumCachedHiddenProcs = 0;
@@ -1549,7 +1550,8 @@ public class OomAdjuster {
                         if (!ActivityManager.isProcStateBackground(uidRec.getSetProcState())
                                 || uidRec.isSetAllowListed()) {
                             uidRec.setLastBackgroundTime(nowElapsed);
-                            if (!mService.mHandler.hasMessages(IDLE_UIDS_MSG)) {
+                            if (mService.mDeterministicUidIdle
+                                    || !mService.mHandler.hasMessages(IDLE_UIDS_MSG)) {
                                 // Note: the background settle time is in elapsed realtime, while
                                 // the handler time base is uptime.  All this means is that we may
                                 // stop background uids later than we had intended, but that only
@@ -3349,7 +3351,8 @@ public class OomAdjuster {
                 // (for states debouncing to avoid from thrashing).
                 state.setLastCanKillOnBgRestrictedAndIdleTime(nowElapsed);
                 // Kick off the delayed checkup message if needed.
-                if (!mService.mHandler.hasMessages(IDLE_UIDS_MSG)) {
+                if (mService.mDeterministicUidIdle
+                        || !mService.mHandler.hasMessages(IDLE_UIDS_MSG)) {
                     mService.mHandler.sendEmptyMessageDelayed(IDLE_UIDS_MSG,
                             mConstants.mKillBgRestrictedAndCachedIdleSettleTimeMs);
                 }
@@ -3468,6 +3471,7 @@ public class OomAdjuster {
     @GuardedBy("mService")
     void idleUidsLocked() {
         final int N = mActiveUids.size();
+        mService.mHandler.removeMessages(IDLE_UIDS_MSG);
         if (N <= 0) {
             return;
         }
@@ -3513,7 +3517,6 @@ public class OomAdjuster {
             }
         }
         if (nextTime > 0) {
-            mService.mHandler.removeMessages(IDLE_UIDS_MSG);
             mService.mHandler.sendEmptyMessageDelayed(IDLE_UIDS_MSG,
                     nextTime + mConstants.BACKGROUND_SETTLE_TIME - nowElapsed);
         }

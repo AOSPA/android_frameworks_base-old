@@ -428,6 +428,8 @@ public final class ActiveServices {
     // allowlisted packageName.
     ArraySet<String> mAllowListWhileInUsePermissionInFgs = new ArraySet<>();
 
+    String mCachedDeviceProvisioningPackage;
+
     // TODO: remove this after feature development is done
     private static final SimpleDateFormat DATE_FORMATTER =
             new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
@@ -502,7 +504,8 @@ public final class ActiveServices {
                 // (REASON_ALARM_MANAGER_ALARM_CLOCK), allow it to continue and do not stop it,
                 // even the app is background-restricted.
                 if (r.isForeground
-                        && r.mAllowStartForegroundAtEntering != REASON_ALARM_MANAGER_ALARM_CLOCK) {
+                        && r.mAllowStartForegroundAtEntering != REASON_ALARM_MANAGER_ALARM_CLOCK
+                        && !isDeviceProvisioningPackage(r.packageName)) {
                     toStop.add(r);
                 }
             }
@@ -643,7 +646,8 @@ public final class ActiveServices {
                     try {
                         final ServiceRecord.StartItem si = r.pendingStarts.get(0);
                         startServiceInnerLocked(this, si.intent, r, false, true, si.callingId,
-                                si.mCallingProcessName, r.startRequested, si.mCallingPackageName);
+                                si.mCallingProcessName, si.mCallingProcessState,
+                                r.startRequested, si.mCallingPackageName);
                     } catch (TransactionTooLargeException e) {
                         // Ignore, nobody upstack cares.
                     }
@@ -945,7 +949,8 @@ public final class ActiveServices {
         boolean forcedStandby = false;
         if (bgLaunch
                 && appRestrictedAnyInBackground(appUid, appPackageName)
-                && !isTempAllowedByAlarmClock(appUid)) {
+                && !isTempAllowedByAlarmClock(appUid)
+                && !isDeviceProvisioningPackage(appPackageName)) {
             if (DEBUG_FOREGROUND_SERVICE) {
                 Slog.d(TAG, "Forcing bg-only service start only for " + r.shortInstanceName
                         + " : bgLaunch=" + bgLaunch + " callerFg=" + callerFg);
@@ -1043,10 +1048,22 @@ public final class ActiveServices {
             fgRequired = false;
         }
 
+        final ProcessRecord callingApp;
+        synchronized (mAm.mPidsSelfLocked) {
+            callingApp = mAm.mPidsSelfLocked.get(callingPid);
+        }
+        final String callingProcessName = callingApp != null
+                ? callingApp.processName : callingPackage;
+        final int callingProcessState =
+                callingApp != null && callingApp.getThread() != null && !callingApp.isKilled()
+                ? callingApp.mState.getCurProcState() : ActivityManager.PROCESS_STATE_UNKNOWN;
+        r.updateProcessStateOnRequest();
+
         // The package could be frozen (meaning it's doing surgery), defer the actual
         // start until the package is unfrozen.
         if (deferServiceBringupIfFrozenLocked(r, service, callingPackage, callingFeatureId,
-                callingUid, callingPid, fgRequired, callerFg, userId,
+                callingUid, callingPid, callingProcessName,
+                callingProcessState, fgRequired, callerFg, userId,
                 backgroundStartPrivileges, false, null)) {
             return null;
         }
@@ -1067,7 +1084,7 @@ public final class ActiveServices {
         // what realResult contains.
         final ComponentName realResult =
                 startServiceInnerLocked(r, service, callingUid, callingPid,
-                        getCallingProcessNameLocked(callingUid, callingPid, callingPackage),
+                        callingProcessName, callingProcessState,
                         fgRequired, callerFg,
                         backgroundStartPrivileges, callingPackage);
         if (res.aliasComponent != null
@@ -1079,17 +1096,9 @@ public final class ActiveServices {
         }
     }
 
-    private String getCallingProcessNameLocked(int callingUid, int callingPid,
-            String callingPackage) {
-        synchronized (mAm.mPidsSelfLocked) {
-            final ProcessRecord callingApp = mAm.mPidsSelfLocked.get(callingPid);
-            return callingApp != null ? callingApp.processName : callingPackage;
-        }
-    }
-
     private ComponentName startServiceInnerLocked(ServiceRecord r, Intent service,
-            int callingUid, int callingPid, String callingProcessName, boolean fgRequired,
-            boolean callerFg,
+            int callingUid, int callingPid, String callingProcessName,
+            int callingProcessState, boolean fgRequired, boolean callerFg,
             BackgroundStartPrivileges backgroundStartPrivileges, String callingPackage)
             throws TransactionTooLargeException {
         NeededUriGrants neededGrants = mAm.mUgmInternal.checkGrantUriPermissionFromIntent(
@@ -1103,7 +1112,8 @@ public final class ActiveServices {
         r.delayedStop = false;
         r.fgRequired = fgRequired;
         r.pendingStarts.add(new ServiceRecord.StartItem(r, false, r.makeNextStartId(),
-                service, neededGrants, callingUid, callingProcessName, callingPackage));
+                service, neededGrants, callingUid, callingProcessName, callingPackage,
+                callingProcessState));
 
         // We want to allow scheduling user-initiated jobs when the app is running a
         // foreground service that was started in the same conditions that allows for scheduling
@@ -1206,7 +1216,8 @@ public final class ActiveServices {
             r.allowBgActivityStartsOnServiceStart(backgroundStartPrivileges);
         }
         ComponentName cmp = startServiceInnerLocked(smap, service, r, callerFg, addToStarting,
-                callingUid, callingProcessName, wasStartRequested, callingPackage);
+                callingUid, callingProcessName, callingProcessState,
+                wasStartRequested, callingPackage);
         return cmp;
     }
 
@@ -1310,7 +1321,8 @@ public final class ActiveServices {
     @GuardedBy("mAm")
     private boolean deferServiceBringupIfFrozenLocked(ServiceRecord s, Intent serviceIntent,
             String callingPackage, @Nullable String callingFeatureId,
-            int callingUid, int callingPid, boolean fgRequired, boolean callerFg, int userId,
+            int callingUid, int callingPid, String callingProcessName,
+            int callingProcessState, boolean fgRequired, boolean callerFg, int userId,
             BackgroundStartPrivileges backgroundStartPrivileges,
             boolean isBinding, IServiceConnection connection) {
         final PackageManagerInternal pm = mAm.getPackageManagerInternal();
@@ -1324,8 +1336,6 @@ public final class ActiveServices {
             curPendingBringups = new ArrayList<>();
             mPendingBringups.put(s, curPendingBringups);
         }
-        final String callingProcessName = getCallingProcessNameLocked(
-                callingUid, callingPid, callingPackage);
         curPendingBringups.add(new Runnable() {
             @Override
             public void run() {
@@ -1357,7 +1367,7 @@ public final class ActiveServices {
                     } else { // Starting a service
                         try {
                             startServiceInnerLocked(s, serviceIntent, callingUid, callingPid,
-                                    callingProcessName, fgRequired, callerFg,
+                                    callingProcessName, callingProcessState, fgRequired, callerFg,
                                     backgroundStartPrivileges, callingPackage);
                         } catch (TransactionTooLargeException e) {
                             /* ignore - local call */
@@ -1404,7 +1414,8 @@ public final class ActiveServices {
 
     ComponentName startServiceInnerLocked(ServiceMap smap, Intent service, ServiceRecord r,
             boolean callerFg, boolean addToStarting, int callingUid, String callingProcessName,
-            boolean wasStartRequested, String callingPackage) throws TransactionTooLargeException {
+            int callingProcessState, boolean wasStartRequested, String callingPackage)
+            throws TransactionTooLargeException {
         synchronized (mAm.mProcessStats.mLock) {
             final ServiceState stracker = r.getTracker();
             if (stracker != null) {
@@ -1447,7 +1458,9 @@ public final class ActiveServices {
                 getShortServiceNameForStats(r),
                 packageState,
                 packageName,
-                callingPackage);
+                callingPackage,
+                callingProcessState,
+                r.mProcessStateOnRequest);
 
         if (r.startRequested && addToStarting) {
             boolean first = smap.mStartingBackground.size() == 0;
@@ -1983,6 +1996,9 @@ public final class ActiveServices {
      */
     private boolean isForegroundServiceAllowedInBackgroundRestricted(ProcessRecord app) {
         final ProcessStateRecord state = app.mState;
+        if (isDeviceProvisioningPackage(app.info.packageName)) {
+            return true;
+        }
         if (!state.isBackgroundRestricted()
                 || state.getSetProcState() <= ActivityManager.PROCESS_STATE_BOUND_TOP) {
             return true;
@@ -3751,11 +3767,22 @@ public final class ActiveServices {
             return 0;
         }
 
+        final ProcessRecord callingApp;
+        synchronized (mAm.mPidsSelfLocked) {
+            callingApp = mAm.mPidsSelfLocked.get(callingPid);
+        }
+        final String callingProcessName = callingApp != null
+                ? callingApp.processName : callingPackage;
+        final int callingProcessState =
+                callingApp != null && callingApp.getThread() != null && !callingApp.isKilled()
+                ? callingApp.mState.getCurProcState() : ActivityManager.PROCESS_STATE_UNKNOWN;
+        s.updateProcessStateOnRequest();
+
         // The package could be frozen (meaning it's doing surgery), defer the actual
         // binding until the package is unfrozen.
         boolean packageFrozen = deferServiceBringupIfFrozenLocked(s, service, callingPackage, null,
-                callingUid, callingPid, false, callerFg, userId, BackgroundStartPrivileges.NONE,
-                true, connection);
+                callingUid, callingPid, callingProcessName, callingProcessState,
+                false, callerFg, userId, BackgroundStartPrivileges.NONE, true, connection);
 
         // If permissions need a review before any of the app components can run,
         // we schedule binding to the service but do not start its process, then
@@ -3920,7 +3947,9 @@ public final class ActiveServices {
                     getShortServiceNameForStats(s),
                     packageState,
                     s.packageName,
-                    callerApp.info.packageName);
+                    callerApp.info.packageName,
+                    callerApp.mState.getCurProcState(),
+                    s.mProcessStateOnRequest);
 
             if (DEBUG_SERVICE) Slog.v(TAG_SERVICE, "Bind " + s + " with " + b
                     + ": received=" + b.intent.received
@@ -5626,7 +5655,7 @@ public final class ActiveServices {
         // be called.
         if (r.startRequested && r.callStart && r.pendingStarts.size() == 0) {
             r.pendingStarts.add(new ServiceRecord.StartItem(r, false, r.makeNextStartId(),
-                    null, null, 0, null, null));
+                    null, null, 0, null, null, ActivityManager.PROCESS_STATE_UNKNOWN));
         }
 
         sendServiceArgsLocked(r, execInFg, true);
@@ -6640,7 +6669,8 @@ public final class ActiveServices {
                     stopServiceLocked(sr, true);
                 } else {
                     sr.pendingStarts.add(new ServiceRecord.StartItem(sr, true,
-                            sr.getLastStartId(), baseIntent, null, 0, null, null));
+                            sr.getLastStartId(), baseIntent, null, 0, null, null,
+                            ActivityManager.PROCESS_STATE_UNKNOWN));
                     if (sr.app != null && sr.app.getThread() != null) {
                         // We always run in the foreground, since this is called as
                         // part of the "remove task" UI operation.
@@ -8681,5 +8711,14 @@ public final class ActiveServices {
             }
         }
         return results;
+    }
+
+    private boolean isDeviceProvisioningPackage(String packageName) {
+        if (mCachedDeviceProvisioningPackage == null) {
+            mCachedDeviceProvisioningPackage = mAm.mContext.getResources().getString(
+                    com.android.internal.R.string.config_deviceProvisioningPackage);
+        }
+        return mCachedDeviceProvisioningPackage != null
+                && mCachedDeviceProvisioningPackage.equals(packageName);
     }
 }
