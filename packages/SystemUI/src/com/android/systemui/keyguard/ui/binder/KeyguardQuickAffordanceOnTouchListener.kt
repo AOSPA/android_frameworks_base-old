@@ -18,6 +18,7 @@ package com.android.systemui.keyguard.ui.binder
 
 import android.annotation.SuppressLint
 import android.graphics.PointF
+import android.os.VibrationEffect
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
@@ -42,6 +43,12 @@ class KeyguardQuickAffordanceOnTouchListener(
     private val longPressDurationMs = ViewConfiguration.getLongPressTimeout().toLong()
     private var longPressAnimator: ViewPropertyAnimator? = null
     private val downDisplayCoords: PointF by lazy { PointF() }
+
+        private val areAllPrimitivesSupported = vibratorHelper?.areAllPrimitivesSupported(
+            VibrationEffect.Composition.PRIMITIVE_TICK,
+            VibrationEffect.Composition.PRIMITIVE_QUICK_RISE,
+            VibrationEffect.Composition.PRIMITIVE_QUICK_FALL
+        ) ?: false
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouch(v: View, event: MotionEvent): Boolean {
@@ -128,7 +135,12 @@ class KeyguardQuickAffordanceOnTouchListener(
                                         )
                                     shakeAnimator.start()
 
-                                    vibratorHelper?.vibrate(KeyguardBottomAreaVibrations.Shake)
+                                    vibratorHelper?.vibrate(
+                                        if (areAllPrimitivesSupported) {
+                                            KeyguardBottomAreaVibrations.Shake
+                                        } else {
+                                            KeyguardBottomAreaVibrations.ShakeAlt
+                                        })
                                 }
                             } else {
                                 null
@@ -151,9 +163,17 @@ class KeyguardQuickAffordanceOnTouchListener(
         view.setOnClickListener {
             vibratorHelper?.vibrate(
                 if (viewModel.isActivated) {
-                    KeyguardBottomAreaVibrations.Activated
-                } else {
-                    KeyguardBottomAreaVibrations.Deactivated
+                        if (areAllPrimitivesSupported) {
+                            KeyguardBottomAreaVibrations.Activated
+                        } else {
+                            KeyguardBottomAreaVibrations.ActivatedAlt
+                        }
+                    } else {
+                        if (areAllPrimitivesSupported) {
+                            KeyguardBottomAreaVibrations.Deactivated
+                        } else {
+                            KeyguardBottomAreaVibrations.DeactivatedAlt
+                        }
                 }
             )
             viewModel.onClicked(

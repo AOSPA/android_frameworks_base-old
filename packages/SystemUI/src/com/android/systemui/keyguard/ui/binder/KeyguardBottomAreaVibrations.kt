@@ -27,6 +27,7 @@ object KeyguardBottomAreaVibrations {
     private const val SmallVibrationScale = 0.3f
     private const val BigVibrationScale = 0.6f
 
+    val ShakeAlt = VibrationEffect.createPredefined(VibrationEffect.EFFECT_DOUBLE_CLICK)
     val Shake =
         VibrationEffect.startComposition()
             .apply {
@@ -45,6 +46,7 @@ object KeyguardBottomAreaVibrations {
             }
             .compose()
 
+    val ActivatedAlt = VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK)
     val Activated =
         VibrationEffect.startComposition()
             .addPrimitive(
@@ -59,6 +61,7 @@ object KeyguardBottomAreaVibrations {
             )
             .compose()
 
+    val DeactivatedAlt = VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK)
     val Deactivated =
         VibrationEffect.startComposition()
             .addPrimitive(
