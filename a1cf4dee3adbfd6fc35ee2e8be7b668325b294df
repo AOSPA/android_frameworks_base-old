@@ -33,6 +33,24 @@
       "message": "HEAVY_CLICK?",
       "revId": "a1cf4dee3adbfd6fc35ee2e8be7b668325b294df",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "22934431_4aaef0c0",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2023-06-22T16:36:58Z",
+      "side": 1,
+      "message": "seems to make more sense for this action",
+      "parentUuid": "4a47c488_c64fb987",
+      "revId": "a1cf4dee3adbfd6fc35ee2e8be7b668325b294df",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
