@@ -1,0 +1,55 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "c67a1d73_e6a3fbec",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2023-06-22T09:48:35Z",
+      "side": 1,
+      "message": "doesnt look like any of the functions would even be loaded",
+      "revId": "4d18b5315dc20039f39ff03140c827961b7f15ca",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "43a36498_632ed584",
+        "filename": "core/java/android/util/BoostFramework.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 339,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2023-06-22T09:48:35Z",
+      "side": 1,
+      "message": "doesnt look like this would be loaded since initfunction would quit early",
+      "revId": "4d18b5315dc20039f39ff03140c827961b7f15ca",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "198aad02_f4d043de",
+        "filename": "core/java/android/util/BoostFramework.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 713,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2023-06-22T09:48:35Z",
+      "side": 1,
+      "message": "SCROLL_OPT_PROP would be false anyways so no need to guard this",
+      "revId": "4d18b5315dc20039f39ff03140c827961b7f15ca",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
