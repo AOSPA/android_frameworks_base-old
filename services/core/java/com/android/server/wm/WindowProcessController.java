@@ -574,7 +574,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
             return;
         }
 
-        final long diff = lastLaunchTime - launchTime;
+        final long diff = launchTime - lastLaunchTime;
         if (diff < RAPID_ACTIVITY_LAUNCH_MS) {
             mRapidActivityLaunchCount++;
         } else if (diff >= RESET_RAPID_ACTIVITY_LAUNCH_MS) {

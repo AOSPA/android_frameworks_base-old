@@ -239,9 +239,6 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
     private @TransitionState int mState = STATE_PENDING;
     private final ReadyTracker mReadyTracker = new ReadyTracker();
 
-    // TODO(b/188595497): remove when not needed.
-    /** @see RecentsAnimationController#mNavigationBarAttachedToApp */
-    private boolean mNavBarAttachedToApp = false;
     private int mRecentsDisplayId = INVALID_DISPLAY;
 
     /** The delay for light bar appearance animation. */
@@ -407,6 +404,28 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
             }
         }
         return false;
+    }
+
+    boolean canApplyDim(@NonNull Task task) {
+        if (mTransientLaunches == null) return true;
+        final Dimmer dimmer = task.getDimmer();
+        final WindowContainer<?> dimmerHost = dimmer != null ? dimmer.getHost() : null;
+        if (dimmerHost == null) return false;
+        if (isInTransientHide(dimmerHost)) {
+            // The layer of dimmer is inside transient-hide task, then allow to dim.
+            return true;
+        }
+        // The dimmer host of a translucent task can be a display, then it is not in transient-hide.
+        for (int i = mTransientLaunches.size() - 1; i >= 0; --i) {
+            // The transient task is usually the task of recents/home activity.
+            final Task transientTask = mTransientLaunches.keyAt(i).getTask();
+            if (transientTask != null && transientTask.canAffectSystemUiFlags()) {
+                // It usually means that the recents animation has moved the transient-hide task
+                // an noticeable distance, then the display level dimmer should not show.
+                return false;
+            }
+        }
+        return true;
     }
 
     boolean hasTransientLaunch() {
@@ -1242,6 +1261,16 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
                     mController.mAtm.mRootWindowContainer.getDisplayContent(mRecentsDisplayId);
             dc.getInputMonitor().setActiveRecents(null /* activity */, null /* layer */);
         }
+        if (mTransientLaunches != null) {
+            for (int i = mTransientLaunches.size() - 1; i >= 0; --i) {
+                // Reset the ability of controlling SystemUi which might be changed by
+                // setTransientLaunch or setRecentsAppBehindSystemBars.
+                final Task task = mTransientLaunches.keyAt(i).getTask();
+                if (task != null) {
+                    task.setCanAffectSystemUiFlags(true);
+                }
+            }
+        }
 
         for (int i = 0; i < mTargetDisplays.size(); ++i) {
             final DisplayContent dc = mTargetDisplays.get(i);
@@ -1800,7 +1829,7 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
         if (navWindow == null || navWindow.mToken == null) {
             return;
         }
-        mNavBarAttachedToApp = true;
+        mController.mNavigationBarAttachedToApp = true;
         navWindow.mToken.cancelAnimation();
         final SurfaceControl.Transaction t = navWindow.mToken.getPendingTransaction();
         final SurfaceControl navSurfaceControl = navWindow.mToken.getSurfaceControl();
@@ -1822,8 +1851,10 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
 
     /** @see RecentsAnimationController#restoreNavigationBarFromApp */
     void legacyRestoreNavigationBarFromApp() {
-        if (!mNavBarAttachedToApp) return;
-        mNavBarAttachedToApp = false;
+        if (!mController.mNavigationBarAttachedToApp) {
+            return;
+        }
+        mController.mNavigationBarAttachedToApp = false;
 
         if (mRecentsDisplayId == INVALID_DISPLAY) {
             Slog.e(TAG, "Reparented navigation bar without a valid display");
@@ -1856,6 +1887,11 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
             break;
         }
 
+        final AsyncRotationController asyncRotationController = dc.getAsyncRotationController();
+        if (asyncRotationController != null) {
+            asyncRotationController.accept(navWindow);
+        }
+
         if (animate) {
             final NavBarFadeAnimationController controller =
                     new NavBarFadeAnimationController(dc);
@@ -1864,6 +1900,9 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
             // Reparent the SurfaceControl of nav bar token back.
             t.reparent(navToken.getSurfaceControl(), parent.getSurfaceControl());
         }
+
+        // To apply transactions.
+        dc.mWmService.scheduleAnimationLocked();
     }
 
     private void reportStartReasonsToLogger() {

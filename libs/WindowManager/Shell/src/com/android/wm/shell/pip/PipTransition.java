@@ -351,7 +351,7 @@ public class PipTransition extends PipTransitionController {
         if (taskInfo != null) {
             startExpandAnimation(taskInfo, mPipOrganizer.getSurfaceControl(),
                     mPipBoundsState.getBounds(), mPipBoundsState.getBounds(),
-                    new Rect(mExitDestinationBounds), Surface.ROTATION_0);
+                    new Rect(mExitDestinationBounds), Surface.ROTATION_0, null /* startT */);
         }
         mExitDestinationBounds.setEmpty();
         mCurrentPipTaskToken = null;
@@ -604,14 +604,8 @@ public class PipTransition extends PipTransitionController {
             }
         }
 
-        // Set the initial frame as scaling the end to the start.
         final Rect destinationBounds = new Rect(pipChange.getEndAbsBounds());
         destinationBounds.offset(-offset.x, -offset.y);
-        startTransaction.setWindowCrop(pipLeash, destinationBounds.width(),
-                destinationBounds.height());
-        mSurfaceTransactionHelper.scale(startTransaction, pipLeash, destinationBounds,
-                currentBounds);
-        startTransaction.apply();
 
         // Check if it is fixed rotation.
         final int rotationDelta;
@@ -641,7 +635,7 @@ public class PipTransition extends PipTransitionController {
             rotationDelta = Surface.ROTATION_0;
         }
         startExpandAnimation(taskInfo, pipLeash, currentBounds, currentBounds, destinationBounds,
-                rotationDelta);
+                rotationDelta, startTransaction);
     }
 
     private void startExpandAndRotationAnimation(@NonNull TransitionInfo info,
@@ -697,7 +691,7 @@ public class PipTransition extends PipTransitionController {
 
     private void startExpandAnimation(final TaskInfo taskInfo, final SurfaceControl leash,
             final Rect baseBounds, final Rect startBounds, final Rect endBounds,
-            final int rotationDelta) {
+            final int rotationDelta, @Nullable SurfaceControl.Transaction startTransaction) {
         final Rect sourceHintRect = PipBoundsAlgorithm.getValidSourceHintRect(
                 taskInfo.pictureInPictureParams, endBounds);
         final PipAnimationController.PipTransitionAnimator animator =
@@ -705,9 +699,14 @@ public class PipTransition extends PipTransitionController {
                         endBounds, sourceHintRect, TRANSITION_DIRECTION_LEAVE_PIP,
                         0 /* startingAngle */, rotationDelta);
         animator.setTransitionDirection(TRANSITION_DIRECTION_LEAVE_PIP)
-                .setPipAnimationCallback(mPipAnimationCallback)
+                .setDuration(mEnterExitAnimationDuration);
+        if (startTransaction != null) {
+            animator.setPipTransactionHandler(mTransactionConsumer).applySurfaceControlTransaction(
+                    leash, startTransaction, PipAnimationController.FRACTION_START);
+            startTransaction.apply();
+        }
+        animator.setPipAnimationCallback(mPipAnimationCallback)
                 .setPipTransactionHandler(mPipOrganizer.getPipTransactionHandler())
-                .setDuration(mEnterExitAnimationDuration)
                 .start();
     }
 
@@ -989,12 +988,7 @@ public class PipTransition extends PipTransitionController {
             @NonNull SurfaceControl.Transaction finishTransaction,
             @NonNull Transitions.TransitionFinishCallback finishCallback,
             @NonNull TaskInfo taskInfo) {
-        final int changeSize = info.getChanges().size();
-        if (changeSize < 4) {
-            throw new RuntimeException(
-                    "Got an exit-pip-to-split transition with unexpected change-list");
-        }
-        for (int i = changeSize - 1; i >= 0; i--) {
+        for (int i = info.getChanges().size() - 1; i >= 0; i--) {
             final TransitionInfo.Change change = info.getChanges().get(i);
             final int mode = change.getMode();
 
@@ -1023,24 +1017,17 @@ public class PipTransition extends PipTransitionController {
     private void resetPrevPip(@NonNull TransitionInfo.Change prevPipTaskChange,
             @NonNull SurfaceControl.Transaction startTransaction) {
         final SurfaceControl leash = prevPipTaskChange.getLeash();
-        final Rect bounds = prevPipTaskChange.getEndAbsBounds();
-        final Point offset = prevPipTaskChange.getEndRelOffset();
-        bounds.offset(-offset.x, -offset.y);
+        startTransaction.remove(leash);
 
-        startTransaction.setWindowCrop(leash, null);
-        startTransaction.setMatrix(leash, 1, 0, 0, 1);
-        startTransaction.setCornerRadius(leash, 0);
-        startTransaction.setPosition(leash, bounds.left, bounds.top);
-
-        if (mHasFadeOut && prevPipTaskChange.getTaskInfo().isVisible()) {
-            if (mPipAnimationController.getCurrentAnimator() != null) {
-                mPipAnimationController.getCurrentAnimator().cancel();
-            }
-            startTransaction.setAlpha(leash, 1);
-        }
         mHasFadeOut = false;
         mCurrentPipTaskToken = null;
-        mPipOrganizer.onExitPipFinished(prevPipTaskChange.getTaskInfo());
+
+        // clean-up the state in PipTaskOrganizer if the PipTaskOrganizer#onTaskAppeared() hasn't
+        // been called yet with its leash reference now pointing to a new SurfaceControl not
+        // matching the leash of the pip we are removing.
+        if (mPipOrganizer.getSurfaceControl() == leash) {
+            mPipOrganizer.onExitPipFinished(prevPipTaskChange.getTaskInfo());
+        }
     }
 
     @Override
