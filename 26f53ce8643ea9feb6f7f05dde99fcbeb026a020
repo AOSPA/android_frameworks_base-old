@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "2a170f04_4d8e5e0f",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000469
+      },
+      "writtenOn": "2023-06-23T15:58:15Z",
+      "side": 1,
+      "message": "on a side note, we need to do smth like this for qs carrier icons too",
+      "revId": "26f53ce8643ea9feb6f7f05dde99fcbeb026a020",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
