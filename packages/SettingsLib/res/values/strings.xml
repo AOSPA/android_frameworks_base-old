@@ -18,6 +18,8 @@
 */
 -->
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <!-- Deep sleep information -->
+    <string name="status_deep_sleep">(Deep sleep: %1$d%2$s)</string>
     <!-- Toast message when Wi-Fi cannot scan for networks -->
     <string name="wifi_fail_to_scan">Can\'t scan for networks</string>
     <!-- Concise terminology for wifi with WEP security [CHAR LIMIT=40] -->
