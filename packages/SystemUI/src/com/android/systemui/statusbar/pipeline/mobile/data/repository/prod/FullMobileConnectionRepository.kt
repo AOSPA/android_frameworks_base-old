@@ -427,6 +427,21 @@ class FullMobileConnectionRepository(
                 activeRepo.value.imsRegistrationTech.value
             )
 
+    override val isConnectionFailed =
+        activeRepo.flatMapLatest { it.isConnectionFailed }
+            .logDiffsForTable(
+                tableLogBuffer,
+                columnPrefix = "",
+                columnName = "isConnectionFailed",
+                initialValue = activeRepo.value.isConnectionFailed.value,
+            )
+            .stateIn(
+                scope,
+                SharingStarted.WhileSubscribed(),
+                activeRepo.value.isConnectionFailed.value
+            )
+
+
     class Factory
     @Inject
     constructor(

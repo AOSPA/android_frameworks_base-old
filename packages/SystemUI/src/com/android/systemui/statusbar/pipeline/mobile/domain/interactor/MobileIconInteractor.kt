@@ -78,6 +78,9 @@ interface MobileIconInteractor {
     /** Only true if mobile is the default transport but is not validated, otherwise false */
     val isDefaultConnectionFailed: StateFlow<Boolean>
 
+    /** Only true if mobile is the cellular transport but is not validated, otherwise false */
+    val isConnectionFailed: StateFlow<Boolean>
+
     /** True if we consider this connection to be in service, i.e. can make calls */
     val isInService: StateFlow<Boolean>
 
@@ -413,6 +416,8 @@ class MobileIconInteractorImpl(
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
     override val isInService = connectionRepository.isInService
+
+    override val isConnectionFailed: StateFlow<Boolean> = connectionRepository.isConnectionFailed
 
     private fun isLteCamped(mobileIconCustmization: MobileIconCustomizationMode): Boolean {
         return (mobileIconCustmization.dataNetworkType == TelephonyManager.NETWORK_TYPE_LTE

@@ -27,6 +27,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.database.ContentObserver
+import android.net.ConnectivityManager
+import android.net.ConnectivityManager.NetworkCallback
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
+import android.net.TelephonyNetworkSpecifier
 import android.provider.Settings.Global
 import android.telephony.CellSignalStrength.SIGNAL_STRENGTH_GREAT
 import android.telephony.CellSignalStrength.SIGNAL_STRENGTH_GOOD
@@ -124,6 +130,7 @@ class MobileConnectionRepositoryImpl(
     override val tableLogBuffer: TableLogBuffer,
     scope: CoroutineScope,
     private val fiveGServiceClient: FiveGServiceClient,
+    private val connectivityManager: ConnectivityManager
 ) : MobileConnectionRepository {
     init {
         if (telephonyManager.subscriptionId != subId) {
@@ -514,6 +521,32 @@ class MobileConnectionRepositoryImpl(
     override val imsRegistrationTech: MutableStateFlow<Int> =
         MutableStateFlow<Int>(REGISTRATION_TECH_NONE)
 
+    override val isConnectionFailed: StateFlow<Boolean> = conflatedCallbackFlow {
+        val callback =
+            object : NetworkCallback(FLAG_INCLUDE_LOCATION_INFO) {
+                override fun onCapabilitiesChanged(
+                    network: Network,
+                    caps: NetworkCapabilities
+                 ) {
+                     trySend(!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED));
+                 }
+            }
+            connectivityManager.registerNetworkCallback(createNetworkRequest(subId), callback)
+
+            awaitClose { connectivityManager.unregisterNetworkCallback(callback) }
+        }
+        .distinctUntilChanged()
+        .stateIn(scope, SharingStarted.WhileSubscribed(), false)
+
+    private fun createNetworkRequest(specfier: Int): NetworkRequest {
+        return NetworkRequest.Builder()
+                .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .setNetworkSpecifier(TelephonyNetworkSpecifier.Builder()
+                        .setSubscriptionId(specfier).build())
+                .build()
+    }
+
     private val registrationCallback =
         object : RegistrationManager.RegistrationCallback() {
             override fun onRegistered(attributes: ImsRegistrationAttributes) {
@@ -561,6 +594,7 @@ class MobileConnectionRepositoryImpl(
         @Background private val bgDispatcher: CoroutineDispatcher,
         @Application private val scope: CoroutineScope,
         private val fiveGServiceClient: FiveGServiceClient,
+        private val connectivityManager: ConnectivityManager
     ) {
         fun build(
             subId: Int,
@@ -582,6 +616,7 @@ class MobileConnectionRepositoryImpl(
                 mobileLogger,
                 scope,
                 fiveGServiceClient,
+                connectivityManager
             )
         }
     }
