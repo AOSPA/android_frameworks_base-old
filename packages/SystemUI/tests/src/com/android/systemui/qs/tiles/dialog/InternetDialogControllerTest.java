@@ -848,7 +848,7 @@ public class InternetDialogControllerTest extends SysuiTestCase {
         mSubIdTelephonyDisplayInfoMap.put(SUB_ID2, info2);
 
         doReturn(SUB_ID2).when(spyController).getActiveAutoSwitchNonDdsSubId();
-        doReturn(true).when(spyController).isMobileDataEnabled();
+        doReturn(true).when(spyController).isMobileDataEnabled(SUB_ID);
         doReturn(true).when(spyController).activeNetworkIsCellular();
         String dds = spyController.getMobileNetworkSummary(SUB_ID);
         String nonDds = spyController.getMobileNetworkSummary(SUB_ID2);
@@ -862,7 +862,7 @@ public class InternetDialogControllerTest extends SysuiTestCase {
     @Test
     public void getMobileNetworkSummary_flagOff() {
         InternetDialogController spyController = spy(mInternetDialogController);
-        doReturn(true).when(spyController).isMobileDataEnabled();
+        doReturn(true).when(spyController).isMobileDataEnabled(SUB_ID);
         doReturn(true).when(spyController).activeNetworkIsCellular();
         String dds = spyController.getMobileNetworkSummary(SUB_ID);
 
@@ -964,7 +964,7 @@ public class InternetDialogControllerTest extends SysuiTestCase {
                 TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NONE);
 
         mSubIdTelephonyDisplayInfoMap.put(SUB_ID, info);
-        doReturn(true).when(spyController).isMobileDataEnabled();
+        doReturn(true).when(spyController).isMobileDataEnabled(SUB_ID);
         doReturn(true).when(spyController).activeNetworkIsCellular();
         spyController.mCarrierNetworkChangeMode = true;
         String dds = spyController.getMobileNetworkSummary(SUB_ID);

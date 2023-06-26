@@ -204,6 +204,7 @@ class DemoMobileConnectionRepository(
     override val videoCapable = MutableStateFlow(false)
     override val imsRegistered = MutableStateFlow(false)
     override val imsRegistrationTech = MutableStateFlow(REGISTRATION_TECH_NONE)
+    override val isConnectionFailed = MutableStateFlow(false)
 
     /**
      * Process a new demo mobile event. Note that [resolvedNetworkType] must be passed in separately
