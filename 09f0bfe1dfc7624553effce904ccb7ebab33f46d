@@ -16,6 +16,24 @@
       "message": "why not just use overlays?",
       "revId": "09f0bfe1dfc7624553effce904ccb7ebab33f46d",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "38abd21e_1d5d7f95",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000737
+      },
+      "writtenOn": "2023-06-26T00:55:01Z",
+      "side": 1,
+      "message": "This is a simple solution, applying many overlays to devices with many variants is not simple.",
+      "parentUuid": "95d8873a_42830ace",
+      "revId": "09f0bfe1dfc7624553effce904ccb7ebab33f46d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
