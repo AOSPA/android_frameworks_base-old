@@ -883,6 +883,18 @@ import java.util.concurrent.atomic.AtomicBoolean;
                                     BluetoothProfile.STATE_CONNECTED));
                 }
             }
+        } else if (data.mInfo.getProfile() == BluetoothProfile.A2DP && data.mPreviousDevice != null
+                   && data.mNewDevice != null && !data.mPreviousDevice.equals(data.mNewDevice)) {
+            final String name = TextUtils.emptyIfNull(data.mNewDevice.getName());
+            new MediaMetrics.Item(MediaMetrics.Name.AUDIO_DEVICE + MediaMetrics.SEPARATOR
+                    + "queueOnBluetoothActiveDeviceChanged_update")
+                    .set(MediaMetrics.Property.NAME, name)
+                    .set(MediaMetrics.Property.STATUS, data.mInfo.getProfile())
+                    .record();
+            synchronized (mDeviceStateLock) {
+                    postBluetoothDeviceConfigChange(createBtDeviceInfo(data, data.mNewDevice,
+                            BluetoothProfile.STATE_CONNECTED));
+                }
         } else {
             synchronized (mDeviceStateLock) {
                 if (data.mPreviousDevice != null) {
