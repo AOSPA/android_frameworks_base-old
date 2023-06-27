@@ -667,7 +667,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
      * @return true if Bluetooth SCO is preferred , false otherwise.
      */
     /*package*/ boolean isBluetoothScoOn() {
-        return isDeviceOnForCommunication(AudioDeviceInfo.TYPE_BLUETOOTH_SCO);
+        boolean mVoipLeaWarEnabled =
+                SystemProperties.getBoolean("persist.enable.bluetooth.voipleawar", false);
+        return isDeviceOnForCommunication(AudioDeviceInfo.TYPE_BLUETOOTH_SCO) ||
+                (mVoipLeaWarEnabled && isBluetoothScoRequested() &&
+                mActiveCommunicationDevice != null &&
+                mActiveCommunicationDevice.getType() == AudioDeviceInfo.TYPE_BLE_HEADSET);
     }
 
     /*package*/ boolean isBluetoothScoActive() {
@@ -1020,9 +1025,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
         if (AudioService.DEBUG_COMM_RTE) {
             Log.v(TAG, "setBluetoothScoOn: " + on + " " + eventSource);
         }
+        boolean mVoipLeaWarEnabled =
+                SystemProperties.getBoolean("persist.enable.bluetooth.voipleawar", false);
         synchronized (mBluetoothAudioStateLock) {
             mBluetoothScoOn = on;
-            updateAudioHalBluetoothState();
+            // Avoid update BT_SCO=on to Audio Hal if SCO is not connected in BT app
+            if (mVoipLeaWarEnabled && on && !mBtHelper.isBluetoothScoOn()) {
+                Log.v(TAG, "skip updateAudioHalBluetoothState if SCO is not on" );
+            } else {
+                updateAudioHalBluetoothState();
+            }
             postUpdateCommunicationRouteClient(eventSource);
         }
     }
