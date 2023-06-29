@@ -135,13 +135,20 @@ constructor(
                 level = shownLevel.value,
                 numberOfLevels = iconInteractor.numberOfLevels.value,
                 showExclamationMark = showExclamationMark.value,
+                carrierNetworkChange = iconInteractor.carrierNetworkChangeActive.value,
             )
         combine(
                 shownLevel,
                 iconInteractor.numberOfLevels,
                 showExclamationMark,
-            ) { shownLevel, numberOfLevels, showExclamationMark ->
-                SignalIconModel(shownLevel, numberOfLevels, showExclamationMark)
+                iconInteractor.carrierNetworkChangeActive,
+            ) { shownLevel, numberOfLevels, showExclamationMark, carrierNetworkChange ->
+                SignalIconModel(
+                    shownLevel,
+                    numberOfLevels,
+                    showExclamationMark,
+                    carrierNetworkChange,
+                )
             }
             .distinctUntilChanged()
             .logDiffsForTable(
@@ -165,8 +172,10 @@ constructor(
                 iconInteractor.isDataEnabled,
                 iconInteractor.alwaysShowDataRatIcon,
                 iconInteractor.mobileIsDefault,
-            ) { dataConnected, dataEnabled, alwaysShow, mobileIsDefault ->
-                alwaysShow || (dataEnabled && dataConnected && mobileIsDefault)
+                iconInteractor.carrierNetworkChangeActive,
+            ) { dataConnected, dataEnabled, alwaysShow, mobileIsDefault, carrierNetworkChange ->
+                alwaysShow ||
+                    (!carrierNetworkChange && (dataEnabled && dataConnected && mobileIsDefault))
             }
             .distinctUntilChanged()
             .logDiffsForTable(
@@ -183,7 +192,9 @@ constructor(
                 showNetworkTypeIcon,
                 iconInteractor.networkTypeIconCustomization,
                 iconInteractor.voWifiAvailable,
-            ) { networkTypeIconGroup, shouldShow, networkTypeIconCustomization, voWifiAvailable ->
+                iconInteractor.isInService,
+            ) { networkTypeIconGroup, shouldShow, networkTypeIconCustomization, voWifiAvailable,
+                isInService ->
                 val desc =
                     if (networkTypeIconGroup.contentDescription != 0)
                         ContentDescription.Resource(networkTypeIconGroup.contentDescription)
@@ -199,7 +210,8 @@ constructor(
                 return@combine when {
                     voWifiAvailable -> icon
                     networkTypeIconCustomization.isRatCustomization -> {
-                        if (shouldShowNetworkTypeIcon(networkTypeIconCustomization)) {
+                        if (shouldShowNetworkTypeIcon(networkTypeIconCustomization)
+                            && isInService) {
                             icon
                         } else {
                             null

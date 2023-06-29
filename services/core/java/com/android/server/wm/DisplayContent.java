@@ -245,6 +245,7 @@ import android.view.inputmethod.ImeTracker;
 import android.window.DisplayWindowPolicyController;
 import android.window.IDisplayAreaOrganizer;
 import android.window.ScreenCapture;
+import android.window.ScreenCapture.SynchronousScreenCaptureListener;
 import android.window.TransitionRequestInfo;
 
 import com.android.internal.R;
@@ -5086,7 +5087,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             return null;
         }
 
-        Pair<ScreenCapture.ScreenCaptureListener, ScreenCapture.ScreenshotSync> syncScreenCapture =
+        SynchronousScreenCaptureListener syncScreenCapture =
                 ScreenCapture.createSyncCaptureListener();
 
         getBounds(mTmpRect);
@@ -5095,10 +5096,10 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 new ScreenCapture.LayerCaptureArgs.Builder(getSurfaceControl())
                         .setSourceCrop(mTmpRect).build();
 
-        ScreenCapture.captureLayers(args, syncScreenCapture.first);
+        ScreenCapture.captureLayers(args, syncScreenCapture);
 
         final ScreenCapture.ScreenshotHardwareBuffer screenshotBuffer =
-                syncScreenCapture.second.get();
+                syncScreenCapture.getBuffer();
         final Bitmap bitmap = screenshotBuffer == null ? null : screenshotBuffer.asBitmap();
         if (bitmap == null) {
             Slog.w(TAG_WM, "Failed to take screenshot");
@@ -5600,17 +5601,14 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      */
     void requestTransitionAndLegacyPrepare(@WindowManager.TransitionType int transit,
             @WindowManager.TransitionFlags int flags) {
-        prepareAppTransition(transit, flags);
-        mTransitionController.requestTransitionIfNeeded(transit, flags,
-                null /* trigger */, this);
+        requestTransitionAndLegacyPrepare(transit, flags, null /* trigger */);
     }
 
     /** @see #requestTransitionAndLegacyPrepare(int, int) */
     void requestTransitionAndLegacyPrepare(@WindowManager.TransitionType int transit,
-            @Nullable WindowContainer trigger) {
-        prepareAppTransition(transit);
-        mTransitionController.requestTransitionIfNeeded(transit, 0 /* flags */,
-                trigger, this);
+            @WindowManager.TransitionFlags int flags, @Nullable WindowContainer trigger) {
+        prepareAppTransition(transit, flags);
+        mTransitionController.requestTransitionIfNeeded(transit, flags, trigger, this);
     }
 
     void executeAppTransition() {
@@ -6507,6 +6505,22 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     boolean isKeyguardOccluded() {
         return mRootWindowContainer.mTaskSupervisor
                 .getKeyguardController().isDisplayOccluded(mDisplayId);
+    }
+
+    /**
+     * @return the task that is occluding the keyguard
+     */
+    @Nullable
+    Task getTaskOccludingKeyguard() {
+        final KeyguardController keyguardController = mRootWindowContainer.mTaskSupervisor
+                .getKeyguardController();
+        if (keyguardController.getTopOccludingActivity(mDisplayId) != null) {
+            return keyguardController.getTopOccludingActivity(mDisplayId).getRootTask();
+        }
+        if (keyguardController.getDismissKeyguardActivity(mDisplayId) != null) {
+            return keyguardController.getDismissKeyguardActivity(mDisplayId).getRootTask();
+        }
+        return null;
     }
 
     @VisibleForTesting

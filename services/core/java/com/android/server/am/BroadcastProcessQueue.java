@@ -25,6 +25,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UptimeMillisLong;
+import android.app.BroadcastOptions;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
 import android.os.SystemClock;
@@ -103,6 +104,12 @@ class BroadcastProcessQueue {
      * used when deciding if we should extend the soft ANR timeout.
      */
     long lastCpuDelayTime;
+
+    /**
+     * Snapshotted value of {@link ProcessStateRecord#getCurProcState()} before
+     * dispatching the current broadcast to the receiver in this process.
+     */
+    int lastProcessState;
 
     /**
      * Ordered collection of broadcasts that are waiting to be dispatched to
@@ -257,7 +264,10 @@ class BroadcastProcessQueue {
             deferredStatesApplyConsumer.accept(record, recordIndex);
         }
 
-        if (record.isReplacePending()) {
+        // Ignore FLAG_RECEIVER_REPLACE_PENDING if the sender specified the policy using the
+        // BroadcastOptions delivery group APIs.
+        if (record.isReplacePending()
+                && record.getDeliveryGroupPolicy() == BroadcastOptions.DELIVERY_GROUP_POLICY_ALL) {
             final BroadcastRecord replacedBroadcastRecord = replaceBroadcast(record, recordIndex);
             if (replacedBroadcastRecord != null) {
                 return replacedBroadcastRecord;
@@ -277,6 +287,25 @@ class BroadcastProcessQueue {
         getQueueForBroadcast(record).addLast(newBroadcastArgs);
         onBroadcastEnqueued(record, recordIndex);
         return null;
+    }
+
+    /**
+     * Re-enqueue the active broadcast so that it can be made active and delivered again. In order
+     * to keep its previous position same to avoid issues with reordering, insert it at the head
+     * of the queue.
+     *
+     * Callers are responsible for clearing the active broadcast by calling
+     * {@link #makeActiveIdle()} after re-enqueuing it.
+     */
+    public void reEnqueueActiveBroadcast() {
+        final BroadcastRecord record = getActive();
+        final int recordIndex = getActiveIndex();
+
+        final SomeArgs broadcastArgs = SomeArgs.obtain();
+        broadcastArgs.arg1 = record;
+        broadcastArgs.argi1 = recordIndex;
+        getQueueForBroadcast(record).addFirst(broadcastArgs);
+        onBroadcastEnqueued(record, recordIndex);
     }
 
     /**
@@ -1015,6 +1044,7 @@ class BroadcastProcessQueue {
     static final int REASON_CONTAINS_INSTRUMENTED = 16;
     static final int REASON_CONTAINS_MANIFEST = 17;
     static final int REASON_FOREGROUND = 18;
+    static final int REASON_CORE_UID = 19;
 
     @IntDef(flag = false, prefix = { "REASON_" }, value = {
             REASON_EMPTY,
@@ -1035,6 +1065,7 @@ class BroadcastProcessQueue {
             REASON_CONTAINS_INSTRUMENTED,
             REASON_CONTAINS_MANIFEST,
             REASON_FOREGROUND,
+            REASON_CORE_UID,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface Reason {}
@@ -1059,6 +1090,7 @@ class BroadcastProcessQueue {
             case REASON_CONTAINS_INSTRUMENTED: return "CONTAINS_INSTRUMENTED";
             case REASON_CONTAINS_MANIFEST: return "CONTAINS_MANIFEST";
             case REASON_FOREGROUND: return "FOREGROUND";
+            case REASON_CORE_UID: return "CORE_UID";
             default: return Integer.toString(reason);
         }
     }
@@ -1103,6 +1135,9 @@ class BroadcastProcessQueue {
             } else if (mProcessPersistent) {
                 mRunnableAt = runnableAt + constants.DELAY_PERSISTENT_PROC_MILLIS;
                 mRunnableAtReason = REASON_PERSISTENT;
+            } else if (UserHandle.isCore(uid)) {
+                mRunnableAt = runnableAt;
+                mRunnableAtReason = REASON_CORE_UID;
             } else if (mCountOrdered > 0) {
                 mRunnableAt = runnableAt;
                 mRunnableAtReason = REASON_CONTAINS_ORDERED;
@@ -1257,7 +1292,7 @@ class BroadcastProcessQueue {
         BroadcastProcessQueue test = head;
         BroadcastProcessQueue tail = null;
         while (test != null) {
-            if (test.getRunnableAt() >= itemRunnableAt) {
+            if (test.getRunnableAt() > itemRunnableAt) {
                 item.runnableAtNext = test;
                 item.runnableAtPrev = test.runnableAtPrev;
                 if (item.runnableAtNext != null) {

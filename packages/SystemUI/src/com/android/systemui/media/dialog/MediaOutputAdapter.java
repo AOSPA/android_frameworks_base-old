@@ -24,10 +24,10 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.drawable.AnimatedVectorDrawable;
 import android.graphics.drawable.Drawable;
-import android.os.Build;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.CheckBox;
 import android.widget.TextView;
 
@@ -151,6 +151,7 @@ public class MediaOutputAdapter extends MediaOutputBaseAdapter {
                 mCurrentActivePosition = -1;
             }
             mStatusIcon.setVisibility(View.GONE);
+            enableFocusPropertyForView(mContainerLayout);
 
             if (mController.isAnyDeviceTransferring()) {
                 if (device.getState() == MediaDeviceState.STATE_CONNECTING
@@ -173,9 +174,8 @@ public class MediaOutputAdapter extends MediaOutputBaseAdapter {
                     mCurrentActivePosition = position;
                     updateFullItemClickListener(v -> onItemClick(v, device));
                     setSingleLineLayout(getItemTitle(device));
-                    initMutingExpectedDevice();
-                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-                        && device.hasSubtext()) {
+                    initFakeActiveDevice();
+                } else if (device.hasSubtext()) {
                     boolean isActiveWithOngoingSession =
                             (device.hasOngoingSession() && (currentlyConnected || isDeviceIncluded(
                                     mController.getSelectedMediaDevice(), device)));
@@ -250,7 +250,8 @@ public class MediaOutputAdapter extends MediaOutputBaseAdapter {
                             mController.getColorItemContent());
                     updateGroupableCheckBox(true, isDeviceDeselectable, device);
                     updateEndClickArea(device, isDeviceDeselectable);
-                    setUpContentDescriptionForView(mContainerLayout, false, device);
+                    disableFocusPropertyForView(mContainerLayout);
+                    setUpContentDescriptionForView(mSeekBar, device);
                     setSingleLineLayout(getItemTitle(device), true /* showSeekBar */,
                             false /* showProgressBar */, true /* showCheckBox */,
                             true /* showEndTouchArea */);
@@ -264,6 +265,27 @@ public class MediaOutputAdapter extends MediaOutputBaseAdapter {
                         setUpDeviceIcon(device);
                         updateFullItemClickListener(v -> cancelMuteAwaitConnection());
                         setSingleLineLayout(getItemTitle(device));
+                    } else if (device.hasOngoingSession()) {
+                        mCurrentActivePosition = position;
+                        if (device.isHostForOngoingSession()) {
+                            updateTitleIcon(R.drawable.media_output_icon_volume,
+                                    mController.getColorItemContent());
+                            updateEndClickAreaAsSessionEditing(device);
+                            mEndClickIcon.setVisibility(View.VISIBLE);
+                            setSingleLineLayout(getItemTitle(device), true /* showSeekBar */,
+                                    false /* showProgressBar */, false /* showCheckBox */,
+                                    true /* showEndTouchArea */);
+                            initSeekbar(device, isCurrentSeekbarInvisible);
+                        } else {
+                            updateDeviceStatusIcon(mContext.getDrawable(
+                                    R.drawable.ic_sound_bars_anim));
+                            mStatusIcon.setVisibility(View.VISIBLE);
+                            updateSingleLineLayoutContentAlpha(
+                                    updateClickActionBasedOnSelectionBehavior(device)
+                                            ? DEVICE_CONNECTED_ALPHA : DEVICE_DISCONNECTED_ALPHA);
+                            setSingleLineLayout(getItemTitle(device));
+                            initFakeActiveDevice();
+                        }
                     } else if (mController.isCurrentConnectedDeviceRemote()
                             && !mController.getSelectableMediaDevice().isEmpty()) {
                         //If device is connected and there's other selectable devices, layout as
@@ -274,7 +296,8 @@ public class MediaOutputAdapter extends MediaOutputBaseAdapter {
                                 mController.getDeselectableMediaDevice(), device);
                         updateGroupableCheckBox(true, isDeviceDeselectable, device);
                         updateEndClickArea(device, isDeviceDeselectable);
-                        setUpContentDescriptionForView(mContainerLayout, false, device);
+                        disableFocusPropertyForView(mContainerLayout);
+                        setUpContentDescriptionForView(mSeekBar, device);
                         setSingleLineLayout(getItemTitle(device), true /* showSeekBar */,
                                 false /* showProgressBar */, true /* showCheckBox */,
                                 true /* showEndTouchArea */);
@@ -282,7 +305,8 @@ public class MediaOutputAdapter extends MediaOutputBaseAdapter {
                     } else {
                         updateTitleIcon(R.drawable.media_output_icon_volume,
                                 mController.getColorItemContent());
-                        setUpContentDescriptionForView(mContainerLayout, false, device);
+                        disableFocusPropertyForView(mContainerLayout);
+                        setUpContentDescriptionForView(mSeekBar, device);
                         mCurrentActivePosition = position;
                         setSingleLineLayout(getItemTitle(device), true /* showSeekBar */,
                                 false /* showProgressBar */, false /* showCheckBox */,
@@ -346,7 +370,7 @@ public class MediaOutputAdapter extends MediaOutputBaseAdapter {
                     ColorStateList.valueOf(mController.getColorItemContent()));
             mEndClickIcon.setOnClickListener(
                     v -> mController.tryToLaunchInAppRoutingIntent(device.getId(), v));
-            mEndTouchArea.setOnClickListener(v -> mCheckBox.performClick());
+            mEndTouchArea.setOnClickListener(v -> mEndClickIcon.performClick());
         }
 
         public void updateEndClickAreaColor(int color) {
@@ -390,7 +414,7 @@ public class MediaOutputAdapter extends MediaOutputBaseAdapter {
                     View.IMPORTANT_FOR_ACCESSIBILITY_YES);
             mEndTouchArea.setBackgroundTintList(
                     ColorStateList.valueOf(mController.getColorItemBackground()));
-            setUpContentDescriptionForView(mEndTouchArea, true, device);
+            setUpContentDescriptionForView(mEndTouchArea, device);
         }
 
         private void updateGroupableCheckBox(boolean isSelected, boolean isGroupable,
@@ -471,14 +495,29 @@ public class MediaOutputAdapter extends MediaOutputBaseAdapter {
             notifyDataSetChanged();
         }
 
-        private void setUpContentDescriptionForView(View view, boolean clickable,
-                MediaDevice device) {
-            view.setClickable(clickable);
+        private void disableFocusPropertyForView(View view) {
+            view.setFocusable(false);
+            view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        }
+
+        private void enableFocusPropertyForView(View view) {
+            view.setFocusable(true);
+            view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
+        }
+
+        private void setUpContentDescriptionForView(View view, MediaDevice device) {
             view.setContentDescription(
                     mContext.getString(device.getDeviceType()
                             == MediaDevice.MediaDeviceType.TYPE_BLUETOOTH_DEVICE
                             ? R.string.accessibility_bluetooth_name
                             : R.string.accessibility_cast_name, device.getName()));
+            view.setAccessibilityDelegate(new View.AccessibilityDelegate() {
+                public void onInitializeAccessibilityNodeInfo(View host,
+                        AccessibilityNodeInfo info) {
+                    super.onInitializeAccessibilityNodeInfo(host, info);
+                    host.setOnClickListener(null);
+                }
+            });
         }
     }
 

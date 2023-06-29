@@ -2444,7 +2444,7 @@ public final class ViewRootImpl implements ViewParent,
      *
      * @hide
      */
-    void notifyRendererOfExpensiveFrame() {
+    public void notifyRendererOfExpensiveFrame() {
         if (mAttachInfo.mThreadedRenderer != null) {
             mAttachInfo.mThreadedRenderer.notifyExpensiveFrame();
         }
@@ -5477,7 +5477,7 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     private void updateRenderHdrSdrRatio() {
-        mRenderHdrSdrRatio = mDisplay.getHdrSdrRatio();
+        mRenderHdrSdrRatio = Math.min(mDesiredHdrSdrRatio, mDisplay.getHdrSdrRatio());
         mUpdateHdrSdrRatioInfo = true;
     }
 
@@ -5505,19 +5505,11 @@ public final class ViewRootImpl implements ViewParent,
                 mHdrSdrRatioChangedListener = null;
             } else {
                 mHdrSdrRatioChangedListener = display -> {
-                    setTargetHdrSdrRatio(display.getHdrSdrRatio());
+                    updateRenderHdrSdrRatio();
+                    invalidate();
                 };
                 mDisplay.registerHdrSdrRatioChangedListener(mExecutor, mHdrSdrRatioChangedListener);
             }
-        }
-    }
-
-    /** happylint */
-    public void setTargetHdrSdrRatio(float ratio) {
-        if (mRenderHdrSdrRatio != ratio) {
-            mRenderHdrSdrRatio = ratio;
-            mUpdateHdrSdrRatioInfo = true;
-            invalidate();
         }
     }
 
@@ -7034,11 +7026,15 @@ public final class ViewRootImpl implements ViewParent,
 
         private int processPointerEvent(QueuedInputEvent q) {
             final MotionEvent event = (MotionEvent)q.mEvent;
-            mHandwritingInitiator.onTouchEvent(event);
+            boolean handled = mHandwritingInitiator.onTouchEvent(event);
+            if (handled) {
+                // If handwriting is started, toolkit doesn't receive ACTION_UP.
+                mLastClickToolType = event.getToolType(event.getActionIndex());
+            }
 
             mAttachInfo.mUnbufferedDispatchRequested = false;
             mAttachInfo.mHandlingPointerEvent = true;
-            boolean handled = mView.dispatchPointerEvent(event);
+            handled = mView.dispatchPointerEvent(event);
             int action = event.getActionMasked();
             if (action == MotionEvent.ACTION_MOVE) {
                 mHaveMoveEvent = true;

@@ -2156,7 +2156,7 @@ final class InstallPackageHelper {
         final String pkgName = pkg.getPackageName();
         final int[] installedForUsers = installRequest.getOriginUsers();
         final int installReason = installRequest.getInstallReason();
-        final String installerPackageName = installRequest.getSourceInstallerPackageName();
+        final String installerPackageName = installRequest.getInstallerPackageName();
 
         if (DEBUG_INSTALL) Slog.d(TAG, "New package installed in " + pkg.getPath());
         if (pkgName != null) {

@@ -390,8 +390,6 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
     public void init(int windowType, Callback callback) {
         initDialog(mActivityManager.getLockTaskModeState());
 
-        mAccessibility.init();
-
         mController.addCallback(mControllerCallbackH, mHandler);
         mController.getState();
 
@@ -478,8 +476,7 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
         mWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         mWindow.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND
                 | WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR);
-        mWindow.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+        mWindow.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                 | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
                 | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
                 | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
@@ -677,6 +674,7 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
         initRingerH();
         initSettingsH(lockTaskModeState);
         initODICaptionsH();
+        mAccessibility.init();
     }
 
     private boolean isWindowGravityLeft() {
@@ -2006,14 +2004,14 @@ public class VolumeDialogImpl implements VolumeDialog, Dumpable,
                 if (row.anim == null) {
                     row.anim = ObjectAnimator.ofInt(row.slider, "progress", progress, newProgress);
                     row.anim.setInterpolator(new DecelerateInterpolator());
+                    row.anim.addListener(
+                        getJankListener(row.view, TYPE_UPDATE, UPDATE_ANIMATION_DURATION));
                 } else {
                     row.anim.cancel();
                     row.anim.setIntValues(progress, newProgress);
                 }
                 row.animTargetProgress = newProgress;
                 row.anim.setDuration(UPDATE_ANIMATION_DURATION);
-                row.anim.addListener(
-                        getJankListener(row.view, TYPE_UPDATE, UPDATE_ANIMATION_DURATION));
                 row.anim.start();
             } else {
                 // update slider directly to clamped value

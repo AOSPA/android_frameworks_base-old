@@ -116,7 +116,7 @@
     <string name="screenrecord_share_label" msgid="5025590804030086930">"Partekatu"</string>
     <string name="screenrecord_save_title" msgid="1886652605520893850">"Gorde da pantailaren grabaketa"</string>
     <string name="screenrecord_save_text" msgid="3008973099800840163">"Sakatu ikusteko"</string>
-    <string name="screenrecord_delete_error" msgid="2870506119743013588">"Errore bat gertatu da pantailaren grabaketa ezabatzean"</string>
+    <string name="screenrecord_save_error" msgid="5862648532560118815">"Errore bat gertatu da pantaila-grabaketa gordetzean"</string>
     <string name="screenrecord_start_error" msgid="2200660692479682368">"Errore bat gertatu da pantaila grabatzen hastean"</string>
     <string name="accessibility_back" msgid="6530104400086152611">"Atzera"</string>
     <string name="accessibility_home" msgid="5430449841237966217">"Hasiera"</string>
@@ -142,7 +142,7 @@
     <string name="biometric_dialog_face_icon_description_authenticated" msgid="2242167416140740920">"Autentifikatu da aurpegia"</string>
     <string name="biometric_dialog_face_icon_description_confirmed" msgid="7918067993953940778">"Berretsita"</string>
     <string name="biometric_dialog_tap_confirm" msgid="9166350738859143358">"Amaitzeko, sakatu \"Berretsi\""</string>
-    <string name="biometric_dialog_tap_confirm_with_face" msgid="1092050545851021991">"Aurpegiaren bidez desblokeatu da. Aurrera egiteko, sakatu desblokeatzeko ikonoa."</string>
+    <string name="biometric_dialog_tap_confirm_with_face" msgid="2378151312221818694">"Aurpegiaren bidez desblokeatu da"</string>
     <string name="biometric_dialog_tap_confirm_with_face_alt_1" msgid="439152621640507113">"Aurpegiaren bidez desblokeatu da. Sakatu aurrera egiteko."</string>
     <string name="biometric_dialog_tap_confirm_with_face_alt_2" msgid="8586608186457385108">"Ezagutu da aurpegia. Sakatu aurrera egiteko."</string>
     <string name="biometric_dialog_tap_confirm_with_face_alt_3" msgid="2192670471930606539">"Ezagutu da aurpegia. Aurrera egiteko, sakatu desblokeatzeko ikonoa."</string>
@@ -943,8 +943,7 @@
     <string name="controls_media_settings_button" msgid="5815790345117172504">"Ezarpenak"</string>
     <string name="controls_media_playing_item_description" msgid="4531853311504359098">"<xliff:g id="SONG_NAME">%1$s</xliff:g> (<xliff:g id="ARTIST_NAME">%2$s</xliff:g>) ari da erreproduzitzen <xliff:g id="APP_LABEL">%3$s</xliff:g> bidez"</string>
     <string name="controls_media_seekbar_description" msgid="4389621713616214611">"<xliff:g id="ELAPSED_TIME">%1$s</xliff:g>/<xliff:g id="TOTAL_TIME">%2$s</xliff:g>"</string>
-    <!-- no translation found for controls_media_empty_title (8296102892421573325) -->
-    <skip />
+    <string name="controls_media_empty_title" msgid="8296102892421573325">"<xliff:g id="APP_NAME">%1$s</xliff:g> abian da"</string>
     <string name="controls_media_button_play" msgid="2705068099607410633">"Erreproduzitu"</string>
     <string name="controls_media_button_pause" msgid="8614887780950376258">"Pausatu"</string>
     <string name="controls_media_button_prev" msgid="8126822360056482970">"Aurrekoa"</string>
@@ -1004,7 +1003,7 @@
     <string name="media_output_broadcast_update_error" msgid="1420868236079122521">"Ezin da gorde. Saiatu berriro."</string>
     <string name="media_output_broadcast_last_update_error" msgid="5484328807296895491">"Ezin da gorde."</string>
     <string name="media_output_broadcast_code_hint_no_less_than_min" msgid="4663836092607696185">"Erabili lau karaktere gutxienez"</string>
-    <string name="media_output_broadcast_code_hint_no_more_than_max" msgid="9181869364856175638">"Erabili 16 karaktere baino gutxiago"</string>
+    <string name="media_output_broadcast_edit_hint_no_more_than_max" msgid="3923625800037673922">"Erabili <xliff:g id="LENGTH">%1$d</xliff:g> karaktere baino gutxiago"</string>
     <string name="build_number_clip_data_label" msgid="3623176728412560914">"Konpilazio-zenbakia"</string>
     <string name="build_number_copy_toast" msgid="877720921605503046">"Kopiatu da konpilazio-zenbakia arbelean."</string>
     <string name="basic_status" msgid="2315371112182658176">"Elkarrizketa irekia"</string>
@@ -1124,12 +1123,18 @@
     <string name="log_access_confirmation_learn_more" msgid="3134565480986328004">"Lortu informazio gehiago"</string>
     <string name="log_access_confirmation_learn_more_at" msgid="5635666259505215905">"Lortu informazio gehiago <xliff:g id="URL">%s</xliff:g> helbidean"</string>
     <string name="keyguard_affordance_enablement_dialog_action_template" msgid="8164857863036314664">"Ireki <xliff:g id="APPNAME">%1$s</xliff:g>"</string>
-    <string name="keyguard_affordance_enablement_dialog_wallet_instruction_1" msgid="8439655049139819278">"• Aplikazioa konfiguratuta dago."</string>
-    <string name="keyguard_affordance_enablement_dialog_wallet_instruction_2" msgid="4321089250629477835">"• Diru-zorroa zerbitzuan gutxienez txartel bat gehitu da."</string>
-    <string name="keyguard_affordance_enablement_dialog_qr_scanner_instruction" msgid="5355839079232119791">"• Kamera-aplikazio bat instalatu da."</string>
-    <string name="keyguard_affordance_enablement_dialog_home_instruction_1" msgid="8438311171750568633">"• Aplikazioa konfiguratuta dago."</string>
-    <string name="keyguard_affordance_enablement_dialog_home_instruction_2" msgid="8308525385889021652">"• Gutxienez gailu bat erabilgarri dago."</string>
-    <string name="keyguard_affordance_enablement_dialog_notes_app_instruction" msgid="2274489846095284167">"Oharrak idazteko lasterbidea erabiltzeko, hautatu oharretarako aplikazio lehenetsia."</string>
+    <!-- no translation found for wallet_quick_affordance_unavailable_install_the_app (7298552910007208368) -->
+    <skip />
+    <!-- no translation found for wallet_quick_affordance_unavailable_configure_the_app (4387433357429873258) -->
+    <skip />
+    <!-- no translation found for qr_scanner_quick_affordance_unavailable_explanation (3049582306241150946) -->
+    <skip />
+    <!-- no translation found for home_quick_affordance_unavailable_install_the_app (6187820778998446168) -->
+    <skip />
+    <!-- no translation found for home_quick_affordance_unavailable_configure_the_app (7953595390775156839) -->
+    <skip />
+    <!-- no translation found for notes_app_quick_affordance_unavailable_explanation (4796955161600178530) -->
+    <skip />
     <string name="keyguard_affordance_enablement_dialog_notes_app_action" msgid="6821710209675089470">"Hautatu aplikazioa"</string>
     <string name="keyguard_affordance_press_too_short" msgid="8145437175134998864">"Eduki sakatuta lasterbidea"</string>
     <string name="rear_display_bottom_sheet_cancel" msgid="3461468855493357248">"Utzi"</string>
@@ -1144,15 +1149,11 @@
     <string name="stylus_battery_low_subtitle" msgid="3583843128908823273">"Konektatu arkatza kargagailu batera"</string>
     <string name="stylus_battery_low" msgid="7134370101603167096">"Arkatzak bateria gutxi du"</string>
     <string name="video_camera" msgid="7654002575156149298">"Bideokamera"</string>
-    <!-- no translation found for call_from_work_profile_title (5418253516453177114) -->
-    <skip />
-    <!-- no translation found for call_from_work_profile_text (2856337395968118274) -->
-    <skip />
+    <string name="call_from_work_profile_title" msgid="5418253516453177114">"Ezin duzu deitu aplikazio pertsonaletatik"</string>
+    <string name="call_from_work_profile_text" msgid="2856337395968118274">"Laneko aplikazioetatik soilik deitzeko baimena ematen du zure erakundeak"</string>
     <string name="call_from_work_profile_action" msgid="2937701298133010724">"Aldatu laneko profilera"</string>
-    <!-- no translation found for install_dialer_on_work_profile_action (2014659711597862506) -->
-    <skip />
-    <!-- no translation found for call_from_work_profile_close (5830072964434474143) -->
-    <skip />
+    <string name="install_dialer_on_work_profile_action" msgid="2014659711597862506">"Instalatu telefonoetarako aplikazio bat (lanerako)"</string>
+    <string name="call_from_work_profile_close" msgid="5830072964434474143">"Utzi"</string>
     <string name="lock_screen_settings" msgid="6152703934761402399">"Pertsonalizatu pantaila blokeatua"</string>
     <string name="keyguard_unlock_to_customize_ls" msgid="2068542308086253819">"Desblokeatu eta pertsonalizatu pantaila blokeatua"</string>
     <string name="wifi_unavailable_dream_overlay_content_description" msgid="2024166212194640100">"Wifi-konexioa ez dago erabilgarri"</string>
@@ -1162,4 +1163,5 @@
     <string name="priority_mode_dream_overlay_content_description" msgid="6044561000253314632">"Lehentasun modua aktibatuta dago"</string>
     <string name="assistant_attention_content_description" msgid="6830215897604642875">"Laguntzailea zerbitzuak arreta jarrita dauka"</string>
     <string name="set_default_notes_app_toast_content" msgid="2812374329662610753">"Ezarri oharren aplikazio lehenetsia ezarpenetan"</string>
+    <string name="install_app" msgid="5066668100199613936">"Instalatu aplikazioa"</string>
 </resources>

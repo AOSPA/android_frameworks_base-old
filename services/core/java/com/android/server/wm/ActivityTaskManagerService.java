@@ -299,6 +299,7 @@ import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
@@ -655,7 +656,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
      */
     float mMinPercentageMultiWindowSupportWidth;
 
-    final List<ActivityTaskManagerInternal.ScreenObserver> mScreenObservers = new ArrayList<>();
+    final List<ActivityTaskManagerInternal.ScreenObserver> mScreenObservers =
+            Collections.synchronizedList(new ArrayList<>());
 
     // VR Vr2d Display Id.
     int mVr2dDisplayId = INVALID_DISPLAY;
@@ -762,6 +764,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
      */
     @Nullable
     private ActivityRecord mTracedResumedActivity;
+
+    boolean toastWindow = false;
 
     /** If non-null, we are tracking the time the user spends in the currently focused app. */
     AppTimeTracker mCurAppTimeTracker;
@@ -2028,7 +2032,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             synchronized (mGlobalLock) {
                 final DisplayContent dc = mRootWindowContainer.getDisplayContent(displayId);
                 if (dc == null) return;
-                final Task task = dc.getTask((t) -> t.isLeafTask() && t.isFocusable(),
+                final Task task = dc.getTask((t) -> t.isLeafTask() && t.isTopActivityFocusable(),
                         true /*  traverseTopToBottom */);
                 if (task == null) return;
                 setFocusedTask(task.mTaskId, null /* touchedActivity */);
@@ -3576,10 +3580,10 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 mRootWindowContainer.forAllDisplays(displayContent -> {
                     mKeyguardController.keyguardGoingAway(displayContent.getDisplayId(), flags);
                 });
-                WallpaperManagerInternal wallpaperManagerInternal = getWallpaperManagerInternal();
-                if (wallpaperManagerInternal != null) {
-                    wallpaperManagerInternal.onKeyguardGoingAway();
-                }
+            }
+            WallpaperManagerInternal wallpaperManagerInternal = getWallpaperManagerInternal();
+            if (wallpaperManagerInternal != null) {
+                wallpaperManagerInternal.onKeyguardGoingAway();
             }
         } finally {
             Binder.restoreCallingIdentity(token);
@@ -3676,6 +3680,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     Slog.e(TAG, "Skip enterPictureInPictureMode, destroyed " + r);
                     return;
                 }
+                EventLogTags.writeWmEnterPip(r.mUserId, System.identityHashCode(r),
+                        r.shortComponentName, Boolean.toString(isAutoEnter));
                 r.setPictureInPictureParams(params);
                 r.mAutoEnteringPip = isAutoEnter;
                 mRootWindowContainer.moveActivityToPinnedRootTask(r,
@@ -4528,8 +4534,12 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         // to set debug system properties. To ensure that system properties are set
         // only when allowed, we check the current UID.
         if (Process.myUid() == Process.SYSTEM_UID) {
-            SystemProperties.set("debug.tracing.mcc", Integer.toString(values.mcc));
-            SystemProperties.set("debug.tracing.mnc", Integer.toString(values.mnc));
+            if (values.mcc != 0) {
+                SystemProperties.set("debug.tracing.mcc", Integer.toString(values.mcc));
+            }
+            if (values.mnc != 0) {
+                SystemProperties.set("debug.tracing.mnc", Integer.toString(values.mnc));
+            }
         }
 
         if (!initLocale && !values.getLocales().isEmpty() && values.userSetLocale) {
@@ -5235,6 +5245,18 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         return mCompatModePackages.compatibilityInfoForPackageLocked(ai);
     }
 
+    void setToastWindow() {
+        toastWindow = true;
+    }
+
+    void resetToastWindow() {
+        toastWindow = false;
+    }
+
+    boolean getToastWindow() {
+        return toastWindow;
+    }
+
     /**
      * Returns the PackageManager. Used by classes hosted by {@link ActivityTaskManagerService}. The
      * PackageManager could be unavailable at construction time and therefore needs to be accessed
@@ -5891,6 +5913,11 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         @Override
         public void registerScreenObserver(ScreenObserver observer) {
             mScreenObservers.add(observer);
+        }
+
+        @Override
+        public void unregisterScreenObserver(ScreenObserver observer) {
+            mScreenObservers.remove(observer);
         }
 
         @Override

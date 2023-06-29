@@ -24,6 +24,7 @@ import static com.android.internal.jank.InteractionJankMonitor.CUJ_LOCKSCREEN_CL
 import android.animation.Animator;
 import android.animation.ValueAnimator;
 import android.annotation.Nullable;
+import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.transition.ChangeBounds;
 import android.transition.Transition;
@@ -46,7 +47,6 @@ import com.android.keyguard.KeyguardClockSwitch.ClockSize;
 import com.android.keyguard.logging.KeyguardLogger;
 import com.android.systemui.R;
 import com.android.systemui.flags.FeatureFlags;
-import com.android.systemui.flags.Flags;
 import com.android.systemui.plugins.ClockController;
 import com.android.systemui.statusbar.notification.AnimatableProperty;
 import com.android.systemui.statusbar.notification.PropertyAnimator;
@@ -281,8 +281,8 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
         }
 
         @Override
-        public void onDensityOrFontScaleChanged() {
-            mKeyguardClockSwitchController.onDensityOrFontScaleChanged();
+        public void onConfigChanged(Configuration newConfig) {
+            mKeyguardClockSwitchController.onConfigChanged();
         }
     };
 
@@ -330,6 +330,7 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
             boolean splitShadeEnabled,
             boolean shouldBeCentered,
             boolean animate) {
+        mKeyguardClockSwitchController.setSplitShadeCentered(splitShadeEnabled && shouldBeCentered);
         if (mStatusViewCentered == shouldBeCentered) {
             return;
         }
@@ -363,7 +364,7 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
         boolean customClockAnimation = clock != null
                 && clock.getLargeClock().getConfig().getHasCustomPositionUpdatedAnimation();
 
-        if (mFeatureFlags.isEnabled(Flags.STEP_CLOCK_ANIMATION) && customClockAnimation) {
+        if (customClockAnimation) {
             // Find the clock, so we can exclude it from this transition.
             FrameLayout clockContainerView = mView.findViewById(R.id.lockscreen_clock_view_large);
 
@@ -400,8 +401,10 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
     @VisibleForTesting
     static class SplitShadeTransitionAdapter extends Transition {
         private static final String PROP_BOUNDS_LEFT = "splitShadeTransitionAdapter:boundsLeft";
+        private static final String PROP_BOUNDS_RIGHT = "splitShadeTransitionAdapter:boundsRight";
         private static final String PROP_X_IN_WINDOW = "splitShadeTransitionAdapter:xInWindow";
-        private static final String[] TRANSITION_PROPERTIES = { PROP_BOUNDS_LEFT, PROP_X_IN_WINDOW};
+        private static final String[] TRANSITION_PROPERTIES = {
+                PROP_BOUNDS_LEFT, PROP_BOUNDS_RIGHT, PROP_X_IN_WINDOW};
 
         private final KeyguardClockSwitchController mController;
 
@@ -412,6 +415,7 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
 
         private void captureValues(TransitionValues transitionValues) {
             transitionValues.values.put(PROP_BOUNDS_LEFT, transitionValues.view.getLeft());
+            transitionValues.values.put(PROP_BOUNDS_RIGHT, transitionValues.view.getRight());
             int[] locationInWindowTmp = new int[2];
             transitionValues.view.getLocationInWindow(locationInWindowTmp);
             transitionValues.values.put(PROP_X_IN_WINDOW, locationInWindowTmp[0]);

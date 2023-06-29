@@ -1579,6 +1579,10 @@ public class HdmiControlService extends SystemService {
             // If the device is not TV, we can't convert path to port-id, so stop here.
             return true;
         }
+        // Invalidate the physical address if parameters length is too short.
+        if (params.length < offset + 2) {
+            return false;
+        }
         int path = HdmiUtils.twoBytesToInt(params, offset);
         if (path != Constants.INVALID_PHYSICAL_ADDRESS && path == getPhysicalAddress()) {
             return true;
@@ -4725,13 +4729,11 @@ public class HdmiControlService extends SystemService {
             Slog.w(TAG, "Tried to update eARC status on a port that doesn't support eARC.");
             return;
         }
-        // If eARC is disabled, the local device is null. In this case, the HAL shouldn't have
-        // reported connection state changes, but even if it did, it won't take effect.
         if (mEarcLocalDevice != null) {
             mEarcLocalDevice.handleEarcStateChange(status);
         } else if (status == HDMI_EARC_STATUS_ARC_PENDING) {
-            // If the local device is null we notify the Audio Service that eARC connection
-            // is disabled.
+            // If eARC is disabled, the local device is null. This is why we notify
+            // AudioService here that the eARC connection is terminated.
             notifyEarcStatusToAudioService(false, new ArrayList<>());
             startArcAction(true, null);
         }

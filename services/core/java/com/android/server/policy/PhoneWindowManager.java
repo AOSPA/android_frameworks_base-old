@@ -1114,6 +1114,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         final DreamManagerInternal dreamManagerInternal = getDreamManagerInternal();
         if (dreamManagerInternal == null || !dreamManagerInternal.canStartDreaming(isScreenOn)) {
+            Slog.d(TAG, "Can't start dreaming when attempting to dream from short power"
+                    + " press (isScreenOn=" + isScreenOn + ")");
             noDreamAction.run();
             return;
         }
@@ -3304,12 +3306,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 Slog.wtf(TAG, "KEYCODE_STYLUS_BUTTON_* should be handled in"
                         + " interceptKeyBeforeQueueing");
                 return key_consumed;
-            case KeyEvent.KEYCODE_MACRO_1:
-            case KeyEvent.KEYCODE_MACRO_2:
-            case KeyEvent.KEYCODE_MACRO_3:
-            case KeyEvent.KEYCODE_MACRO_4:
-                Slog.wtf(TAG, "KEYCODE_MACRO_x should be handled in interceptKeyBeforeQueueing");
-                return key_consumed;
         }
 
         if (isValidGlobalKey(keyCode)
@@ -4461,7 +4457,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             case KeyEvent.KEYCODE_MACRO_2:
             case KeyEvent.KEYCODE_MACRO_3:
             case KeyEvent.KEYCODE_MACRO_4:
-                // TODO(b/266098478): Add logic to handle KEYCODE_MACROx feature
                 result &= ~ACTION_PASS_TO_USER;
                 break;
         }

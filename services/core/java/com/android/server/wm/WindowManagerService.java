@@ -88,6 +88,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_VOLUME_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
 import static android.view.WindowManager.REMOVE_CONTENT_MODE_UNDEFINED;
 import static android.view.WindowManager.TRANSIT_NONE;
+import static android.view.WindowManager.TRANSIT_OPEN;
 import static android.view.WindowManager.fixScale;
 import static android.view.WindowManagerGlobal.ADD_OKAY;
 import static android.view.WindowManagerGlobal.RELAYOUT_RES_CANCEL_AND_REDRAW;
@@ -1684,6 +1685,7 @@ public class WindowManagerService extends IWindowManager.Stub
             // UID, otherwise we allow unlimited duration. When a UID looses focus we
             // schedule hiding all of its toast windows.
             if (type == TYPE_TOAST) {
+                mAtmService.setToastWindow();
                 if (!displayContent.canAddToastWindowForUid(callingUid)) {
                     ProtoLog.w(WM_ERROR, "Adding more than one toast window for UID at a time.");
                     return WindowManagerGlobal.ADD_DUPLICATE_ADD;
@@ -3623,6 +3625,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     public void setCurrentUser(@UserIdInt int newUserId) {
         synchronized (mGlobalLock) {
+            mAtmService.getTransitionController().requestTransitionIfNeeded(TRANSIT_OPEN, null);
             mCurrentUserId = newUserId;
             mPolicy.setCurrentUserLw(newUserId);
             mKeyguardDisableHandler.setCurrentUser(newUserId);
@@ -7712,6 +7715,15 @@ public class WindowManagerService extends IWindowManager.Stub
             synchronized (mGlobalLock) {
                 requestTraversal();
             }
+        }
+
+        @Override
+        public void onDisplayManagerReceivedDeviceState(int deviceState) {
+            mH.post(() -> {
+                synchronized (mGlobalLock) {
+                    mRoot.onDisplayManagerReceivedDeviceState(deviceState);
+                }
+            });
         }
 
         @Override

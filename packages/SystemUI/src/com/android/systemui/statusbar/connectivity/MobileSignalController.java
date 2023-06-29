@@ -241,7 +241,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
                 Global.DATA_ROAMING + mSubscriptionInfo.getSubscriptionId()),
                 true, mObserver);
         mContext.registerReceiver(mVolteSwitchObserver,
-                new IntentFilter("org.codeaurora.intent.action.ACTION_ENHANCE_4G_SWITCH"));
+                new IntentFilter("org.codeaurora.intent.action.ACTION_ENHANCE_4G_SWITCH"), Context.RECEIVER_EXPORTED);
         if (mConfig.showVolteIcon || mConfig.showVowifiIcon) {
             try {
                 mImsMmTelManager.registerImsStateCallback(mContext.getMainExecutor(),

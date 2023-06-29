@@ -671,6 +671,11 @@ class ProcessRecord implements WindowProcessListener {
         return mOnewayThread;
     }
 
+    @GuardedBy(anyOf = {"mService", "mProcLock"})
+    int getCurProcState() {
+        return mState.getCurProcState();
+    }
+
     @GuardedBy({"mService", "mProcLock"})
     public void makeActive(IApplicationThread thread, ProcessStatsService tracker) {
         // TODO(b/180501180): Add back this logging message.
