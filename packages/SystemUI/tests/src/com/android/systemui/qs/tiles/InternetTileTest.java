@@ -47,8 +47,8 @@ import com.android.systemui.qs.tiles.dialog.InternetDialogFactory;
 import com.android.systemui.statusbar.connectivity.AccessPointController;
 import com.android.systemui.statusbar.connectivity.IconState;
 import com.android.systemui.statusbar.connectivity.NetworkController;
-import com.android.systemui.util.CarrierNameCustomization;
 import com.android.systemui.statusbar.connectivity.WifiIndicators;
+import com.android.systemui.util.CarrierNameCustomization;
 
 import org.junit.After;
 import org.junit.Before;

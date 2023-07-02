@@ -347,15 +347,15 @@ public class InternetTile extends QSTileImpl<SignalState> {
                 // Not data sim, don't display.
                 return;
             }
-            if (mCarrierNameCustomization.isRoamingCustomizationEnabled()
-                    && mCarrierNameCustomization.isRoaming(indicators.subId)) {
-                mCellularInfo.mDataSubscriptionName =
-                        mCarrierNameCustomization.getRoamingCarrierName(indicators.subId);
-            } else {
-                synchronized (mCellularInfo) {
+            synchronized (mCellularInfo) {
+                if (mCarrierNameCustomization.isRoamingCustomizationEnabled()
+                        && mCarrierNameCustomization.isRoaming(indicators.subId)) {
+                    mCellularInfo.mDataSubscriptionName =
+                            mCarrierNameCustomization.getRoamingCarrierName(indicators.subId);
+                } else {
                     mCellularInfo.mDataSubscriptionName = indicators.qsDescription == null
-                        ? mController.getMobileDataNetworkName() : indicators.qsDescription;
-            }
+                            ? mController.getMobileDataNetworkName() : indicators.qsDescription;
+                }
                 mCellularInfo.mDataContentDescription = indicators.qsDescription != null
                     ? indicators.typeContentDescriptionHtml : null;
                 mCellularInfo.mMobileSignalIconId = indicators.qsIcon.icon;
