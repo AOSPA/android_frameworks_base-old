@@ -574,7 +574,7 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
         }
         mState = STATE_STARTED;
 
-        if (mPerf != null) {
+        if (mPerf != null && mType == TRANSIT_CHANGE) {
             mPerf.perfHint(BoostFramework.VENDOR_HINT_ROTATION_ANIM_BOOST, null);
             mIsAnimationPerfLockAcquired = true;
         }
