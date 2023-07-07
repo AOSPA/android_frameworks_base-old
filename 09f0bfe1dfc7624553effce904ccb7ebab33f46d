@@ -34,6 +34,24 @@
       "parentUuid": "95d8873a_42830ace",
       "revId": "09f0bfe1dfc7624553effce904ccb7ebab33f46d",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "10349cc7_d1fd2670",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000498
+      },
+      "writtenOn": "2023-07-07T10:59:05Z",
+      "side": 1,
+      "message": "It is, just make your RRO overlays depends over Android:requiredSystemPropertyName in AndroidManifest.xml",
+      "parentUuid": "38abd21e_1d5d7f95",
+      "revId": "09f0bfe1dfc7624553effce904ccb7ebab33f46d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
