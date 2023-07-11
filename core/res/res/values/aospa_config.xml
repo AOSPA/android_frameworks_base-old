@@ -132,4 +132,13 @@
     <!-- Display color inversion availability -->
     <bool name="config_displayInversionAvailable">true</bool>
 
+    <!-- Define Richtap vibration patterns -->
+    <string name="config_richtapVibrationEffectClick">1, 4097, 0, 100, 65, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0</string>
+    <string name="config_richtapVibrationEffectDoubleClick">1, 4097, 0, 100, 80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4097, 70, 100, 80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0</string>
+    <string name="config_richtapVibrationEffectTick">1, 4097, 0, 100, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0</string>
+    <string name="config_richtapVibrationEffectThud">1, 4097, 0, 100, 50, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0</string>
+    <string name="config_richtapVibrationEffectPop">1, 4097, 0, 100, 65, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0</string>
+    <string name="config_richtapVibrationEffectHeavyClick">1, 4097, 0, 100, 57, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0</string>
+    <string name="config_richtapVibrationEffectTextureTick">1, 4097, 0, 50, 33, 29, 0, 0, 0, 12, 59, 0, 22, 75, -21, 29, 0, 0, 4097, 30, 100, 30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0</string>
+
 </resources>

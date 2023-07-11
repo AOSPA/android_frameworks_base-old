@@ -34,22 +34,37 @@ public class RichTapVibrationEffect {
     public static int[] getInnerEffect(int id) {
         switch (id) {
             case VibrationEffect.EFFECT_CLICK:
-                return new int[]{1, 4097, 0, 100, 65, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                return getInnerEffectFromOverlay(R.string.config_richtapVibrationEffectDoubleClick);
             case VibrationEffect.EFFECT_DOUBLE_CLICK:
-                return new int[]{1, 4097, 0, 100, 80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4097, 70, 100, 80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                return getInnerEffectFromOverlay(R.string.config_richtapVibrationEffectDoubleClick);
             case VibrationEffect.EFFECT_TICK:
-                return new int[]{1, 4097, 0, 100, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                return getInnerEffectFromOverlay(R.string.config_richtapVibrationEffectTick);
             case VibrationEffect.EFFECT_THUD:
-                return new int[]{1, 4097, 0, 100, 50, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                return getInnerEffectFromOverlay(R.string.config_richtapVibrationEffectThud);
             case VibrationEffect.EFFECT_POP:
-                return new int[]{1, 4097, 0, 100, 65, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                return getInnerEffectFromOverlay(R.string.config_richtapVibrationEffectPop);
             case VibrationEffect.EFFECT_HEAVY_CLICK:
-                return new int[]{1, 4097, 0, 100, 57, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                return getInnerEffectFromOverlay(R.string.config_richtapVibrationEffectHeavyClick);
             case VibrationEffect.EFFECT_TEXTURE_TICK:
-                return new int[]{1, 4097, 0, 50, 33, 29, 0, 0, 0, 12, 59, 0, 22, 75, -21, 29, 0, 0, 4097, 30, 100, 30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                return getInnerEffectFromOverlay(R.string.config_richtapVibrationEffectTextureTick);
             default:
                 Slog.d(TAG, "Exception encountered!", new IllegalStateException("Unexpected effect id: " + id));
                 return null;
+        }
+    }
+
+    private static int[] getInnerEffectFromOverlay(int id) {
+        try {
+            String effectRaw = Resources.getSystem().getString(id);
+            String[] effectArrString = effectRaw.replaceAll(" ", "").split(",");
+            int[] effectArrInt = new int[effectArrString.length];
+            for (int i = 0; i < effectArrString.length; i++) {
+                effectArrInt[i] = Integer.valueOf(effectArrString[i]);
+            }
+            return effectArrInt;
+        } catch {
+            Slog.d(TAG, "Exception encountered!", new IllegalStateException("Unexpected issue converting effect"));
+            return null;
         }
     }
 
