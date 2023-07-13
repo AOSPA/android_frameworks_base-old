@@ -17,7 +17,6 @@
 package com.android.systemui.statusbar.pipeline.mobile.data.repository.prod
 
 import android.content.Intent
-import android.net.ConnectivityManager
 import android.telephony.CarrierConfigManager.KEY_INFLATE_SIGNAL_STRENGTH_BOOL
 import android.telephony.NetworkRegistrationInfo
 import android.telephony.ServiceState
@@ -103,7 +102,6 @@ class MobileConnectionRepositoryTest : SysuiTestCase() {
     @Mock private lateinit var telephonyManager: TelephonyManager
     @Mock private lateinit var logger: MobileInputLogger
     @Mock private lateinit var tableLogger: TableLogBuffer
-    @Mock private lateinit var connectivityManager: ConnectivityManager
 
     private val mobileMappings = FakeMobileMappingsProxy()
     private val systemUiCarrierConfig =
@@ -138,7 +136,6 @@ class MobileConnectionRepositoryTest : SysuiTestCase() {
                 tableLogger,
                 testScope.backgroundScope,
                 fiveGServiceClient,
-                connectivityManager,
             )
     }
 
