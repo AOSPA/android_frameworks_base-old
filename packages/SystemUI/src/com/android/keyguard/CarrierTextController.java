@@ -16,9 +16,12 @@
 
 package com.android.keyguard;
 
+import android.content.res.Configuration;
 import android.telephony.TelephonyManager;
 
 import com.android.systemui.util.ViewController;
+
+import java.util.Locale;
 
 import javax.inject.Inject;
 
@@ -28,6 +31,7 @@ import javax.inject.Inject;
 public class CarrierTextController extends ViewController<CarrierText> {
     private final CarrierTextManager mCarrierTextManager;
     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
+    private Locale mLocale;
     private final CarrierTextManager.CarrierTextCallback mCarrierTextCallback =
             new CarrierTextManager.CarrierTextCallback() {
                 @Override
@@ -58,6 +62,8 @@ public class CarrierTextController extends ViewController<CarrierText> {
                 .setDebugLocationString(mView.getDebugLocation())
                 .build();
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
+        mView.setOnConfigurationChangedListener(this::refreshInfoIfNeeded);
+        mLocale = mView.getResources().getConfiguration().locale;
     }
 
     @Override
@@ -74,5 +80,14 @@ public class CarrierTextController extends ViewController<CarrierText> {
     @Override
     protected void onViewDetached() {
         mCarrierTextManager.setListening(null);
+    }
+
+    private void refreshInfoIfNeeded(Configuration newConfig) {
+        if (mLocale != newConfig.locale) {
+            mCarrierTextManager.loadCarrierMap();
+            mCarrierTextManager.updateCarrierText();
+            mLocale = newConfig.locale;
+        }
+
     }
 }
