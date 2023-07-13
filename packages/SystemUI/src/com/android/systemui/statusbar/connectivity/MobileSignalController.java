@@ -27,7 +27,12 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Resources;
 import android.database.ContentObserver;
+import android.net.ConnectivityManager;
+import android.net.ConnectivityManager.NetworkCallback;
+import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
+import android.net.TelephonyNetworkSpecifier;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings.Global;
@@ -111,6 +116,10 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
     private FiveGServiceClient mClient;
     /**********************************************************/
 
+    private ConnectivityManager mConnectivityManager;
+    private ConnectivityManager.NetworkCallback mNetworkCallback;
+    private boolean mIsConnectionFailed = false;
+
     private final MobileStatusTracker.Callback mMobileCallback =
             new MobileStatusTracker.Callback() {
                 private String mLastStatus;
@@ -191,6 +200,13 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
         };
         mImsMmTelManager = ImsMmTelManager.createForSubscriptionId(info.getSubscriptionId());
         mMobileStatusTracker = mobileStatusTrackerFactory.createTracker(mMobileCallback);
+        mNetworkCallback = new NetworkCallback(NetworkCallback.FLAG_INCLUDE_LOCATION_INFO) {
+            @Override
+            public void onCapabilitiesChanged(Network network, NetworkCapabilities nc) {
+                mIsConnectionFailed =
+                    !nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
+            }
+        };
     }
 
     void setConfiguration(Config config) {
@@ -250,6 +266,16 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
                 Log.e(mTag, "failed to call registerImsStateCallback ", exception);
             }
         }
+        mConnectivityManager = (ConnectivityManager)
+            mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkRequest.Builder builder = new NetworkRequest.Builder();
+        builder.addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR);
+        builder.addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
+        TelephonyNetworkSpecifier specifier = new TelephonyNetworkSpecifier.Builder()
+            .setSubscriptionId(mSubscriptionInfo.getSubscriptionId()).build();
+        builder.setNetworkSpecifier(specifier);
+        final NetworkRequest request = builder.build();
+        mConnectivityManager.registerNetworkCallback(request, mNetworkCallback);
     }
 
     /**
@@ -261,6 +287,9 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
         mContext.unregisterReceiver(mVolteSwitchObserver);
         if (mConfig.showVolteIcon || mConfig.showVowifiIcon) {
             mImsMmTelManager.unregisterImsStateCallback(mImsStateCallback);
+        }
+        if (mNetworkCallback != null) {
+            mConnectivityManager.unregisterNetworkCallback(mNetworkCallback);
         }
     }
 
@@ -291,7 +320,11 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
                     || (mCurrentState.iconGroup == TelephonyIcons.NOT_DEFAULT_DATA
                             && mCurrentState.defaultDataOff));
             boolean noInternet = mCurrentState.inetCondition == 0;
-            boolean cutOut = dataDisabled || noInternet;
+            boolean isDataEnabled = mCurrentState.mobileDataEnabled;
+            boolean isDataConnected = mCurrentState.dataState == TelephonyManager.DATA_CONNECTED;
+            boolean isInService = isInService();
+            boolean cutOut = !isDataEnabled
+                || (isDataConnected && mIsConnectionFailed) || !isInService;
             if (mConfig.hideNoInternetState) {
                 cutOut = false;
             }
