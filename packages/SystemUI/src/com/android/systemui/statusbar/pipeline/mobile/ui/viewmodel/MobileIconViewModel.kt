@@ -95,8 +95,14 @@ constructor(
                 iconInteractor.isDataConnected,
                 iconInteractor.isConnectionFailed,
                 iconInteractor.isInService,
-            ) { isDataEnabled, isDataConnected, isConnectionFailed, isInService ->
-                !isDataEnabled || (isDataConnected && isConnectionFailed) || !isInService
+                iconInteractor.hideNoInternetState,
+            ) { isDataEnabled, isDataConnected, isConnectionFailed,
+                    isInService, hideNoInternetState ->
+                if (hideNoInternetState) {
+                    false
+                } else {
+                    !isDataEnabled || (isDataConnected && isConnectionFailed) || !isInService
+                }
             }
             .stateIn(scope, SharingStarted.WhileSubscribed(), true)
 
