@@ -218,8 +218,6 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     protected ActivityStarter mActivityStarter;
     @VisibleForTesting
     protected SubscriptionManager.OnSubscriptionsChangedListener mOnSubscriptionsChangedListener;
-    @VisibleForTesting
-    protected Map<Integer, NonDdsCallStateCallback> mNonDdsCallStateCallbacksMap;
     protected WifiUtils.InternetIconInjector mWifiIconInjector;
     @VisibleForTesting
     protected boolean mCanConfigWifi;
@@ -334,7 +332,6 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         mConnectedWifiInternetMonitor = new ConnectedWifiInternetMonitor();
         mWifiStateWorker = wifiStateWorker;
         mFeatureFlags = featureFlags;
-        mNonDdsCallStateCallbacksMap = new HashMap<Integer, NonDdsCallStateCallback>();
         mCarrierNameCustomization = carrierNameCustomization;
         mExtTelephonyManager = ExtTelephonyManager.getInstance(context);
     }
@@ -364,21 +361,6 @@ public class InternetDialogController implements AccessPointController.AccessPoi
                 new InternetTelephonyCallback(mDefaultDataSubId);
         mSubIdTelephonyCallbackMap.put(mDefaultDataSubId, telephonyCallback);
         mTelephonyManager.registerTelephonyCallback(mExecutor, telephonyCallback);
-
-        // Listen to non-DDS call state changes
-        List<SubscriptionInfo> subInfos =
-                mSubscriptionManager.getActiveSubscriptionInfoList();
-        if (subInfos != null) {
-            for (SubscriptionInfo subInfo : subInfos) {
-                if (subInfo.getSubscriptionId() != mDefaultDataSubId) {
-                    NonDdsCallStateCallback nonDdsCallStateCallback = new NonDdsCallStateCallback();
-                    mTelephonyManager.createForSubscriptionId(subInfo.getSubscriptionId())
-                            .registerTelephonyCallback(mExecutor, nonDdsCallStateCallback);
-                    mNonDdsCallStateCallbacksMap.put(subInfo.getSubscriptionId(),
-                            nonDdsCallStateCallback);
-                }
-            }
-        }
 
         // Listen the connectivity changes
         mConnectivityManager.registerDefaultNetworkCallback(mConnectivityManagerNetworkCallback);
@@ -413,11 +395,6 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         mKeyguardUpdateMonitor.removeCallback(mKeyguardUpdateCallback);
         mConnectivityManager.unregisterNetworkCallback(mConnectivityManagerNetworkCallback);
         mConnectedWifiInternetMonitor.unregisterCallback();
-        for (int subId : mNonDdsCallStateCallbacksMap.keySet()) {
-            mTelephonyManager.createForSubscriptionId(subId).
-                    unregisterTelephonyCallback(mNonDdsCallStateCallbacksMap.get(subId));
-        }
-        mNonDdsCallStateCallbacksMap.clear();
         if (mIsExtTelServiceConnected) {
             mExtTelephonyManager.disconnectService(mExtTelServiceCallback);
         }
@@ -1223,8 +1200,64 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     public void onSettingsActivityTriggered(Intent settingsIntent) {
     }
 
+    private void registerTelephonyCallbackOnNddsSub() {
+        if (SubscriptionManager.isUsableSubscriptionId(mNddsSubId)) {
+            TelephonyCallback telephonyCallback = createNddsSubTelephonyCallback(mNddsSubId);
+            if (!mSubIdTelephonyCallbackMap.containsKey(mNddsSubId)) {
+                TelephonyManager nDdsSubTm = mTelephonyManager.createForSubscriptionId(mNddsSubId);
+                nDdsSubTm.registerTelephonyCallback(mExecutor, telephonyCallback);
+                mSubIdTelephonyCallbackMap.put(mNddsSubId, telephonyCallback);
+                mSubIdTelephonyManagerMap.put(mNddsSubId, nDdsSubTm);
+                Log.d(TAG, "registerTelephonyCallOnNddsSub on SUB: " + mNddsSubId);
+            } else {
+                TelephonyCallback oldTelephonyCallback = mSubIdTelephonyCallbackMap.get(mNddsSubId);
+                if (!oldTelephonyCallback.getClass().equals(telephonyCallback.getClass())) {
+                    Log.d(TAG, "registerTelephonyCallOnNddsSub refreshing on SUB: " + mNddsSubId);
+                    TelephonyManager nDdsSubTm = mSubIdTelephonyManagerMap.get(mNddsSubId);
+                    nDdsSubTm.unregisterTelephonyCallback(oldTelephonyCallback);
+                    nDdsSubTm.registerTelephonyCallback(mExecutor, telephonyCallback);
+                }
+            }
+        } else {
+            // Prune stale SUBs
+            List<Integer> staleSubs = mSubIdTelephonyManagerMap.keySet()
+                    .stream().filter(sub -> sub != mDefaultDataSubId).collect(Collectors.toList());
+            for (Integer sub : staleSubs) {
+                Log.d(TAG, "registerTelephonyCallOnNddsSub pruning on SUB: " + sub);
+                TelephonyCallback oldTelephonyCallback = mSubIdTelephonyCallbackMap.get(sub);
+                if (oldTelephonyCallback != null) {
+                    mSubIdTelephonyManagerMap.get(sub)
+                            .unregisterTelephonyCallback(oldTelephonyCallback);
+                }
+                mSubIdTelephonyManagerMap.remove(sub);
+                mSubIdTelephonyCallbackMap.remove(sub);
+                mSubIdTelephonyDisplayInfoMap.remove(sub);
+            }
+        }
+    }
+
+    private TelephonyCallback createNddsSubTelephonyCallback(int subId) {
+        return isDualDataEnabled() ? new NonDdsInternetTelephonyCallback(subId)
+                : new NonDdsCallStateCallback();
+    }
+
     private class NonDdsCallStateCallback extends TelephonyCallback implements
             TelephonyCallback.CallStateListener {
+
+        @Override
+        public void onCallStateChanged(int callState) {
+            Log.d(TAG, "onCallStateChanged: " + callState);
+            mNonDdsCallState = callState;
+            mCallback.onNonDdsCallStateChanged(callState);
+        }
+    }
+
+    private class NonDdsInternetTelephonyCallback extends InternetTelephonyCallback
+            implements TelephonyCallback.CallStateListener {
+        private NonDdsInternetTelephonyCallback(int subId) {
+            super(subId);
+        }
+
         @Override
         public void onCallStateChanged(int callState) {
             Log.d(TAG, "onCallStateChanged: " + callState);
@@ -1487,6 +1520,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
                 }
             }
         }
+        registerTelephonyCallbackOnNddsSub();
     }
 
     public boolean isDualDataEnabled() {
