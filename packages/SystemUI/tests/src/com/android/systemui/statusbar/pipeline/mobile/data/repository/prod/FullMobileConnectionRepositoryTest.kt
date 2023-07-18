@@ -629,6 +629,7 @@ class FullMobileConnectionRepositoryTest : SysuiTestCase() {
                 tableLogBuffer,
                 testScope.backgroundScope,
                 FiveGServiceClient(mContext),
+                connectivityManager = mock(),
             )
         whenever(
                 mobileFactory.build(

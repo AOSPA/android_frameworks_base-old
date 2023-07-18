@@ -2250,6 +2250,8 @@
     <!-- Message body of the dialog to turn off data usage [CHAR LIMIT=NONE] -->
     <string name="mobile_data_disable_message">You won\’t have access to data or the internet through <xliff:g id="carrier" example="T-Mobile">%s</xliff:g>. Internet will only be available via Wi-Fi.</string>
 
+    <string name="mobile_data_disable_message_on_dual_data">You won\’t have access to data or the internet through <xliff:g id="carrier" example="T-Mobile">%s</xliff:g>.</string>
+
     <!-- Message body of the dialog to turn off mobile data when IMS is registered on C_IWLAN, UE is in C_IWLAN-only mode, and device is in a call [CHAR LIMIT=NONE] -->
     <string name="data_disable_ciwlan_call_will_drop_message">Disabling mobile data will cause ongoing call drop.</string>
 

@@ -787,11 +787,14 @@ public class BtHelper {
             return new AudioDeviceAttributes(AudioSystem.DEVICE_OUT_BLUETOOTH_SCO, "");
         }
         String address = btDevice.getAddress();
-        String name = getName(btDevice);
+        String dummyAddress = "00:00:00:00:00:00";
+        String name = "";
+        if (!address.equals(dummyAddress)) {
+            name = getName(btDevice);
+        }
         if (!BluetoothAdapter.checkBluetoothAddress(address)) {
             address = "";
         }
-        String dummyAddress = "00:00:00:00:00:00";
         BluetoothClass btClass = dummyAddress.equals(address) ? null :
                                  btDevice.getBluetoothClass();
         int nativeType = AudioSystem.DEVICE_OUT_BLUETOOTH_SCO;

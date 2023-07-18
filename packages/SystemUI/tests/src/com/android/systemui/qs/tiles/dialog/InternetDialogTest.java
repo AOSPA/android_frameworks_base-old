@@ -321,7 +321,7 @@ public class InternetDialogTest extends SysuiTestCase {
     public void updateDialog_mobileDataIsEnabled_checkMobileDataSwitch() {
         doReturn(true).when(mInternetDialogController).hasActiveSubId();
         when(mInternetDialogController.isCarrierNetworkActive()).thenReturn(true);
-        when(mInternetDialogController.isMobileDataEnabled()).thenReturn(true);
+        when(mInternetDialogController.isMobileDataEnabled(anyInt())).thenReturn(true);
         mMobileToggleSwitch.setChecked(false);
 
         mInternetDialog.updateDialog(true);
@@ -333,7 +333,7 @@ public class InternetDialogTest extends SysuiTestCase {
     public void updateDialog_mobileDataIsNotChanged_checkMobileDataSwitch() {
         doReturn(true).when(mInternetDialogController).hasActiveSubId();
         when(mInternetDialogController.isCarrierNetworkActive()).thenReturn(true);
-        when(mInternetDialogController.isMobileDataEnabled()).thenReturn(false);
+        when(mInternetDialogController.isMobileDataEnabled(anyInt())).thenReturn(false);
         mMobileToggleSwitch.setChecked(false);
 
         mInternetDialog.updateDialog(true);

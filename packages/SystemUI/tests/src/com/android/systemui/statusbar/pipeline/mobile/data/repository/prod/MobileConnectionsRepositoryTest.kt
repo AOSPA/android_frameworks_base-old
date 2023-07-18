@@ -187,6 +187,7 @@ class MobileConnectionsRepositoryTest : SysuiTestCase() {
                 scope = testScope.backgroundScope,
                 carrierConfigRepository = carrierConfigRepository,
                 fiveGServiceClient = fiveGServiceClient,
+                connectivityManager = connectivityManager,
             )
         carrierMergedFactory =
             CarrierMergedConnectionRepository.Factory(
