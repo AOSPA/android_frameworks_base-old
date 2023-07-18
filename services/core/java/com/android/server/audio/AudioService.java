@@ -5175,7 +5175,8 @@ public class AudioService extends IAudioService.Stub
 
         int silenceRingerSetting = Settings.Secure.VOLUME_HUSH_OFF;
         if (mContext.getResources()
-                .getBoolean(com.android.internal.R.bool.config_volumeHushGestureEnabled)) {
+                .getBoolean(com.android.internal.R.bool.config_volumeHushGestureEnabled) && 
+                !mContext.getResources().getBoolean(com.android.internal.R.bool.config_hasAlertSlider)) {
             silenceRingerSetting = mSettings.getSecureIntForUser(mContentResolver,
                     Settings.Secure.VOLUME_HUSH_GESTURE, VOLUME_HUSH_OFF,
                     UserHandle.USER_CURRENT);
@@ -5214,7 +5215,9 @@ public class AudioService extends IAudioService.Stub
         }
         maybeVibrate(effect, reason);
         setRingerModeInternal(ringerMode, reason);
-        Toast.makeText(mContext, toastText, Toast.LENGTH_SHORT).show();
+        if (silenceRingerSetting != Settings.Secure.VOLUME_HUSH_OFF) {
+            Toast.makeText(mContext, toastText, Toast.LENGTH_SHORT).show();
+        }
     }
 
     private boolean maybeVibrate(VibrationEffect effect, String reason) {
