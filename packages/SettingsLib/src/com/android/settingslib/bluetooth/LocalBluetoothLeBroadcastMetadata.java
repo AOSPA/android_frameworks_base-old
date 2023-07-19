@@ -259,7 +259,7 @@ public class LocalBluetoothLeBroadcastMetadata {
             Log.d(TAG, "Convert " + qrCodeString + "to BluetoothLeBroadcastMetadata");
         }
 
-        Pattern pattern = Pattern.compile(PATTERN_BT_BROADCAST_METADATA);
+        Pattern pattern = Pattern.compile(PATTERN_BT_BROADCAST_METADATA, Pattern.DOTALL);
         Matcher match = pattern.matcher(qrCodeString);
         if (match.find()) {
             mSourceAddressType = Integer.parseInt(match.group(MATCH_INDEX_ADDRESS_TYPE));
@@ -319,7 +319,7 @@ public class LocalBluetoothLeBroadcastMetadata {
         if (DEBUG) {
             Log.d(TAG, "Convert " + subgroupString + "to BluetoothLeBroadcastSubgroup");
         }
-        Pattern pattern = Pattern.compile(PATTERN_BT_SUBGROUP);
+        Pattern pattern = Pattern.compile(PATTERN_BT_SUBGROUP, Pattern.DOTALL);
         Matcher match = pattern.matcher(subgroupString);
         if (match.find()) {
             mCodecId = Integer.parseInt(match.group(MATCH_INDEX_CODEC_ID));
@@ -354,7 +354,7 @@ public class LocalBluetoothLeBroadcastMetadata {
             Log.d(TAG,
                     "Convert " + configMetadataString + "to BluetoothLeAudioCodecConfigMetadata");
         }
-        Pattern pattern = Pattern.compile(PATTERN_REGEX);
+        Pattern pattern = Pattern.compile(PATTERN_REGEX, Pattern.DOTALL);
         Matcher match = pattern.matcher(configMetadataString);
         ArrayList<String> resultList = new ArrayList<>();
         while (match.find()) {
@@ -384,7 +384,7 @@ public class LocalBluetoothLeBroadcastMetadata {
         if (DEBUG) {
             Log.d(TAG, "Convert " + contentMetadataString + "to BluetoothLeAudioContentMetadata");
         }
-        Pattern pattern = Pattern.compile(PATTERN_REGEX);
+        Pattern pattern = Pattern.compile(PATTERN_REGEX, Pattern.DOTALL);
         Matcher match = pattern.matcher(contentMetadataString);
         ArrayList<String> resultList = new ArrayList<>();
         while (match.find()) {
@@ -425,7 +425,7 @@ public class LocalBluetoothLeBroadcastMetadata {
         if (DEBUG) {
             Log.d(TAG, "Convert " + channelString + "to BluetoothLeBroadcastChannel");
         }
-        Pattern pattern = Pattern.compile(PATTERN_BT_CHANNEL);
+        Pattern pattern = Pattern.compile(PATTERN_BT_CHANNEL, Pattern.DOTALL);
         Matcher match = pattern.matcher(channelString);
         Map<Integer, BluetoothLeAudioCodecConfigMetadata> channel =
                 new HashMap<Integer, BluetoothLeAudioCodecConfigMetadata>();
