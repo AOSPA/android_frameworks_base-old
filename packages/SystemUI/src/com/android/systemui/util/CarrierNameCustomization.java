@@ -95,7 +95,7 @@ public class CarrierNameCustomization {
         return combinedCarrierName.toString();
     }
 
-    private void loadCarrierMap(Context context) {
+    public void loadCarrierMap(Context context) {
         String customizationConfigs[] =
                 context.getResources().getStringArray(R.array.customization_carrier_name_list);
         for(String config : customizationConfigs ) {

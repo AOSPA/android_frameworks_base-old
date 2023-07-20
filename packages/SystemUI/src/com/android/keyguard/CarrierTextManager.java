@@ -318,7 +318,7 @@ public class CarrierTextManager {
         return mKeyguardUpdateMonitor.getFilteredSubscriptionInfo();
     }
 
-    protected void updateCarrierText() {
+    public void updateCarrierText() {
         Trace.beginSection("CarrierTextManager#updateCarrierText");
         boolean allSimsMissing = true;
         boolean anySimReadyAndInService = false;
@@ -912,5 +912,9 @@ public class CarrierTextManager {
         }else{
             return false;
         }
+    }
+
+    public void loadCarrierMap() {
+        mCarrierNameCustomization.loadCarrierMap(getContext());
     }
 }
