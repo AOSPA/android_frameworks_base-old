@@ -142,6 +142,8 @@ class MobileConnectionRepositoryImpl(
     }
     private val tag: String = MobileConnectionRepositoryImpl::class.java.simpleName
     private val imsMmTelManager: ImsMmTelManager = ImsMmTelManager.createForSubscriptionId(subId)
+    private var registrationCallback: RegistrationManager.RegistrationCallback? = null
+    private var capabilityCallback: ImsMmTelManager.CapabilityCallback? = null
     /**
      * This flow defines the single shared connection to system_server via TelephonyCallback. Any
      * new callback should be added to this listener and funneled through callbackEvents via a data
@@ -218,12 +220,27 @@ class MobileConnectionRepositoryImpl(
                             trySend(CallbackEvent.OnNrIconTypeChanged(serviceState.nrIconType))
                         }
                     }
+
+                val imsStateCallback =
+                    object : ImsStateCallback() {
+                        override fun onAvailable() {
+                            registerCapabilityAndRegistrationCallback()
+                        }
+
+                        override fun onUnavailable(reason: Int) {
+                            unregisterCapabilityAndRegistrationCallback()
+                        }
+
+                        override fun onError() {
+                            unregisterCapabilityAndRegistrationCallback()
+                        }
+                    }
+
                 telephonyManager.registerTelephonyCallback(bgDispatcher.asExecutor(), callback)
                 val slotIndex = getSlotIndex(subId)
                 fiveGServiceClient.registerListener(slotIndex, callback)
                 try {
-                    imsMmTelManager.registerImsStateCallback(
-                                bgDispatcher.asExecutor(), imsStateCallback)
+                    imsMmTelManager.registerImsStateCallback(context.mainExecutor, imsStateCallback)
                 } catch (exception: ImsException) {
                     Log.e(tag, "failed to call registerImsStateCallback ", exception)
                 }
@@ -232,12 +249,10 @@ class MobileConnectionRepositoryImpl(
                     fiveGServiceClient.unregisterListener(slotIndex, callback)
                     try {
                         imsMmTelManager.unregisterImsStateCallback(imsStateCallback)
-                        imsMmTelManager.unregisterMmTelCapabilityCallback(capabilityCallback)
-                        imsMmTelManager.unregisterImsRegistrationCallback(registrationCallback)
                     } catch (exception: Exception) {
                         Log.e(tag, "failed to call unregister ims callback ", exception)
                     }
-
+                    unregisterCapabilityAndRegistrationCallback()
                 }
             }
             .scan(initial = initial) { state, event -> state.applyEvent(event) }
@@ -477,37 +492,63 @@ class MobileConnectionRepositoryImpl(
             .map { it.telephonyDisplayInfo.networkType }
             .stateIn(scope, SharingStarted.WhileSubscribed(), NETWORK_TYPE_UNKNOWN)
 
-    val imsStateCallback =
-        object : ImsStateCallback() {
-            override fun onAvailable() {
-                try {
-                    imsMmTelManager.registerImsRegistrationCallback(
-                        bgDispatcher.asExecutor(), registrationCallback)
-                    imsMmTelManager.registerMmTelCapabilityCallback(
-                        bgDispatcher.asExecutor(), capabilityCallback)
-                } catch (exception: ImsException) {
-                    Log.e(tag, "onAvailable failed to call register ims callback ", exception)
-                }
-            }
+    private fun registerCapabilityAndRegistrationCallback() {
+        if (registrationCallback == null) {
+            registrationCallback =
+                object : RegistrationManager.RegistrationCallback() {
+                    override fun onRegistered(attributes: ImsRegistrationAttributes) {
+                        imsRegistered.value = true
+                        imsRegistrationTech.value = attributes.getRegistrationTechnology()
+                    }
 
-            override fun onUnavailable(reason: Int) {
-                try {
-                    imsMmTelManager.unregisterMmTelCapabilityCallback(capabilityCallback)
-                    imsMmTelManager.unregisterImsRegistrationCallback(registrationCallback)
-                } catch (exception: Exception) {
-                    Log.e(tag, "onUnavailable failed to call unregister ims callback ", exception)
+                    override fun onUnregistered(info: ImsReasonInfo) {
+                        imsRegistered.value = false
+                        imsRegistrationTech.value = REGISTRATION_TECH_NONE
+                    }
                 }
-            }
-
-            override fun onError() {
-                try {
-                    imsMmTelManager.unregisterMmTelCapabilityCallback(capabilityCallback)
-                    imsMmTelManager.unregisterImsRegistrationCallback(registrationCallback)
-                } catch (exception: Exception) {
-                    Log.e(tag, "onUnavailable failed to call unregister ims callback ", exception)
-                }
-            }
         }
+
+        if (capabilityCallback == null) {
+            capabilityCallback =
+                object : ImsMmTelManager.CapabilityCallback() {
+                    override fun onCapabilitiesStatusChanged(config: MmTelCapabilities) {
+                        voiceCapable.value = config.isCapable(
+                            MmTelCapabilities.CAPABILITY_TYPE_VOICE)
+                        videoCapable.value = config.isCapable(
+                            MmTelCapabilities.CAPABILITY_TYPE_VIDEO)
+                    }
+                }
+        }
+
+        try {
+            imsMmTelManager.registerImsRegistrationCallback(
+                context.mainExecutor, registrationCallback)
+            imsMmTelManager.registerMmTelCapabilityCallback(
+                context.mainExecutor, capabilityCallback)
+        } catch (e: ImsException) {
+            Log.e(tag, "failed to call register ims callback ", e)
+        }
+    }
+
+    private fun unregisterCapabilityAndRegistrationCallback() {
+        try {
+            capabilityCallback?.let {
+                imsMmTelManager.unregisterMmTelCapabilityCallback(it)
+            }
+            registrationCallback?.let {
+                imsMmTelManager.unregisterImsRegistrationCallback(it)
+            }
+        } catch (exception: Exception) {
+            Log.e(tag, " failed to call unregister ims callback ", exception)
+
+        }
+        capabilityCallback = null
+        registrationCallback = null
+        imsRegistered.value = false
+        imsRegistrationTech.value = REGISTRATION_TECH_NONE
+        voiceCapable.value = false
+        videoCapable.value = false
+    }
 
     override val voiceCapable: MutableStateFlow<Boolean> =
         MutableStateFlow<Boolean>(false)
@@ -546,27 +587,6 @@ class MobileConnectionRepositoryImpl(
                         .setSubscriptionId(specfier).build())
                 .build()
     }
-
-    private val registrationCallback =
-        object : RegistrationManager.RegistrationCallback() {
-            override fun onRegistered(attributes: ImsRegistrationAttributes) {
-                imsRegistered.value = true
-                imsRegistrationTech.value = attributes.getRegistrationTechnology()
-            }
-
-            override fun onUnregistered(info: ImsReasonInfo) {
-                imsRegistered.value = false
-                imsRegistrationTech.value = REGISTRATION_TECH_NONE
-            }
-        }
-
-    private val capabilityCallback =
-        object : ImsMmTelManager.CapabilityCallback() {
-            override fun onCapabilitiesStatusChanged(config: MmTelCapabilities) {
-                voiceCapable.value = config.isCapable(MmTelCapabilities.CAPABILITY_TYPE_VOICE)
-                videoCapable.value = config.isCapable(MmTelCapabilities.CAPABILITY_TYPE_VIDEO)
-            }
-        }
 
     private fun getSlotIndex(subId: Int): Int {
         var subscriptionManager: SubscriptionManager =
