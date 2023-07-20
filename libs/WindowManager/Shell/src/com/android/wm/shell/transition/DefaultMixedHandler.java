@@ -25,6 +25,7 @@ import static android.window.TransitionInfo.FLAG_IS_WALLPAPER;
 
 import static com.android.wm.shell.common.split.SplitScreenConstants.FLAG_IS_DIVIDER_BAR;
 import static com.android.wm.shell.common.split.SplitScreenConstants.SPLIT_POSITION_UNDEFINED;
+import static com.android.wm.shell.pip.PipAnimationController.ANIM_TYPE_ALPHA;
 import static com.android.wm.shell.splitscreen.SplitScreen.STAGE_TYPE_UNDEFINED;
 import static com.android.wm.shell.splitscreen.SplitScreenController.EXIT_REASON_CHILD_TASK_ENTER_PIP;
 import static com.android.wm.shell.util.TransitionUtil.isOpeningType;
@@ -476,6 +477,7 @@ public class DefaultMixedHandler implements Transitions.TransitionHandler,
                 }
             }
 
+            mPipHandler.setEnterAnimationType(ANIM_TYPE_ALPHA);
             mPipHandler.startEnterAnimation(pipChange, startTransaction, finishTransaction,
                     finishCB);
             // Dispatch the rest of the transition normally. This will most-likely be taken by
@@ -609,18 +611,14 @@ public class DefaultMixedHandler implements Transitions.TransitionHandler,
             }
         };
         mixed.mInFlightSubAnimations++;
+        // Sync pip state.
+        if (mPipHandler != null) {
+            mPipHandler.syncPipSurfaceState(info, startTransaction, finishTransaction);
+        }
         if (!mKeyguardHandler.startAnimation(
                 mixed.mTransition, info, startTransaction, finishTransaction, finishCB)) {
             mixed.mInFlightSubAnimations--;
             return false;
-        }
-        // Sync pip state.
-        if (mPipHandler != null) {
-            // We don't know when to apply `startTransaction` so use a separate transaction here.
-            // This should be fine because these surface properties are independent.
-            final SurfaceControl.Transaction t = new SurfaceControl.Transaction();
-            mPipHandler.syncPipSurfaceState(info, t, finishTransaction);
-            t.apply();
         }
         return true;
     }
@@ -637,19 +635,12 @@ public class DefaultMixedHandler implements Transitions.TransitionHandler,
             finishCallback.onTransitionFinished(wct, wctCB);
         };
         mixed.mInFlightSubAnimations = 1;
-        if (!mUnfoldHandler.startAnimation(
-                mixed.mTransition, info, startTransaction, finishTransaction, finishCB)) {
-            return false;
-        }
         // Sync pip state.
         if (mPipHandler != null) {
-            // We don't know when to apply `startTransaction` so use a separate transaction here.
-            // This should be fine because these surface properties are independent.
-            final SurfaceControl.Transaction t = new SurfaceControl.Transaction();
-            mPipHandler.syncPipSurfaceState(info, t, finishTransaction);
-            t.apply();
+            mPipHandler.syncPipSurfaceState(info, startTransaction, finishTransaction);
         }
-        return true;
+        return mUnfoldHandler.startAnimation(
+                mixed.mTransition, info, startTransaction, finishTransaction, finishCB);
     }
 
     /** Use to when split use intent to enter, check if this enter transition should be mixed or
