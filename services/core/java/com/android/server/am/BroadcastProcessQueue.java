@@ -25,6 +25,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UptimeMillisLong;
+import android.app.ActivityManager;
 import android.app.BroadcastOptions;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
@@ -208,7 +209,7 @@ class BroadcastProcessQueue {
     private boolean mLastDeferredStates;
 
     private boolean mUidForeground;
-    private boolean mUidCached;
+    private boolean mProcessFreezable;
     private boolean mProcessInstrumented;
     private boolean mProcessPersistent;
 
@@ -440,7 +441,7 @@ class BroadcastProcessQueue {
      */
     @CheckResult
     public boolean setProcessAndUidState(@Nullable ProcessRecord app, boolean uidForeground,
-            boolean uidCached) {
+            boolean processFreezable) {
         this.app = app;
 
         // Since we may have just changed our PID, invalidate cached strings
@@ -449,13 +450,13 @@ class BroadcastProcessQueue {
 
         boolean didSomething = false;
         if (app != null) {
-            didSomething |= setUidCached(uidCached);
             didSomething |= setUidForeground(uidForeground);
+            didSomething |= setProcessFreezable(processFreezable);
             didSomething |= setProcessInstrumented(app.getActiveInstrumentation() != null);
             didSomething |= setProcessPersistent(app.isPersistent());
         } else {
-            didSomething |= setUidCached(uidCached);
             didSomething |= setUidForeground(false);
+            didSomething |= setProcessFreezable(false);
             didSomething |= setProcessInstrumented(false);
             didSomething |= setProcessPersistent(false);
         }
@@ -479,13 +480,13 @@ class BroadcastProcessQueue {
     }
 
     /**
-     * Update if this process is in the "cached" state, typically signaling that
+     * Update if this process is in the "freezable" state, typically signaling that
      * broadcast dispatch should be paused or delayed.
      */
     @CheckResult
-    private boolean setUidCached(boolean uidCached) {
-        if (mUidCached != uidCached) {
-            mUidCached = uidCached;
+    private boolean setProcessFreezable(boolean freezable) {
+        if (mProcessFreezable != freezable) {
+            mProcessFreezable = freezable;
             invalidateRunnableAt();
             return true;
         } else {
@@ -1045,6 +1046,7 @@ class BroadcastProcessQueue {
     static final int REASON_CONTAINS_MANIFEST = 17;
     static final int REASON_FOREGROUND = 18;
     static final int REASON_CORE_UID = 19;
+    static final int REASON_TOP_PROCESS = 20;
 
     @IntDef(flag = false, prefix = { "REASON_" }, value = {
             REASON_EMPTY,
@@ -1066,6 +1068,7 @@ class BroadcastProcessQueue {
             REASON_CONTAINS_MANIFEST,
             REASON_FOREGROUND,
             REASON_CORE_UID,
+            REASON_TOP_PROCESS,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface Reason {}
@@ -1091,6 +1094,7 @@ class BroadcastProcessQueue {
             case REASON_CONTAINS_MANIFEST: return "CONTAINS_MANIFEST";
             case REASON_FOREGROUND: return "FOREGROUND";
             case REASON_CORE_UID: return "CORE_UID";
+            case REASON_TOP_PROCESS: return "TOP_PROCESS";
             default: return Integer.toString(reason);
         }
     }
@@ -1132,6 +1136,11 @@ class BroadcastProcessQueue {
             } else if (mUidForeground) {
                 mRunnableAt = runnableAt + constants.DELAY_FOREGROUND_PROC_MILLIS;
                 mRunnableAtReason = REASON_FOREGROUND;
+            } else if (app != null && app.getSetProcState() == ActivityManager.PROCESS_STATE_TOP) {
+                // TODO (b/287676625): Use a callback to check when a process goes in and out of
+                // the TOP state.
+                mRunnableAt = runnableAt + constants.DELAY_FOREGROUND_PROC_MILLIS;
+                mRunnableAtReason = REASON_TOP_PROCESS;
             } else if (mProcessPersistent) {
                 mRunnableAt = runnableAt + constants.DELAY_PERSISTENT_PROC_MILLIS;
                 mRunnableAtReason = REASON_PERSISTENT;
@@ -1150,7 +1159,7 @@ class BroadcastProcessQueue {
             } else if (mCountManifest > 0) {
                 mRunnableAt = runnableAt;
                 mRunnableAtReason = REASON_CONTAINS_MANIFEST;
-            } else if (mUidCached) {
+            } else if (mProcessFreezable) {
                 if (r.deferUntilActive) {
                     // All enqueued broadcasts are deferrable, defer
                     if (mCountDeferred == mCountEnqueued) {
@@ -1220,7 +1229,7 @@ class BroadcastProcessQueue {
         // When all we have pending is deferred broadcasts, and we're cached,
         // then we want everything to be marked deferred
         final boolean wantDeferredStates = (mCountDeferred > 0)
-                && (mCountDeferred == mCountEnqueued) && mUidCached;
+                && (mCountDeferred == mCountEnqueued) && mProcessFreezable;
 
         if (mLastDeferredStates != wantDeferredStates) {
             mLastDeferredStates = wantDeferredStates;
@@ -1407,9 +1416,9 @@ class BroadcastProcessQueue {
         if (mUidForeground) {
             sb.append("FG");
         }
-        if (mUidCached) {
+        if (mProcessFreezable) {
             if (sb.length() > 0) sb.append("|");
-            sb.append("CACHED");
+            sb.append("FRZ");
         }
         if (mProcessInstrumented) {
             if (sb.length() > 0) sb.append("|");
