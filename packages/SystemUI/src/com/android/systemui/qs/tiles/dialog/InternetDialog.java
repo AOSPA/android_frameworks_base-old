@@ -12,16 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Changes from Qualcomm Innovation Center are provided under the following license:
- *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
- * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 package com.android.systemui.qs.tiles.dialog;
-
-import static android.telephony.ims.feature.ImsFeature.FEATURE_MMTEL;
-import static android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_CROSS_SIM;
 
 import static com.android.systemui.Prefs.Key.QS_HAS_TURNED_OFF_MOBILE_DATA;
 import static com.android.systemui.qs.tiles.dialog.InternetDialogController.MAX_WIFI_ENTRY_COUNT;
@@ -34,8 +26,6 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.RemoteException;
-import android.telephony.ims.aidl.IImsRegistration;
 import android.telephony.ServiceState;
 import android.telephony.SignalStrength;
 import android.telephony.SubscriptionManager;
@@ -175,9 +165,6 @@ public class InternetDialog extends SystemUIDialog implements
         mIsSearchingHidden = true;
         mInternetDialogSubTitle.setText(getSubtitleText());
     };
-
-    private boolean mIsCallIdle = true;
-    private boolean mIsImsRegisteredOverCiwlan = false;
 
     @Inject
     public InternetDialog(Context context, InternetDialogFactory internetDialogFactory,
@@ -402,15 +389,6 @@ public class InternetDialog extends SystemUIDialog implements
                 mInternetDialogController.hasEthernet() ? View.VISIBLE : View.GONE);
     }
 
-    /**
-     * Do not allow the user to disable mobile data of DDS while there is an active
-     * call on the nDDS.
-     */
-    private boolean shouldDisallowUserToDisableMobileData() {
-        return mInternetDialogController.isMobileDataEnabled()
-                && !mInternetDialogController.isNonDdsCallStateIdle();
-    }
-
     private void setMobileDataLayout(boolean activeNetworkIsCellular,
             boolean isCarrierNetworkActive) {
         boolean isNetworkConnected = activeNetworkIsCellular || isCarrierNetworkActive;
@@ -429,12 +407,6 @@ public class InternetDialog extends SystemUIDialog implements
                 mSecondaryMobileNetworkLayout.setVisibility(View.GONE);
             }
         } else {
-            if (shouldDisallowUserToDisableMobileData()) {
-                Log.d(TAG, "Do not allow mobile data switch to be turned off");
-                mMobileDataToggle.setEnabled(false);
-            } else {
-                mMobileDataToggle.setEnabled(true);
-            }
             mMobileNetworkLayout.setVisibility(View.VISIBLE);
             mMobileDataToggle.setChecked(mInternetDialogController.isMobileDataEnabled());
             mMobileTitleText.setText(getMobileNetworkTitle(mDefaultDataSubId));
@@ -685,9 +657,6 @@ public class InternetDialog extends SystemUIDialog implements
     }
 
     String getMobileNetworkSummary(int subId) {
-        if (shouldDisallowUserToDisableMobileData()) {
-            return mContext.getString(R.string.mobile_data_summary_not_allowed_to_disable_data);
-        }
         return mInternetDialogController.getMobileNetworkSummary(subId);
     }
 
@@ -717,21 +686,6 @@ public class InternetDialog extends SystemUIDialog implements
     }
 
     private boolean shouldShowMobileDialog() {
-        mIsCallIdle = mTelephonyManager.getCallState() == TelephonyManager.CALL_STATE_IDLE;
-        IImsRegistration imsRegistrationImpl = mTelephonyManager.getImsRegistration(
-                mSubscriptionManager.getSlotIndex(mDefaultDataSubId), FEATURE_MMTEL);
-        if (imsRegistrationImpl != null) {
-            try {
-                mIsImsRegisteredOverCiwlan = imsRegistrationImpl.getRegistrationTechnology() ==
-                        REGISTRATION_TECH_CROSS_SIM;
-            } catch (RemoteException ex) {
-                Log.e(TAG, "getRegistrationTechnology failed", ex);
-            }
-        }
-        if (mInternetDialogController.isMobileDataEnabled() && !mIsCallIdle &&
-                mIsImsRegisteredOverCiwlan) {
-            return true;
-        }
         boolean flag = Prefs.getBoolean(mContext, QS_HAS_TURNED_OFF_MOBILE_DATA,
                 false);
         if (mInternetDialogController.isMobileDataEnabled() && !flag) {
@@ -746,19 +700,9 @@ public class InternetDialog extends SystemUIDialog implements
         if (TextUtils.isEmpty(carrierName) || !isInService) {
             carrierName = mContext.getString(R.string.mobile_data_disable_message_default_carrier);
         }
-        String mobileDataDisableDialogMessage = mContext.getString(
-                R.string.mobile_data_disable_message, carrierName);
-        // If call is ongoing and IMS is registered on C_IWLAN, adjust the dialog message
-        Log.d(TAG, "isCallIdle = " + mIsCallIdle + ", isImsRegisteredOverCiwlan = " +
-                mIsImsRegisteredOverCiwlan);
-        if (!mIsCallIdle && mIsImsRegisteredOverCiwlan) {
-            mobileDataDisableDialogMessage = mContext.getString(
-                    R.string.mobile_data_disable_ciwlan_call_message) + "\n" +
-                    mobileDataDisableDialogMessage;
-        }
         mAlertDialog = new Builder(mContext)
                 .setTitle(R.string.mobile_data_disable_title)
-                .setMessage(mobileDataDisableDialogMessage)
+                .setMessage(mContext.getString(R.string.mobile_data_disable_message, carrierName))
                 .setNegativeButton(android.R.string.cancel, (d, w) -> {
                     mMobileDataToggle.setChecked(true);
                 })
@@ -857,11 +801,6 @@ public class InternetDialog extends SystemUIDialog implements
 
     @Override
     public void onDisplayInfoChanged(TelephonyDisplayInfo telephonyDisplayInfo) {
-        mHandler.post(() -> updateDialog(true /* shouldUpdateMobileNetwork */));
-    }
-
-    @Override
-    public void onNonDdsCallStateChanged(int callState) {
         mHandler.post(() -> updateDialog(true /* shouldUpdateMobileNetwork */));
     }
 

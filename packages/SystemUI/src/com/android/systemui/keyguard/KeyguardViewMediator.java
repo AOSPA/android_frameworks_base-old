@@ -116,7 +116,6 @@ import com.android.keyguard.ViewMediatorCallback;
 import com.android.keyguard.mediator.ScreenOnCoordinator;
 import com.android.systemui.CoreStartable;
 import com.android.systemui.DejankUtils;
-import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
 import com.android.systemui.EventLogTags;
 import com.android.systemui.R;
@@ -368,8 +367,6 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
      * Index is the slotId - in case of multiple SIM cards.
      */
     private final SparseIntArray mLastSimStates = new SparseIntArray();
-    private static SparseIntArray mUnlockTrackSimStates = new SparseIntArray();
-    private static final int STATE_INVALID = -1;
 
     /**
      * Indicates if a SIM card had the SIM PIN enabled during the initialization, before
@@ -539,6 +536,19 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
     KeyguardUpdateMonitorCallback mUpdateCallback = new KeyguardUpdateMonitorCallback() {
 
         @Override
+        public void onKeyguardVisibilityChanged(boolean visible) {
+            synchronized (KeyguardViewMediator.this) {
+                if (!visible && mPendingPinLock) {
+                    Log.i(TAG, "PIN lock requested, starting keyguard");
+
+                    // Bring the keyguard back in order to show the PIN lock
+                    mPendingPinLock = false;
+                    doKeyguardLocked(null);
+                }
+            }
+        }
+
+        @Override
         public void onUserSwitching(int userId) {
             if (DEBUG) Log.d(TAG, String.format("onUserSwitching %d", userId));
             // Note that the mLockPatternUtils user has already been updated from setCurrentUser.
@@ -609,29 +619,6 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
                 lastSimStateWasLocked = (lastState == TelephonyManager.SIM_STATE_PIN_REQUIRED
                         || lastState == TelephonyManager.SIM_STATE_PUK_REQUIRED);
                 mLastSimStates.append(slotId, simState);
-
-                int trackState = mUnlockTrackSimStates.get(slotId, STATE_INVALID);
-                //update the mUnlockTrackSimStates
-                if(simState == TelephonyManager.SIM_STATE_READY){
-                    if(trackState == TelephonyManager.SIM_STATE_LOADED){
-                        if (DEBUG) Log.e(TAG, "skip the redundant SIM_STATE_READY state");
-                        return;
-                    }else{
-                        mUnlockTrackSimStates.put(slotId, simState);
-                   }
-                }else{
-                    if(simState != TelephonyManager.SIM_STATE_PIN_REQUIRED) {
-                        mUnlockTrackSimStates.put(slotId, simState);
-                    }
-                }
-
-                //check the SIM_STATE_PIN_REQUIRED
-                if(trackState == TelephonyManager.SIM_STATE_READY){
-                    if(simState == TelephonyManager.SIM_STATE_PIN_REQUIRED) {
-                        if (DEBUG) Log.e(TAG, "skip the unnecessary SIM_STATE_PIN_REQUIRED state");
-                        return;
-                    }
-                }
             }
 
             switch (simState) {
@@ -1852,10 +1839,6 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
         return mUnoccludeAnimationRunner;
     }
 
-    public static int getUnlockTrackSimState(int slotId) {
-        return mUnlockTrackSimStates.get(slotId);
-    }
-
     public boolean isHiding() {
         return mHiding;
     }
@@ -1884,8 +1867,7 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
 
             if (mOccluded != isOccluded) {
                 mOccluded = isOccluded;
-                mKeyguardViewControllerLazy.get().setOccluded(isOccluded,
-                        (Dependency.get(KeyguardUpdateMonitor.class).isSimPinSecure()?false:animate)
+                mKeyguardViewControllerLazy.get().setOccluded(isOccluded, animate
                         && mDeviceInteractive);
                 adjustStatusBarLocked();
             }
@@ -2775,9 +2757,7 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
         // only play "unlock" noises if not on a call (since the incall UI
         // disables the keyguard)
         if (TelephonyManager.EXTRA_STATE_IDLE.equals(mPhoneState)) {
-            if (mShowing && mDeviceInteractive) {
-                playSounds(false);
-            }
+            playSounds(false);
         }
 
         setShowingLocked(false);
