@@ -53,12 +53,10 @@ public class KeyguardPasswordViewController
     private final InputMethodManager mInputMethodManager;
     private final DelayableExecutor mMainExecutor;
     private final KeyguardViewController mKeyguardViewController;
-    private final LockPatternUtils mLockPatternUtils;
     private final boolean mShowImeAtScreenOn;
     private EditText mPasswordEntry;
     private ImageView mSwitchImeButton;
     private boolean mPaused;
-    private int mPasswordLength = -1;
 
     private final OnEditorActionListener mOnEditorActionListener = (v, actionId, event) -> {
         // Check if this was the result of hitting the enter key
@@ -90,9 +88,6 @@ public class KeyguardPasswordViewController
         public void afterTextChanged(Editable s) {
             if (!TextUtils.isEmpty(s)) {
                 onUserInput();
-                if (s.length() == mPasswordLength) {
-                    verifyPasswordAndUnlock();
-                }
             }
         }
     };
@@ -120,7 +115,6 @@ public class KeyguardPasswordViewController
         mShowImeAtScreenOn = resources.getBoolean(R.bool.kg_show_ime_at_screen_on);
         mPasswordEntry = mView.findViewById(mView.getPasswordTextViewId());
         mSwitchImeButton = mView.findViewById(R.id.switch_ime_button);
-        mLockPatternUtils = lockPatternUtils;
     }
 
     @Override
@@ -198,9 +192,6 @@ public class KeyguardPasswordViewController
         if (reason != KeyguardSecurityView.SCREEN_ON || mShowImeAtScreenOn) {
             showInput();
         }
-
-        mPasswordLength = mLockPatternUtils.getCredentialLength(
-                KeyguardUpdateMonitor.getCurrentUser());
     }
 
     private void showInput() {

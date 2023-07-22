@@ -20,7 +20,6 @@ import android.content.Context;
 import android.util.DisplayMetrics;
 import android.view.Display;
 import android.view.Surface;
-import android.os.SystemProperties;
 
 import com.android.systemui.R;
 
@@ -111,12 +110,6 @@ public class DisplayUtils {
     }
 
     private static int getCornerRadiusDefault(Context context) {
-        int radius = 0;
-        int disableRoundedCorner = SystemProperties.getInt("vendor.display.disable_rounded_corner",
-                0);
-        if (disableRoundedCorner == 1) {
-           return 0;
-        }
         return context.getResources().getDimensionPixelSize(R.dimen.config_rounded_mask_size);
     }
 }

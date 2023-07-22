@@ -113,10 +113,6 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
             SystemProperties.getBoolean("debug.disable_screen_decorations", false);
     private static final boolean DEBUG_SCREENSHOT_ROUNDED_CORNERS =
             SystemProperties.getBoolean("debug.screenshot_rounded_corners", false);
-
-    private static int mDisableRoundedCorner =
-            SystemProperties.getInt("vendor.display.disable_rounded_corner", 0);
-
     private static final boolean VERBOSE = false;
     static final boolean DEBUG_COLOR = DEBUG_SCREENSHOT_ROUNDED_CORNERS;
 
@@ -987,12 +983,6 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
             updateConfiguration();
             if (DEBUG) Log.i(TAG, "onConfigChanged from rot " + oldRotation + " to " + mRotation);
             setupDecorations();
-            for (int id: DISPLAY_CUTOUT_IDS) {
-                final View view = getOverlayView(id);
-                if (view instanceof DisplayCutoutView) {
-                    ((DisplayCutoutView) view).updateCutout();
-                }
-            }
             if (mOverlays != null) {
                 // Updating the layout params ensures that ViewRootImpl will call relayoutWindow(),
                 // which ensures that the forced seamless rotation will end, even if we updated
@@ -1121,10 +1111,6 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
     }
 
     static boolean shouldDrawCutout(Context context) {
-        if (mDisableRoundedCorner == 1) {
-           return false;
-        }
-
         return DisplayCutout.getFillBuiltInDisplayCutout(
                 context.getResources(), context.getDisplay().getUniqueId());
     }

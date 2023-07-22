@@ -28,7 +28,6 @@ import com.android.systemui.R;
 public class KeyguardSimPinView extends KeyguardSimInputView {
     public static final String TAG = "KeyguardSimPinView";
 
-
     public KeyguardSimPinView(Context context) {
         this(context, null);
     }

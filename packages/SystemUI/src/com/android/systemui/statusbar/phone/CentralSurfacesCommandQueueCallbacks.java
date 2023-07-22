@@ -66,7 +66,6 @@ import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutController;
 import com.android.systemui.statusbar.phone.dagger.CentralSurfacesComponent;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
-import com.android.systemui.statusbar.policy.FlashlightController;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.RemoteInputQuickSettingsDisabler;
@@ -107,7 +106,6 @@ public class CentralSurfacesCommandQueueCallbacks implements CommandQueue.Callba
     private final VibrationEffect mCameraLaunchGestureVibrationEffect;
     private final SystemBarAttributesListener mSystemBarAttributesListener;
     private final Lazy<CameraLauncher> mCameraLauncherLazy;
-    private final FlashlightController mFlashlightController;
     private final QuickSettingsController mQsController;
     private final QSHost mQSHost;
 
@@ -142,7 +140,6 @@ public class CentralSurfacesCommandQueueCallbacks implements CommandQueue.Callba
             @DisplayId int displayId,
             SystemBarAttributesListener systemBarAttributesListener,
             Lazy<CameraLauncher> cameraLauncherLazy,
-            FlashlightController flashlightController,
             UserTracker userTracker,
             QSHost qsHost) {
         mCentralSurfaces = centralSurfaces;
@@ -169,7 +166,6 @@ public class CentralSurfacesCommandQueueCallbacks implements CommandQueue.Callba
         mDisableFlagsLogger = disableFlagsLogger;
         mDisplayId = displayId;
         mCameraLauncherLazy = cameraLauncherLazy;
-        mFlashlightController = flashlightController;
         mUserTracker = userTracker;
         mQSHost = qsHost;
 
@@ -372,9 +368,7 @@ public class CentralSurfacesCommandQueueCallbacks implements CommandQueue.Callba
             mPowerManager.wakeUp(SystemClock.uptimeMillis(), PowerManager.WAKE_REASON_CAMERA_LAUNCH,
                     "com.android.systemui:CAMERA_GESTURE");
         }
-        if (source != StatusBarManager.CAMERA_LAUNCH_SOURCE_SCREEN_GESTURE) {
-            vibrateForCameraGesture();
-        }
+        vibrateForCameraGesture();
 
         if (source == StatusBarManager.CAMERA_LAUNCH_SOURCE_POWER_DOUBLE_TAP) {
             Log.v(CentralSurfaces.TAG, "Camera launch");
@@ -610,12 +604,5 @@ public class CentralSurfacesCommandQueueCallbacks implements CommandQueue.Callba
             timings[i] = pattern[i];
         }
         return VibrationEffect.createWaveform(timings, /* repeat= */ -1);
-    }
-
-    @Override
-    public void toggleCameraFlash() {
-        if (mFlashlightController.isAvailable()) {
-            mFlashlightController.setFlashlight(!mFlashlightController.isEnabled());
-        }
     }
 }

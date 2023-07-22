@@ -166,7 +166,7 @@ object Flags {
     // TODO(b/255618149): Tracking Bug
     @JvmField
     val CUSTOMIZABLE_LOCK_SCREEN_QUICK_AFFORDANCES =
-        releasedFlag(216, "customizable_lock_screen_quick_affordances", teamfood = true)
+        unreleasedFlag(216, "customizable_lock_screen_quick_affordances", teamfood = true)
 
     /**
      * Migrates control of the LightRevealScrim's reveal effect and amount from legacy code to the
@@ -332,7 +332,7 @@ object Flags {
 
     // TODO(b/265892345): Tracking Bug
     val PLUG_IN_STATUS_BAR_CHIP =
-            releasedFlag(265892345, "plug_in_status_bar_chip")
+            unreleasedFlag(265892345, "plug_in_status_bar_chip", teamfood = true)
 
     // 700 - dialer/calls
     // TODO(b/254512734): Tracking Bug
@@ -363,7 +363,7 @@ object Flags {
     val MEDIA_TAP_TO_TRANSFER = releasedFlag(900, "media_tap_to_transfer")
 
     // TODO(b/254512502): Tracking Bug
-    val MEDIA_SESSION_ACTIONS = releasedFlag(901, "media_session_actions")
+    val MEDIA_SESSION_ACTIONS = unreleasedFlag(901, "media_session_actions")
 
     // TODO(b/254512726): Tracking Bug
     val MEDIA_NEARBY_DEVICES = releasedFlag(903, "media_nearby_devices")
@@ -378,12 +378,12 @@ object Flags {
     @JvmField val DREAM_MEDIA_TAP_TO_OPEN = unreleasedFlag(906, "dream_media_tap_to_open")
 
     // TODO(b/254513168): Tracking Bug
-    @JvmField val UMO_SURFACE_RIPPLE = releasedFlag(907, "umo_surface_ripple")
+    @JvmField val UMO_SURFACE_RIPPLE = unreleasedFlag(907, "umo_surface_ripple")
 
     @JvmField val MEDIA_FALSING_PENALTY = releasedFlag(908, "media_falsing_media")
 
     // TODO(b/261734857): Tracking Bug
-    @JvmField val UMO_TURBULENCE_NOISE = releasedFlag(909, "umo_turbulence_noise")
+    @JvmField val UMO_TURBULENCE_NOISE = unreleasedFlag(909, "umo_turbulence_noise")
 
     // TODO(b/263272731): Tracking Bug
     val MEDIA_TTT_RECEIVER_SUCCESS_RIPPLE = releasedFlag(910, "media_ttt_receiver_success_ripple")
@@ -543,8 +543,7 @@ object Flags {
         sysPropBooleanFlag(1202, "persist.wm.debug.predictive_back_always_enforce", default = false)
 
     // TODO(b/254512728): Tracking Bug
-    @JvmField
-    val NEW_BACK_AFFORDANCE = releasedFlag(1203, "new_back_affordance", teamfood = false)
+    @JvmField val NEW_BACK_AFFORDANCE = unreleasedFlag(1203, "new_back_affordance", teamfood = true)
 
     // TODO(b/255854141): Tracking Bug
     @JvmField

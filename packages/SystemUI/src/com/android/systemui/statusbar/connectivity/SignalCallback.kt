@@ -122,9 +122,7 @@ data class WifiIndicators(
     @JvmField val activityOut: Boolean,
     @JvmField val description: String?,
     @JvmField val isTransient: Boolean,
-    @JvmField val statusLabel: String?,
-    @JvmField val wifiStandard: Int,
-    @JvmField val isDefault: Boolean
+    @JvmField val statusLabel: String?
 ) {
     override fun toString(): String {
         return StringBuilder("WifiIndicators[")
@@ -136,7 +134,6 @@ data class WifiIndicators(
                 .append(",qsDescription=").append(description)
                 .append(",isTransient=").append(isTransient)
                 .append(",statusLabel=").append(statusLabel)
-                .append(",isDefault=").append(isDefault)
                 .append(']').toString()
     }
 }
@@ -149,14 +146,12 @@ data class MobileDataIndicators(
     @JvmField val qsType: Int,
     @JvmField val activityIn: Boolean,
     @JvmField val activityOut: Boolean,
-    @JvmField val volteIcon: Int,
     @JvmField val typeContentDescription: CharSequence?,
     @JvmField val typeContentDescriptionHtml: CharSequence?,
     @JvmField val qsDescription: CharSequence?,
     @JvmField val subId: Int,
     @JvmField val roaming: Boolean,
-    @JvmField val showTriangle: Boolean,
-    @JvmField val isDefault: Boolean
+    @JvmField val showTriangle: Boolean
 ) {
     override fun toString(): String {
         return java.lang.StringBuilder("MobileDataIndicators[")
@@ -166,14 +161,12 @@ data class MobileDataIndicators(
                 .append(",qsType=").append(qsType)
                 .append(",activityIn=").append(activityIn)
                 .append(",activityOut=").append(activityOut)
-                .append(",volteIcon=").append(volteIcon)
                 .append(",typeContentDescription=").append(typeContentDescription)
                 .append(",typeContentDescriptionHtml=").append(typeContentDescriptionHtml)
                 .append(",description=").append(qsDescription)
                 .append(",subId=").append(subId)
                 .append(",roaming=").append(roaming)
                 .append(",showTriangle=").append(showTriangle)
-                .append(",isDefault=").append(isDefault)
                 .append(']').toString()
     }
 }
