@@ -163,7 +163,6 @@ public class KeyguardPatternViewController
                 boolean isValidPattern) {
             boolean dismissKeyguard = KeyguardUpdateMonitor.getCurrentUser() == userId;
             if (matched) {
-                mLockPatternUtils.sanitizePassword();
                 getKeyguardSecurityCallback().reportUnlockAttempt(userId, true, 0);
                 if (dismissKeyguard) {
                     mLockPatternView.setDisplayMode(LockPatternView.DisplayMode.Correct);

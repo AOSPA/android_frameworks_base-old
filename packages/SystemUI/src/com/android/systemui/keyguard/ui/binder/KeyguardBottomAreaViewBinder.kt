@@ -324,7 +324,7 @@ object KeyguardBottomAreaViewBinder {
                 Utils.getColorAttr(
                     view.context,
                     if (viewModel.isActivated) {
-                        com.android.internal.R.attr.colorAccent
+                        com.android.internal.R.attr.colorAccentPrimary
                     } else {
                         com.android.internal.R.attr.colorSurface
                     }
@@ -382,12 +382,6 @@ object KeyguardBottomAreaViewBinder {
 
         private val longPressDurationMs = ViewConfiguration.getLongPressTimeout().toLong()
         private var longPressAnimator: ViewPropertyAnimator? = null
-
-        private val areAllPrimitivesSupported = vibratorHelper?.areAllPrimitivesSupported(
-            VibrationEffect.Composition.PRIMITIVE_TICK,
-            VibrationEffect.Composition.PRIMITIVE_QUICK_RISE,
-            VibrationEffect.Composition.PRIMITIVE_QUICK_FALL
-        ) ?: false
 
         @SuppressLint("ClickableViewAccessibility")
         override fun onTouch(v: View?, event: MotionEvent?): Boolean {
@@ -476,12 +470,7 @@ object KeyguardBottomAreaViewBinder {
                                             CycleInterpolator(ShakeAnimationCycles)
                                         shakeAnimator.start()
 
-                                        vibratorHelper?.vibrate(
-                                            if (areAllPrimitivesSupported) {
-                                                Vibrations.Shake
-                                            } else {
-                                                Vibrations.ShakeAlt
-                                            })
+                                        vibratorHelper?.vibrate(Vibrations.Shake)
                                     }
                                 } else {
                                     null
@@ -504,17 +493,9 @@ object KeyguardBottomAreaViewBinder {
             view.setOnClickListener {
                 vibratorHelper?.vibrate(
                     if (viewModel.isActivated) {
-                        if (areAllPrimitivesSupported) {
-                            Vibrations.Activated
-                        } else {
-                            Vibrations.ActivatedAlt
-                        }
+                        Vibrations.Activated
                     } else {
-                        if (areAllPrimitivesSupported) {
-                            Vibrations.Deactivated
-                        } else {
-                            Vibrations.DeactivatedAlt
-                        }
+                        Vibrations.Deactivated
                     }
                 )
                 viewModel.onClicked(
@@ -642,7 +623,6 @@ object KeyguardBottomAreaViewBinder {
                     }
                 }
                 .compose()
-        val ShakeAlt = VibrationEffect.createPredefined(VibrationEffect.EFFECT_DOUBLE_CLICK)
 
         val Activated =
             VibrationEffect.startComposition()
@@ -657,7 +637,6 @@ object KeyguardBottomAreaViewBinder {
                     0,
                 )
                 .compose()
-        val ActivatedAlt = VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK)
 
         val Deactivated =
             VibrationEffect.startComposition()
@@ -672,6 +651,5 @@ object KeyguardBottomAreaViewBinder {
                     0,
                 )
                 .compose()
-        val DeactivatedAlt = VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK)
     }
 }
