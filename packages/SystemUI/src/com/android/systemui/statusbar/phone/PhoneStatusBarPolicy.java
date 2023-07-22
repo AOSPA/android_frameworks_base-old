@@ -30,8 +30,6 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.media.AudioManager;
-import android.net.wifi.ScanResult;
-import android.net.wifi.WifiManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.RemoteException;
@@ -287,6 +285,11 @@ public class PhoneStatusBarPolicy
         mIconController.setIcon(mSlotCast, R.drawable.stat_sys_cast, null);
         mIconController.setIconVisibility(mSlotCast, false);
 
+        // hotspot
+        mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_hotspot,
+                mResources.getString(R.string.accessibility_status_bar_hotspot));
+        mIconController.setIconVisibility(mSlotHotspot, mHotspot.isHotspotEnabled());
+
         // managed profile
         updateManagedProfile();
 
@@ -341,9 +344,6 @@ public class PhoneStatusBarPolicy
         mRecordingController.addCallback(this);
 
         mCommandQueue.addCallback(this);
-
-        // Get initial user setup state
-        onUserSetupChanged();
     }
 
     private String getManagedProfileAccessibilityString() {
@@ -451,19 +451,22 @@ public class PhoneStatusBarPolicy
     }
 
     private final void updateBluetooth() {
+        int iconId = R.drawable.stat_sys_data_bluetooth_connected;
         String contentDescription =
                 mResources.getString(R.string.accessibility_quick_settings_bluetooth_on);
         boolean bluetoothVisible = false;
-        int batteryLevel = -1;
-        if (mBluetooth != null && mBluetooth.isBluetoothConnected()) {
-            bluetoothVisible = mBluetooth.isBluetoothEnabled();
-            batteryLevel = mBluetooth.getBatteryLevel();
-            contentDescription = mResources.getString(
-                    R.string.accessibility_bluetooth_connected);
+        if (mBluetooth != null) {
+            if (mBluetooth.isBluetoothConnected()
+                    && (mBluetooth.isBluetoothAudioActive()
+                    || !mBluetooth.isBluetoothAudioProfileOnly())) {
+                contentDescription = mResources.getString(
+                        R.string.accessibility_bluetooth_connected);
+                bluetoothVisible = mBluetooth.isBluetoothEnabled();
+            }
         }
 
-        mIconController.setBluetoothIcon(mSlotBluetooth,
-                new BluetoothIconState(bluetoothVisible, batteryLevel, contentDescription));
+        mIconController.setIcon(mSlotBluetooth, iconId, contentDescription);
+        mIconController.setIconVisibility(mSlotBluetooth, bluetoothVisible);
     }
 
     private final void updateTTY() {
@@ -567,11 +570,6 @@ public class PhoneStatusBarPolicy
     private final HotspotController.Callback mHotspotCallback = new HotspotController.Callback() {
         @Override
         public void onHotspotChanged(boolean enabled, int numDevices) {
-            mIconController.setIconVisibility(mSlotHotspot, enabled);
-        }
-        @Override
-        public void onHotspotChanged(boolean enabled, int numDevices, int standard) {
-            updateHotspotIcon(standard);
             mIconController.setIconVisibility(mSlotHotspot, enabled);
         }
     };
@@ -801,45 +799,5 @@ public class PhoneStatusBarPolicy
         // Ensure this is on the main thread
         if (DEBUG) Log.d(TAG, "screenrecord: hiding icon");
         mHandler.post(() -> mIconController.setIconVisibility(mSlotScreenRecord, false));
-    }
-
-    private void updateHotspotIcon(int standard) {
-        final boolean showNetworkStandard = mResources.getBoolean(
-                com.android.internal.R.bool.config_show_network_standard);
-        if (!showNetworkStandard) {
-            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_hotspot,
-                mResources.getString(R.string.accessibility_status_bar_hotspot));
-            return;
-        }
-        if (standard == ScanResult.WIFI_STANDARD_11AX) {
-            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_6_hotspot,
-                mResources.getString(R.string.accessibility_status_bar_hotspot));
-        } else if (standard == ScanResult.WIFI_STANDARD_11AC) {
-            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_5_hotspot,
-                mResources.getString(R.string.accessibility_status_bar_hotspot));
-        } else if (standard == ScanResult.WIFI_STANDARD_11N) {
-            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_4_hotspot,
-                mResources.getString(R.string.accessibility_status_bar_hotspot));
-        } else {
-            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_hotspot,
-                mResources.getString(R.string.accessibility_status_bar_hotspot));
-        }
-    }
-
-    public static class BluetoothIconState {
-        public boolean visible;
-        public int batteryLevel;
-        public String contentDescription;
-
-        public BluetoothIconState(boolean visible, int batteryLevel, String contentDescription) {
-            this.visible = visible;
-            this.batteryLevel = batteryLevel;
-            this.contentDescription = contentDescription;
-        }
-
-        @Override
-        public String toString() {
-            return "BluetoothIconState(visible=" + visible + " batteryLevel=" + batteryLevel + ")";
-        }
     }
 }

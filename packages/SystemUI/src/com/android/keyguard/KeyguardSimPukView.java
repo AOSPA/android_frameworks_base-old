@@ -19,15 +19,11 @@ package com.android.keyguard;
 import static com.android.systemui.util.PluralMessageFormaterKt.icuMessageFormat;
 
 import android.content.Context;
-import android.telephony.SubscriptionInfo;
 import android.util.AttributeSet;
 import android.util.Log;
 
-import com.android.systemui.Dependency;
 import com.android.systemui.R;
 
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Displays a PIN pad for entering a PUK (Pin Unlock Kode) provided by a carrier.
@@ -35,7 +31,6 @@ import java.util.Map;
 public class KeyguardSimPukView extends KeyguardSimInputView {
     private static final boolean DEBUG = KeyguardConstants.DEBUG;
     public static final String TAG = "KeyguardSimPukView";
-    private Map<String, String> mWrongPukCodeMessageMap =  new HashMap<>(4);
 
     public KeyguardSimPukView(Context context) {
         this(context, null);
@@ -43,35 +38,6 @@ public class KeyguardSimPukView extends KeyguardSimInputView {
 
     public KeyguardSimPukView(Context context, AttributeSet attrs) {
         super(context, attrs);
-        updateWrongPukMessageMap(context);
-    }
-
-    void updateWrongPukMessageMap(Context context) {
-        String[] customizationConfigs = context.getResources().
-                getStringArray(R.array.kg_wrong_puk_code_message_list);
-        if ( customizationConfigs.length == 0 ){
-            Log.d(TAG, "There is no customization PUK prompt");
-            return;
-        }
-        for(String config : customizationConfigs ) {
-            String[] kv = config.trim().split(":");
-            if ( kv.length != 2) {
-                Log.e(TAG, "invalid key value config " + config);
-                continue;
-            }
-            mWrongPukCodeMessageMap.put(kv[0], kv[1]);
-        }
-    }
-
-    private String getMessageTextForWrongPukCode(int subId) {
-        String message = null;
-        SubscriptionInfo info = Dependency.get(KeyguardUpdateMonitor.class)
-                    .getSubscriptionInfoForSubId(subId);
-        if ( info != null ) {
-            String mccMNC = info.getMccString()+info.getMncString();
-            message = mWrongPukCodeMessageMap.get(mccMNC);
-        }
-        return message;
     }
 
     @Override
@@ -81,16 +47,11 @@ public class KeyguardSimPukView extends KeyguardSimInputView {
     }
 
     String getPukPasswordErrorMessage(
-            int attemptsRemaining, boolean isDefault, boolean isEsimLocked, int subId) {
+            int attemptsRemaining, boolean isDefault, boolean isEsimLocked) {
         String displayMessage;
 
         if (attemptsRemaining == 0) {
-            String message = getMessageTextForWrongPukCode(subId);
-            if ( message == null ) {
-                displayMessage = getContext().getString(R.string.kg_password_wrong_puk_code_dead);
-            }else {
-                displayMessage = message;
-            }
+            displayMessage = getContext().getString(R.string.kg_password_wrong_puk_code_dead);
         } else if (attemptsRemaining > 0) {
             int msgId = isDefault ? R.string.kg_password_default_puk_message :
                     R.string.kg_password_wrong_puk_code;

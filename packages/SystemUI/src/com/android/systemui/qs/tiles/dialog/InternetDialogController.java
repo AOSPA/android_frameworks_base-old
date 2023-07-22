@@ -88,7 +88,6 @@ import com.android.systemui.statusbar.policy.LocationController;
 import com.android.systemui.toast.SystemUIToast;
 import com.android.systemui.toast.ToastFactory;
 import com.android.systemui.util.CarrierConfigTracker;
-import com.android.systemui.util.CarrierNameCustomization;
 import com.android.systemui.util.settings.GlobalSettings;
 import com.android.wifitrackerlib.MergedCarrierEntry;
 import com.android.wifitrackerlib.WifiEntry;
@@ -186,7 +185,6 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     private DialogLaunchAnimator mDialogLaunchAnimator;
     private boolean mHasWifiEntries;
     private WifiStateWorker mWifiStateWorker;
-    private int mNonDdsCallState = TelephonyManager.CALL_STATE_IDLE;
 
     @VisibleForTesting
     static final float TOAST_PARAMS_HORIZONTAL_WEIGHT = 1.0f;
@@ -198,8 +196,6 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     protected ActivityStarter mActivityStarter;
     @VisibleForTesting
     protected SubscriptionManager.OnSubscriptionsChangedListener mOnSubscriptionsChangedListener;
-    @VisibleForTesting
-    protected Map<Integer, NonDdsCallStateCallback> mNonDdsCallStateCallbacksMap;
     @VisibleForTesting
     protected WifiUtils.InternetIconInjector mWifiIconInjector;
     @VisibleForTesting
@@ -213,7 +209,6 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     @VisibleForTesting
     protected boolean mCarrierNetworkChangeMode;
 
-    private CarrierNameCustomization mCarrierNameCustomization;
     private final KeyguardUpdateMonitorCallback mKeyguardUpdateCallback =
             new KeyguardUpdateMonitorCallback() {
                 @Override
@@ -245,8 +240,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
             LocationController locationController,
             DialogLaunchAnimator dialogLaunchAnimator,
             WifiStateWorker wifiStateWorker,
-            FeatureFlags featureFlags,
-            CarrierNameCustomization carrierNameCustomization
+            FeatureFlags featureFlags
     ) {
         if (DEBUG) {
             Log.d(TAG, "Init InternetDialogController");
@@ -280,8 +274,6 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         mDialogLaunchAnimator = dialogLaunchAnimator;
         mConnectedWifiInternetMonitor = new ConnectedWifiInternetMonitor();
         mWifiStateWorker = wifiStateWorker;
-        mNonDdsCallStateCallbacksMap = new HashMap<Integer, NonDdsCallStateCallback>();
-        mCarrierNameCustomization = carrierNameCustomization;
         mFeatureFlags = featureFlags;
     }
 
@@ -305,26 +297,10 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         mConfig = MobileMappings.Config.readConfig(mContext);
         mTelephonyManager = mTelephonyManager.createForSubscriptionId(mDefaultDataSubId);
         mSubIdTelephonyManagerMap.put(mDefaultDataSubId, mTelephonyManager);
-        InternetTelephonyCallback mInternetTelephonyCallback =
-            new InternetTelephonyCallback(mDefaultDataSubId);
-        mSubIdTelephonyCallbackMap.put(mDefaultDataSubId, mInternetTelephonyCallback);
-        mTelephonyManager.registerTelephonyCallback(mExecutor, mInternetTelephonyCallback);
-
-        // Listen to non-DDS call state changes
-        List<SubscriptionInfo> subInfos =
-                mSubscriptionManager.getActiveSubscriptionInfoList();
-        if (subInfos != null) {
-            for (SubscriptionInfo subInfo : subInfos) {
-                if (subInfo.getSubscriptionId() != mDefaultDataSubId) {
-                    NonDdsCallStateCallback nonDdsCallStateCallback = new NonDdsCallStateCallback();
-                    mTelephonyManager.createForSubscriptionId(subInfo.getSubscriptionId())
-                            .registerTelephonyCallback(mExecutor, nonDdsCallStateCallback);
-                    mNonDdsCallStateCallbacksMap.put(subInfo.getSubscriptionId(),
-                            nonDdsCallStateCallback);
-                }
-            }
-        }
-
+        InternetTelephonyCallback telephonyCallback =
+                new InternetTelephonyCallback(mDefaultDataSubId);
+        mSubIdTelephonyCallbackMap.put(mDefaultDataSubId, telephonyCallback);
+        mTelephonyManager.registerTelephonyCallback(mExecutor, telephonyCallback);
         // Listen the connectivity changes
         mConnectivityManager.registerDefaultNetworkCallback(mConnectivityManagerNetworkCallback);
         mCanConfigWifi = canConfigWifi;
@@ -350,11 +326,6 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         mKeyguardUpdateMonitor.removeCallback(mKeyguardUpdateCallback);
         mConnectivityManager.unregisterNetworkCallback(mConnectivityManagerNetworkCallback);
         mConnectedWifiInternetMonitor.unregisterCallback();
-        for (int subId : mNonDdsCallStateCallbacksMap.keySet()) {
-            mTelephonyManager.createForSubscriptionId(subId).
-                    unregisterTelephonyCallback(mNonDdsCallStateCallbacksMap.get(subId));
-        }
-        mNonDdsCallStateCallbacksMap.clear();
     }
 
     @VisibleForTesting
@@ -681,12 +652,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     }
 
     CharSequence getMobileNetworkTitle(int subId) {
-        if (mCarrierNameCustomization.isRoamingCustomizationEnabled()
-                && mCarrierNameCustomization.isRoaming(subId)) {
-            return mCarrierNameCustomization.getRoamingCarrierName(subId);
-        } else {
-            return getUniqueSubscriptionDisplayName(subId, mContext);
-        }
+        return getUniqueSubscriptionDisplayName(subId, mContext);
     }
 
     String getMobileNetworkSummary(int subId) {
@@ -889,13 +855,6 @@ public class InternetDialogController implements AccessPointController.AccessPoi
             return false;
         }
         return true;
-    }
-
-    /**
-     * Return {@code true} if there is an ongoing call on the non-DDS
-     */
-    boolean isNonDdsCallStateIdle() {
-        return mNonDdsCallState == TelephonyManager.CALL_STATE_IDLE;
     }
 
     /**
@@ -1110,16 +1069,6 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     public void onSettingsActivityTriggered(Intent settingsIntent) {
     }
 
-    private class NonDdsCallStateCallback extends TelephonyCallback implements
-            TelephonyCallback.CallStateListener {
-        @Override
-        public void onCallStateChanged(int callState) {
-            Log.d(TAG, "onCallStateChanged: " + callState);
-            mNonDdsCallState = callState;
-            mCallback.onNonDdsCallStateChanged(callState);
-        }
-    }
-
     private class InternetTelephonyCallback extends TelephonyCallback implements
             TelephonyCallback.DataConnectionStateListener,
             TelephonyCallback.DisplayInfoListener,
@@ -1174,18 +1123,6 @@ public class InternetDialogController implements AccessPointController.AccessPoi
 
         @Override
         public void onSubscriptionsChanged() {
-            List<SubscriptionInfo> subInfos = mSubscriptionManager.getActiveSubscriptionInfoList();
-            int numberOfActiveSubscriptions = subInfos.size();
-            /*
-             * When there is only one subscription, there is no nDDS sub, so call state of nDDS is
-             * idle by default. Ensure that call state of nDDS is correctly updated when number of
-             * subscriptions change at runtime.
-             */
-            if (numberOfActiveSubscriptions == 1){
-                Log.d(TAG, "Resetting call state of nDDS");
-                mNonDdsCallState = TelephonyManager.CALL_STATE_IDLE;
-            }
-
             updateListener();
         }
     }
@@ -1351,8 +1288,6 @@ public class InternetDialogController implements AccessPointController.AccessPoi
 
         void onAccessPointsChanged(@Nullable List<WifiEntry> wifiEntries,
                 @Nullable WifiEntry connectedEntry, boolean hasMoreWifiEntries);
-
-        void onNonDdsCallStateChanged(int callState);
     }
 
     void makeOverlayToast(int stringId) {
