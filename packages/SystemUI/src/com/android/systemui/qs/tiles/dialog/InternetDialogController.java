@@ -88,7 +88,6 @@ import com.android.systemui.statusbar.policy.LocationController;
 import com.android.systemui.toast.SystemUIToast;
 import com.android.systemui.toast.ToastFactory;
 import com.android.systemui.util.CarrierConfigTracker;
-import com.android.systemui.util.CarrierNameCustomization;
 import com.android.systemui.util.settings.GlobalSettings;
 import com.android.wifitrackerlib.MergedCarrierEntry;
 import com.android.wifitrackerlib.WifiEntry;
@@ -213,7 +212,6 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     @VisibleForTesting
     protected boolean mCarrierNetworkChangeMode;
 
-    private CarrierNameCustomization mCarrierNameCustomization;
     private final KeyguardUpdateMonitorCallback mKeyguardUpdateCallback =
             new KeyguardUpdateMonitorCallback() {
                 @Override
@@ -245,8 +243,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
             LocationController locationController,
             DialogLaunchAnimator dialogLaunchAnimator,
             WifiStateWorker wifiStateWorker,
-            FeatureFlags featureFlags,
-            CarrierNameCustomization carrierNameCustomization
+            FeatureFlags featureFlags
     ) {
         if (DEBUG) {
             Log.d(TAG, "Init InternetDialogController");
@@ -281,7 +278,6 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         mConnectedWifiInternetMonitor = new ConnectedWifiInternetMonitor();
         mWifiStateWorker = wifiStateWorker;
         mNonDdsCallStateCallbacksMap = new HashMap<Integer, NonDdsCallStateCallback>();
-        mCarrierNameCustomization = carrierNameCustomization;
         mFeatureFlags = featureFlags;
     }
 
@@ -681,12 +677,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     }
 
     CharSequence getMobileNetworkTitle(int subId) {
-        if (mCarrierNameCustomization.isRoamingCustomizationEnabled()
-                && mCarrierNameCustomization.isRoaming(subId)) {
-            return mCarrierNameCustomization.getRoamingCarrierName(subId);
-        } else {
-            return getUniqueSubscriptionDisplayName(subId, mContext);
-        }
+        return getUniqueSubscriptionDisplayName(subId, mContext);
     }
 
     String getMobileNetworkSummary(int subId) {
