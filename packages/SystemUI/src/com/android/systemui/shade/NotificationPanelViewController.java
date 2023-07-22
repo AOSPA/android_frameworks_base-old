@@ -55,7 +55,6 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.StatusBarManager;
 import android.content.ContentResolver;
-import android.content.Context;
 import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.graphics.Color;
@@ -78,11 +77,9 @@ import android.transition.TransitionListenerAdapter;
 import android.transition.TransitionManager;
 import android.transition.TransitionSet;
 import android.transition.TransitionValues;
-import android.util.BoostFramework;
 import android.util.IndentingPrintWriter;
 import android.util.Log;
 import android.util.MathUtils;
-import android.view.GestureDetector;
 import android.view.InputDevice;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -503,8 +500,6 @@ public final class NotificationPanelViewController implements Dumpable {
     private final NavigationBarController mNavigationBarController;
     private final int mDisplayId;
 
-    private GestureDetector mDoubleTapGestureListener;
-
     private final KeyguardIndicationController mKeyguardIndicationController;
     private int mHeadsUpInset;
     private boolean mHeadsUpPinnedMode;
@@ -616,11 +611,6 @@ public final class NotificationPanelViewController implements Dumpable {
     private int mLockscreenToDreamingTransitionTranslationY;
     private int mGoneToDreamingTransitionTranslationY;
     private int mLockscreenToOccludedTransitionTranslationY;
-
-    /**
-     * For PanelView fling perflock call
-     */
-    private BoostFramework mPerf = null;
 
     private final Runnable mFlingCollapseRunnable = () -> fling(0, false /* expand */,
             mNextCollapseSpeedUpFactor, false /* expandBecauseOfFalsing */);
@@ -890,16 +880,6 @@ public final class NotificationPanelViewController implements Dumpable {
         });
         mBottomAreaShadeAlphaAnimator.setDuration(160);
         mBottomAreaShadeAlphaAnimator.setInterpolator(Interpolators.ALPHA_OUT);
-        mDoubleTapGestureListener = new GestureDetector(mView.getContext(),
-                new GestureDetector.SimpleOnGestureListener() {
-            @Override
-            public boolean onDoubleTap(MotionEvent event) {
-                final PowerManager pm = (PowerManager) mView.getContext().getSystemService(
-                        Context.POWER_SERVICE);
-                pm.goToSleep(event.getEventTime());
-                return true;
-            }
-        });
         mConversationNotificationManager = conversationNotificationManager;
         mAuthController = authController;
         mLockIconViewController = lockIconViewController;
@@ -962,7 +942,6 @@ public final class NotificationPanelViewController implements Dumpable {
                 });
         mAlternateBouncerInteractor = alternateBouncerInteractor;
         dumpManager.registerDumpable(this);
-        mPerf = new BoostFramework();
     }
 
     private void unlockAnimationFinished() {
@@ -2028,10 +2007,6 @@ public final class NotificationPanelViewController implements Dumpable {
                 animator.setDuration(mFixedDuration);
             }
         }
-        if (mPerf != null) {
-            String currentPackage = mView.getContext().getPackageName();
-            mPerf.perfHint(BoostFramework.VENDOR_HINT_SCROLL_BOOST, currentPackage, -1, BoostFramework.Scroll.PANEL_VIEW);
-        }
         animator.addListener(new AnimatorListenerAdapter() {
             private boolean mCancelled;
 
@@ -2044,17 +2019,11 @@ public final class NotificationPanelViewController implements Dumpable {
 
             @Override
             public void onAnimationCancel(Animator animation) {
-                if (mPerf != null) {
-                    mPerf.perfLockRelease();
-                }
                 mCancelled = true;
             }
 
             @Override
             public void onAnimationEnd(Animator animation) {
-                if (mPerf != null) {
-                    mPerf.perfLockRelease();
-                }
                 if (shouldSpringBack && !mCancelled) {
                     // After the shade is flung open to an overscrolled state, spring back
                     // the shade by reducing section padding to 0.
@@ -4839,10 +4808,6 @@ public final class NotificationPanelViewController implements Dumpable {
                 mShadeLog.logMotionEvent(event,
                         "onTouch: ignore touch, bouncer scrimmed or showing over dream");
                 return false;
-            }
-
-            if (mBarState == StatusBarState.KEYGUARD) {
-                mDoubleTapGestureListener.onTouchEvent(event);
             }
 
             // Make sure the next touch won't the blocked after the current ends.

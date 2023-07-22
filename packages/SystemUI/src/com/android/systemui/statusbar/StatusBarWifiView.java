@@ -48,7 +48,6 @@ public class StatusBarWifiView extends BaseStatusBarFrameLayout implements DarkR
     /// Contains the main icon layout
     private LinearLayout mWifiGroup;
     private ImageView mWifiIcon;
-    private ImageView mWifiStandard;
     private ImageView mIn;
     private ImageView mOut;
     private View mInoutContainer;
@@ -88,7 +87,6 @@ public class StatusBarWifiView extends BaseStatusBarFrameLayout implements DarkR
     public void setStaticDrawableColor(int color) {
         ColorStateList list = ColorStateList.valueOf(color);
         mWifiIcon.setImageTintList(list);
-        mWifiStandard.setImageTintList(list);
         mIn.setImageTintList(list);
         mOut.setImageTintList(list);
         mDotView.setDecorColor(color);
@@ -153,7 +151,6 @@ public class StatusBarWifiView extends BaseStatusBarFrameLayout implements DarkR
     private void init() {
         mWifiGroup = findViewById(R.id.wifi_group);
         mWifiIcon = findViewById(R.id.wifi_signal);
-        mWifiStandard = findViewById(R.id.wifi_standard);
         mIn = findViewById(R.id.wifi_in);
         mOut = findViewById(R.id.wifi_out);
         mSignalSpacer = findViewById(R.id.wifi_signal_spacer);
@@ -198,7 +195,7 @@ public class StatusBarWifiView extends BaseStatusBarFrameLayout implements DarkR
         if (mState.resId != state.resId && state.resId >= 0) {
             mWifiIcon.setImageDrawable(mContext.getDrawable(state.resId));
         }
-        setWifiStandard(state);
+
         mIn.setVisibility(state.activityIn ? View.VISIBLE : View.GONE);
         mOut.setVisibility(state.activityOut ? View.VISIBLE : View.GONE);
         mInoutContainer.setVisibility(
@@ -207,8 +204,7 @@ public class StatusBarWifiView extends BaseStatusBarFrameLayout implements DarkR
         mSignalSpacer.setVisibility(state.signalSpacerVisible ? View.VISIBLE : View.GONE);
 
         boolean needsLayout = state.activityIn != mState.activityIn
-                || state.activityOut != mState.activityOut
-                || state.wifiStandard != mState.wifiStandard;
+                ||state.activityOut != mState.activityOut;
 
         if (mState.visible != state.visible) {
             needsLayout |= true;
@@ -224,7 +220,7 @@ public class StatusBarWifiView extends BaseStatusBarFrameLayout implements DarkR
         if (mState.resId >= 0) {
             mWifiIcon.setImageDrawable(mContext.getDrawable(mState.resId));
         }
-        setWifiStandard(mState);
+
         mIn.setVisibility(mState.activityIn ? View.VISIBLE : View.GONE);
         mOut.setVisibility(mState.activityOut ? View.VISIBLE : View.GONE);
         mInoutContainer.setVisibility(
@@ -234,33 +230,11 @@ public class StatusBarWifiView extends BaseStatusBarFrameLayout implements DarkR
         setVisibility(mState.visible ? View.VISIBLE : View.GONE);
     }
 
-    private void setWifiStandard(WifiIconState state) {
-        int resid = 0;
-        switch (state.wifiStandard) {
-            case 4:
-                resid = R.drawable.ic_wifi_standard_4;
-                break;
-            case 5:
-                resid = R.drawable.ic_wifi_standard_5;
-                break;
-            case 6:
-                resid = R.drawable.ic_wifi_standard_6;
-                break;
-        }
-        if (resid > 0) {
-            mWifiStandard.setVisibility(View.VISIBLE);
-            mWifiStandard.setImageDrawable(mContext.getDrawable(resid));
-        } else {
-            mWifiStandard.setVisibility(View.GONE);
-        }
-    }
-
     @Override
     public void onDarkChanged(ArrayList<Rect> areas, float darkIntensity, int tint) {
         int areaTint = getTint(areas, this, tint);
         ColorStateList color = ColorStateList.valueOf(areaTint);
         mWifiIcon.setImageTintList(color);
-        mWifiStandard.setImageTintList(color);
         mIn.setImageTintList(color);
         mOut.setImageTintList(color);
         mDotView.setDecorColor(areaTint);

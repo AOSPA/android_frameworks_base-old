@@ -14,11 +14,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Changes from Qualcomm Innovation Center are provided under the following license:
- *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
- * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 -->
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
@@ -228,10 +223,6 @@
     <string name="screenshot_edit_description">Edit screenshot</string>
     <!-- Content description indicating that tapping the element will allow sharing the screenshot [CHAR LIMIT=NONE] -->
     <string name="screenshot_share_description">Share screenshot</string>
-    <!-- Label for UI element which allows deleting the screenshot [CHAR LIMIT=30] -->
-    <string name="screenshot_delete_label">Delete</string>
-    <!-- Content description indicating that tapping the element will allow deleting the screenshot [CHAR LIMIT=NONE] -->
-    <string name="screenshot_delete_description">Delete screenshot</string>
     <!-- Label for UI element which allows the user to capture additional off-screen content in a screenshot. [CHAR LIMIT=30] -->
     <string name="screenshot_scroll_label">Capture more</string>
     <!-- Content description indicating that tapping a button will dismiss the screenshots UI [CHAR LIMIT=NONE] -->
@@ -300,15 +291,11 @@
     <string name="screenrecord_stop_label">Stop</string>
     <!-- Label for notification action to share screen recording [CHAR LIMIT=35] -->
     <string name="screenrecord_share_label">Share</string>
-    <!-- Label for notification action to delete a screen recording file [CHAR LIMIT=35] -->
-    <string name="screenrecord_delete_label">Delete</string>
     <!-- A toast message shown after successfully canceling a screen recording [CHAR LIMIT=NONE] -->
     <!-- Notification text shown after saving a screen recording [CHAR LIMIT=100] -->
     <string name="screenrecord_save_title">Screen recording saved</string>
     <!-- Subtext for a notification shown after saving a screen recording to prompt the user to view it [CHAR_LIMIT=100] -->
     <string name="screenrecord_save_text">Tap to view</string>
-    <!-- A toast message shown after successfully deleting a screen recording [CHAR LIMIT=NONE] -->
-    <string name="screenrecord_delete_description">Screen recording deleted</string>
     <!-- A toast message shown when there is an error deleting a screen recording [CHAR LIMIT=NONE] -->
     <string name="screenrecord_delete_error">Error deleting screen recording</string>
     <!-- A toast message shown when the screen recording cannot be started due to insufficient permissions [CHAR LIMIT=NONE] -->
@@ -1330,15 +1317,6 @@
     <!-- Name of the alarm status bar icon. -->
     <string name="status_bar_alarm">Alarm</string>
 
-    <!-- Name of the VPN status bar icon. -->
-    <string name="status_bar_vpn">VPN</string>
-
-    <!-- Name of the roaming status bar icon. -->
-    <string name="status_bar_roaming">Roaming indicator</string>
-
-    <!-- Name of the data saver status bar icon. -->
-    <string name="status_bar_data_saver">Data saver</string>
-
     <!-- Wallet strings -->
     <!-- Wallet empty state, title [CHAR LIMIT=32] -->
     <string name="wallet_title">Wallet</string>
@@ -1813,7 +1791,7 @@
     <string name="right_icon">Right icon</string>
 
     <!-- Label for area where tiles can be dragged out of [CHAR LIMIT=60] -->
-    <string name="drag_to_add_tiles">Press on tiles to add or remove</string>
+    <string name="drag_to_add_tiles">Hold and drag to add tiles</string>
 
     <!-- Label for header of customize QS [CHAR LIMIT=60] -->
     <string name="drag_to_rearrange_tiles">Hold and drag to rearrange tiles</string>
@@ -2092,12 +2070,6 @@
 
     <!-- Message body of the dialog to turn off data usage [CHAR LIMIT=NONE] -->
     <string name="mobile_data_disable_message">You won\’t have access to data or the internet through <xliff:g id="carrier" example="T-Mobile">%s</xliff:g>. Internet will only be available via Wi-Fi.</string>
-
-    <!-- Message body of the dialog to turn off mobile data when IMS is registered on C_IWLAN and device is in a call [CHAR LIMIT=NONE] -->
-    <string name="mobile_data_disable_ciwlan_call_message">Disabling mobile data may cause ongoing call disconnect.</string>
-
-    <!-- Internet dialog, summary of mobile network when there is an ongoing call on the non default data subscription. [CHAR LIMIT=NONE] -->
-    <string name="mobile_data_summary_not_allowed_to_disable_data">Unavailable during a call on the other SIM</string>
 
     <!-- Text used to refer to the user's current carrier in mobile_data_disable_message if the users's mobile network carrier name is not available [CHAR LIMIT=NONE] -->
     <string name="mobile_data_disable_message_default_carrier">your carrier</string>

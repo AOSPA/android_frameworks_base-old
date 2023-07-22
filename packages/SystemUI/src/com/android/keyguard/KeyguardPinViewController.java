@@ -31,8 +31,6 @@ public class KeyguardPinViewController
     private final DevicePostureController mPostureController;
     private final DevicePostureController.Callback mPostureCallback = posture ->
             mView.onDevicePostureChanged(posture);
-    private final LockPatternUtils mLockPatternUtils;
-    private int mPinLength = -1;
 
     protected KeyguardPinViewController(KeyguardPINView view,
             KeyguardUpdateMonitor keyguardUpdateMonitor,
@@ -48,7 +46,6 @@ public class KeyguardPinViewController
                 emergencyButtonController, falsingCollector);
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
         mPostureController = postureController;
-        mLockPatternUtils = lockPatternUtils;
     }
 
     @Override
@@ -70,23 +67,6 @@ public class KeyguardPinViewController
     protected void onViewDetached() {
         super.onViewDetached();
         mPostureController.removeCallback(mPostureCallback);
-    }
-
-    @Override
-    protected void onTextChanged(int textLength) {
-        super.onTextChanged(textLength);
-
-        if (textLength == mPinLength) {
-            verifyPasswordAndUnlock();
-        }
-    }
-
-    @Override
-    public void onResume(int reason) {
-        super.onResume(reason);
-
-        mPinLength = mLockPatternUtils.getCredentialLength(KeyguardUpdateMonitor.getCurrentUser());
-        mView.showUnlockButton(mPinLength == -1);
     }
 
     @Override
