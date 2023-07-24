@@ -16,6 +16,23 @@
       "message": "pasysui",
       "revId": "e1893dd74238d4369355640d6f5243b236e662fd",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "0638ad1b_4c4b3892",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000730
+      },
+      "writtenOn": "2023-07-24T17:55:02Z",
+      "side": 1,
+      "message": "acknowledged",
+      "revId": "e1893dd74238d4369355640d6f5243b236e662fd",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
