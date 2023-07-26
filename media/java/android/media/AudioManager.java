@@ -69,6 +69,7 @@ import android.os.Message;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.text.TextUtils;
@@ -3184,6 +3185,9 @@ public class AudioManager {
      * @deprecated Use {@link AudioManager#getDevices(int)} instead to list available audio devices.
      */
     public boolean isBluetoothA2dpOn() {
+        boolean mVoipLeaWarEnabled =
+                SystemProperties.getBoolean("persist.enable.bluetooth.voipleawar", false);
+
         if (AudioSystem.getDeviceConnectionState(DEVICE_OUT_BLUETOOTH_A2DP,"")
                 == AudioSystem.DEVICE_STATE_AVAILABLE) {
             return true;
@@ -3192,6 +3196,11 @@ public class AudioManager {
             return true;
         } else if (AudioSystem.getDeviceConnectionState(DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER,"")
                 == AudioSystem.DEVICE_STATE_AVAILABLE) {
+            return true;
+        } else if (mVoipLeaWarEnabled &&
+                AudioSystem.getDeviceConnectionState(DEVICE_OUT_BLE_HEADSET,"")
+                == AudioSystem.DEVICE_STATE_AVAILABLE) {
+            Log.i(TAG, "isBluetoothA2dpOn: return true for DEVICE_OUT_BLE_HEADSET");
             return true;
         }
         return false;
