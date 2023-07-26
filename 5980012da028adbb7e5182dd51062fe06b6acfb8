@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "f5ca0512_81753f75",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2023-07-26T02:47:39Z",
+      "side": 1,
+      "message": "Hello, and thanks for your contribution! Would it be possible for you to add a before/after image?",
+      "revId": "5980012da028adbb7e5182dd51062fe06b6acfb8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
