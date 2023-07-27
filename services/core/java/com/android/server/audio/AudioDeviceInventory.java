@@ -495,7 +495,7 @@ public class AudioDeviceInventory {
         MediaMetrics.Item mmi = new MediaMetrics.Item(mMetricsId
                 + "onBluetoothDeviceConfigChange")
                 .set(MediaMetrics.Property.EVENT, BtHelper.deviceEventToString(event));
-
+        boolean a2dpCodecChange = false;
         final BluetoothDevice btDevice = btInfo.mDevice;
         if (btDevice == null) {
             mmi.set(MediaMetrics.Property.EARLY_RETURN, "btDevice null").record();
@@ -573,44 +573,40 @@ public class AudioDeviceInventory {
                             AudioSystem.audioFormatToString(audioCodec))
                     .set(MediaMetrics.Property.INDEX, volume)
                     .set(MediaMetrics.Property.NAME, di.mDeviceName);
-            }
-
-
-            if (event == BtHelper.EVENT_DEVICE_CONFIG_CHANGE) {
-                boolean a2dpCodecChange = false;
                 if (btInfo.mProfile == BluetoothProfile.A2DP) {
                     if (di.mDeviceCodecFormat != audioCodec) {
                         di.mDeviceCodecFormat = audioCodec;
                         mConnectedDevices.replace(key, di);
                         a2dpCodecChange = true;
                     }
-                    final int res = mAudioSystem.handleDeviceConfigChange(
-                            btInfo.mAudioSystemDevice, address,
-                            BtHelper.getName(btDevice), audioCodec);
-
-                    if (res != AudioSystem.AUDIO_STATUS_OK) {
-                        AudioService.sDeviceLogger.enqueue(new EventLogger.StringEvent(
-                                "APM handleDeviceConfigChange failed for A2DP device addr="
-                                        + address + " codec="
-                                        + AudioSystem.audioFormatToString(audioCodec))
-                                .printLog(TAG));
-
-                        // force A2DP device disconnection in case of error so that AudioService
-                        // state is consistent with audio policy manager state
-                        setBluetoothActiveDevice(new AudioDeviceBroker.BtDeviceInfo(btInfo,
-                                BluetoothProfile.STATE_DISCONNECTED));
-                    } else {
-                        AudioService.sDeviceLogger.enqueue(new EventLogger.StringEvent(
-                                "APM handleDeviceConfigChange success for A2DP device addr="
-                                        + address
-                                        + " codec=" + AudioSystem.audioFormatToString(audioCodec))
-                                .printLog(TAG));
-
-                    }
                 }
-                if (!a2dpCodecChange) {
-                    updateBluetoothPreferredModes_l(btDevice /*connectedDevice*/);
-                }
+            }
+
+            final int res = mAudioSystem.handleDeviceConfigChange(
+                    btInfo.mAudioSystemDevice, address,
+                    BtHelper.getName(btDevice), audioCodec);
+
+            if (res != AudioSystem.AUDIO_STATUS_OK) {
+                AudioService.sDeviceLogger.enqueue(new EventLogger.StringEvent(
+                        "APM handleDeviceConfigChange failed for A2DP device addr="
+                                + address + " codec="
+                                + AudioSystem.audioFormatToString(audioCodec))
+                        .printLog(TAG));
+
+                // force A2DP device disconnection in case of error so that AudioService
+                // state is consistent with audio policy manager state
+                setBluetoothActiveDevice(new AudioDeviceBroker.BtDeviceInfo(btInfo,
+                        BluetoothProfile.STATE_DISCONNECTED));
+            } else {
+                AudioService.sDeviceLogger.enqueue(new EventLogger.StringEvent(
+                        "APM handleDeviceConfigChange success for A2DP device addr="
+                                + address
+                                + " codec=" + AudioSystem.audioFormatToString(audioCodec))
+                        .printLog(TAG));
+            }
+
+            if (!a2dpCodecChange) {
+                updateBluetoothPreferredModes_l(btDevice /*connectedDevice*/);
             }
         }
         mmi.record();
