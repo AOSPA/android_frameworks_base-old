@@ -16,6 +16,23 @@
       "message": "Hello, and thanks for your contribution! Would it be possible for you to add a before/after image?",
       "revId": "5980012da028adbb7e5182dd51062fe06b6acfb8",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "85c30a47_4c3f7a06",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000499
+      },
+      "writtenOn": "2023-07-28T19:43:24Z",
+      "side": 1,
+      "message": "Hi. This PR changes the battery status chip color from https://imgur.com/a/29Hiy7m to https://imgur.com/a/EY3DMk1.",
+      "revId": "5980012da028adbb7e5182dd51062fe06b6acfb8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
