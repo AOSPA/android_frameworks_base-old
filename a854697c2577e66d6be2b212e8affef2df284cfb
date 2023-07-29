@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "fd3dfc3c_b0349fc5",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/connectivity/MobileSignalController.java",
+        "patchSetId": 14
+      },
+      "lineNbr": 473,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2023-07-29T07:44:22Z",
+      "side": 0,
+      "message": "May be able to add this back",
+      "revId": "a854697c2577e66d6be2b212e8affef2df284cfb",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "b5931400_acead08b",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/connectivity/MobileSignalController.java",
+        "patchSetId": 14
+      },
+      "lineNbr": 638,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2023-07-29T07:44:22Z",
+      "side": 0,
+      "message": "may want to add this back",
+      "revId": "a854697c2577e66d6be2b212e8affef2df284cfb",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
