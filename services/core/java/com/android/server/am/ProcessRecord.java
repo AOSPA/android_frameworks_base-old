@@ -676,6 +676,11 @@ class ProcessRecord implements WindowProcessListener {
         return mState.getCurProcState();
     }
 
+    @GuardedBy(anyOf = {"mService", "mProcLock"})
+    int getSetProcState() {
+        return mState.getSetProcState();
+    }
+
     @GuardedBy({"mService", "mProcLock"})
     public void makeActive(IApplicationThread thread, ProcessStatsService tracker) {
         // TODO(b/180501180): Add back this logging message.
@@ -1230,6 +1235,9 @@ class ProcessRecord implements WindowProcessListener {
                         "Killing " + toShortString() + " (adj " + mState.getSetAdj()
                         + "): " + reason, info.uid);
             }
+            // Since the process is getting killed, reset the freezable related state.
+            mOptRecord.setPendingFreeze(false);
+            mOptRecord.setFrozen(false);
             if (mPid > 0) {
                 mService.mProcessList.noteAppKill(this, reasonCode, subReason, description);
                 EventLog.writeEvent(EventLogTags.AM_KILL,

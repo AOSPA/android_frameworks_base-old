@@ -17,6 +17,7 @@
 package com.android.keyguard;
 
 import android.content.Context;
+import android.content.res.Configuration;
 import android.content.res.TypedArray;
 import android.text.TextUtils;
 import android.text.method.SingleLineTransformationMethod;
@@ -34,6 +35,7 @@ public class CarrierText extends TextView {
     private final boolean mShowAirplaneMode;
 
     private final String mDebugLocation;
+    private OnConfigurationChangedListener mOnConfigurationChangedListener;
 
     public CarrierText(Context context) {
         this(context, null);
@@ -96,5 +98,21 @@ public class CarrierText extends TextView {
 
             return source;
         }
+    }
+
+    public void setOnConfigurationChangedListener(OnConfigurationChangedListener listener) {
+        mOnConfigurationChangedListener = listener;
+    }
+
+    @Override
+    protected void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        if (mOnConfigurationChangedListener != null) {
+            mOnConfigurationChangedListener.onConfigurationChanged(newConfig);
+        }
+    }
+
+    interface OnConfigurationChangedListener {
+        void onConfigurationChanged(Configuration newConfig);
     }
 }
