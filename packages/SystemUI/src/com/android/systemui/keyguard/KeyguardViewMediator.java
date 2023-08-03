@@ -436,6 +436,7 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
     private final LockPatternUtils mLockPatternUtils;
     private final BroadcastDispatcher mBroadcastDispatcher;
     private boolean mKeyguardDonePending = false;
+    private boolean mUnlockingAndWakingFromDream = false;
     private boolean mHideAnimationRun = false;
     private boolean mHideAnimationRunning = false;
 
@@ -809,6 +810,25 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
             mKeyguardViewControllerLazy.get().setKeyguardGoingAwayState(false);
             mKeyguardDisplayManager.hide();
             mUpdateMonitor.startBiometricWatchdog();
+
+            // It's possible that the device was unlocked (via BOUNCER or Fingerprint) while
+            // dreaming. It's time to wake up.
+            if (mUnlockingAndWakingFromDream) {
+                Log.d(TAG, "waking from dream after unlock");
+                mUnlockingAndWakingFromDream = false;
+
+                if (mKeyguardStateController.isShowing()) {
+                    Log.d(TAG, "keyguard showing after keyguardGone, dismiss");
+                    mKeyguardViewControllerLazy.get()
+                            .notifyKeyguardAuthenticated(!mWakeAndUnlocking);
+                } else {
+                    Log.d(TAG, "keyguard gone, waking up from dream");
+                    mPM.wakeUp(SystemClock.uptimeMillis(),
+                            mWakeAndUnlocking ? PowerManager.WAKE_REASON_BIOMETRIC
+                            : PowerManager.WAKE_REASON_GESTURE,
+                            "com.android.systemui:UNLOCK_DREAMING");
+                }
+            }
             Trace.endSection();
         }
 
@@ -2638,6 +2658,7 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
 
             mKeyguardExitAnimationRunner = null;
             mWakeAndUnlocking = false;
+            mUnlockingAndWakingFromDream = false;
             setPendingLock(false);
 
             // Force if we we're showing in the middle of hiding, to ensure we end up in the correct
@@ -2762,7 +2783,13 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
 
             mHiding = true;
 
-            if (mShowing && !mOccluded) {
+            mUnlockingAndWakingFromDream = mStatusBarStateController.isDreaming()
+                    && !mStatusBarStateController.isDozing();
+
+            if ((mShowing && !mOccluded) || mUnlockingAndWakingFromDream) {
+                if (mUnlockingAndWakingFromDream) {
+                    Log.d(TAG, "hiding keyguard before waking from dream");
+                }
                 mKeyguardGoingAwayRunnable.run();
             } else {
                 // TODO(bc-unlock): Fill parameters
@@ -2772,13 +2799,6 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
                             mHideAnimation.getDuration(), null /* apps */, null /* wallpapers */,
                             null /* nonApps */, null /* finishedCallback */);
                 });
-            }
-
-            // It's possible that the device was unlocked (via BOUNCER or Fingerprint) while
-            // dreaming. It's time to wake up.
-            if (mDreamOverlayShowing) {
-                mPM.wakeUp(SystemClock.uptimeMillis(), PowerManager.WAKE_REASON_GESTURE,
-                        "com.android.systemui:UNLOCK_DREAMING");
             }
         }
         Trace.endSection();
@@ -2949,6 +2969,7 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
     }
 
     private void onKeyguardExitFinished() {
+        if (DEBUG) Log.d(TAG, "onKeyguardExitFinished()");
         // only play "unlock" noises if not on a call (since the incall UI
         // disables the keyguard)
         if (TelephonyManager.EXTRA_STATE_IDLE.equals(mPhoneState)) {
@@ -3170,13 +3191,14 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
                 flags |= StatusBarManager.DISABLE_RECENT;
             }
 
-            if (mPowerGestureIntercepted) {
+            if (mPowerGestureIntercepted && mOccluded && isSecure()) {
                 flags |= StatusBarManager.DISABLE_RECENT;
             }
 
             if (DEBUG) {
                 Log.d(TAG, "adjustStatusBarLocked: mShowing=" + mShowing + " mOccluded=" + mOccluded
                         + " isSecure=" + isSecure() + " force=" + forceHideHomeRecentsButtons
+                        + " mPowerGestureIntercepted=" + mPowerGestureIntercepted
                         +  " --> flags=0x" + Integer.toHexString(flags));
             }
 
@@ -3403,6 +3425,7 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
         pw.print("  mPendingReset: "); pw.println(mPendingReset);
         pw.print("  mPendingLock: "); pw.println(mPendingLock);
         pw.print("  wakeAndUnlocking: "); pw.println(mWakeAndUnlocking);
+        pw.print("  mPowerGestureIntercepted: "); pw.println(mPowerGestureIntercepted);
     }
 
     /**
