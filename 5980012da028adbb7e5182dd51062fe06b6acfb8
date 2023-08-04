@@ -33,6 +33,41 @@
       "message": "Hi. This PR changes the battery status chip color from https://imgur.com/a/29Hiy7m to https://imgur.com/a/EY3DMk1.",
       "revId": "5980012da028adbb7e5182dd51062fe06b6acfb8",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "4566e9e7_7aaf62ef",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2023-08-04T02:58:12Z",
+      "side": 1,
+      "message": "Should maybe update the keyguard shortcuts too for this to be consistent. Not sure if we should do that in another commit or just add it here too? Maybe it won\u0027t work well for them, we\u0027ll have to see.",
+      "revId": "5980012da028adbb7e5182dd51062fe06b6acfb8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "06c01216_7879ac42",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2023-08-04T02:58:12Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "f5ca0512_81753f75",
+      "revId": "5980012da028adbb7e5182dd51062fe06b6acfb8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
