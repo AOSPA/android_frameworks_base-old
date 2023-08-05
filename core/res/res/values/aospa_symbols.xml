@@ -109,4 +109,8 @@
     <!-- Enforce DisplayModeDirector to select user preferred resolution -->
     <java-symbol type="bool" name="config_forceToUseSelectedResolution" />
 
+    <!-- Delay in ms before invoking single tap gesture
+         Should be set to dt2w max time / 2 when needed -->
+    <java-symbol type="integer" name="config_singleTapDelay" />
+
 </resources>
