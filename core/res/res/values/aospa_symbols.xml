@@ -94,4 +94,8 @@
     <!-- Whether to show WiFi/Hotspot standard -->
     <java-symbol type="bool" name="config_show_network_standard" />
 
+    <!-- Delay in ms before invoking single tap gesture
+         Should be set to dt2w max time / 2 when needed -->
+    <java-symbol type="integer" name="config_singleTapDelay" />
+
 </resources>
