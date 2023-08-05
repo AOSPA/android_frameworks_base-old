@@ -123,4 +123,8 @@
     <!-- Whether to show WiFi/Hotspot standard -->
     <bool name="config_show_network_standard">false</bool>
 
+    <!-- Delay in ms before invoking single tap gesture
+         Should be set to dt2w max time / 2 when needed -->
+    <integer name="config_singleTapDelay">0</integer>
+
 </resources>
