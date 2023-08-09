@@ -197,7 +197,6 @@ android_library {
     ],
     manifest: "AndroidManifest.xml",
     defaults: [
-       "framework-wifi-vendor-hide-access-defaults",
         "SystemUI_compose_defaults",
     ],
     libs: [
@@ -314,9 +313,6 @@ java_library {
 android_library {
     name: "SystemUI-tests-base",
     manifest: "tests/AndroidManifest-base.xml",
-    defaults: [
-       "framework-wifi-vendor-hide-access-defaults",
-    ],
     resource_dirs: [
         "tests/res",
         "res-product",

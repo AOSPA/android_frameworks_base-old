@@ -909,22 +909,6 @@ public class AccessPoint implements Comparable<AccessPoint> {
         networkId = WifiConfiguration.INVALID_NETWORK_ID;
     }
 
-    public boolean isSuiteBSupported() {
-            WifiManager wifiManager = mContext.getSystemService(WifiManager.class);
-            String capability = wifiManager.getCapabilities("key_mgmt");
-
-            if (!capability.contains("WPA-EAP-SUITE-B-192")) {
-                  return false;
-            }
-
-            for (ScanResult result : mScanResults) {
-                if (result.capabilities.contains("EAP_SUITE_B_192")) {
-                    return true;
-                }
-            }
-        return false;
-    }
-
     public WifiInfo getInfo() {
         return mInfo;
     }
