@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "154ce385_9ab8e625",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000143
+      },
+      "writtenOn": "2023-08-09T12:50:20Z",
+      "side": 1,
+      "message": "Test:\n\ndisabled keyboard in input manager\n -\u003e notification gone\n\nenabled keyboard in input manager\n -\u003e notification appeared again",
+      "revId": "a5de04bacc3947bb065e3f641b695fb7662c1c41",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
