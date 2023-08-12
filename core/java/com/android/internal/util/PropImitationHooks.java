@@ -81,16 +81,21 @@ public class PropImitationHooks {
         }
     }
 
-    private static void setPropValue(String key, Object value) {
+    private static void setPropValue(String key, Object value, boolean isVersionField) {
         try {
             dlog("Setting prop " + key + " to " + value.toString());
-            Field field = Build.class.getDeclaredField(key);
+            Class clazz = isVersionField ? Build.VERSION.class : Build.class;
+            Field field = clazz.getDeclaredField(key);
             field.setAccessible(true);
             field.set(null, value);
             field.setAccessible(false);
         } catch (NoSuchFieldException | IllegalAccessException e) {
             Log.e(TAG, "Failed to set prop " + key, e);
         }
+    }
+
+    private static void setPropValue(String key, Object value) {
+        setPropValue(key, value, false);
     }
 
     private static void setCertifiedPropsForGms() {
@@ -117,6 +122,8 @@ public class PropImitationHooks {
             setPropValue("PRODUCT", sCertifiedProps[1]);
             setPropValue("MODEL", sCertifiedProps[2]);
             setPropValue("FINGERPRINT", sCertifiedProps[3]);
+            setPropValue("DEVICE_INITIAL_SDK_INT", Math.min(
+                    Build.VERSION.DEVICE_INITIAL_SDK_INT, Build.VERSION_CODES.S), true);
         } else {
             dlog("Skip spoofing build for GMS, because GmsAddAccountActivityOnTop");
         }
