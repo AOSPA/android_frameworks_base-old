@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "a606f992_1790b2d5",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000469
+      },
+      "writtenOn": "2023-08-14T03:06:12Z",
+      "side": 1,
+      "message": "Can we make it an integer-array, like the AOSP vibration patterns",
+      "revId": "21dca2e96ce6ed2e8c64f3191d398bb2a3817132",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
