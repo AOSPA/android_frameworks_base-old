@@ -4549,7 +4549,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     mTransitionChangeFlags |= FLAG_STARTING_WINDOW_TRANSFER_RECIPIENT;
                 }
                 // Post cleanup after the visibility and animation are transferred.
-                fromActivity.postWindowRemoveStartingWindowCleanup(tStartingWindow);
+                fromActivity.postWindowRemoveStartingWindowCleanup();
                 fromActivity.mVisibleSetFromTransferredStartingWindow = false;
 
                 mWmService.updateFocusedWindowLocked(
@@ -7563,27 +7563,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
     }
 
-    void postWindowRemoveStartingWindowCleanup(WindowState win) {
-        // TODO: Something smells about the code below...Is there a better way?
-        if (mStartingWindow == win) {
-            ProtoLog.v(WM_DEBUG_STARTING_WINDOW, "Notify removed startingWindow %s", win);
-            removeStartingWindow();
-        } else if (mChildren.size() == 0) {
-            // If this is the last window and we had requested a starting transition window,
-            // well there is no point now.
-            ProtoLog.v(WM_DEBUG_STARTING_WINDOW, "Nulling last startingData");
-            mStartingData = null;
-            if (mVisibleSetFromTransferredStartingWindow) {
-                // We set the visible state to true for the token from a transferred starting
-                // window. We now reset it back to false since the starting window was the last
-                // window in the token.
-                setVisible(false);
-            }
-        } else if (mChildren.size() == 1 && mStartingSurface != null && !isRelaunching()) {
-            // If this is the last window except for a starting transition window,
-            // we need to get rid of the starting transition.
-            ProtoLog.v(WM_DEBUG_STARTING_WINDOW, "Last window, removing starting window %s", win);
-            removeStartingWindow();
+    void postWindowRemoveStartingWindowCleanup() {
+        if (mChildren.size() == 0 && mVisibleSetFromTransferredStartingWindow) {
+            // We set the visible state to true for the token from a transferred starting
+            // window. We now reset it back to false since the starting window was the last
+            // window in the token.
+            setVisible(false);
         }
     }
 
@@ -8123,6 +8108,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 mLastReportedConfiguration.getMergedConfiguration())) {
             ensureActivityConfiguration(0 /* globalChanges */, false /* preserveWindow */,
                     false /* ignoreVisibility */, true /* isRequestedOrientationChanged */);
+            if (mTransitionController.inPlayingTransition(this)) {
+                mTransitionController.mValidateActivityCompat.add(this);
+            }
         }
 
         mAtmService.getTaskChangeNotificationController().notifyActivityRequestedOrientationChanged(
