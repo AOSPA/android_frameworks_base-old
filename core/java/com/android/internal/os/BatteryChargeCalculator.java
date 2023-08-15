@@ -16,6 +16,7 @@
 
 package com.android.internal.os;
 
+import android.content.res.Resources;
 import android.os.BatteryConsumer;
 import android.os.BatteryStats;
 import android.os.BatteryUsageStats;
@@ -38,7 +39,8 @@ public class BatteryChargeCalculator extends PowerCalculator {
         builder.setDischargePercentage(
                 batteryStats.getDischargeAmount(BatteryStats.STATS_SINCE_CHARGED));
 
-        int batteryCapacityMah = batteryStats.getLearnedBatteryCapacity() / 1000;
+        int batteryCapacityMahDivider = Resources.getSystem().Integer(R.bool.config_batteryCapacityMahDivider);
+        int batteryCapacityMah = batteryStats.getLearnedBatteryCapacity() / batteryCapacityMahDivider;
         if (batteryCapacityMah <= 0) {
             batteryCapacityMah = batteryStats.getMinLearnedBatteryCapacity() / 1000;
             if (batteryCapacityMah <= 0) {
