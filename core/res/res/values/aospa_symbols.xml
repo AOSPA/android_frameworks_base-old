@@ -108,4 +108,7 @@
     <!-- Enforce DisplayModeDirector to select user preferred resolution -->
     <java-symbol type="bool" name="config_forceToUseSelectedResolution" />
 
+    <!-- Defines a custom dischargeMah divider for devices that report different values -->
+    <java-symbol type="integer" name="config_dischargeMahDivider" />
+
 </resources>

@@ -135,4 +135,7 @@
     <!-- Enforce DisplayModeDirector to select user preferred resolution -->
     <bool name="config_forceToUseSelectedResolution">false</bool>
 
+    <!-- Defines a custom dischargeMah divider for devices that report different values -->
+    <integer name="config_dischargeMahDivider">1000</integer>
+
 </resources>
