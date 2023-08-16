@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "5bf1ff38_03e0ed9b",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2023-08-16T02:53:38Z",
+      "side": 1,
+      "message": "any reason we cant add it to our product_customization of fonts.xml?",
+      "revId": "8396df7a40168b1057a2fb25c34d9b7ba83b738a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
