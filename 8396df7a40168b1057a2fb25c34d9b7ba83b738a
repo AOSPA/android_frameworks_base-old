@@ -16,6 +16,24 @@
       "message": "any reason we cant add it to our product_customization of fonts.xml?",
       "revId": "8396df7a40168b1057a2fb25c34d9b7ba83b738a",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "4428d45c_f48aea89",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000499
+      },
+      "writtenOn": "2023-08-16T18:14:15Z",
+      "side": 1,
+      "message": "Doesn\u0027t boot in that case. Presumably because the Roboto ttf isn\u0027t in product, but in that case, we\u0027d need to add an extra copy of the ttf which is a bit redundant.",
+      "parentUuid": "5bf1ff38_03e0ed9b",
+      "revId": "8396df7a40168b1057a2fb25c34d9b7ba83b738a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
