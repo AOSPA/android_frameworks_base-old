@@ -52,6 +52,24 @@
       "parentUuid": "4428d45c_f48aea89",
       "revId": "8396df7a40168b1057a2fb25c34d9b7ba83b738a",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "b2dfb51d_52795f34",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2023-08-17T09:34:31Z",
+      "side": 1,
+      "message": "keeping it in product is fine since that makes the patch work entirely out of fwb",
+      "parentUuid": "70b94466_3aa983fd",
+      "revId": "8396df7a40168b1057a2fb25c34d9b7ba83b738a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
