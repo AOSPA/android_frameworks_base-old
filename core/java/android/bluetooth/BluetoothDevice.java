@@ -300,6 +300,8 @@ public final class BluetoothDevice implements Parcelable, Attributable {
      * @hide
      **/
 
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_REMOTE_ISSUE_OCCURRED  =
             "org.codeaurora.intent.bluetooth.action.REMOTE_ISSUE_OCCURRED";
