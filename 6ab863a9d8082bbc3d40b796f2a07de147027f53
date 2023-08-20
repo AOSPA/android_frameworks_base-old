@@ -16,6 +16,24 @@
       "message": "thank you for pushing this.  I think we may be better off with\nhttps://gerrit.aospa.co/c/AOSPA/android_frameworks_base/+/32584\n\nwhat do you think?",
       "revId": "6ab863a9d8082bbc3d40b796f2a07de147027f53",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "0ad47895_e942070f",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 7
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000925
+      },
+      "writtenOn": "2023-08-20T18:17:01Z",
+      "side": 1,
+      "message": "I think it\u0027s better but the custom carrier text in QS is a nice touch imo",
+      "parentUuid": "d80f3954_b1231f79",
+      "revId": "6ab863a9d8082bbc3d40b796f2a07de147027f53",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
