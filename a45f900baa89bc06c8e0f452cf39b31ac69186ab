@@ -16,6 +16,23 @@
       "message": "works",
       "revId": "a45f900baa89bc06c8e0f452cf39b31ac69186ab",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "5cad7b72_02df5dfe",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2023-08-22T21:12:01Z",
+      "side": 1,
+      "message": "As per https://android-review.googlesource.com/c/platform/frameworks/base/+/2043395\n\n\"I\u0027m not sure where the USAP stuff is headed. Currently it doesn\u0027t work with the native fork loop, which I think means it still has Java heap growth issues.\"",
+      "revId": "a45f900baa89bc06c8e0f452cf39b31ac69186ab",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
