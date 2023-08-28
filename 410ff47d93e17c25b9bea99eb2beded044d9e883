@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "fd9e97c2_0a60a328",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000469
+      },
+      "writtenOn": "2023-08-28T14:57:06Z",
+      "side": 1,
+      "message": "Works but randomly keeps reloading network in background, need help improving the logic",
+      "revId": "410ff47d93e17c25b9bea99eb2beded044d9e883",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
