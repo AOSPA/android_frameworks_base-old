@@ -275,6 +275,7 @@ public final class ActiveServices {
     private static final String AIDL_SERVICE =
             "vendor.qti.hardware.servicetrackeraidl.IServicetracker/default";
 
+    private static boolean mIsAIDLSupported = true;
     // Foreground service types that always get immediate notification display,
     // expressed in the same bitmask format that ServiceRecord.foregroundServiceType
     // uses.
@@ -416,7 +417,6 @@ public final class ActiveServices {
 
     private vendor.qti.hardware.servicetracker.V1_0.IServicetracker mServicetracker;
     private vendor.qti.hardware.servicetrackeraidl.IServicetracker  mServicetracker_aidl;
-
 
     private final boolean isLowRamDevice =
             SystemProperties.getBoolean("ro.config.low_ram", false);
@@ -683,6 +683,15 @@ public final class ActiveServices {
             SERVICE_RESCHEDULE = Boolean.parseBoolean(mPerf.perfGetProp("ro.vendor.qti.am.reschedule_service", "false"));
 
         this.mFGSLogger = new ForegroundServiceTypeLoggerModule();
+        try {
+            if (ServiceManager.isDeclared(AIDL_SERVICE)){
+                if (DEBUG_SERVICE) Slog.w(TAG, "AIDL is supported");
+                mIsAIDLSupported = true;
+            }
+        } catch (Exception e) {
+            if (DEBUG_SERVICE) Slog.w(TAG, "AIDL not Supported");
+            mIsAIDLSupported = false;
+        }
     }
 
     void systemServicesReady() {
@@ -732,13 +741,14 @@ public final class ActiveServices {
     }
 
     private boolean getAIDLServicetrackerInstance() {
+
+        if (!mIsAIDLSupported) return false;
+
         if (mServicetracker_aidl == null ) {
             try {
-                if (ServiceManager.isDeclared(AIDL_SERVICE)){
-                    IBinder mBinder = ServiceManager.getService(AIDL_SERVICE);
-                    mServicetracker_aidl =
-                        vendor.qti.hardware.servicetrackeraidl.IServicetracker.Stub.asInterface(mBinder);
-                }
+                IBinder mBinder = ServiceManager.getService(AIDL_SERVICE);
+                mServicetracker_aidl =
+                    vendor.qti.hardware.servicetrackeraidl.IServicetracker.Stub.asInterface(mBinder);
             } catch (java.util.NoSuchElementException e) {
                 // Service doesn't exist or cannot be opened logged below
             } catch (Exception e) {
