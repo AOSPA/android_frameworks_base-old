@@ -14,6 +14,13 @@
  * limitations under the License.
  */
 
+/*
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 package com.android.keyguard;
 
 import static com.android.systemui.DejankUtils.whitelistIpcs;
@@ -73,7 +80,6 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
     private Executor mBackgroundExecutor;
 
     private EmergencyButtonCallback mEmergencyButtonCallback;
-    private boolean mIsCellAvailable;
     private ServiceState mServiceState;
 
     private final KeyguardUpdateMonitorCallback mInfoCallback =
@@ -81,20 +87,17 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
         @Override
         public void onSimStateChanged(int subId, int slotId, int simState) {
             updateEmergencyCallButton();
-            requestCellInfoUpdate();
         }
 
         @Override
         public void onPhoneStateChanged(int phoneState) {
             updateEmergencyCallButton();
-            requestCellInfoUpdate();
         }
 
         @Override
         public void onServiceStateChanged(int subId, ServiceState state) {
             mServiceState = state;
             updateEmergencyCallButton();
-            requestCellInfoUpdate();
         }
     };
 
@@ -216,37 +219,8 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
         });
     }
 
-    private void requestCellInfoUpdate(){
-        if(!getContext().getResources().getBoolean(R.bool.kg_hide_emgcy_btn_when_oos)) {
-            return;
-        }
-        TelephonyManager tmWithoutSim = mTelephonyManager
-                .createForSubscriptionId(SubscriptionManager.INVALID_SUBSCRIPTION_ID);
-        try {
-            tmWithoutSim.requestCellInfoUpdate(getContext().getMainExecutor(),
-                    new TelephonyManager.CellInfoCallback() {
-                        @Override
-                        public void onCellInfo(List<CellInfo> cellInfo) {
-                            if (KeyguardConstants.DEBUG_SIM_STATES) {
-                                Log.d(LOG_TAG, "requestCellInfoUpdate.onCellInfo cellInfoList.size="
-                                        + (cellInfo == null ? 0 : cellInfo.size()));
-                            }
-                            if (cellInfo == null || cellInfo.isEmpty()) {
-                                mIsCellAvailable = false;
-                            } else {
-                                mIsCellAvailable = true;
-                            }
-                            updateEmergencyCallButton();
-                        }
-                    });
-        } catch (Exception exception) {
-            Log.e(LOG_TAG, "Fail to call TelephonyManager.requestCellInfoUpdate ", exception);
-        }
-    }
-
     private boolean isEmergencyCapable() {
         return (!mKeyguardUpdateMonitor.isOOS()
-                || mIsCellAvailable
                 || (mServiceState !=null && mServiceState.isEmergencyOnly()));
     }
 
