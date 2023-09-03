@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "0aa48cd7_81c18432",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000488
+      },
+      "writtenOn": "2023-09-03T20:28:47Z",
+      "side": 1,
+      "message": "REMINDER TO VISHAL: PICK THIS FOR U",
+      "revId": "a886b4a632726fb73d58294c07a2cf65e0f70aaa",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
