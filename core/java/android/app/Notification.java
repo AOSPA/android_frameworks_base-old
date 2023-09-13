@@ -2862,8 +2862,9 @@ public class Notification implements Parcelable
                 visitor.accept(person.getIconUri());
             }
 
-            final RemoteInputHistoryItem[] history = (RemoteInputHistoryItem[])
-                    extras.getParcelableArray(Notification.EXTRA_REMOTE_INPUT_HISTORY_ITEMS);
+            final RemoteInputHistoryItem[] history = extras.getParcelableArray(
+                    Notification.EXTRA_REMOTE_INPUT_HISTORY_ITEMS,
+                    RemoteInputHistoryItem.class);
             if (history != null) {
                 for (int i = 0; i < history.length; i++) {
                     RemoteInputHistoryItem item = history[i];
@@ -2902,14 +2903,6 @@ public class Notification implements Parcelable
             }
 
             visitIconUri(visitor, extras.getParcelable(EXTRA_CONVERSATION_ICON));
-        }
-
-        if (isStyle(CallStyle.class) & extras != null) {
-            Person callPerson = extras.getParcelable(EXTRA_CALL_PERSON);
-            if (callPerson != null) {
-                visitor.accept(callPerson.getIconUri());
-            }
-            visitIconUri(visitor, extras.getParcelable(EXTRA_VERIFICATION_ICON));
         }
 
         if (isStyle(CallStyle.class) & extras != null) {
