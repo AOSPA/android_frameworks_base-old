@@ -6244,12 +6244,13 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             }
             callServiceTrackeronActivityStatechange(STARTED, true);
             setState(STARTED, "makeActiveIfNeeded");
-
+            acquireActivityBoost();
             try {
                 mAtmService.getLifecycleManager().scheduleTransaction(app.getThread(), token,
                         StartActivityItem.obtain(takeOptions()));
             } catch (Exception e) {
                 Slog.w(TAG, "Exception thrown sending start: " + intent.getComponent(), e);
+                releaseActivityBoost();
             }
             // The activity may be waiting for stop, but that is no longer appropriate if we are
             // starting the activity again
@@ -6915,6 +6916,40 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             perfActivityBoostHandler = -1;
         } else if (perfActivityBoostHandler > 0) {
             Slog.w(TAG, "activity boost didn't release as expected");
+        }
+    }
+
+    protected void acquireActivityBoost() {
+        if (mPerf != null) {
+            if (mPerf.getPerfHalVersion() >= BoostFramework.PERF_HAL_V23) {
+                int pkgType = mPerf.perfGetFeedback(BoostFramework.VENDOR_FEEDBACK_WORKLOAD_TYPE,
+                        packageName);
+                int pid = -1;
+                WindowProcessController wpc = null;
+                if (app == null) {
+                    if (info != null && info.applicationInfo != null && mAtmService != null) {
+                        wpc = mAtmService.getProcessController(processName,
+                                info.applicationInfo.uid);
+                    }
+                } else {
+                    wpc = app;
+                }
+                if (wpc != null && wpc.hasThread()) {
+                    pid = wpc.getPid();
+                }
+                perfActivityBoostHandler =
+                        mPerf.perfHintAcqRel(perfActivityBoostHandler,
+                                BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, packageName,
+                                -1, BoostFramework.Launch.ACTIVITY_LAUNCH_BOOST, 2, pkgType, pid);
+            } else {
+                if (perfActivityBoostHandler > 0) {
+                    Slog.i(TAG, "Activity boosted, release it firstly");
+                    mPerf.perfLockReleaseHandler(perfActivityBoostHandler);
+                }
+                perfActivityBoostHandler =
+                         mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                                 packageName, -1, BoostFramework.Launch.BOOST_V1);
+            }
         }
     }
 
