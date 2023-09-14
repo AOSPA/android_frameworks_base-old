@@ -33,7 +33,6 @@ android_library {
     name: "SettingsLib",
 
     defaults: [
-        "framework-wifi-vendor-hide-access-defaults",
         "btadva_settings_lib_java_defaults",
     ],
 
