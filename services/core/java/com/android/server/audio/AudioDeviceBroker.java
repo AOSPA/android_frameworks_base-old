@@ -2294,6 +2294,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
                         requestedDevice.getType() == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
                     Log.w(TAG, "onUpdateCommunicationRoute, defaultDevice is null, set it to active BLE device");
                     defaultDevice = mDeviceInventory.getDeviceOfType(AudioSystem.DEVICE_OUT_BLE_HEADSET);
+                } else if (defaultDevice != null && requestedDevice == null &&
+                        defaultDevice.getType() == AudioDeviceInfo.TYPE_BLE_HEADSET) {
+                    Log.w(TAG, "onUpdateCommunicationRoute, requestedDevice is null, clear default BLE device");
+                    defaultDevice = null;
                 }
             }
 
