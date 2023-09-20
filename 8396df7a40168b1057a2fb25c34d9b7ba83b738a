@@ -70,6 +70,24 @@
       "parentUuid": "70b94466_3aa983fd",
       "revId": "8396df7a40168b1057a2fb25c34d9b7ba83b738a",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "bf0579e8_c4c9e9e0",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000499
+      },
+      "writtenOn": "2023-09-20T12:37:41Z",
+      "side": 1,
+      "message": "I tried to put it in fonts_customization.xml but I get this.\n\n09-20 20:34:44.947  4034  4034 I Typeface: Preloading /system/fonts/RobotoStatic-Regular.ttf\n09-20 20:34:44.951  4034  4034 W zygote64: Landroid/graphics/Typeface; failed initialization: java.lang.IllegalArgumentException: customizationType must be specified\n09-20 20:34:44.951  4034  4034 W zygote64:   at void android.graphics.fonts.FontCustomizationParser.readFamily(org.xmlpull.v1.XmlPullParser, java.lang.String, java.util.List, java.util.Map) (FontCustomizationParser.java:134)\n09-20 20:34:44.951  4034  4034 W zygote64:   at android.graphics.fonts.FontCustomizationParser$Result android.graphics.fonts.FontCustomizationParser.readFamilies(org.xmlpull.v1.XmlPullParser, java.lang.String, java.util.Map) (FontCustomizationParser.java:116)\n09-20 20:34:44.951  4034  4034 W zygote64:   at android.graphics.fonts.FontCustomizationParser$Result android.graphics.fonts.FontCustomizationParser.parse(java.io.InputStream, java.lang.String, java.util.Map) (FontCustomizationParser.java:85)\n09-20 20:34:44.951  4034  4034 W zygote64:   at android.text.FontConfig android.graphics.FontListParser.parse(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.util.Map, long, int) (FontListParser.java:106)\n09-20 20:34:44.951  4034  4034 W zygote64:   at android.text.FontConfig android.graphics.fonts.SystemFonts.getSystemFontConfigInternal(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.util.Map, long, int) (SystemFonts.java:244)\n09-20 20:34:44.951  4034  4034 W zygote64:   at android.text.FontConfig android.graphics.fonts.SystemFonts.getSystemPreinstalledFontConfig() (SystemFonts.java:230)\n09-20 20:34:44.951  4034  4034 W zygote64:   at void android.graphics.Typeface.\u003cclinit\u003e() (Typeface.java:1454)\n09-20 20:34:44.951  4034  4034 W zygote64:   at java.lang.Class java.lang.Class.classForName(java.lang.String, boolean, java.lang.ClassLoader) (Class.java:-2)\n09-20 20:34:44.951  4034  4034 W zygote64:   at java.lang.Class java.lang.Class.forName(java.lang.String, boolean, java.lang.ClassLoader) (Class.java:454)\n09-20 20:34:44.951  4034  4034 W zygote64:   at void com.android.internal.os.ZygoteInit.preloadClasses() (ZygoteInit.java:307)\n09-20 20:34:44.951  4034  4034 W zygote64:   at void com.android.internal.os.ZygoteInit.preload(android.util.TimingsTraceLog) (ZygoteInit.java:140)\n09-20 20:34:44.951  4034  4034 W zygote64:   at void com.android.internal.os.ZygoteInit.main(java.lang.String[]) (ZygoteInit.java:895)\n\nNot sure how to make it a fallback in vendor overlays. Even the official Android docs mention that /system/etc/fonts.xml has to be modified, so this is probably fine as is. https://source.android.com/docs/core/fonts/custom-font-fallback",
+      "parentUuid": "b2dfb51d_52795f34",
+      "revId": "8396df7a40168b1057a2fb25c34d9b7ba83b738a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
