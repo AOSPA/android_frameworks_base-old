@@ -264,8 +264,6 @@ class ActivityStarter {
     private IVoiceInteractionSession mVoiceSession;
     private IVoiceInteractor mVoiceInteractor;
 
-    public BoostFramework mPerf = null;
-
     // Last activity record we attempted to start
     private ActivityRecord mLastStartActivityRecord;
     // The result of the last activity we attempted to start.
@@ -627,7 +625,6 @@ class ActivityStarter {
             mRemoteTaskManager = mService.getRemoteTaskManager();
         }
         reset(true);
-        mPerf = new BoostFramework();
     }
 
     /**
@@ -3139,26 +3136,7 @@ class ActivityStarter {
 
     /** Places {@link #mStartActivity} in {@code task} or an embedded {@link TaskFragment}. */
     private void addOrReparentStartingActivity(@NonNull Task task, String reason) {
-        String packageName= mService.mContext.getPackageName();
-        if (mPerf != null) {
-            if (mPerf.getPerfHalVersion() >= BoostFramework.PERF_HAL_V23) {
-                    int pkgType =
-                        mPerf.perfGetFeedback(BoostFramework.VENDOR_FEEDBACK_WORKLOAD_TYPE,
-                                                    packageName);
-                    mStartActivity.perfActivityBoostHandler =
-                        mPerf.perfHintAcqRel(mStartActivity.perfActivityBoostHandler,
-                                        BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, packageName,
-                                        -1, BoostFramework.Launch.ACTIVITY_LAUNCH_BOOST, 1, pkgType);
-            } else {
-                    if (mStartActivity.perfActivityBoostHandler > 0) {
-                       Slog.i(TAG, "Activity boosted, release it firstly");
-                       mPerf.perfLockReleaseHandler(mStartActivity.perfActivityBoostHandler);
-                    }
-                mStartActivity.perfActivityBoostHandler =
-                    mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
-                                    packageName, -1, BoostFramework.Launch.BOOST_V1);
-            }
-        }
+        mStartActivity.acquireActivityBoost();
         TaskFragment newParent = task;
         if (mInTaskFragment != null) {
             int embeddingCheckResult = canEmbedActivity(mInTaskFragment, mStartActivity, task);
