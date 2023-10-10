@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "579decd5_ab88f856",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-10-10T01:21:29Z",
+      "side": 1,
+      "message": "I feel like isMusicActive() is broken, thus it resumes even if no music was playing when the level becomes 0 and increases again. Someone should better check this on a real device (tested on an emulator). Works fine besides that",
+      "revId": "5941090dab377565685a4cc43a8c1e2c1cc75f2c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
