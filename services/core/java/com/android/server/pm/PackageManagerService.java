@@ -1984,6 +1984,10 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         mStorageEventHelper = new StorageEventHelper(this, mDeletePackageHelper,
                 mRemovePackageHelper);
 
+        t.traceBegin("readListOfPackagesToBeDisabled");
+        mInstallPackageHelper.readListOfPackagesToBeDisabled();
+        t.traceEnd();
+
         synchronized (mLock) {
             // Create the computer as soon as the state objects have been installed.  The
             // cached computer is the same as the live computer until the end of the
