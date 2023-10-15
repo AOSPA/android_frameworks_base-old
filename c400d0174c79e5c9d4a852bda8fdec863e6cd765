@@ -1,0 +1,157 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "dcff3069_00cc76e8",
+        "filename": "core/java/android/view/ViewRootImpl.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 7037,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-10-15T19:25:18Z",
+      "side": 1,
+      "message": "Maybe another TAG would be better",
+      "revId": "c400d0174c79e5c9d4a852bda8fdec863e6cd765",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "91ec21b5_20272c5b",
+        "filename": "core/java/android/view/ViewRootImpl.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 11604,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-10-15T19:25:18Z",
+      "side": 1,
+      "message": "Same here",
+      "revId": "c400d0174c79e5c9d4a852bda8fdec863e6cd765",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "2cc4f793_aa49845b",
+        "filename": "services/core/java/com/android/server/policy/SwipeToScreenshotListener.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 35,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-10-15T19:25:18Z",
+      "side": 1,
+      "message": "Can be final",
+      "revId": "c400d0174c79e5c9d4a852bda8fdec863e6cd765",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "2b15fb39_ccc4a601",
+        "filename": "services/core/java/com/android/server/policy/SwipeToScreenshotListener.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 37,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-10-15T19:25:18Z",
+      "side": 1,
+      "message": "^",
+      "revId": "c400d0174c79e5c9d4a852bda8fdec863e6cd765",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "c0e093e6_6cccebf1",
+        "filename": "services/core/java/com/android/server/policy/SwipeToScreenshotListener.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 38,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-10-15T19:25:18Z",
+      "side": 1,
+      "message": "^",
+      "revId": "c400d0174c79e5c9d4a852bda8fdec863e6cd765",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "787f570b_92c96f37",
+        "filename": "services/core/java/com/android/server/policy/SwipeToScreenshotListener.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 40,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-10-15T19:25:18Z",
+      "side": 1,
+      "message": "^",
+      "revId": "c400d0174c79e5c9d4a852bda8fdec863e6cd765",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "988a0067_dd934d1d",
+        "filename": "services/core/java/com/android/server/policy/SwipeToScreenshotListener.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 41,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-10-15T19:25:18Z",
+      "side": 1,
+      "message": "^",
+      "revId": "c400d0174c79e5c9d4a852bda8fdec863e6cd765",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "4ca64804_0fb34242",
+        "filename": "services/core/java/com/android/server/policy/SwipeToScreenshotListener.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 111,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-10-15T19:25:18Z",
+      "side": 1,
+      "message": "Why a property?",
+      "revId": "c400d0174c79e5c9d4a852bda8fdec863e6cd765",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "ff1708c7_49649316",
+        "filename": "services/core/java/com/android/server/policy/SwipeToScreenshotListener.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 140,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-10-15T19:25:18Z",
+      "side": 1,
+      "message": "Math.min(...)",
+      "revId": "c400d0174c79e5c9d4a852bda8fdec863e6cd765",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
