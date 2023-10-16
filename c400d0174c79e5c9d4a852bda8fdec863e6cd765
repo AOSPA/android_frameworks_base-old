@@ -18,6 +18,24 @@
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "e4d78ba9_1a37e562",
+        "filename": "core/java/android/view/ViewRootImpl.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 7037,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-10-16T02:20:06Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "dcff3069_00cc76e8",
+      "revId": "c400d0174c79e5c9d4a852bda8fdec863e6cd765",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "91ec21b5_20272c5b",
@@ -31,6 +49,24 @@
       "writtenOn": "2023-10-15T19:25:18Z",
       "side": 1,
       "message": "Same here",
+      "revId": "c400d0174c79e5c9d4a852bda8fdec863e6cd765",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "19d8a11f_a49362c8",
+        "filename": "core/java/android/view/ViewRootImpl.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 11604,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-10-16T02:20:06Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "91ec21b5_20272c5b",
       "revId": "c400d0174c79e5c9d4a852bda8fdec863e6cd765",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
@@ -52,6 +88,24 @@
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "4ccef486_7673fed1",
+        "filename": "services/core/java/com/android/server/policy/SwipeToScreenshotListener.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 35,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-10-16T02:20:06Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "2cc4f793_aa49845b",
+      "revId": "c400d0174c79e5c9d4a852bda8fdec863e6cd765",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "2b15fb39_ccc4a601",
@@ -65,6 +119,24 @@
       "writtenOn": "2023-10-15T19:25:18Z",
       "side": 1,
       "message": "^",
+      "revId": "c400d0174c79e5c9d4a852bda8fdec863e6cd765",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "00d64ab1_5998a8c0",
+        "filename": "services/core/java/com/android/server/policy/SwipeToScreenshotListener.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 37,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-10-16T02:20:06Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "2b15fb39_ccc4a601",
       "revId": "c400d0174c79e5c9d4a852bda8fdec863e6cd765",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
@@ -86,6 +158,24 @@
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "6801e918_7352b603",
+        "filename": "services/core/java/com/android/server/policy/SwipeToScreenshotListener.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 38,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-10-16T02:20:06Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "c0e093e6_6cccebf1",
+      "revId": "c400d0174c79e5c9d4a852bda8fdec863e6cd765",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "787f570b_92c96f37",
@@ -103,6 +193,24 @@
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "4f43d1cf_8555efca",
+        "filename": "services/core/java/com/android/server/policy/SwipeToScreenshotListener.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 40,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-10-16T02:20:06Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "787f570b_92c96f37",
+      "revId": "c400d0174c79e5c9d4a852bda8fdec863e6cd765",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "988a0067_dd934d1d",
@@ -116,6 +224,24 @@
       "writtenOn": "2023-10-15T19:25:18Z",
       "side": 1,
       "message": "^",
+      "revId": "c400d0174c79e5c9d4a852bda8fdec863e6cd765",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "0e705d51_62d71765",
+        "filename": "services/core/java/com/android/server/policy/SwipeToScreenshotListener.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 41,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-10-16T02:20:06Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "988a0067_dd934d1d",
       "revId": "c400d0174c79e5c9d4a852bda8fdec863e6cd765",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
@@ -150,6 +276,24 @@
       "writtenOn": "2023-10-15T19:25:18Z",
       "side": 1,
       "message": "Math.min(...)",
+      "revId": "c400d0174c79e5c9d4a852bda8fdec863e6cd765",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "a2d7f152_7be62278",
+        "filename": "services/core/java/com/android/server/policy/SwipeToScreenshotListener.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 140,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-10-16T02:20:06Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "ff1708c7_49649316",
       "revId": "c400d0174c79e5c9d4a852bda8fdec863e6cd765",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
