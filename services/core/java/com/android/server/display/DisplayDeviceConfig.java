@@ -41,6 +41,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.display.BrightnessSynchronizer;
 import com.android.server.display.config.AutoBrightness;
 import com.android.server.display.config.BlockingZoneConfig;
+import com.android.server.display.config.BrightnessLimitMap;
 import com.android.server.display.config.BrightnessThresholds;
 import com.android.server.display.config.BrightnessThrottlingMap;
 import com.android.server.display.config.BrightnessThrottlingPoint;
@@ -51,8 +52,11 @@ import com.android.server.display.config.DisplayQuirks;
 import com.android.server.display.config.HbmTiming;
 import com.android.server.display.config.HighBrightnessMode;
 import com.android.server.display.config.IntegerArray;
+import com.android.server.display.config.LuxThrottling;
 import com.android.server.display.config.NitsMap;
+import com.android.server.display.config.NonNegativeFloatToFloatPoint;
 import com.android.server.display.config.Point;
+import com.android.server.display.config.PredefinedBrightnessLimitNames;
 import com.android.server.display.config.RefreshRateConfigs;
 import com.android.server.display.config.RefreshRateRange;
 import com.android.server.display.config.RefreshRateThrottlingMap;
@@ -218,6 +222,22 @@ import javax.xml.datatype.DatatypeConfigurationException;
  *        <thermalStatusLimit>light</thermalStatusLimit>
  *        <allowInLowPowerMode>false</allowInLowPowerMode>
  *      </highBrightnessMode>
+ *
+ *      <luxThrottling>
+ *        <brightnessLimitMap>
+ *          <type>default</type>
+ *          <map>
+ *            <point>
+ *                <first>5000</first>
+ *                <second>0.3</second>
+ *            </point>
+ *            <point>
+ *               <first>5000</first>
+ *               <second>0.3</second>
+ *            </point>
+ *          </map>
+ *        </brightnessPeakMap>
+ *      </luxThrottling>
  *
  *      <quirks>
  *       <quirk>canSetBrightnessViaHwc</quirk>
@@ -694,6 +714,9 @@ public class DisplayDeviceConfig {
 
     private final Map<String, SparseArray<SurfaceControl.RefreshRateRange>>
             mRefreshRateThrottlingMap = new HashMap<>();
+
+    private final Map<BrightnessLimitMapType, Map<Float, Float>>
+            mLuxThrottlingData = new HashMap<>();
 
     @Nullable
     private HostUsiVersion mHostUsiVersion;
@@ -1347,6 +1370,11 @@ public class DisplayDeviceConfig {
         return hbmData;
     }
 
+    @NonNull
+    public Map<BrightnessLimitMapType, Map<Float, Float>> getLuxThrottlingData() {
+        return mLuxThrottlingData;
+    }
+
     public List<RefreshRateLimitation> getRefreshRateLimitations() {
         return mRefreshRateLimitations;
     }
@@ -1533,6 +1561,7 @@ public class DisplayDeviceConfig {
                 + ", mBrightnessDefault=" + mBrightnessDefault
                 + ", mQuirks=" + mQuirks
                 + ", isHbmEnabled=" + mIsHighBrightnessModeEnabled
+                + ", mLuxThrottlingData=" + mLuxThrottlingData
                 + ", mHbmData=" + mHbmData
                 + ", mSdrToHdrRatioSpline=" + mSdrToHdrRatioSpline
                 + ", mThermalBrightnessThrottlingDataMapByThrottlingId="
@@ -1679,6 +1708,7 @@ public class DisplayDeviceConfig {
                 loadBrightnessMap(config);
                 loadThermalThrottlingConfig(config);
                 loadHighBrightnessModeData(config);
+                loadLuxThrottling(config);
                 loadQuirks(config);
                 loadBrightnessRamps(config);
                 loadAmbientLightSensorFromDdc(config);
@@ -2029,7 +2059,7 @@ public class DisplayDeviceConfig {
 
     /** Loads the refresh rate profiles. */
     private void loadRefreshRateZoneProfiles(RefreshRateConfigs refreshRateConfigs) {
-        if (refreshRateConfigs == null) {
+        if (refreshRateConfigs == null || refreshRateConfigs.getRefreshRateZoneProfiles() == null) {
             return;
         }
         for (RefreshRateZone zone :
@@ -2428,6 +2458,54 @@ public class DisplayDeviceConfig {
             }
 
             mSdrToHdrRatioSpline = loadSdrHdrRatioMap(hbm);
+        }
+    }
+
+    private void loadLuxThrottling(DisplayConfiguration config) {
+        LuxThrottling cfg = config.getLuxThrottling();
+        if (cfg != null) {
+            HighBrightnessMode hbm = config.getHighBrightnessMode();
+            float hbmTransitionPoint = hbm != null ? hbm.getTransitionPoint_all().floatValue()
+                    : PowerManager.BRIGHTNESS_MAX;
+            List<BrightnessLimitMap> limitMaps = cfg.getBrightnessLimitMap();
+            for (BrightnessLimitMap map : limitMaps) {
+                PredefinedBrightnessLimitNames type = map.getType();
+                BrightnessLimitMapType mappedType = BrightnessLimitMapType.convert(type);
+                if (mappedType == null) {
+                    Slog.wtf(TAG, "Invalid NBM config: unsupported map type=" + type);
+                    continue;
+                }
+                if (mLuxThrottlingData.containsKey(mappedType)) {
+                    Slog.wtf(TAG, "Invalid NBM config: duplicate map type=" + mappedType);
+                    continue;
+                }
+                Map<Float, Float> luxToTransitionPointMap = new HashMap<>();
+
+                List<NonNegativeFloatToFloatPoint> points = map.getMap().getPoint();
+                for (NonNegativeFloatToFloatPoint point : points) {
+                    float lux = point.getFirst().floatValue();
+                    float maxBrightness = point.getSecond().floatValue();
+                    if (maxBrightness > hbmTransitionPoint) {
+                        Slog.wtf(TAG,
+                                "Invalid NBM config: maxBrightness is greater than hbm"
+                                        + ".transitionPoint. type="
+                                        + type + "; lux=" + lux + "; maxBrightness="
+                                        + maxBrightness);
+                        continue;
+                    }
+                    if (luxToTransitionPointMap.containsKey(lux)) {
+                        Slog.wtf(TAG,
+                                "Invalid NBM config: duplicate lux key. type=" + type + "; lux="
+                                        + lux);
+                        continue;
+                    }
+                    luxToTransitionPointMap.put(lux,
+                            mBacklightToBrightnessSpline.interpolate(maxBrightness));
+                }
+                if (!luxToTransitionPointMap.isEmpty()) {
+                    mLuxThrottlingData.put(mappedType, luxToTransitionPointMap);
+                }
+            }
         }
     }
 
@@ -3161,6 +3239,21 @@ public class DisplayDeviceConfig {
             for (ThrottlingLevel level : inLevels) {
                 throttlingLevels.add(new ThrottlingLevel(level.thermalStatus, level.brightness));
             }
+        }
+    }
+
+    public enum BrightnessLimitMapType {
+        DEFAULT, ADAPTIVE;
+
+        @Nullable
+        private static BrightnessLimitMapType convert(PredefinedBrightnessLimitNames type) {
+            switch (type) {
+                case _default:
+                    return DEFAULT;
+                case adaptive:
+                    return ADAPTIVE;
+            }
+            return null;
         }
     }
 }

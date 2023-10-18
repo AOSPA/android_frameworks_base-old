@@ -661,6 +661,8 @@ public class BtHelper {
 
     //@GuardedBy("AudioDeviceBroker.mDeviceStateLock")
     /*package*/ synchronized void onBtProfileDisconnected(int profile) {
+        AudioService.sDeviceLogger.enqueue(new EventLogger.StringEvent(
+                "BT profile " + BluetoothProfile.getProfileName(profile) + " disconnected"));
         switch (profile) {
             case BluetoothProfile.A2DP:
                 mA2dp = null;
@@ -689,6 +691,9 @@ public class BtHelper {
 
     @GuardedBy("AudioDeviceBroker.mDeviceStateLock")
     /*package*/ synchronized void onBtProfileConnected(int profile, BluetoothProfile proxy) {
+        AudioService.sDeviceLogger.enqueue(new EventLogger.StringEvent(
+                "BT profile " + BluetoothProfile.getProfileName(profile) + " connected to proxy "
+                + proxy));
         if (profile == BluetoothProfile.HEADSET) {
             onHeadsetProfileConnected((BluetoothHeadset) proxy);
             return;
