@@ -87,6 +87,24 @@
       "parentUuid": "e780f09a_48d0c9ee",
       "revId": "591d59383b8b659a730487b9fbda8a63f63cb26c",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "8f325653_c76fe242",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000463
+      },
+      "writtenOn": "2023-10-19T12:18:06Z",
+      "side": 1,
+      "message": "I\u0027ll check Settings impl to see if something should be done there as well",
+      "parentUuid": "6eb87686_3b0fc165",
+      "revId": "591d59383b8b659a730487b9fbda8a63f63cb26c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
