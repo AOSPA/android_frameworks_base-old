@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "a69adf9e_5fd55642",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2023-10-19T02:03:17Z",
+      "side": 1,
+      "message": "Replaces https://gerrit.aospa.co/c/AOSPA/android_frameworks_base/+/35761",
+      "revId": "a31cecfafe0381b1ad4bcdeca59329e7d50a61b1",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
