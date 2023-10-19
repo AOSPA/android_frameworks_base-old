@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "b11c9a3c_75e22a09",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2023-10-19T10:59:13Z",
+      "side": 1,
+      "message": "This works, however Android\u0027s \"Auto-confirm correct pin\" prompt when adding a PIN still only comes up at 6 numbers instead of 4. Currently has to be manually enabled",
+      "revId": "591d59383b8b659a730487b9fbda8a63f63cb26c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
