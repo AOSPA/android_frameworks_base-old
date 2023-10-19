@@ -69,6 +69,24 @@
       "parentUuid": "41e1f5d0_bab9debd",
       "revId": "591d59383b8b659a730487b9fbda8a63f63cb26c",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "6eb87686_3b0fc165",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000463
+      },
+      "writtenOn": "2023-10-19T12:16:59Z",
+      "side": 1,
+      "message": "the option to enable auto pin confirm is still showing up only for 6 digits pin",
+      "parentUuid": "e780f09a_48d0c9ee",
+      "revId": "591d59383b8b659a730487b9fbda8a63f63cb26c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
