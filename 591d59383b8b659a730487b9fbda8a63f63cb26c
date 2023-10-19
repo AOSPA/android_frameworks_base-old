@@ -122,6 +122,24 @@
       "message": "https://gerrit.aospa.co/c/AOSPA/android_packages_apps_Settings/+/35919",
       "revId": "591d59383b8b659a730487b9fbda8a63f63cb26c",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "f95aa97e_6ed7946c",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000463
+      },
+      "writtenOn": "2023-10-19T13:05:40Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "8f325653_c76fe242",
+      "revId": "591d59383b8b659a730487b9fbda8a63f63cb26c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
