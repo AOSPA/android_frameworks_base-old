@@ -37,6 +37,7 @@ import android.hardware.biometrics.face.IFace;
 import android.hardware.biometrics.face.SensorProps;
 import android.hardware.face.Face;
 import android.hardware.face.FaceAuthenticateOptions;
+import android.hardware.face.FaceSensorProperties;
 import android.hardware.face.FaceSensorPropertiesInternal;
 import android.hardware.face.FaceServiceReceiver;
 import android.hardware.face.IFaceAuthenticatorsRegisteredCallback;
@@ -685,7 +686,7 @@ public class FaceService extends SystemService {
                         false, /** supportsFaceDetection **/
                         false, /** supportsSelfIllumination **/
                         false); /** resetLockoutRequiresChallenge **/
-                SenseProvider provider = new SenseProvider(getContext(), props, mLockoutResetDispatcher);
+                SenseProvider provider = new SenseProvider(getContext(), mBiometricStateCallback, props, mLockoutResetDispatcher);
                 providers.add(provider);
             }
             return providers;

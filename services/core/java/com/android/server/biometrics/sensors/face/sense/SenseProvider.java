@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2020 The Android Open Source Project
- * Copyright (C) 2022 Paranoid Android
+ * Copyright (C) 2023 Paranoid Android
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,6 +39,7 @@ import android.hardware.biometrics.ITestSessionCallback;
 import android.hardware.biometrics.face.V1_0.IBiometricsFace;
 import android.hardware.biometrics.face.V1_0.IBiometricsFaceClientCallback;
 import android.hardware.face.Face;
+import android.hardware.face.FaceAuthenticateOptions;
 import android.hardware.face.FaceSensorPropertiesInternal;
 import android.hardware.face.IFaceServiceReceiver;
 import android.os.Binder;
@@ -71,8 +72,10 @@ import com.android.server.biometrics.sensors.AuthenticationConsumer;
 import com.android.server.biometrics.sensors.BaseClientMonitor;
 import com.android.server.biometrics.sensors.BiometricNotificationUtils;
 import com.android.server.biometrics.sensors.BiometricScheduler;
+import com.android.server.biometrics.sensors.BiometricStateCallback;
 import com.android.server.biometrics.sensors.ClientMonitorCallback;
 import com.android.server.biometrics.sensors.ClientMonitorCallbackConverter;
+import com.android.server.biometrics.sensors.ClientMonitorCompositeCallback;
 import com.android.server.biometrics.sensors.EnumerateConsumer;
 import com.android.server.biometrics.sensors.ErrorConsumer;
 import com.android.server.biometrics.sensors.LockoutResetDispatcher;
@@ -124,6 +127,7 @@ public class SenseProvider implements ServiceProvider {
     private boolean mTestHalEnabled;
 
     @NonNull private final FaceSensorPropertiesInternal mSensorProperties;
+    @NonNull private final BiometricStateCallback mBiometricStateCallback;
     @NonNull private final Context mContext;
     @NonNull private final BiometricScheduler mScheduler;
     @NonNull private final Handler mHandler;
@@ -360,6 +364,7 @@ public class SenseProvider implements ServiceProvider {
 
     @VisibleForTesting
     public SenseProvider(@NonNull Context context,
+            @NonNull BiometricStateCallback biometricStateCallback,
             @NonNull FaceSensorPropertiesInternal sensorProps,
             @NonNull LockoutResetDispatcher lockoutResetDispatcher,
             @NonNull BiometricScheduler scheduler) {
@@ -367,6 +372,7 @@ public class SenseProvider implements ServiceProvider {
         mIsBinding = false;
         mSensorProperties = sensorProps;
         mContext = context;
+        mBiometricStateCallback = biometricStateCallback;
         mSensorId = sensorProps.sensorId;
         mScheduler = scheduler;
         mHandler = new Handler(Looper.getMainLooper());
@@ -391,8 +397,8 @@ public class SenseProvider implements ServiceProvider {
         context.registerReceiver(mUserUnlockReceiver, new IntentFilter(Intent.ACTION_USER_UNLOCKED));
     }
 
-    public SenseProvider(Context context, FaceSensorPropertiesInternal sensorProps, LockoutResetDispatcher lockoutResetDispatcher) {
-        this(context, sensorProps, lockoutResetDispatcher, new BiometricScheduler(TAG, 0, null));
+    public SenseProvider(Context context, BiometricStateCallback biometricStateCallback, FaceSensorPropertiesInternal sensorProps, LockoutResetDispatcher lockoutResetDispatcher) {
+        this(context, biometricStateCallback, sensorProps, lockoutResetDispatcher, new BiometricScheduler(TAG, 0, null));
     }
 
     private synchronized ISenseService getDaemon() {
@@ -432,6 +438,11 @@ public class SenseProvider implements ServiceProvider {
     @NonNull
     public List<Face> getEnrolledFaces(int sensorId, int userId) {
         return FaceUtils.getLegacyInstance(mSensorId).getBiometricsForUser(mContext, userId);
+    }
+
+    @Override
+    public boolean hasEnrollments(int sensorId, int userId) {
+        return !getEnrolledFaces(sensorId, userId).isEmpty();
     }
 
     @Override
@@ -509,10 +520,16 @@ public class SenseProvider implements ServiceProvider {
             mScheduler.scheduleClientMonitor(client, new ClientMonitorCallback() {
                 @Override
                 public void onClientStarted(@NonNull BaseClientMonitor clientMonitor) {
+                    mBiometricStateCallback.onClientStarted(clientMonitor);
                     if (client != clientMonitor) {
                         Slog.e(TAG, "scheduleGenerateChallenge onClientStarted, mismatched client."
                                 + " Expecting: " + client + ", received: " + clientMonitor);
                     }
+                }
+
+                @Override
+                public void onBiometricAction(int action) {
+                    mBiometricStateCallback.onBiometricAction(action);
                 }
             });
         });
@@ -545,6 +562,7 @@ public class SenseProvider implements ServiceProvider {
                 @Override
                 public void onClientFinished(@NonNull BaseClientMonitor clientMonitor,
                         boolean success) {
+                    mBiometricStateCallback.onClientFinished(clientMonitor, success);
                     if (client != clientMonitor) {
                         Slog.e(TAG, "scheduleRevokeChallenge, mismatched client."
                                 + "Expecting: " + client + ", received: " + clientMonitor);
@@ -603,9 +621,9 @@ public class SenseProvider implements ServiceProvider {
     }
 
     @Override
-    public long scheduleFaceDetect(int sensorId, @NonNull IBinder token,
-            int userId, @NonNull ClientMonitorCallbackConverter callback,
-            @NonNull String opPackageName, int statsClient) {
+    public long scheduleFaceDetect(@NonNull IBinder token,
+            @NonNull ClientMonitorCallbackConverter callback,
+            @NonNull FaceAuthenticateOptions options, int statsClient) {
         throw new IllegalStateException("Face detect not supported by IBiometricsFace@1.0. Did you"
                 + "forget to check the supportsFaceDetection flag?");
     }
@@ -617,11 +635,12 @@ public class SenseProvider implements ServiceProvider {
     }
 
     @Override
-    public void scheduleAuthenticate(int sensorId, @NonNull IBinder token, long operationId,
-            int userId, int cookie, @NonNull ClientMonitorCallbackConverter receiver,
-            @NonNull String opPackageName, long requestId, boolean restricted, int statsClient,
-            boolean allowBackgroundAuthentication, boolean isKeyguardBypassEnabled) {
+    public void scheduleAuthenticate(@NonNull IBinder token, long operationId,
+            int cookie, @NonNull ClientMonitorCallbackConverter receiver,
+            @NonNull FaceAuthenticateOptions options, long requestId, boolean restricted,
+            int statsClient, boolean allowBackgroundAuthentication) {
         mHandler.post(() -> {
+            final int userId = options.getUserId();
             if (getDaemon() == null) {
                 bindService(mCurrentUserId);
                 try {
@@ -636,25 +655,25 @@ public class SenseProvider implements ServiceProvider {
 
             final boolean isStrongBiometric = Utils.isStrongBiometric(mSensorId);
             final FaceAuthenticationClient client = new FaceAuthenticationClient(mContext,
-                    mLazyDaemon, token, requestId, receiver, userId, operationId, restricted,
-                    opPackageName, cookie, false /* requireConfirmation */, mSensorId,
+                    mLazyDaemon, token, requestId, receiver, operationId, restricted,
+                    options, cookie, false /* requireConfirmation */,
                     createLogger(BiometricsProtoEnums.ACTION_AUTHENTICATE, statsClient),
                     mBiometricContext, isStrongBiometric, mLockoutTracker,
-                    mUsageStats, allowBackgroundAuthentication, isKeyguardBypassEnabled);
+                    mUsageStats, allowBackgroundAuthentication,
+                    Utils.getCurrentStrength(mSensorId));
             mScheduler.scheduleClientMonitor(client);
         });
     }
 
     @Override
-    public long scheduleAuthenticate(int sensorId, @NonNull IBinder token, long operationId,
-            int userId, int cookie, @NonNull ClientMonitorCallbackConverter receiver,
-            @NonNull String opPackageName, boolean restricted, int statsClient,
-            boolean allowBackgroundAuthentication, boolean isKeyguardBypassEnabled) {
+    public long scheduleAuthenticate(@NonNull IBinder token, long operationId,
+            int cookie, @NonNull ClientMonitorCallbackConverter receiver,
+            @NonNull FaceAuthenticateOptions options, boolean restricted,
+            int statsClient, boolean allowBackgroundAuthentication) {
         final long id = mRequestCounter.incrementAndGet();
 
-        scheduleAuthenticate(sensorId, token, operationId, userId, cookie, receiver,
-                opPackageName, id, restricted, statsClient,
-                allowBackgroundAuthentication, isKeyguardBypassEnabled);
+        scheduleAuthenticate(token, operationId, cookie, receiver,
+                options, id, restricted, statsClient, allowBackgroundAuthentication);
 
         return id;
     }
@@ -686,7 +705,7 @@ public class SenseProvider implements ServiceProvider {
                     createLogger(BiometricsProtoEnums.ACTION_REMOVE,
                             BiometricsProtoEnums.CLIENT_UNKNOWN),
                     mBiometricContext, mAuthenticatorIds);
-            mScheduler.scheduleClientMonitor(client);
+            mScheduler.scheduleClientMonitor(client, mBiometricStateCallback);
         });
     }
 
@@ -714,7 +733,7 @@ public class SenseProvider implements ServiceProvider {
                     createLogger(BiometricsProtoEnums.ACTION_REMOVE,
                             BiometricsProtoEnums.CLIENT_UNKNOWN),
                     mBiometricContext, mAuthenticatorIds);
-            mScheduler.scheduleClientMonitor(client);
+            mScheduler.scheduleClientMonitor(client, mBiometricStateCallback);
         });
     }
 
@@ -734,7 +753,7 @@ public class SenseProvider implements ServiceProvider {
                     createLogger(BiometricsProtoEnums.ACTION_UNKNOWN,
                             BiometricsProtoEnums.CLIENT_UNKNOWN),
                     mBiometricContext, hardwareAuthToken);
-            mScheduler.scheduleClientMonitor(client);
+            mScheduler.scheduleClientMonitor(client, mBiometricStateCallback);
         });
     }
 
@@ -761,7 +780,7 @@ public class SenseProvider implements ServiceProvider {
                     opPackageName, mSensorId, BiometricLogger.ofUnknown(mContext),
                     mBiometricContext,
                     feature, enabled, hardwareAuthToken, faceId);
-            mScheduler.scheduleClientMonitor(client);
+            mScheduler.scheduleClientMonitor(client, mBiometricStateCallback);
         });
     }
 
@@ -817,21 +836,27 @@ public class SenseProvider implements ServiceProvider {
         mHandler.post(() -> {
             scheduleUpdateActiveUserWithoutHandler(userId);
 
-            final List<Face> enrolledList = getEnrolledFaces(mSensorId, userId);
             final FaceInternalCleanupClient client = new FaceInternalCleanupClient(mContext,
                     mLazyDaemon, userId, mContext.getOpPackageName(), mSensorId,
                     createLogger(BiometricsProtoEnums.ACTION_ENUMERATE,
                             BiometricsProtoEnums.CLIENT_UNKNOWN),
-                    mBiometricContext, enrolledList,
+                    mBiometricContext,
                     FaceUtils.getLegacyInstance(mSensorId), mAuthenticatorIds);
-            mScheduler.scheduleClientMonitor(client, callback);
+            mScheduler.scheduleClientMonitor(client, new ClientMonitorCompositeCallback(callback,
+                    mBiometricStateCallback));
         });
     }
 
     @Override
     public void scheduleInternalCleanup(int sensorId, int userId,
             @Nullable ClientMonitorCallback callback) {
-        scheduleInternalCleanup(userId, callback);
+        scheduleInternalCleanup(userId, mBiometricStateCallback);
+    }
+
+    @Override
+    public void scheduleInternalCleanup(int sensorId, int userId,
+            @Nullable ClientMonitorCallback callback, boolean favorHalEnrollments) {
+        scheduleInternalCleanup(userId, mBiometricStateCallback);
     }
 
     @Override

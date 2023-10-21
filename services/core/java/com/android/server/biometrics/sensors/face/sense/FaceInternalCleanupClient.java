@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2020 The Android Open Source Project
- * Copyright (C) 2022 Paranoid Android
+ * Copyright (C) 2023 Paranoid Android
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,10 +40,10 @@ class FaceInternalCleanupClient extends InternalCleanupClient<Face, ISenseServic
     FaceInternalCleanupClient(@NonNull Context context,
             @NonNull Supplier<ISenseService> lazyDaemon, int userId, @NonNull String owner,
             int sensorId, @NonNull BiometricLogger logger,
-            @NonNull BiometricContext biometricContext, @NonNull List<Face> enrolledList,
+            @NonNull BiometricContext biometricContext,
             @NonNull BiometricUtils<Face> utils, @NonNull Map<Integer, Long> authenticatorIds) {
         super(context, lazyDaemon, userId, owner, sensorId, logger, biometricContext,
-                enrolledList, utils, authenticatorIds);
+                utils, authenticatorIds);
     }
 
     @Override

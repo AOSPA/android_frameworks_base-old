@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2020 The Android Open Source Project
- * Copyright (C) 2022 Paranoid Android
+ * Copyright (C) 2023 Paranoid Android
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,9 @@ import android.hardware.SensorPrivacyManager;
 import android.hardware.biometrics.BiometricAuthenticator;
 import android.hardware.biometrics.BiometricConstants;
 import android.hardware.biometrics.BiometricFaceConstants;
+import android.hardware.biometrics.BiometricManager.Authenticators;
 import android.hardware.biometrics.face.V1_0.IBiometricsFace;
+import android.hardware.face.FaceAuthenticateOptions;
 import android.hardware.face.FaceManager;
 import android.os.IBinder;
 import android.os.RemoteException;
@@ -40,6 +42,7 @@ import com.android.server.biometrics.sensors.ClientMonitorCallback;
 import com.android.server.biometrics.sensors.ClientMonitorCallbackConverter;
 import com.android.server.biometrics.sensors.ClientMonitorCompositeCallback;
 import com.android.server.biometrics.sensors.LockoutTracker;
+import com.android.server.biometrics.sensors.PerformanceTracker;
 import com.android.server.biometrics.sensors.face.UsageStats;
 
 import java.util.ArrayList;
@@ -51,7 +54,8 @@ import vendor.aospa.biometrics.face.ISenseService;
  * Face-specific authentication client supporting the {@link android.hardware.biometrics.face.V1_0}
  * HIDL interface.
  */
-class FaceAuthenticationClient extends AuthenticationClient<ISenseService> {
+class FaceAuthenticationClient
+        extends AuthenticationClient<ISenseService, FaceAuthenticateOptions> {
 
     private static final String TAG = "FaceAuthenticationClient";
 
@@ -67,17 +71,18 @@ class FaceAuthenticationClient extends AuthenticationClient<ISenseService> {
     FaceAuthenticationClient(@NonNull Context context,
             @NonNull Supplier<ISenseService> lazyDaemon,
             @NonNull IBinder token, long requestId,
-            @NonNull ClientMonitorCallbackConverter listener, int targetUserId, long operationId,
-            boolean restricted, String owner, int cookie, boolean requireConfirmation, int sensorId,
+            @NonNull ClientMonitorCallbackConverter listener, long operationId,
+            boolean restricted, @NonNull FaceAuthenticateOptions options, int cookie,
+            boolean requireConfirmation,
             @NonNull BiometricLogger logger, @NonNull BiometricContext biometricContext,
             boolean isStrongBiometric, @NonNull LockoutTracker lockoutTracker,
             @NonNull UsageStats usageStats, boolean allowBackgroundAuthentication,
-            boolean isKeyguardBypassEnabled) {
-        super(context, lazyDaemon, token, listener, targetUserId, operationId, restricted,
-                owner, cookie, requireConfirmation, sensorId, logger, biometricContext,
+            @Authenticators.Types int sensorStrength) {
+        super(context, lazyDaemon, token, listener, operationId, restricted,
+                options, cookie, requireConfirmation, logger, biometricContext,
                 isStrongBiometric, null /* taskStackListener */,
                 lockoutTracker, allowBackgroundAuthentication, true /* shouldVibrate */,
-                isKeyguardBypassEnabled);
+                sensorStrength);
         setRequestId(requestId);
         mUsageStats = usageStats;
 
@@ -145,6 +150,21 @@ class FaceAuthenticationClient extends AuthenticationClient<ISenseService> {
     }
 
     @Override
+    public @LockoutTracker.LockoutMode int handleFailedAttempt(int userId) {
+        @LockoutTracker.LockoutMode final int lockoutMode =
+                getLockoutTracker().getLockoutModeForUser(userId);
+        final PerformanceTracker performanceTracker =
+                PerformanceTracker.getInstanceForSensorId(getSensorId());
+        if (lockoutMode == LockoutTracker.LOCKOUT_PERMANENT) {
+            performanceTracker.incrementPermanentLockoutForUser(userId);
+        } else if (lockoutMode == LockoutTracker.LOCKOUT_TIMED) {
+            performanceTracker.incrementTimedLockoutForUser(userId);
+        }
+
+        return lockoutMode;
+    }
+
+    @Override
     public void onAuthenticated(BiometricAuthenticator.Identifier identifier,
             boolean authenticated, ArrayList<Byte> token) {
         super.onAuthenticated(identifier, authenticated, token);
@@ -194,6 +214,12 @@ class FaceAuthenticationClient extends AuthenticationClient<ISenseService> {
 
         if (acquireInfo == FaceManager.FACE_ACQUIRED_RECALIBRATE) {
             BiometricNotificationUtils.showReEnrollmentNotification(getContext());
+        }
+        @LockoutTracker.LockoutMode final int lockoutMode =
+                getLockoutTracker().getLockoutModeForUser(getTargetUserId());
+        if (lockoutMode == LockoutTracker.LOCKOUT_NONE) {
+            PerformanceTracker pt = PerformanceTracker.getInstanceForSensorId(getSensorId());
+            pt.incrementAcquireForUser(getTargetUserId(), isCryptoOperation());
         }
 
         final boolean shouldSend = shouldSend(acquireInfo, vendorCode);
