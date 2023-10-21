@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "500dc8d6_59a78d6c",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2023-10-21T23:46:53Z",
+      "side": 1,
+      "message": "this doesn\u0027t seem quite right given the other one.  I think we should probably drop both commits.",
+      "revId": "281dffb9a2ba28bab187a1f67268663305ed095e",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
