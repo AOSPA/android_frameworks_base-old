@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2020 The Android Open Source Project
- * Copyright (C) 2022 Paranoid Android
+ * Copyright (C) 2023 Paranoid Android
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,6 @@
 
 package com.android.server.biometrics.sensors.face.sense;
 
-import static android.Manifest.permission.TEST_BIOMETRIC;
-
 import android.annotation.NonNull;
 import android.content.Context;
 import android.hardware.biometrics.ITestSession;
@@ -31,7 +29,6 @@ import android.os.Binder;
 import android.os.RemoteException;
 import android.util.Slog;
 
-import com.android.server.biometrics.Utils;
 import com.android.server.biometrics.sensors.BaseClientMonitor;
 import com.android.server.biometrics.sensors.ClientMonitorCallback;
 import com.android.server.biometrics.sensors.face.FaceUtils;
@@ -39,8 +36,13 @@ import com.android.server.biometrics.sensors.face.FaceUtils;
 import java.util.List;
 import java.util.Random;
 
+/**
+ * A test session implementation for {@link SenseProvider}. See
+ * {@link android.hardware.biometrics.BiometricTestSession}.
+ */
 public class BiometricTestSessionImpl extends ITestSession.Stub {
-    private static final String TAG = "BiometricTestSessionImpl";
+
+    private static final String TAG = "face/sense/BiometricTestSessionImpl";
 
     @NonNull private final Context mContext;
     private final int mSensorId;
@@ -50,6 +52,11 @@ public class BiometricTestSessionImpl extends ITestSession.Stub {
     @NonNull private final SenseProvider.HalResultController mHalResultController;
     @NonNull private final SenseProvider mSenseProvider;
 
+    /**
+     * Internal receiver currently only used for enroll. Results do not need to be forwarded to the
+     * test, since enrollment is a platform-only API. The authentication path is tested through
+     * the public BiometricPrompt APIs and does not use this receiver.
+     */
     private final IFaceServiceReceiver mReceiver = new IFaceServiceReceiver.Stub() {
         @Override
         public void onEnrollResult(Face face, int remaining) {
@@ -57,7 +64,7 @@ public class BiometricTestSessionImpl extends ITestSession.Stub {
         }
 
         @Override
-        public void onAcquired(int acquiredInfo, int vendorCode) {
+        public void onAcquired(int acquireInfo, int vendorCode) {
 
         }
 
@@ -123,35 +130,39 @@ public class BiometricTestSessionImpl extends ITestSession.Stub {
         mRandom = new Random();
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.TEST_BIOMETRIC)
     @Override
     public void setTestHalEnabled(boolean enabled) {
-        Utils.checkPermission(mContext, TEST_BIOMETRIC);
+        super.setTestHalEnabled_enforcePermission();
 
         mSenseProvider.setTestHalEnabled(enabled);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.TEST_BIOMETRIC)
     @Override
     public void startEnroll(int userId) {
-        Utils.checkPermission(mContext, TEST_BIOMETRIC);
+        super.startEnroll_enforcePermission();
 
         mSenseProvider.scheduleEnroll(mSensorId, new Binder(), new byte[69], userId, mReceiver,
                 mContext.getOpPackageName(), new int[0] /* disabledFeatures */,
                 null /* previewSurface */, false /* debugConsent */);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.TEST_BIOMETRIC)
     @Override
     public void finishEnroll(int userId) {
-        Utils.checkPermission(mContext, TEST_BIOMETRIC);
+        super.finishEnroll_enforcePermission();
 
         mHalResultController.onEnrollResult(1, userId, 0);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.TEST_BIOMETRIC)
     @Override
     public void acceptAuthentication(int userId) {
-        Utils.checkPermission(mContext, TEST_BIOMETRIC);
+        super.acceptAuthentication_enforcePermission();
 
-        // Fake authentication with any of the existing fingers
-        List<Face> faces = FaceUtils.getLegacyInstance(mSensorId)
+        // Fake authentication with any of the existing faces
+        List<Face> faces = FaceUtils.getInstance(mSensorId)
                 .getBiometricsForUser(mContext, userId);
         if (faces.isEmpty()) {
             Slog.w(TAG, "No faces, returning");
@@ -162,30 +173,34 @@ public class BiometricTestSessionImpl extends ITestSession.Stub {
         mHalResultController.onAuthenticated(0 /* deviceId */, userId, hat);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.TEST_BIOMETRIC)
     @Override
     public void rejectAuthentication(int userId) {
-        Utils.checkPermission(mContext, TEST_BIOMETRIC);
+        super.rejectAuthentication_enforcePermission();
 
         mHalResultController.onAuthenticated(0 /* deviceId */, userId, null);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.TEST_BIOMETRIC)
     @Override
     public void notifyAcquired(int userId, int acquireInfo) {
-        Utils.checkPermission(mContext, TEST_BIOMETRIC);
+        super.notifyAcquired_enforcePermission();
 
         mHalResultController.onAcquired(userId, 0 /* deviceId */, 0 /* vendorCode */);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.TEST_BIOMETRIC)
     @Override
     public void notifyError(int userId, int errorCode) {
-        Utils.checkPermission(mContext, TEST_BIOMETRIC);
+        super.notifyError_enforcePermission();
 
         mHalResultController.onError(0 /* deviceId */, 0 /* vendorCode */);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.TEST_BIOMETRIC)
     @Override
     public void cleanupInternalState(int userId) {
-        Utils.checkPermission(mContext, TEST_BIOMETRIC);
+        super.cleanupInternalState_enforcePermission();
 
         mSenseProvider.scheduleInternalCleanup(mSensorId, userId, new ClientMonitorCallback() {
             @Override

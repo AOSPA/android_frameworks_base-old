@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2020 The Android Open Source Project
- * Copyright (C) 2022 Paranoid Android
+ * Copyright (C) 2023 Paranoid Android
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,18 +32,22 @@ import com.android.internal.R;
 import com.android.server.biometrics.Utils;
 import com.android.server.biometrics.log.BiometricContext;
 import com.android.server.biometrics.log.BiometricLogger;
+import com.android.server.biometrics.sensors.BiometricNotificationUtils;
 import com.android.server.biometrics.sensors.BiometricUtils;
 import com.android.server.biometrics.sensors.ClientMonitorCallback;
 import com.android.server.biometrics.sensors.ClientMonitorCallbackConverter;
 import com.android.server.biometrics.sensors.ClientMonitorCompositeCallback;
 import com.android.server.biometrics.sensors.EnrollClient;
+import com.android.server.biometrics.sensors.face.FaceUtils;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.function.Supplier;
 
 import vendor.aospa.biometrics.face.ISenseService;
 
+/**
+ * Face-specific enroll client for the {@link ISenseService} AIDL HAL interface.
+ */
 public class FaceEnrollClient extends EnrollClient<ISenseService> {
 
     private static final String TAG = "FaceEnrollClient";
@@ -51,21 +55,31 @@ public class FaceEnrollClient extends EnrollClient<ISenseService> {
     @NonNull private final int[] mDisabledFeatures;
     @NonNull private final int[] mEnrollIgnoreList;
     @NonNull private final int[] mEnrollIgnoreListVendor;
+    private final int mMaxTemplatesPerUser;
 
     FaceEnrollClient(@NonNull Context context, @NonNull Supplier<ISenseService> lazyDaemon,
             @NonNull IBinder token, @NonNull ClientMonitorCallbackConverter listener, int userId,
-            @NonNull byte[] hardwareAuthToken, @NonNull String owner, long requestId,
+            @NonNull byte[] hardwareAuthToken, @NonNull String opPackageName, long requestId,
             @NonNull BiometricUtils<Face> utils, @NonNull int[] disabledFeatures, int timeoutSec,
             @Nullable Surface previewSurface, int sensorId,
-            @NonNull BiometricLogger logger, @NonNull BiometricContext biometricContext) {
-        super(context, lazyDaemon, token, listener, userId, hardwareAuthToken, owner, utils,
+            @NonNull BiometricLogger logger, @NonNull BiometricContext biometricContext,
+            int maxTemplatesPerUser, boolean debugConsent) {
+        super(context, lazyDaemon, token, listener, userId, hardwareAuthToken, opPackageName, utils,
                 timeoutSec, sensorId, false /* shouldVibrate */, logger, biometricContext);
         setRequestId(requestId);
-        mDisabledFeatures = Arrays.copyOf(disabledFeatures, disabledFeatures.length);
+        mDisabledFeatures = disabledFeatures;
         mEnrollIgnoreList = getContext().getResources()
                 .getIntArray(R.array.config_face_acquire_enroll_ignorelist);
         mEnrollIgnoreListVendor = getContext().getResources()
                 .getIntArray(R.array.config_face_acquire_vendor_enroll_ignorelist);
+        mMaxTemplatesPerUser = maxTemplatesPerUser;
+    }
+
+    @Override
+    public void start(@NonNull ClientMonitorCallback callback) {
+        super.start(callback);
+
+        BiometricNotificationUtils.cancelReEnrollNotification(getContext());
     }
 
     @NonNull
@@ -77,25 +91,19 @@ public class FaceEnrollClient extends EnrollClient<ISenseService> {
 
     @Override
     protected boolean hasReachedEnrollmentLimit() {
-        final int limit = getContext().getResources().getInteger(
-                com.android.internal.R.integer.config_faceMaxTemplatesPerUser);
-        final int enrolled = mBiometricUtils.getBiometricsForUser(getContext(), getTargetUserId())
-                .size();
-        if (enrolled >= limit) {
-            Slog.w(TAG, "Too many faces registered, user: " + getTargetUserId());
-            return true;
-        }
-        return false;
+        return FaceUtils.getInstance(getSensorId()).getBiometricsForUser(getContext(),
+                getTargetUserId()).size() >= mMaxTemplatesPerUser;
+    }
+
+    private boolean shouldSendAcquiredMessage(int acquireInfo, int vendorCode) {
+        return acquireInfo == FaceManager.FACE_ACQUIRED_VENDOR
+                ? !Utils.listContains(mEnrollIgnoreListVendor, vendorCode)
+                : !Utils.listContains(mEnrollIgnoreList, acquireInfo);
     }
 
     @Override
     public void onAcquired(int acquireInfo, int vendorCode) {
-        final boolean shouldSend;
-        if (acquireInfo == FaceManager.FACE_ACQUIRED_VENDOR) {
-            shouldSend = !Utils.listContains(mEnrollIgnoreListVendor, vendorCode);
-        } else {
-            shouldSend = !Utils.listContains(mEnrollIgnoreList, acquireInfo);
-        }
+        final boolean shouldSend = shouldSendAcquiredMessage(acquireInfo, vendorCode);
         onAcquiredInternal(acquireInfo, vendorCode, shouldSend);
     }
 
@@ -121,6 +129,8 @@ public class FaceEnrollClient extends EnrollClient<ISenseService> {
 
     @Override
     protected void stopHalOperation() {
+        unsubscribeBiometricContext();
+
         try {
             getFreshDaemon().cancel();
         } catch (RemoteException e) {
