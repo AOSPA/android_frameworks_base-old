@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "7c989ad0_0636df96",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2023-10-22T23:30:29Z",
+      "side": 1,
+      "message": "frameworks/base/packages/SystemUI/src/com/android/systemui/screenshot/ScreenshotController.java:1318: error: could not resolve ComponentName\n        public void setArgs(ComponentName topComponent, Consumer\u003cUri\u003e finisher,\n                            ^\nframeworks/base/packages/SystemUI/src/com/android/systemui/screenshot/ScreenshotController.java:1314: error: could not resolve ComponentName\n        ComponentName mTopComponent;\n        ^\nframeworks/base/packages/SystemUI/src/com/android/systemui/screenshot/ScreenshotController.java:438: error: could not resolve ComponentName\n    void takeScreenshotFullscreenInternal(ComponentName topComponent, Consumer\u003cUri\u003e finisher,\n                                          ^\n\u003c\u003e: error: InjectProcessingStep was unable to process \u0027ScreenshotController(android.content.Context,com.android.systemui.flags.FeatureFlags,com.android.systemui.screenshot.ScreenshotSmartActions,com.android.systemui.screenshot.ScreenshotNotificationsController,com.android.systemui.screenshot.ScrollCaptureClient,com.android.internal.logging.UiEventLogger,com.android.systemui.screenshot.ImageExporter,com.android.systemui.screenshot.ImageCapture,java.util.concurrent.Executor,com.android.systemui.screenshot.ScrollCaptureController,com.android.systemui.screenshot.LongScreenshotData,android.app.ActivityManager,com.android.systemui.screenshot.TimeoutHandler,com.android.systemui.broadcast.BroadcastSender,com.android.systemui.screenshot.ScreenshotNotificationSmartActionsProvider,com.android.systemui.screenshot.ActionIntentExecutor,android.os.UserManager,com.android.systemui.screenshot.AssistContentRequester,com.android.systemui.screenshot.MessageContainerController,com.android.systemui.settings.DisplayTracker)\u0027 because \u0027ComponentName\u0027 could not be resolved.",
+      "revId": "bd0682192688cc2d0ca77b7c82024900817b29b8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
