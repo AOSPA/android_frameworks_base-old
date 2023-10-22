@@ -96,8 +96,8 @@ public enum ScrimState {
             mFrontTint = Color.BLACK;
             mFrontAlpha = .66f;
 
-            mBehindTint = Color.BLACK;
-            mBehindAlpha = 1f;
+            mBehindTint = mClipQsScrim ? Color.BLACK : Color.WHITE;
+            mBehindAlpha = mClipQsScrim ? 1f : .85f;
         }
     },
 
