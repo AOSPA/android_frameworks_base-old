@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "6df0c796_693ecad9",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2023-10-22T19:34:26Z",
+      "side": 1,
+      "message": "frameworks/base/packages/SettingsLib/src/com/android/settingslib/mobile/TelephonyIcons.java:50: error: cannot find symbol\n    public static final int ICON_5G_UWB \u003d R.drawable.ic_5g_uc_mobiledata;\n    \n    https://android-git.linaro.org/platform/frameworks/base.git/commit/packages/SettingsLib/res/drawable?h\u003dmain\u0026id\u003d34ca8eb744d207217be35e21adaf2c301ced58ab",
+      "revId": "edf263fa71a896284a9bcef36e13f1503b454aa4",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
