@@ -96,8 +96,8 @@ public enum ScrimState {
             mFrontTint = Color.BLACK;
             mFrontAlpha = .66f;
 
-            mBehindTint = Color.BLACK;
-            mBehindAlpha = 1f;
+            mBehindTint = mIsNightModeActive ? Color.BLACK : Color.WHITE;
+            mBehindAlpha = mIsNightModeActive ? 1f : .85f;
         }
     },
 
@@ -327,6 +327,7 @@ public enum ScrimState {
     boolean mKeyguardFadingAway;
     long mKeyguardFadingAwayDuration;
     boolean mClipQsScrim;
+    boolean mIsNightModeActive;
 
     public void init(ScrimView scrimInFront, ScrimView scrimBehind, DozeParameters dozeParameters,
             DockManager dockManager) {
@@ -336,6 +337,8 @@ public enum ScrimState {
         mDozeParameters = dozeParameters;
         mDockManager = dockManager;
         mDisplayRequiresBlanking = dozeParameters.getDisplayNeedsBlanking();
+
+        mIsNightModeActive = mScrimBehind.getContext().getResources().getConfiguration().isNightModeActive();
     }
 
     /** Prepare state for transition. */
