@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "2e6947ba_21bd1844",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2023-10-22T19:11:11Z",
+      "side": 1,
+      "message": "not needed with themepicker based shortcut customization",
+      "revId": "93219ecc32eeec14e412e3a4fa5b88adc46b4f2b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
