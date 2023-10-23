@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "978aaef4_1a6d911b",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 4
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2023-10-23T03:54:44Z",
+      "side": 1,
+      "message": "frameworks/base/packages/SystemUI/src/com/android/systemui/keyguard/domain/interactor/KeyguardInteractor.kt:191:30: error: unresolved reference: CAMERA_LAUNCH_SOURCE_SCREEN_GESTURE\n            StatusBarManager.CAMERA_LAUNCH_SOURCE_SCREEN_GESTURE  -\u003e",
+      "revId": "8b31badc7aff0a1cea9512de7b634906f9cd2bb5",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
