@@ -16,6 +16,24 @@
       "message": "frameworks/base/packages/SystemUI/src/com/android/systemui/doze/DozeSensors.java:52: error: a type with the same simple name is already defined by the single-type-import of R\nimport com.android.systemui.R;\n^\nframeworks/base/packages/SystemUI/src/com/android/systemui/screenshot/ScreenshotController.java:579: error: cannot find symbol\n        TaskStackChangeListeners.getInstance().unregisterTaskStackListener(mTaskListener);\n                                                                           ^\n  symbol:   variable mTaskListener\n  location: class ScreenshotController\nframeworks/base/packages/SystemUI/src/com/android/systemui/screenshot/ScreenshotController.java:579: error: cannot find symbol\n        TaskStackChangeListeners.getInstance().unregisterTaskStackListener(mTaskListener);",
       "revId": "714183a5db22d2f17862801458140939d81ca14b",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "7bf26015_3cadff4e",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2023-10-23T04:19:22Z",
+      "side": 1,
+      "message": "ignore the com.android.systemui.R error, that should not have gone here.  The ScreenshotController error is relevant.",
+      "parentUuid": "2a1c901a_5614dbd0",
+      "revId": "714183a5db22d2f17862801458140939d81ca14b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
