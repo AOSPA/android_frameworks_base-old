@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "f73fef48_b9207a15",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2023-10-23T06:41:31Z",
+      "side": 1,
+      "message": "I don\u0027t really care about all these userdebug performance fixes.  if you want full performance, use user.  it seems like a lot of stuff to maintain otherwise.",
+      "revId": "bd029b9e2663e8219eb061d25213e11cdc1c954c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
