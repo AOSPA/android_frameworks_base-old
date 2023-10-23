@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "53d9d045_1141c04e",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2023-10-23T07:15:32Z",
+      "side": 1,
+      "message": "Wi-Fi generation doesn\u0027t appear when disabled and does when enabled",
+      "revId": "dbb8e53789f074c85185150d46916c701c863f97",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
