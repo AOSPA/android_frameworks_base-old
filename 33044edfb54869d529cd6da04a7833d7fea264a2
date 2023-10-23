@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "08007f83_fdfd57a0",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2023-10-23T04:26:01Z",
+      "side": 1,
+      "message": "frameworks/base/packages/SystemUI/src/com/android/systemui/screenshot/ScreenshotController.java:657: error: incompatible types: boolean cannot be converted to ScreenshotEvent\n                dismissScreenshot(false);",
+      "revId": "33044edfb54869d529cd6da04a7833d7fea264a2",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
