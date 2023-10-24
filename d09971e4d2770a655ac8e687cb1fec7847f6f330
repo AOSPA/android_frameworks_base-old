@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "ec7a9ebe_4abd30c6",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000845
+      },
+      "writtenOn": "2023-10-24T20:50:15Z",
+      "side": 1,
+      "message": "on hold as discussed in slack.",
+      "revId": "d09971e4d2770a655ac8e687cb1fec7847f6f330",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
