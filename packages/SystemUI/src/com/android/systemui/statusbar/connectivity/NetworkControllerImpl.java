@@ -86,7 +86,6 @@ import com.android.systemui.statusbar.policy.DataSaverController;
 import com.android.systemui.statusbar.policy.DataSaverControllerImpl;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController.DeviceProvisionedListener;
-import com.android.systemui.statusbar.policy.FiveGServiceClient;
 import com.android.systemui.telephony.TelephonyListenerManager;
 import com.android.systemui.util.CarrierConfigTracker;
 
@@ -207,9 +206,6 @@ public class NetworkControllerImpl extends BroadcastReceiver
     private boolean mForceCellularValidated;
     private InternetDialogFactory mInternetDialogFactory;
     private Handler mMainHandler;
-
-    @VisibleForTesting
-    FiveGServiceClient mFiveGServiceClient;
 
     private ConfigurationController.ConfigurationListener mConfigurationListener =
             new ConfigurationController.ConfigurationListener() {
@@ -387,8 +383,6 @@ public class NetworkControllerImpl extends BroadcastReceiver
             mWifiManager.registerScanResultsCallback(mReceiverHandler::post, scanResultsCallback);
         }
 
-        mFiveGServiceClient = FiveGServiceClient.getInstance(context);
-
         NetworkCallback callback =
                 new NetworkCallback(NetworkCallback.FLAG_INCLUDE_LOCATION_INFO){
             private Network mLastNetwork;
@@ -500,7 +494,6 @@ public class NetworkControllerImpl extends BroadcastReceiver
         for (int i = 0; i < mMobileSignalControllers.size(); i++) {
             MobileSignalController mobileSignalController = mMobileSignalControllers.valueAt(i);
             mobileSignalController.registerListener();
-            mobileSignalController.registerFiveGStateListener(mFiveGServiceClient);
         }
         if (mSubscriptionListener == null) {
             mSubscriptionListener = new SubListener(mBgLooper);
@@ -555,15 +548,9 @@ public class NetworkControllerImpl extends BroadcastReceiver
         for (int i = 0; i < mMobileSignalControllers.size(); i++) {
             MobileSignalController mobileSignalController = mMobileSignalControllers.valueAt(i);
             mobileSignalController.unregisterListener();
-            mobileSignalController.unregisterFiveGStateListener(mFiveGServiceClient);
         }
         mSubscriptionManager.removeOnSubscriptionsChangedListener(mSubscriptionListener);
         mBroadcastDispatcher.unregisterReceiver(this);
-    }
-
-    @VisibleForTesting
-    public FiveGServiceClient getFiveGServiceClient() {
-        return mFiveGServiceClient;
     }
 
     public int getConnectedWifiLevel() {
@@ -1012,7 +999,6 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 }
                 if (mListening) {
                     controller.registerListener();
-                    controller.registerFiveGStateListener(mFiveGServiceClient);
                 }
             }
         }
@@ -1023,7 +1009,6 @@ public class NetworkControllerImpl extends BroadcastReceiver
                     mDefaultSignalController = null;
                 }
                 cachedControllers.get(key).unregisterListener();
-                cachedControllers.get(key).unregisterFiveGStateListener(mFiveGServiceClient);
             }
         }
         mCallbackHandler.setSubs(subscriptions);

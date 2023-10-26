@@ -86,9 +86,6 @@ import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConn
 import com.android.systemui.statusbar.pipeline.mobile.util.MobileMappingsProxy
 import com.android.systemui.statusbar.pipeline.shared.data.model.DataActivityModel
 import com.android.systemui.statusbar.pipeline.shared.data.model.toMobileDataActivityModel
-import com.android.systemui.statusbar.policy.FiveGServiceClient
-import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState
-import com.android.systemui.statusbar.policy.FiveGServiceClient.IFiveGStateListener
 import com.qti.extphone.NrIconType
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
@@ -129,7 +126,6 @@ class MobileConnectionRepositoryImpl(
     logger: MobileInputLogger,
     override val tableLogBuffer: TableLogBuffer,
     scope: CoroutineScope,
-    private val fiveGServiceClient: FiveGServiceClient,
     private val connectivityManager: ConnectivityManager
 ) : MobileConnectionRepository {
     init {
@@ -174,11 +170,6 @@ class MobileConnectionRepositoryImpl(
                         TelephonyCallback.CarrierNetworkListener,
                         TelephonyCallback.DisplayInfoListener,
                         TelephonyCallback.DataEnabledListener,
-                        FiveGServiceClient.IFiveGStateListener {
-                        override fun onServiceStateChanged(serviceState: ServiceState) {
-                            logger.logOnServiceStateChanged(serviceState, subId)
-                            trySend(CallbackEvent.OnServiceStateChanged(serviceState))
-                        }
 
                         override fun onSignalStrengthsChanged(signalStrength: SignalStrength) {
                             logger.logOnSignalStrengthsChanged(signalStrength, subId)
@@ -214,11 +205,6 @@ class MobileConnectionRepositoryImpl(
                             logger.logOnDataEnabledChanged(enabled, subId)
                             trySend(CallbackEvent.OnDataEnabledChanged(enabled))
                         }
-
-                        override fun onStateChanged(serviceState: FiveGServiceState) {
-                            logger.logOnNrIconTypeChanged(serviceState.nrIconType, subId)
-                            trySend(CallbackEvent.OnNrIconTypeChanged(serviceState.nrIconType))
-                        }
                     }
 
                 val imsStateCallback =
@@ -238,7 +224,6 @@ class MobileConnectionRepositoryImpl(
 
                 telephonyManager.registerTelephonyCallback(bgDispatcher.asExecutor(), callback)
                 val slotIndex = getSlotIndex(subId)
-                fiveGServiceClient.registerListener(slotIndex, callback)
                 try {
                     imsMmTelManager.registerImsStateCallback(context.mainExecutor, imsStateCallback)
                 } catch (exception: ImsException) {
@@ -246,7 +231,6 @@ class MobileConnectionRepositoryImpl(
                 }
                 awaitClose {
                     telephonyManager.unregisterTelephonyCallback(callback)
-                    fiveGServiceClient.unregisterListener(slotIndex, callback)
                     try {
                         imsMmTelManager.unregisterImsStateCallback(imsStateCallback)
                     } catch (exception: Exception) {
@@ -614,7 +598,6 @@ class MobileConnectionRepositoryImpl(
         private val mobileMappingsProxy: MobileMappingsProxy,
         @Background private val bgDispatcher: CoroutineDispatcher,
         @Application private val scope: CoroutineScope,
-        private val fiveGServiceClient: FiveGServiceClient,
         private val connectivityManager: ConnectivityManager
     ) {
         fun build(
@@ -636,7 +619,6 @@ class MobileConnectionRepositoryImpl(
                 logger,
                 mobileLogger,
                 scope,
-                fiveGServiceClient,
                 connectivityManager
             )
         }
