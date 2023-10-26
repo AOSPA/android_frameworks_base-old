@@ -34,6 +34,24 @@
       "parentUuid": "c72e95ef_a9782540",
       "revId": "17b5205ba8464986e9488e60b236cc467802ea3b",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "c2ab5e45_27a0045c",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 9
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2023-10-26T07:11:08Z",
+      "side": 1,
+      "message": "turn on dark mode, lock phone, pull down quick settings and press and hold any tile that asks for your fingerprint - this needs a light / dark mode check to set the correct values",
+      "parentUuid": "864fe84f_0f7c8f22",
+      "revId": "17b5205ba8464986e9488e60b236cc467802ea3b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
