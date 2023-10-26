@@ -68,7 +68,6 @@ import com.android.systemui.statusbar.connectivity.NetworkController;
 import com.android.systemui.statusbar.connectivity.SignalCallback;
 import com.android.systemui.statusbar.connectivity.WifiIcons;
 import com.android.systemui.statusbar.connectivity.WifiIndicators;
-import com.android.systemui.util.CarrierNameCustomization;
 
 import java.io.PrintWriter;
 
@@ -94,7 +93,6 @@ public class InternetTile extends QSTileImpl<SignalState> {
     protected final InternetSignalCallback mSignalCallback = new InternetSignalCallback();
     private final InternetDialogFactory mInternetDialogFactory;
     final Handler mHandler;
-    private CarrierNameCustomization mCarrierNameCustomization;
 
     @Inject
     public InternetTile(
@@ -109,8 +107,7 @@ public class InternetTile extends QSTileImpl<SignalState> {
             QSLogger qsLogger,
             NetworkController networkController,
             AccessPointController accessPointController,
-            InternetDialogFactory internetDialogFactory,
-            CarrierNameCustomization carrierNameCustomization
+            InternetDialogFactory internetDialogFactory
     ) {
         super(host, uiEventLogger, backgroundLooper, mainHandler, falsingManager, metricsLogger,
                 statusBarStateController, activityStarter, qsLogger);
@@ -120,7 +117,6 @@ public class InternetTile extends QSTileImpl<SignalState> {
         mAccessPointController = accessPointController;
         mDataController = mController.getMobileDataController();
         mController.observe(getLifecycle(), mSignalCallback);
-        mCarrierNameCustomization = carrierNameCustomization;
     }
 
     @Override
@@ -350,14 +346,8 @@ public class InternetTile extends QSTileImpl<SignalState> {
                 return;
             }
             synchronized (mCellularInfo) {
-                if (mCarrierNameCustomization.isRoamingCustomizationEnabled()
-                        && mCarrierNameCustomization.isRoaming(indicators.subId)) {
-                    mCellularInfo.mDataSubscriptionName =
-                            mCarrierNameCustomization.getRoamingCarrierName(indicators.subId);
-                } else {
-                    mCellularInfo.mDataSubscriptionName = indicators.qsDescription == null
-                            ? mController.getMobileDataNetworkName() : indicators.qsDescription;
-                }
+                mCellularInfo.mDataSubscriptionName = indicators.qsDescription == null
+                    ? mController.getMobileDataNetworkName() : indicators.qsDescription;
                 mCellularInfo.mDataContentDescription = indicators.qsDescription != null
                     ? indicators.typeContentDescriptionHtml : null;
                 mCellularInfo.mMobileSignalIconId = indicators.qsIcon.icon;
