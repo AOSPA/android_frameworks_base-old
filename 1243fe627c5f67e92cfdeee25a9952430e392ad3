@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "16cdb6f5_f25369c5",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2023-10-26T06:42:25Z",
+      "side": 1,
+      "message": "do we really need accent colour on doze while wireless charging??",
+      "revId": "1243fe627c5f67e92cfdeee25a9952430e392ad3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
