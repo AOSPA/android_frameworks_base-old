@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "47732acc_260e3da6",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 5
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2023-10-26T12:08:20Z",
+      "side": 1,
+      "message": "small touch targets dont quite look like they are being touched with this",
+      "revId": "027797a27712b41f2235d4bac27f9725af6753dc",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
