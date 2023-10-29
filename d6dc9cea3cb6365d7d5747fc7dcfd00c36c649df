@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "9e816802_cc4ed85f",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 5
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2023-10-29T21:06:39Z",
+      "side": 1,
+      "message": "frameworks/base/packages/SystemUI/src/com/android/systemui/screenrecord/RecordingService.java:236: error: cannot find symbol\n                mNotificationManager.cancelAsUser(null, NOTIFICATION_VIEW_ID, currentUser);",
+      "revId": "d6dc9cea3cb6365d7d5747fc7dcfd00c36c649df",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
