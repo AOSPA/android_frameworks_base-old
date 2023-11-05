@@ -22,6 +22,30 @@
       },
       "revId": "2616c4e5953c1dc10f18f70a5e10ad66add32f5b",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "faa853ad_dd1b9c07",
+        "filename": "packages/SystemUI/src/com/android/systemui/doze/DozeTriggers.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 334,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2023-11-05T19:15:25Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "c8f1ec2b_6ab69009",
+      "range": {
+        "startLine": 334,
+        "startChar": 31,
+        "endLine": 334,
+        "endChar": 33
+      },
+      "revId": "2616c4e5953c1dc10f18f70a5e10ad66add32f5b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
