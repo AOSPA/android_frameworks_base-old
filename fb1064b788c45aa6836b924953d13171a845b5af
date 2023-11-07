@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "35b6e9eb_55f3f6ca",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 4
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000143
+      },
+      "writtenOn": "2023-11-07T09:54:03Z",
+      "side": 1,
+      "message": "Fixes miui camera on mi13 (photos not saving or just with 1.6mb in size)",
+      "revId": "fb1064b788c45aa6836b924953d13171a845b5af",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
