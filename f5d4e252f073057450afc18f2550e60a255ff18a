@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "81e12103_1c32dd95",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2023-11-09T17:42:46Z",
+      "side": 1,
+      "message": "I think you should mention andrew as a co author or something like that as he created the vector icons + animations.",
+      "revId": "f5d4e252f073057450afc18f2550e60a255ff18a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
