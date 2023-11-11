@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "90b72987_a8f7127d",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000835
+      },
+      "writtenOn": "2023-11-11T07:44:44Z",
+      "side": 1,
+      "message": "Commit 71e45f55510894914ff230f88119f06261787097 removed the smartspace flag",
+      "revId": "b67b84eb14445eb22a5e6f11dc7ba0c76432b0db",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
