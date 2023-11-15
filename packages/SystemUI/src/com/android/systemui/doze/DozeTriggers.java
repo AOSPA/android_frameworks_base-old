@@ -364,7 +364,11 @@ public class DozeTriggers implements DozeMachine.Part {
                         mDozeLog.d("udfpsLongPress - Not sending aodInterrupt. "
                                 + "Unsupported doze state.");
                     }
-                    requestPulse(DozeLog.REASON_SENSOR_UDFPS_LONG_PRESS, true, null);
+                    if (mConfig.alwaysOnEnabled(UserHandle.USER_CURRENT)) {
+                        requestPulse(DozeLog.REASON_SENSOR_UDFPS_LONG_PRESS, true, null);
+                    } else {
+                        mMachine.wakeUp(DozeLog.REASON_SENSOR_UDFPS_LONG_PRESS);
+                    }
                 } else {
                     mDozeHost.extendPulse(pulseReason);
                 }
