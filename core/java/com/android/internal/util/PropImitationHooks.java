@@ -35,6 +35,9 @@ import com.android.internal.R;
 
 import java.lang.reflect.Field;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
 
 public class PropImitationHooks {
 
@@ -46,6 +49,27 @@ public class PropImitationHooks {
     private static final String PACKAGE_GMS = "com.google.android.gms";
     private static final String PROCESS_GMS_UNSTABLE = PACKAGE_GMS + ".unstable";
     private static final String PACKAGE_NETFLIX = "com.netflix.mediaclient";
+    private static final String PACKAGE_GPHOTOS = "com.google.android.apps.photos";
+    private static final String FEATURE_NEXUS_PRELOAD = "com.google.android.apps.photos.NEXUS_PRELOAD";
+
+    private static final Map<String, String> sPixelXLProps = new HashMap<>();
+    static {
+        sPixelXLProps.put("BRAND", "google");
+        sPixelXLProps.put("MANUFACTURER", "Google");
+        sPixelXLProps.put("DEVICE", "marlin");
+        sPixelXLProps.put("PRODUCT", "marlin");
+        sPixelXLProps.put("MODEL", "Pixel XL");
+        sPixelXLProps.put("FINGERPRINT", "google/marlin/marlin:10/QP1A.191005.007.A3/5972272:user/release-keys");
+    }
+
+    private static final Set<String> sPixelFeatures = Set.of(
+        "PIXEL_2017_PRELOAD",
+        "PIXEL_2018_PRELOAD",
+        "PIXEL_2019_MIDYEAR_PRELOAD",
+        "PIXEL_2019_PRELOAD",
+        "PIXEL_2020_EXPERIENCE",
+        "PIXEL_2020_MIDYEAR_EXPERIENCE"
+    );
 
     private static final String PROP_SECURITY_PATCH = "persist.sys.pihooks.security_patch";
     private static final String PROP_FIRST_API_LEVEL = "persist.sys.pihooks.first_api_level";
@@ -81,6 +105,7 @@ public class PropImitationHooks {
         sProcessName = processName;
         sIsGms = packageName.equals(PACKAGE_GMS) && processName.equals(PROCESS_GMS_UNSTABLE);
         sIsFinsky = packageName.equals(PACKAGE_FINSKY);
+        sIsPhotos = packageName.equals(PACKAGE_GPHOTOS);
 
         /* Set Certified Properties for GMSCore
          * Set Stock Fingerprint for ARCore
@@ -94,6 +119,9 @@ public class PropImitationHooks {
         } else if (!sNetflixModel.isEmpty() && packageName.equals(PACKAGE_NETFLIX)) {
             dlog("Setting model to " + sNetflixModel + " for Netflix");
             setPropValue("MODEL", sNetflixModel);
+        } else if (sIsPhotos) {
+            dlog("Spoofing Pixel XL for Google Photos");
+            sPixelXLProps.forEach((k, v) -> setPropValue(k, v));
         }
     }
 
@@ -206,6 +234,19 @@ public class PropImitationHooks {
             dlog("Blocked key attestation sIsGms=" + sIsGms + " sIsFinsky=" + sIsFinsky);
             throw new UnsupportedOperationException();
         }
+    }
+
+    public static boolean hasSystemFeature(String name, boolean has) {
+        if (sIsPhotos) {
+            if (has && sPixelFeatures.stream().anyMatch(name::contains)) {
+                dlog("Blocked system feature " + name + " for Google Photos");
+                has = false;
+            } else if (!has && name.equalsIgnoreCase(FEATURE_NEXUS_PRELOAD)) {
+                dlog("Enabled system feature " + name + " for Google Photos");
+                has = true;
+            }
+        }
+        return has;
     }
 
     public static void dlog(String msg) {
