@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "df7f25dd_2a8fc2b1",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2023-11-19T11:27:25Z",
+      "side": 1,
+      "message": "we’re fairly against spoofing gphotos for unlimited uploads",
+      "revId": "ecbe9f79a869dcdcf9800c520718226110be5f58",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
