@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "ca7187a8_2248f5c0",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000101
+      },
+      "writtenOn": "2023-11-19T16:37:43Z",
+      "side": 1,
+      "message": "No more crash log to be seen in logs",
+      "revId": "e44923ec8c4aed1fe025bbaa857ccfbcaf04697b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
