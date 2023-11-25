@@ -4019,6 +4019,10 @@ public final class PowerManagerService extends SystemService
                     }
                 }
             }
+            Intent intent = new Intent(Intent.ACTION_DISPLAY_STATE_CHANGED)
+                    .addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY
+                            | Intent.FLAG_RECEIVER_FOREGROUND);
+            mContext.sendBroadcastAsUser(intent, UserHandle.ALL);
         }
 
         @Override
