@@ -74,6 +74,7 @@ import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
 import android.view.DisplayAddress;
 import android.view.IWindowManager;
+import android.view.Display;
 import android.view.Surface;
 import android.window.TransitionRequestInfo;
 import android.window.WindowContainerTransaction;
@@ -321,8 +322,7 @@ public class DisplayRotation {
         overrideMirroring =
                 SystemProperties.getBoolean("vendor.display.override_mirroring_rotation", false);
 
-        isBuiltin = ((displayAddress) != null) ?
-                ((((DisplayAddress.Physical) displayAddress).getPort() & 0x80) == 0x80) : false;
+        isBuiltin = (displayContent.mDisplay.getType() == Display.TYPE_INTERNAL);
         /* QTI_END */
 
         if (/* QTI_BEGIN */ (overrideMirroring && isBuiltin) || /* QTI_END */ isDefaultDisplay) {
