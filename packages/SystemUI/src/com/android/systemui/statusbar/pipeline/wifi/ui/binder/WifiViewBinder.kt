@@ -63,6 +63,11 @@ object WifiViewBinder {
         val activityContainerView = view.requireViewById<View>(R.id.inout_container)
         val airplaneSpacer = view.requireViewById<View>(R.id.wifi_airplane_spacer)
         val signalSpacer = view.requireViewById<View>(R.id.wifi_signal_spacer)
+<<<<<<< PATCH SET (5de75c SystemUI: Re-Introduce wifi standard icon feature [1/2])
+        val voWifiView = view.requireViewById<ImageView>(R.id.vowifi)
+        val wifiStandardView = view.requireViewById<ImageView>(R.id.wifi_standard)
+=======
+>>>>>>> BASE      (6f4f79 SystemUI: RecordingService: Fix non dismissing notifications)
 
         view.isVisible = true
         iconView.isVisible = true
@@ -112,6 +117,11 @@ object WifiViewBinder {
                         iconView.imageTintList = tintList
                         activityInView.imageTintList = tintList
                         activityOutView.imageTintList = tintList
+<<<<<<< PATCH SET (5de75c SystemUI: Re-Introduce wifi standard icon feature [1/2])
+                        voWifiView.imageTintList = tintList
+                        wifiStandardView.imageTintList = tintList
+=======
+>>>>>>> BASE      (6f4f79 SystemUI: RecordingService: Fix non dismissing notifications)
                         dotView.setDecorColor(tint)
                     }
                 }
