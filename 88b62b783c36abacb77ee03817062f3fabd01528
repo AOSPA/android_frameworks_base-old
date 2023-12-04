@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "fc3365a4_ded84387",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000480
+      },
+      "writtenOn": "2023-12-04T10:36:21Z",
+      "side": 1,
+      "message": "This is unnecessary, it is already configurable with an overlay.\n\nYou can just set volume_dialog_gravity to 19, for (LEFT|CENTER_VERTICAL), and drop this commit (you still need the other fixes from this chain, they are also uploaded to also Gerrit btw).\nThis commit is only useful to override the value with a runtime configurable value.",
+      "revId": "88b62b783c36abacb77ee03817062f3fabd01528",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
