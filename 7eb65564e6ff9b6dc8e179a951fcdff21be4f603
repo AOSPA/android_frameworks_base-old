@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "9457f845_03241ea4",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000890
+      },
+      "writtenOn": "2023-12-04T13:51:37Z",
+      "side": 1,
+      "message": "I would not prefer a chain of trust to be broken like this",
+      "revId": "7eb65564e6ff9b6dc8e179a951fcdff21be4f603",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
