@@ -16,6 +16,24 @@
       "message": "Pixel 8 Pro doesnt show any icon for face unlock afaik, are we sure we want it?",
       "revId": "18d99a832c1fd3c449da439a55cf7bd3eda026cb",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "4a5c3cde_3e325ddf",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000760
+      },
+      "writtenOn": "2023-12-05T14:04:30Z",
+      "side": 1,
+      "message": "well its good to have an icon indicating that the facesense service is active and looking for a face",
+      "parentUuid": "1bca36b0_92c4ddd3",
+      "revId": "18d99a832c1fd3c449da439a55cf7bd3eda026cb",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
