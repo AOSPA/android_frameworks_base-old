@@ -34,6 +34,24 @@
       "parentUuid": "1bca36b0_92c4ddd3",
       "revId": "18d99a832c1fd3c449da439a55cf7bd3eda026cb",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "9358a9ed_85d1c3cc",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000143
+      },
+      "writtenOn": "2023-12-06T13:04:30Z",
+      "side": 1,
+      "message": "Cant we animate a circle around the camera cutout (if the device has one) instead of that icon to match pixels?",
+      "parentUuid": "4a5c3cde_3e325ddf",
+      "revId": "18d99a832c1fd3c449da439a55cf7bd3eda026cb",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
