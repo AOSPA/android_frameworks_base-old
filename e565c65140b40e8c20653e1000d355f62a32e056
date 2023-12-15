@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "a2f2e661_38e05ff8",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 5
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000143
+      },
+      "writtenOn": "2023-12-15T09:44:33Z",
+      "side": 1,
+      "message": "uploaded a patchset with text and animation split into two commits, so we can review it as separate and could merge text only for now",
+      "revId": "e565c65140b40e8c20653e1000d355f62a32e056",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
