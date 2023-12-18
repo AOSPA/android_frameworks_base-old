@@ -31,4 +31,7 @@
     <bool name="use_lock_pattern_drawable">false</bool>
     <bool name="resolver_landscape_phone">true</bool>
     <bool name="config_wifi_dual_sap_mode_enabled">false</bool>
+
+    <!-- Whether or not to include horizontal space around the dialog -->
+    <bool name="autofill_dialog_horizontal_space_included">false</bool>
 </resources>

@@ -44,6 +44,7 @@ import android.media.session.MediaController.PlaybackInfo;
 import android.media.session.MediaSession.Token;
 import android.net.Uri;
 import android.os.Handler;
+import android.os.HandlerExecutor;
 import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteException;
@@ -59,6 +60,7 @@ import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.CaptioningManager;
 
+import androidx.annotation.NonNull;
 import androidx.lifecycle.Observer;
 
 import com.android.internal.annotations.GuardedBy;
@@ -83,6 +85,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.inject.Inject;
 
@@ -134,7 +137,7 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
     private final Receiver mReceiver = new Receiver();
     private final RingerModeObservers mRingerModeObservers;
     private final MediaSessions mMediaSessions;
-    private final CaptioningManager mCaptioningManager;
+    private final AtomicReference<CaptioningManager> mCaptioningManager = new AtomicReference<>();
     private final KeyguardManager mKeyguardManager;
     private final ActivityManager mActivityManager;
     private final UserTracker mUserTracker;
@@ -163,16 +166,16 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
 
     private final WakefulnessLifecycle.Observer mWakefullnessLifecycleObserver =
             new WakefulnessLifecycle.Observer() {
-        @Override
-        public void onStartedWakingUp() {
-            mDeviceInteractive = true;
-        }
+                @Override
+                public void onStartedWakingUp() {
+                    mDeviceInteractive = true;
+                }
 
-        @Override
-        public void onFinishedGoingToSleep() {
-            mDeviceInteractive = false;
-        }
-    };
+                @Override
+                public void onFinishedGoingToSleep() {
+                    mDeviceInteractive = false;
+                }
+            };
 
     @Inject
     public VolumeDialogControllerImpl(
@@ -187,7 +190,6 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
             AccessibilityManager accessibilityManager,
             PackageManager packageManager,
             WakefulnessLifecycle wakefulnessLifecycle,
-            CaptioningManager captioningManager,
             KeyguardManager keyguardManager,
             ActivityManager activityManager,
             UserTracker userTracker,
@@ -217,10 +219,12 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
         mVibrator = vibrator;
         mHasVibrator = mVibrator.hasVibrator();
         mAudioService = iAudioService;
-        mCaptioningManager = captioningManager;
         mKeyguardManager = keyguardManager;
         mActivityManager = activityManager;
         mUserTracker = userTracker;
+        mUserTracker.addCallback(mUserChangedCallback, new HandlerExecutor(mWorker));
+        createCaptioningManagerServiceByUserContext(mUserTracker.getUserContext());
+
         dumpManager.registerDumpable("VolumeDialogControllerImpl", this);
 
         mAdaptivePlaybackEnabled = Settings.System.getIntForUser(mContext.getContentResolver(),
@@ -231,8 +235,8 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
         boolean accessibilityVolumeStreamActive = accessibilityManager
                 .isAccessibilityVolumeStreamActive();
         mVolumeController.setA11yMode(accessibilityVolumeStreamActive ?
-                    VolumePolicy.A11Y_MODE_INDEPENDENT_A11Y_VOLUME :
-                        VolumePolicy.A11Y_MODE_MEDIA_A11Y_VOLUME);
+                VolumePolicy.A11Y_MODE_INDEPENDENT_A11Y_VOLUME :
+                VolumePolicy.A11Y_MODE_MEDIA_A11Y_VOLUME);
 
         mWakefulnessLifecycle.addObserver(mWakefullnessLifecycleObserver);
     }
@@ -329,12 +333,31 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
         mWorker.sendEmptyMessage(W.GET_STATE);
     }
 
-    public boolean areCaptionsEnabled() {
-        return mCaptioningManager.isSystemAudioCaptioningEnabled();
+    /**
+     * We met issues about the wrong state of System Caption in multi-user mode.
+     * It happened in the usage of CaptioningManager Service from SysUI process
+     * that is a global system process of User 0.
+     * Therefore, we have to add callback on UserTracker that allows us to get the Context of
+     * active User and then get the corresponding CaptioningManager Service for further usages.
+     */
+    private final UserTracker.Callback mUserChangedCallback =
+            new UserTracker.Callback() {
+                @Override
+                public void onUserChanged(int newUser, @NonNull Context userContext) {
+                    createCaptioningManagerServiceByUserContext(userContext);
+                }
+            };
+
+    private void createCaptioningManagerServiceByUserContext(@NonNull Context userContext) {
+        mCaptioningManager.set(userContext.getSystemService(CaptioningManager.class));
     }
 
-    public void setCaptionsEnabled(boolean isEnabled) {
-        mCaptioningManager.setSystemAudioCaptioningEnabled(isEnabled);
+    public void getCaptionsEnabledState(boolean checkForSwitchState) {
+        mWorker.obtainMessage(W.GET_CAPTIONS_ENABLED_STATE, checkForSwitchState).sendToTarget();
+    }
+
+    public void setCaptionsEnabledState(boolean enabled) {
+        mWorker.obtainMessage(W.SET_CAPTIONS_ENABLED_STATE, enabled).sendToTarget();
     }
 
     public void getCaptionsComponentState(boolean fromTooltip) {
@@ -375,8 +398,8 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
     }
 
     public void setEnableDialogs(boolean volumeUi, boolean safetyWarning) {
-      mShowVolumeDialog = volumeUi;
-      mShowSafetyWarning = safetyWarning;
+        mShowVolumeDialog = volumeUi;
+        mShowSafetyWarning = safetyWarning;
     }
 
     @Override
@@ -427,12 +450,38 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
     }
 
     private void onShowCsdWarningW(@AudioManager.CsdWarning int csdWarning, int durationMs) {
-            mCallbacks.onShowCsdWarning(csdWarning, durationMs);
+        mCallbacks.onShowCsdWarning(csdWarning, durationMs);
     }
 
     private void onGetCaptionsComponentStateW(boolean fromTooltip) {
-        mCallbacks.onCaptionComponentStateChanged(
-                mCaptioningManager.isSystemAudioCaptioningUiEnabled(), fromTooltip);
+        CaptioningManager captioningManager = mCaptioningManager.get();
+        if (null != captioningManager) {
+            mCallbacks.onCaptionComponentStateChanged(
+                    captioningManager.isSystemAudioCaptioningUiEnabled(), fromTooltip);
+        } else {
+            Log.e(TAG, "onGetCaptionsComponentStateW(), null captioningManager");
+        }
+    }
+
+    private void onGetCaptionsEnabledStateW(boolean checkForSwitchState) {
+        CaptioningManager captioningManager = mCaptioningManager.get();
+        if (null != captioningManager) {
+            mCallbacks.onCaptionEnabledStateChanged(
+                    captioningManager.isSystemAudioCaptioningEnabled(), checkForSwitchState);
+        } else {
+            Log.e(TAG, "onGetCaptionsEnabledStateW(), null captioningManager");
+        }
+    }
+
+    private void onSetCaptionsEnabledStateW(boolean enabled) {
+        CaptioningManager captioningManager = mCaptioningManager.get();
+        if (null != captioningManager) {
+            captioningManager.setSystemAudioCaptioningEnabled(enabled);
+            mCallbacks.onCaptionEnabledStateChanged(
+                    captioningManager.isSystemAudioCaptioningEnabled(), false);
+        } else {
+            Log.e(TAG, "onGetCaptionsEnabledStateW(), null captioningManager");
+        }
     }
 
     private void onAccessibilityModeChanged(Boolean showA11yStream) {
@@ -751,7 +800,7 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
          * This method will never be called if the CSD (Computed Sound Dose) feature is
          * not enabled. See com.android.android.server.audio.SoundDoseHelper for the state of
          * the feature.
-         * @param warning the type of warning to display, values are one of
+         * @param csdWarning the type of warning to display, values are one of
          *        {@link android.media.AudioManager#CSD_WARNING_DOSE_REACHED_1X},
          *        {@link android.media.AudioManager#CSD_WARNING_DOSE_REPEATED_5X},
          *        {@link android.media.AudioManager#CSD_WARNING_MOMENTARY_EXPOSURE},
@@ -830,6 +879,8 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
         private static final int ACCESSIBILITY_MODE_CHANGED = 15;
         private static final int GET_CAPTIONS_COMPONENT_STATE = 16;
         private static final int SHOW_CSD_WARNING = 17;
+        private static final int GET_CAPTIONS_ENABLED_STATE = 18;
+        private static final int SET_CAPTIONS_ENABLED_STATE = 19;
 
         W(Looper looper) {
             super(looper);
@@ -857,6 +908,10 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
                 case ACCESSIBILITY_MODE_CHANGED: onAccessibilityModeChanged((Boolean) msg.obj);
                     break;
                 case SHOW_CSD_WARNING: onShowCsdWarningW(msg.arg1, msg.arg2); break;
+                case GET_CAPTIONS_ENABLED_STATE:
+                    onGetCaptionsEnabledStateW((Boolean) msg.obj); break;
+                case SET_CAPTIONS_ENABLED_STATE:
+                    onSetCaptionsEnabledStateW((Boolean) msg.obj); break;
             }
         }
     }
@@ -1025,6 +1080,17 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
                                 componentEnabled, fromTooltip));
             }
         }
+
+        @Override
+        public void onCaptionEnabledStateChanged(Boolean isEnabled, Boolean checkBeforeSwitch) {
+            boolean captionsEnabled = isEnabled != null && isEnabled;
+            for (final Map.Entry<Callbacks, Handler> entry : mCallbackMap.entrySet()) {
+                entry.getValue().post(
+                        () -> entry.getKey().onCaptionEnabledStateChanged(
+                                captionsEnabled, checkBeforeSwitch));
+            }
+        }
+
     }
 
     private final class RingerModeObservers {

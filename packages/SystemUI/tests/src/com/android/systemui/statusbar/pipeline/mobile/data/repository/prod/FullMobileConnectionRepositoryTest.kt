@@ -22,9 +22,11 @@ import android.telephony.TelephonyCallback
 import android.telephony.TelephonyManager
 import androidx.test.filters.SmallTest
 import com.android.systemui.SysuiTestCase
+import com.android.systemui.coroutines.collectLastValue
 import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.log.table.TableLogBufferFactory
 import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameModel
+import com.android.systemui.statusbar.pipeline.mobile.data.model.SubscriptionModel
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.FakeMobileConnectionRepository
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionRepository
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.prod.FullMobileConnectionRepository.Companion.COL_EMERGENCY
@@ -43,6 +45,7 @@ import com.google.common.truth.Truth.assertThat
 import java.io.PrintWriter
 import java.io.StringWriter
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.test.TestScope
@@ -79,24 +82,51 @@ class FullMobileConnectionRepositoryTest : SysuiTestCase() {
     private val mobileFactory = mock<MobileConnectionRepositoryImpl.Factory>()
     private val carrierMergedFactory = mock<CarrierMergedConnectionRepository.Factory>()
 
+    private val subscriptionModel =
+        MutableStateFlow(
+            SubscriptionModel(
+                subscriptionId = SUB_ID,
+                carrierName = DEFAULT_NAME,
+            )
+        )
+
     private lateinit var mobileRepo: FakeMobileConnectionRepository
     private lateinit var carrierMergedRepo: FakeMobileConnectionRepository
 
     @Before
     fun setUp() {
-        mobileRepo = FakeMobileConnectionRepository(SUB_ID, tableLogBuffer)
-        carrierMergedRepo = FakeMobileConnectionRepository(SUB_ID, tableLogBuffer)
+        mobileRepo =
+            FakeMobileConnectionRepository(
+                SUB_ID,
+                tableLogBuffer,
+            )
+        carrierMergedRepo =
+            FakeMobileConnectionRepository(
+                    SUB_ID,
+                    tableLogBuffer,
+                )
+                .apply {
+                    // Mimicks the real carrier merged repository
+                    this.isAllowedDuringAirplaneMode.value = true
+                }
 
         whenever(
                 mobileFactory.build(
                     eq(SUB_ID),
                     any(),
-                    eq(DEFAULT_NAME),
+                    any(),
+                    eq(DEFAULT_NAME_MODEL),
                     eq(SEP),
                 )
             )
             .thenReturn(mobileRepo)
-        whenever(carrierMergedFactory.build(eq(SUB_ID), any())).thenReturn(carrierMergedRepo)
+        whenever(
+                carrierMergedFactory.build(
+                    eq(SUB_ID),
+                    any(),
+                )
+            )
+            .thenReturn(carrierMergedRepo)
     }
 
     @Test
@@ -116,7 +146,8 @@ class FullMobileConnectionRepositoryTest : SysuiTestCase() {
                 .build(
                     SUB_ID,
                     tableLogBuffer,
-                    DEFAULT_NAME,
+                    subscriptionModel,
+                    DEFAULT_NAME_MODEL,
                     SEP,
                 )
         }
@@ -134,7 +165,11 @@ class FullMobileConnectionRepositoryTest : SysuiTestCase() {
 
             assertThat(underTest.activeRepo.value).isEqualTo(mobileRepo)
             assertThat(underTest.operatorAlphaShort.value).isEqualTo(nonCarrierMergedName)
-            verify(carrierMergedFactory, never()).build(SUB_ID, tableLogBuffer)
+            verify(carrierMergedFactory, never())
+                .build(
+                    SUB_ID,
+                    tableLogBuffer,
+                )
         }
 
     @Test
@@ -301,6 +336,24 @@ class FullMobileConnectionRepositoryTest : SysuiTestCase() {
         }
 
     @Test
+    fun isAllowedDuringAirplaneMode_updatesWhenCarrierMergedUpdates() =
+        testScope.runTest {
+            initializeRepo(startingIsCarrierMerged = false)
+
+            val latest by collectLastValue(underTest.isAllowedDuringAirplaneMode)
+
+            assertThat(latest).isFalse()
+
+            underTest.setIsCarrierMerged(true)
+
+            assertThat(latest).isTrue()
+
+            underTest.setIsCarrierMerged(false)
+
+            assertThat(latest).isFalse()
+        }
+
+    @Test
     fun factory_reusesLogBuffersForSameConnection() =
         testScope.runTest {
             val realLoggerFactory =
@@ -326,7 +379,8 @@ class FullMobileConnectionRepositoryTest : SysuiTestCase() {
                 factory.build(
                     SUB_ID,
                     startingIsCarrierMerged = false,
-                    DEFAULT_NAME,
+                    subscriptionModel,
+                    DEFAULT_NAME_MODEL,
                     SEP,
                 )
 
@@ -334,7 +388,8 @@ class FullMobileConnectionRepositoryTest : SysuiTestCase() {
                 factory.build(
                     SUB_ID,
                     startingIsCarrierMerged = false,
-                    DEFAULT_NAME,
+                    subscriptionModel,
+                    DEFAULT_NAME_MODEL,
                     SEP,
                 )
 
@@ -366,7 +421,8 @@ class FullMobileConnectionRepositoryTest : SysuiTestCase() {
                 factory.build(
                     SUB_ID,
                     startingIsCarrierMerged = false,
-                    DEFAULT_NAME,
+                    subscriptionModel,
+                    DEFAULT_NAME_MODEL,
                     SEP,
                 )
 
@@ -375,7 +431,8 @@ class FullMobileConnectionRepositoryTest : SysuiTestCase() {
                 factory.build(
                     SUB_ID,
                     startingIsCarrierMerged = true,
-                    DEFAULT_NAME,
+                    subscriptionModel,
+                    DEFAULT_NAME_MODEL,
                     SEP,
                 )
 
@@ -601,7 +658,8 @@ class FullMobileConnectionRepositoryTest : SysuiTestCase() {
                 SUB_ID,
                 startingIsCarrierMerged,
                 tableLogBuffer,
-                DEFAULT_NAME,
+                subscriptionModel,
+                DEFAULT_NAME_MODEL,
                 SEP,
                 testScope.backgroundScope,
                 mobileFactory,
@@ -618,8 +676,10 @@ class FullMobileConnectionRepositoryTest : SysuiTestCase() {
             MobileConnectionRepositoryImpl(
                 mContext,
                 SUB_ID,
-                defaultNetworkName = NetworkNameModel.Default("default"),
-                networkNameSeparator = SEP,
+                context,
+                subscriptionModel,
+                DEFAULT_NAME_MODEL,
+                SEP,
                 telephonyManager,
                 systemUiCarrierConfig = mock(),
                 fakeBroadcastDispatcher,
@@ -635,7 +695,8 @@ class FullMobileConnectionRepositoryTest : SysuiTestCase() {
                 mobileFactory.build(
                     eq(SUB_ID),
                     any(),
-                    eq(DEFAULT_NAME),
+                    any(),
+                    eq(DEFAULT_NAME_MODEL),
                     eq(SEP),
                 )
             )
@@ -658,7 +719,13 @@ class FullMobileConnectionRepositoryTest : SysuiTestCase() {
                 testScope.backgroundScope,
                 wifiRepository,
             )
-        whenever(carrierMergedFactory.build(eq(SUB_ID), any())).thenReturn(realRepo)
+        whenever(
+                carrierMergedFactory.build(
+                    eq(SUB_ID),
+                    any(),
+                )
+            )
+            .thenReturn(realRepo)
 
         return realRepo
     }
@@ -671,7 +738,8 @@ class FullMobileConnectionRepositoryTest : SysuiTestCase() {
 
     private companion object {
         const val SUB_ID = 42
-        private val DEFAULT_NAME = NetworkNameModel.Default("default name")
+        private val DEFAULT_NAME = "default name"
+        private val DEFAULT_NAME_MODEL = NetworkNameModel.Default(DEFAULT_NAME)
         private const val SEP = "-"
         private const val BUFFER_SEPARATOR = "|"
     }

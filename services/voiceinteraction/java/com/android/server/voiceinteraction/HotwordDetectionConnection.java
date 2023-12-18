@@ -30,6 +30,7 @@ import static com.android.internal.util.FrameworkStatsLog.HOTWORD_DETECTOR_KEYPH
 import android.app.AppOpsManager;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.AppOpsManager;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.Disabled;
 import android.content.ComponentName;
@@ -50,10 +51,12 @@ import android.os.PersistableBundle;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SharedMemory;
+import android.os.SystemProperties;
 import android.provider.DeviceConfig;
 import android.service.voice.HotwordDetectionService;
 import android.service.voice.HotwordDetectionServiceFailure;
 import android.service.voice.HotwordDetector;
+import android.service.voice.IDetectorSessionStorageService;
 import android.service.voice.IMicrophoneHotwordDetectionVoiceInteractionCallback;
 import android.service.voice.ISandboxedDetectionService;
 import android.service.voice.IVisualQueryDetectionVoiceInteractionCallback;
@@ -69,6 +72,7 @@ import android.view.contentcapture.IContentCaptureManager;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.app.IHotwordRecognitionStatusCallback;
 import com.android.internal.app.IVisualQueryDetectionAttentionListener;
+import com.android.internal.infra.AndroidFuture;
 import com.android.internal.infra.ServiceConnector;
 import com.android.server.LocalServices;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
@@ -111,6 +115,9 @@ final class HotwordDetectionConnection {
     private static final String KEY_RESTART_PERIOD_IN_SECONDS = "restart_period_in_seconds";
     private static final long RESET_DEBUG_HOTWORD_LOGGING_TIMEOUT_MILLIS = 60 * 60 * 1000; // 1 hour
     private static final int MAX_ISOLATED_PROCESS_NUMBER = 10;
+
+    private static final boolean SYSPROP_VISUAL_QUERY_SERVICE_ENABLED =
+            SystemProperties.getBoolean("ro.hotword.visual_query_service_enabled", false);
 
     /**
      * Indicates the {@link HotwordDetectionService} is created.
@@ -157,6 +164,8 @@ final class HotwordDetectionConnection {
     @NonNull private ServiceConnection mRemoteVisualQueryDetectionService;
     @GuardedBy("mLock")
     @Nullable private IBinder mAudioFlinger;
+
+    @Nullable private IHotwordRecognitionStatusCallback mHotwordRecognitionCallback;
     @GuardedBy("mLock")
     private boolean mDebugHotwordLogging = false;
 
@@ -368,29 +377,29 @@ final class HotwordDetectionConnection {
     /**
      * This method is only used by VisualQueryDetector.
      */
-    void startPerceivingLocked(IVisualQueryDetectionVoiceInteractionCallback callback) {
+    boolean startPerceivingLocked(IVisualQueryDetectionVoiceInteractionCallback callback) {
         if (DEBUG) {
             Slog.d(TAG, "startPerceivingLocked");
         }
         final VisualQueryDetectorSession session = getVisualQueryDetectorSessionLocked();
         if (session == null) {
-            return;
+            return false;
         }
-        session.startPerceivingLocked(callback);
+        return session.startPerceivingLocked(callback);
     }
 
     /**
      * This method is only used by VisaulQueryDetector.
      */
-    void stopPerceivingLocked() {
+    boolean stopPerceivingLocked() {
         if (DEBUG) {
             Slog.d(TAG, "stopPerceivingLocked");
         }
         final VisualQueryDetectorSession session = getVisualQueryDetectorSessionLocked();
         if (session == null) {
-            return;
+            return false;
         }
-        session.stopPerceivingLocked();
+        return session.stopPerceivingLocked();
     }
 
     public void startListeningFromExternalSourceLocked(
@@ -676,7 +685,8 @@ final class HotwordDetectionConnection {
             mIntent = intent;
             mDetectionServiceType = detectionServiceType;
             int flags = bindInstantServiceAllowed ? Context.BIND_ALLOW_INSTANT : 0;
-            if (mVisualQueryDetectionComponentName != null
+            if (SYSPROP_VISUAL_QUERY_SERVICE_ENABLED
+                    && mVisualQueryDetectionComponentName != null
                     && mHotwordDetectionComponentName != null) {
                 flags |= Context.BIND_SHARED_ISOLATED_PROCESS;
             }
@@ -694,6 +704,7 @@ final class HotwordDetectionConnection {
             updateContentCaptureManager(connection);
             updateSpeechService(connection);
             updateServiceIdentity(connection);
+            updateStorageService(connection);
             return connection;
         }
     }
@@ -910,6 +921,7 @@ final class HotwordDetectionConnection {
                     mVoiceInteractionServiceUid, mVoiceInteractorIdentity,
                     mScheduledExecutorService, mDebugHotwordLogging, mRemoteExceptionListener);
         }
+        mHotwordRecognitionCallback = callback;
         mDetectorSessions.put(detectorType, session);
         session.initialize(options, sharedMemory);
     }
@@ -1033,6 +1045,23 @@ final class HotwordDetectionConnection {
                 addServiceUidForAudioPolicy(uid);
             }
         }));
+    }
+
+    private void updateStorageService(ServiceConnection connection) {
+        connection.run(service -> {
+            service.registerRemoteStorageService(new IDetectorSessionStorageService.Stub() {
+                @Override
+                public void openFile(String filename, AndroidFuture future)
+                        throws RemoteException {
+                    Slog.v(TAG, "BinderCallback#onFileOpen");
+                    try {
+                        mHotwordRecognitionCallback.onOpenFile(filename, future);
+                    } catch (RemoteException e) {
+                        e.rethrowFromSystemServer();
+                    }
+                }
+            });
+        });
     }
 
     private void addServiceUidForAudioPolicy(int uid) {

@@ -20,6 +20,7 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothCsipSetCoordinator;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
+import android.bluetooth.le.ScanFilter;
 import android.content.Context;
 import android.util.Log;
 
@@ -116,10 +117,21 @@ public class CachedBluetoothDeviceManager {
     /**
      * Create and return a new {@link CachedBluetoothDevice}. This assumes
      * that {@link #findDevice} has already been called and returned null.
-     * @param device the address of the new Bluetooth device
+     * @param device the new Bluetooth device
      * @return the newly created CachedBluetoothDevice object
      */
     public CachedBluetoothDevice addDevice(BluetoothDevice device) {
+        return addDevice(device, /*leScanFilters=*/null);
+    }
+
+    /**
+     * Create and return a new {@link CachedBluetoothDevice}. This assumes
+     * that {@link #findDevice} has already been called and returned null.
+     * @param device the new Bluetooth device
+     * @param leScanFilters the BLE scan filters which the device matched
+     * @return the newly created CachedBluetoothDevice object
+     */
+    public CachedBluetoothDevice addDevice(BluetoothDevice device, List<ScanFilter> leScanFilters) {
         CachedBluetoothDevice newDevice;
         final LocalBluetoothProfileManager profileManager = mBtManager.getProfileManager();
         synchronized (this) {
@@ -127,7 +139,7 @@ public class CachedBluetoothDeviceManager {
             if (newDevice == null) {
                 newDevice = new CachedBluetoothDevice(mContext, profileManager, device);
                 mCsipDeviceManager.initCsipDeviceIfNeeded(newDevice);
-                mHearingAidDeviceManager.initHearingAidDeviceIfNeeded(newDevice);
+                mHearingAidDeviceManager.initHearingAidDeviceIfNeeded(newDevice, leScanFilters);
                 if (!mCsipDeviceManager.setMemberDeviceIfNeeded(newDevice)
                         && !mHearingAidDeviceManager.setSubDeviceIfNeeded(newDevice)) {
                     mCachedDevices.add(newDevice);
@@ -365,16 +377,17 @@ public class CachedBluetoothDeviceManager {
     public synchronized void onDeviceUnpaired(CachedBluetoothDevice device) {
         device.setGroupId(BluetoothCsipSetCoordinator.GROUP_ID_INVALID);
         CachedBluetoothDevice mainDevice = mCsipDeviceManager.findMainDevice(device);
-        final Set<CachedBluetoothDevice> memberDevices = device.getMemberDevice();
+        // Should iterate through the cloned set to avoid ConcurrentModificationException
+        final Set<CachedBluetoothDevice> memberDevices = new HashSet<>(device.getMemberDevice());
         if (!memberDevices.isEmpty()) {
-            // Main device is unpaired, to unpair the member device
+            // Main device is unpaired, also unpair the member devices
             for (CachedBluetoothDevice memberDevice : memberDevices) {
                 memberDevice.unpair();
                 memberDevice.setGroupId(BluetoothCsipSetCoordinator.GROUP_ID_INVALID);
                 device.removeMemberDevice(memberDevice);
             }
         } else if (mainDevice != null) {
-            // the member device unpaired, to unpair main device
+            // Member device is unpaired, also unpair the main device
             mainDevice.unpair();
         }
         mainDevice = mHearingAidDeviceManager.findMainDevice(device);

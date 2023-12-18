@@ -1814,7 +1814,9 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                 /* multi_window */
                 false,
                 /* bal_code */
-                -1
+                -1,
+                /* task_stack */
+                null
         );
 
         boolean restrictActivitySwitch = ActivitySecurityModelFeatureFlags
@@ -1953,7 +1955,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
         // DestroyActivityItem may be called first.
         final ActivityRecord top = task.getTopMostActivity();
         if (top != null && top.finishing && !top.mAppStopped && top.lastVisibleTime > 0
-                && !task.mKillProcessesOnDestroyed) {
+                && !task.mKillProcessesOnDestroyed && top.hasProcess()) {
             task.mKillProcessesOnDestroyed = true;
             mHandler.sendMessageDelayed(
                     mHandler.obtainMessage(KILL_TASK_PROCESSES_TIMEOUT_MSG, task),
@@ -2347,7 +2349,8 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
             displaySwapping |= s.isDisplaySleepingAndSwapping();
             ProtoLog.v(WM_DEBUG_STATES, "Stopping %s: nowVisible=%b animating=%b "
                     + "finishing=%s", s, s.nowVisible, animating, s.finishing);
-            if ((!animating && !displaySwapping) || mService.mShuttingDown) {
+            if ((!animating && !displaySwapping) || mService.mShuttingDown
+                    || s.getRootTask().isForceHiddenForPinnedTask()) {
                 if (!processPausingActivities && s.isState(PAUSING)) {
                     // Defer processing pausing activities in this iteration and reschedule
                     // a delayed idle to reprocess it again
@@ -2516,6 +2519,10 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
         final ActivityRecord prevTopActivity = mTopResumedActivity;
         final Task topRootTask = mRootWindowContainer.getTopDisplayFocusedRootTask();
         if (topRootTask == null || topRootTask.getTopResumedActivity() == prevTopActivity) {
+            if (topRootTask == null) {
+                // There's no focused task and there won't have any resumed activity either.
+                scheduleTopResumedActivityStateLossIfNeeded();
+            }
             if (mService.isSleepingLocked()) {
                 // There won't be a next resumed activity. The top process should still be updated
                 // according to the current top focused activity.
@@ -2525,16 +2532,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
         }
 
         // Ask previous activity to release the top state.
-        final boolean prevActivityReceivedTopState =
-                prevTopActivity != null && !mTopResumedActivityWaitingForPrev;
-        // mTopResumedActivityWaitingForPrev == true at this point would mean that an activity
-        // before the prevTopActivity one hasn't reported back yet. So server never sent the top
-        // resumed state change message to prevTopActivity.
-        if (prevActivityReceivedTopState
-                && prevTopActivity.scheduleTopResumedActivityChanged(false /* onTop */)) {
-            scheduleTopResumedStateLossTimeout(prevTopActivity);
-            mTopResumedActivityWaitingForPrev = true;
-        }
+        scheduleTopResumedActivityStateLossIfNeeded();
 
         // Update the current top activity.
         mTopResumedActivity = topRootTask.getTopResumedActivity();
@@ -2557,6 +2555,23 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
         scheduleTopResumedActivityStateIfNeeded();
 
         mService.updateTopApp(mTopResumedActivity);
+    }
+
+    /** Schedule current top resumed activity state loss */
+    private void scheduleTopResumedActivityStateLossIfNeeded() {
+        if (mTopResumedActivity == null) {
+            return;
+        }
+
+        // mTopResumedActivityWaitingForPrev == true at this point would mean that an activity
+        // before the prevTopActivity one hasn't reported back yet. So server never sent the top
+        // resumed state change message to prevTopActivity.
+        if (!mTopResumedActivityWaitingForPrev
+                && mTopResumedActivity.scheduleTopResumedActivityChanged(false /* onTop */)) {
+            scheduleTopResumedStateLossTimeout(mTopResumedActivity);
+            mTopResumedActivityWaitingForPrev = true;
+            mTopResumedActivity = null;
+        }
     }
 
     /** Schedule top resumed state change if previous top activity already reported back. */

@@ -185,6 +185,8 @@ class RecentTasks {
 
     /** The non-empty tasks that are removed from recent tasks (see {@link #removeForAddTask}). */
     private final ArrayList<Task> mHiddenTasks = new ArrayList<>();
+    /** The maximum size that the hidden tasks are cached. */
+    private static final int MAX_HIDDEN_TASK_SIZE = 10;
 
     /** Whether to trim inactive tasks when activities are idle. */
     private boolean mCheckTrimmableTasksOnIdle;
@@ -689,6 +691,26 @@ class RecentTasks {
         }
     }
 
+    /**
+     * Removes the oldest recent task that is compatible with the given one. This is possible if
+     * the task windowing mode changed after being added to the Recents.
+     */
+    void removeCompatibleRecentTask(Task task) {
+        final int taskIndex = mTasks.indexOf(task);
+        if (taskIndex < 0) {
+            return;
+        }
+
+        final int candidateIndex = findRemoveIndexForTask(task, false /* includingSelf */);
+        if (candidateIndex == -1) {
+            // Nothing to trim
+            return;
+        }
+
+        final Task taskToRemove = taskIndex > candidateIndex ? task : mTasks.get(candidateIndex);
+        remove(taskToRemove);
+    }
+
     void removeTasksByPackageName(String packageName, int userId) {
         for (int i = mTasks.size() - 1; i >= 0; --i) {
             final Task task = mTasks.get(i);
@@ -1111,6 +1133,10 @@ class RecentTasks {
                         // front unless overridden by the provided activity options
                         mTasks.remove(taskIndex);
                         mTasks.add(0, task);
+                        if (taskIndex != 0) {
+                            // Only notify when position changes
+                            mTaskNotificationController.notifyTaskListUpdated();
+                        }
 
                         if (DEBUG_RECENTS) {
                             Slog.d(TAG_RECENTS, "addRecent: moving to top " + task
@@ -1496,9 +1522,13 @@ class RecentTasks {
         return task.compareTo(rootHomeTask) < 0;
     }
 
-    /** Remove the tasks that user may not be able to return. */
+    /** Remove the tasks that user may not be able to return when exceeds the cache limit. */
     private void removeUnreachableHiddenTasks(int windowingMode) {
-        for (int i = mHiddenTasks.size() - 1; i >= 0; i--) {
+        final int size = mHiddenTasks.size();
+        if (size <= MAX_HIDDEN_TASK_SIZE) {
+            return;
+        }
+        for (int i = size - 1; i >= MAX_HIDDEN_TASK_SIZE; i--) {
             final Task hiddenTask = mHiddenTasks.get(i);
             if (!hiddenTask.hasChild() || hiddenTask.inRecents) {
                 // The task was removed by other path or it became reachable (added to recents).
@@ -1548,7 +1578,7 @@ class RecentTasks {
                 // A non-empty task is replaced by a new task. Because the removed task is no longer
                 // managed by the recent tasks list, add it to the hidden list to prevent the task
                 // from becoming dangling.
-                mHiddenTasks.add(removedTask);
+                mHiddenTasks.add(0, removedTask);
             }
             notifyTaskRemoved(removedTask, false /* wasTrimmed */, false /* killProcess */);
             if (DEBUG_RECENTS_TRIM_TASKS) {
@@ -1565,6 +1595,10 @@ class RecentTasks {
      * list (if any).
      */
     private int findRemoveIndexForAddTask(Task task) {
+        return findRemoveIndexForTask(task, true /* includingSelf */);
+    }
+
+    private int findRemoveIndexForTask(Task task, boolean includingSelf) {
         final int recentsCount = mTasks.size();
         final Intent intent = task.intent;
         final boolean document = intent != null && intent.isDocument();
@@ -1581,7 +1615,7 @@ class RecentTasks {
                         task.affinity != null && task.affinity.equals(t.affinity);
                 final boolean sameIntent = intent != null && intent.filterEquals(trIntent);
                 boolean multiTasksAllowed = false;
-                final int flags = intent.getFlags();
+                final int flags = intent != null ? intent.getFlags() : 0;
                 if ((flags & (FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_NEW_DOCUMENT)) != 0
                         && (flags & FLAG_ACTIVITY_MULTIPLE_TASK) != 0) {
                     multiTasksAllowed = true;
@@ -1620,6 +1654,8 @@ class RecentTasks {
                     // existing task
                     continue;
                 }
+            } else if (!includingSelf) {
+                continue;
             }
             return i;
         }

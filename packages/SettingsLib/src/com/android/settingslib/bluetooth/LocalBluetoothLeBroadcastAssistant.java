@@ -223,23 +223,6 @@ public class LocalBluetoothLeBroadcastAssistant implements LocalBluetoothProfile
         }
     }
 
-    public void stopSearchingForSources() {
-        if (DEBUG) {
-            Log.d(TAG, "stopSearchingForSources()");
-        }
-        if (mService == null) {
-            Log.d(TAG, "The BluetoothLeBroadcastAssistant is null");
-            return;
-        }
-        synchronized(mBassLock) {
-            if (mCallback == null) {
-                Log.d(TAG, "stopSearchingForSources: Callback is not registered yet");
-                return;
-            }
-            mService.stopSearchingForSources();
-        }
-    }
-
     /**
      * Return true if a search has been started by this application.
      *
@@ -255,6 +238,33 @@ public class LocalBluetoothLeBroadcastAssistant implements LocalBluetoothProfile
             return false;
         }
         return mService.isSearchInProgress();
+    }
+
+    /**
+     * Stops an ongoing search for nearby Broadcast Sources.
+     *
+     * On success, {@link BluetoothLeBroadcastAssistant.Callback#onSearchStopped(int)} will be
+     * called with reason code {@link BluetoothStatusCodes#REASON_LOCAL_APP_REQUEST}.
+     * On failure, {@link BluetoothLeBroadcastAssistant.Callback#onSearchStopFailed(int)} will be
+     * called with reason code
+     *
+     * @throws IllegalStateException if callback was not registered
+     */
+    public void stopSearchingForSources() {
+        if (DEBUG) {
+            Log.d(TAG, "stopSearchingForSources()");
+        }
+        if (mService == null) {
+            Log.d(TAG, "The BluetoothLeBroadcastAssistant is null");
+            return;
+        }
+        synchronized(mBassLock) {
+            if (mCallback == null) {
+                Log.d(TAG, "stopSearchingForSources: Callback is not registered yet");
+                return;
+            }
+            mService.stopSearchingForSources();
+        }
     }
 
     /**

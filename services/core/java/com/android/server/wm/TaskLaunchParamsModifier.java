@@ -571,7 +571,7 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
             return false;
         }
 
-        final int sourceWindowingMode = source.getWindowingMode();
+        final int sourceWindowingMode = source.getTask().getWindowingMode();
         if (sourceWindowingMode != WINDOWING_MODE_FULLSCREEN
                 && sourceWindowingMode != WINDOWING_MODE_FREEFORM) {
             return false;

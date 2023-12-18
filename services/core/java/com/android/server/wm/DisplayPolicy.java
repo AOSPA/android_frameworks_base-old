@@ -19,11 +19,13 @@ package com.android.server.wm;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.view.Display.INVALID_DISPLAY;
+import static android.inputmethodservice.InputMethodService.ENABLE_HIDE_IME_CAPTION_BAR;
 import static android.view.Display.TYPE_INTERNAL;
 import static android.view.InsetsFrameProvider.SOURCE_ARBITRARY_RECTANGLE;
 import static android.view.InsetsFrameProvider.SOURCE_CONTAINER_BOUNDS;
 import static android.view.InsetsFrameProvider.SOURCE_DISPLAY;
 import static android.view.InsetsFrameProvider.SOURCE_FRAME;
+import static android.view.ViewRootImpl.CLIENT_IMMERSIVE_CONFIRMATION;
 import static android.view.ViewRootImpl.CLIENT_TRANSIENT;
 import static android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
 import static android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS;
@@ -40,6 +42,7 @@ import static android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACK
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
 import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_DRAW_BAR_BACKGROUNDS;
+import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_IMMERSIVE_CONFIRMATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_INTERCEPT_GLOBAL_DRAG_AND_DROP;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_LAYOUT_SIZE_EXTENDED_BY_CUTOUT;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_TRUSTED_OVERLAY;
@@ -212,6 +215,8 @@ public class DisplayPolicy {
     private boolean mIsPerfBoostFlingAcquired;
 
     private final Object mServiceAcquireLock = new Object();
+    private long mPanicTime;
+    private final long mPanicThresholdMs;
     private StatusBarManagerInternal mStatusBarManagerInternal;
 
     @Px
@@ -264,6 +269,8 @@ public class DisplayPolicy {
     private volatile boolean mKeyguardDrawComplete;
     private volatile boolean mWindowManagerDrawComplete;
 
+    private boolean mImmersiveConfirmationWindowExists;
+
     private WindowState mStatusBar = null;
     private volatile WindowState mNotificationShade;
     private WindowState mNavigationBar = null;
@@ -280,6 +287,8 @@ public class DisplayPolicy {
 
     private boolean mIsFreeformWindowOverlappingWithNavBar;
 
+    private @InsetsType int mForciblyShownTypes;
+
     private boolean mIsImmersiveMode;
 
     // The windows we were told about in focusChanged.
@@ -289,13 +298,13 @@ public class DisplayPolicy {
     private WindowState mSystemUiControllingWindow;
 
     // Candidate window to determine the color of navigation bar. The window needs to be top
-    // fullscreen-app windows or dim layers that are intersecting with the window frame of status
-    // bar.
+    // fullscreen-app windows or dim layers that are intersecting with the window frame of
+    // navigation bar.
     private WindowState mNavBarColorWindowCandidate;
 
-    // The window to determine opacity and background of translucent navigation bar. The window
-    // needs to be opaque.
-    private WindowState mNavBarBackgroundWindow;
+    // Candidate window to determine opacity and background of translucent navigation bar.
+    // The window frame must intersect the frame of navigation bar.
+    private WindowState mNavBarBackgroundWindowCandidate;
 
     /**
      * A collection of {@link AppearanceRegion} to indicate that which region of status bar applies
@@ -345,8 +354,6 @@ public class DisplayPolicy {
     private WindowState mTopFullscreenOpaqueWindowState;
     private boolean mTopIsFullscreen;
     private int mNavBarOpacityMode = NAV_BAR_OPAQUE_WHEN_FREEFORM_OR_DOCKED;
-    private boolean mForceConsumeSystemBars;
-    private boolean mForceShowSystemBars;
 
     /**
      * Windows that provides gesture insets. If multiple windows provide gesture insets at the same
@@ -455,6 +462,7 @@ public class DisplayPolicy {
         mCanSystemBarsBeShownByUser = !r.getBoolean(
                 R.bool.config_remoteInsetsControllerControlsSystemBars) || r.getBoolean(
                 R.bool.config_remoteInsetsControllerSystemBarsCanBeShownByUserAction);
+        mPanicThresholdMs = r.getInteger(R.integer.config_immersive_mode_confirmation_panic);
 
         mAccessibilityManager = (AccessibilityManager) mContext.getSystemService(
                 Context.ACCESSIBILITY_SERVICE);
@@ -776,8 +784,12 @@ public class DisplayPolicy {
         };
         displayContent.mAppTransition.registerListenerLocked(mAppTransitionListener);
         displayContent.mTransitionController.registerLegacyListener(mAppTransitionListener);
-        mImmersiveModeConfirmation = new ImmersiveModeConfirmation(mContext, looper,
-                mService.mVrModeEnabled, mCanSystemBarsBeShownByUser);
+        if (CLIENT_TRANSIENT || CLIENT_IMMERSIVE_CONFIRMATION) {
+            mImmersiveModeConfirmation = null;
+        } else {
+            mImmersiveModeConfirmation = new ImmersiveModeConfirmation(mContext, looper,
+                    mService.mVrModeEnabled, mCanSystemBarsBeShownByUser);
+        }
 
         // TODO: Make it can take screenshot on external display
         mScreenshotHelper = displayContent.isDefaultDisplay
@@ -1112,12 +1124,6 @@ public class DisplayPolicy {
         if (!win.mSession.mCanSetUnrestrictedGestureExclusion) {
             attrs.privateFlags &= ~PRIVATE_FLAG_UNRESTRICTED_GESTURE_EXCLUSION;
         }
-
-        final InsetsSourceProvider provider = win.getControllableInsetProvider();
-        if (provider != null && provider.getSource().insetsRoundedCornerFrame()
-                != attrs.insetsRoundedCornerFrame) {
-            provider.getSource().setInsetsRoundedCornerFrame(attrs.insetsRoundedCornerFrame);
-        }
     }
 
     /**
@@ -1234,6 +1240,9 @@ public class DisplayPolicy {
                 mNavigationBar = win;
                 break;
         }
+        if ((attrs.privateFlags & PRIVATE_FLAG_IMMERSIVE_CONFIRMATION_WINDOW) != 0) {
+            mImmersiveConfirmationWindowExists = true;
+        }
         if (attrs.providedInsets != null) {
             for (int i = attrs.providedInsets.length - 1; i >= 0; i--) {
                 final InsetsFrameProvider provider = attrs.providedInsets[i];
@@ -1255,9 +1264,11 @@ public class DisplayPolicy {
                 } else {
                     overrideProviders = null;
                 }
-                mDisplayContent.getInsetsStateController().getOrCreateSourceProvider(
-                        provider.getId(), provider.getType()).setWindowContainer(
-                                win, frameProvider, overrideProviders);
+                final InsetsSourceProvider sourceProvider = mDisplayContent
+                        .getInsetsStateController().getOrCreateSourceProvider(provider.getId(),
+                                provider.getType());
+                sourceProvider.getSource().setFlags(provider.getFlags());
+                sourceProvider.setWindowContainer(win, frameProvider, overrideProviders);
                 mInsetsSourceWindowsExceptIme.add(win);
             }
         }
@@ -1344,8 +1355,8 @@ public class DisplayPolicy {
                 throw new IllegalArgumentException("IME insets must be provided by a window.");
             }
 
-            if (mNavigationBar != null && navigationBarPosition(displayFrames.mRotation)
-                    == NAV_BAR_BOTTOM) {
+            if (!ENABLE_HIDE_IME_CAPTION_BAR && mNavigationBar != null
+                    && navigationBarPosition(displayFrames.mRotation) == NAV_BAR_BOTTOM) {
                 // In gesture navigation, nav bar frame is larger than frame to calculate insets.
                 // IME should not provide frame which is smaller than the nav bar frame. Otherwise,
                 // nav bar might be overlapped with the content of the client when IME is shown.
@@ -1391,6 +1402,9 @@ public class DisplayPolicy {
             }
         }
         mInsetsSourceWindowsExceptIme.remove(win);
+        if ((win.mAttrs.privateFlags & PRIVATE_FLAG_IMMERSIVE_CONFIRMATION_WINDOW) != 0) {
+            mImmersiveConfirmationWindowExists = false;
+        }
     }
 
     WindowState getStatusBar() {
@@ -1441,18 +1455,10 @@ public class DisplayPolicy {
         return ANIMATION_STYLEABLE;
     }
 
-    /**
-     * @return true if the system bars are forced to be consumed
-     */
+    // TODO (b/277891341): Remove this and related usages. This has been replaced by
+    //                     InsetsSource#FLAG_FORCE_CONSUMING.
     public boolean areSystemBarsForcedConsumedLw() {
-        return mForceConsumeSystemBars;
-    }
-
-    /**
-     * @return true if the system bars are forced to stay visible
-     */
-    public boolean areSystemBarsForcedShownLw() {
-        return mForceShowSystemBars;
+        return false;
     }
 
     /**
@@ -1538,7 +1544,7 @@ public class DisplayPolicy {
         mBottomGestureHost = null;
         mTopFullscreenOpaqueWindowState = null;
         mNavBarColorWindowCandidate = null;
-        mNavBarBackgroundWindow = null;
+        mNavBarBackgroundWindowCandidate = null;
         mStatusBarAppearanceRegionList.clear();
         mLetterboxDetails.clear();
         mStatusBarBackgroundWindows.clear();
@@ -1549,6 +1555,7 @@ public class DisplayPolicy {
         mAllowLockscreenWhenOn = false;
         mShowingDream = false;
         mIsFreeformWindowOverlappingWithNavBar = false;
+        mForciblyShownTypes = 0;
     }
 
     /**
@@ -1604,6 +1611,10 @@ public class DisplayPolicy {
                     mBottomGestureHost = win;
                 }
             }
+        }
+
+        if (win.mSession.mCanForceShowingInsets) {
+            mForciblyShownTypes |= win.mAttrs.forciblyShownTypes;
         }
 
         if (!affectsSystemUi) {
@@ -1665,8 +1676,8 @@ public class DisplayPolicy {
                     mNavBarColorWindowCandidate = win;
                     addSystemBarColorApp(win);
                 }
-                if (mNavBarBackgroundWindow == null) {
-                    mNavBarBackgroundWindow = win;
+                if (mNavBarBackgroundWindowCandidate == null) {
+                    mNavBarBackgroundWindowCandidate = win;
                 }
             }
 
@@ -1682,20 +1693,32 @@ public class DisplayPolicy {
             }
         } else if (win.isDimming()) {
             if (mStatusBar != null) {
-                if (addStatusBarAppearanceRegionsForDimmingWindow(
-                        win.mAttrs.insetsFlags.appearance & APPEARANCE_LIGHT_STATUS_BARS,
-                        mStatusBar.getFrame(), win.getBounds(), win.getFrame())) {
+                // If the dim window is below status bar window, we should update the appearance
+                // region if needed. Otherwise, leave it as it is.
+                final int statusBarLayer = mStatusBar.mToken.getWindowLayerFromType();
+                final int targetWindowLayer = win.mToken.getWindowLayerFromType();
+                if (targetWindowLayer < statusBarLayer
+                        && addStatusBarAppearanceRegionsForDimmingWindow(
+                                win.mAttrs.insetsFlags.appearance & APPEARANCE_LIGHT_STATUS_BARS,
+                                mStatusBar.getFrame(), win.getBounds(), win.getFrame())) {
                     addSystemBarColorApp(win);
                 }
             }
             if (isOverlappingWithNavBar(win) && mNavBarColorWindowCandidate == null) {
                 mNavBarColorWindowCandidate = win;
+                addSystemBarColorApp(win);
             }
-        } else if (appWindow && attached == null && mNavBarColorWindowCandidate == null
+        } else if (appWindow && attached == null
+                && (mNavBarColorWindowCandidate == null || mNavBarBackgroundWindowCandidate == null)
                 && win.getFrame().contains(
                         getBarContentFrameForWindow(win, Type.navigationBars()))) {
-            mNavBarColorWindowCandidate = win;
-            addSystemBarColorApp(win);
+            if (mNavBarColorWindowCandidate == null) {
+                mNavBarColorWindowCandidate = win;
+                addSystemBarColorApp(win);
+            }
+            if (mNavBarBackgroundWindowCandidate == null) {
+                mNavBarBackgroundWindowCandidate = win;
+            }
         }
     }
 
@@ -1775,6 +1798,10 @@ public class DisplayPolicy {
         mService.mPolicy.setAllowLockscreenWhenOn(getDisplayId(), mAllowLockscreenWhenOn);
     }
 
+    boolean areTypesForciblyShownTransiently(@InsetsType int types) {
+        return (mForciblyShownTypes & types) == types;
+    }
+
     /**
      * Applies the keyguard policy to a specific window.
      *
@@ -1801,18 +1828,6 @@ public class DisplayPolicy {
     }
 
     private boolean shouldBeHiddenByKeyguard(WindowState win, WindowState imeTarget) {
-        // If AOD is showing, the IME should be hidden. However, sometimes the AOD is considered
-        // hidden because it's in the process of hiding, but it's still being shown on screen.
-        // In that case, we want to continue hiding the IME until the windows have completed
-        // drawing. This way, we know that the IME can be safely shown since the other windows are
-        // now shown.
-        final boolean hideIme = win.mIsImWindow
-                && (mDisplayContent.isAodShowing()
-                        || (mDisplayContent.isDefaultDisplay && !mWindowManagerDrawComplete));
-        if (hideIme) {
-            return true;
-        }
-
         if (!mDisplayContent.isDefaultDisplay || !isKeyguardShowing()) {
             return false;
         }
@@ -1837,7 +1852,8 @@ public class DisplayPolicy {
      * @return Whether the top fullscreen app hides the given type of system bar.
      */
     boolean topAppHidesSystemBar(@InsetsType int type) {
-        if (mTopFullscreenOpaqueWindowState == null || mForceShowSystemBars) {
+        if (mTopFullscreenOpaqueWindowState == null
+                || getInsetsPolicy().areTypesForciblyShowing(type)) {
             return false;
         }
         return !mTopFullscreenOpaqueWindowState.isRequestedVisible(type);
@@ -2323,7 +2339,11 @@ public class DisplayPolicy {
                 }
             }
         }
-        mImmersiveModeConfirmation.confirmCurrentPrompt();
+        if (CLIENT_IMMERSIVE_CONFIRMATION || CLIENT_TRANSIENT) {
+            mStatusBarManagerInternal.confirmImmersivePrompt();
+        } else {
+            mImmersiveModeConfirmation.confirmCurrentPrompt();
+        }
     }
 
     boolean isKeyguardShowing() {
@@ -2373,7 +2393,8 @@ public class DisplayPolicy {
 
         // Immersive mode confirmation should never affect the system bar visibility, otherwise
         // it will unhide the navigation bar and hide itself.
-        if (winCandidate.getAttrs().token == mImmersiveModeConfirmation.getWindowToken()) {
+        if ((winCandidate.getAttrs().privateFlags
+                & PRIVATE_FLAG_IMMERSIVE_CONFIRMATION_WINDOW) != 0) {
             if (mNotificationShade != null && mNotificationShade.canReceiveKeys()) {
                 // Let notification shade control the system bar visibility.
                 winCandidate = mNotificationShade;
@@ -2514,14 +2535,7 @@ public class DisplayPolicy {
         final boolean freeformRootTaskVisible =
                 defaultTaskDisplayArea.isRootTaskVisible(WINDOWING_MODE_FREEFORM);
 
-        // We need to force showing system bars when adjacent tasks or freeform roots visible.
-        mForceShowSystemBars = adjacentTasksVisible || freeformRootTaskVisible;
-        // We need to force the consumption of the system bars if they are force shown or if they
-        // are controlled by a remote insets controller.
-        mForceConsumeSystemBars = mForceShowSystemBars
-                || getInsetsPolicy().remoteInsetsControllerControlsSystemBars(win)
-                || getInsetsPolicy().forcesShowingNavigationBars(win);
-        mDisplayContent.getInsetsPolicy().updateBarControlTarget(win);
+        getInsetsPolicy().updateSystemBars(win, adjacentTasksVisible, freeformRootTaskVisible);
 
         final boolean topAppHidesStatusBar = topAppHidesSystemBar(Type.statusBars());
         if (getStatusBar() != null) {
@@ -2548,9 +2562,16 @@ public class DisplayPolicy {
             // The immersive confirmation window should be attached to the immersive window root.
             final RootDisplayArea root = win.getRootDisplayArea();
             final int rootDisplayAreaId = root == null ? FEATURE_UNDEFINED : root.mFeatureId;
-            mImmersiveModeConfirmation.immersiveModeChangedLw(rootDisplayAreaId, isImmersiveMode,
-                    mService.mPolicy.isUserSetupComplete(),
-                    isNavBarEmpty(disableFlags));
+            if (!CLIENT_TRANSIENT && !CLIENT_IMMERSIVE_CONFIRMATION) {
+                mImmersiveModeConfirmation.immersiveModeChangedLw(rootDisplayAreaId,
+                        isImmersiveMode,
+                        mService.mPolicy.isUserSetupComplete(),
+                        isNavBarEmpty(disableFlags));
+            } else {
+                // TODO (b/277290737): Move this to the client side, instead of using a proxy.
+                callStatusBarSafely(statusBar -> statusBar.immersiveModeChanged(rootDisplayAreaId,
+                        isImmersiveMode));
+            }
         }
 
         // Show transient bars for panic if needed.
@@ -2635,7 +2656,7 @@ public class DisplayPolicy {
         return win.isFullyTransparentBarAllowed(getBarContentFrameForWindow(win, type));
     }
 
-    private boolean drawsBarBackground(WindowState win) {
+    private static boolean drawsBarBackground(WindowState win) {
         if (win == null) {
             return true;
         }
@@ -2675,7 +2696,14 @@ public class DisplayPolicy {
      */
     private int configureNavBarOpacity(int appearance, boolean multiWindowTaskVisible,
             boolean freeformRootTaskVisible) {
-        final boolean drawBackground = drawsBarBackground(mNavBarBackgroundWindow);
+        final WindowState navBackgroundWin = chooseNavigationBackgroundWindow(
+                mNavBarBackgroundWindowCandidate,
+                mDisplayContent.mInputMethodWindow,
+                mNavigationBarPosition);
+        final boolean drawBackground = navBackgroundWin != null
+                // There is no app window showing underneath nav bar. (e.g., The screen is locked.)
+                // Let system windows (ex: notification shade) draw nav bar background.
+                || mNavBarBackgroundWindowCandidate == null;
 
         if (mNavBarOpacityMode == NAV_BAR_FORCE_TRANSPARENT) {
             if (drawBackground) {
@@ -2695,7 +2723,7 @@ public class DisplayPolicy {
             }
         }
 
-        if (!isFullyTransparentAllowed(mNavBarBackgroundWindow, Type.navigationBars())) {
+        if (!isFullyTransparentAllowed(navBackgroundWin, Type.navigationBars())) {
             appearance |= APPEARANCE_SEMI_TRANSPARENT_NAVIGATION_BARS;
         }
 
@@ -2706,11 +2734,26 @@ public class DisplayPolicy {
         return appearance & ~APPEARANCE_OPAQUE_NAVIGATION_BARS;
     }
 
+    @VisibleForTesting
+    @Nullable
+    static WindowState chooseNavigationBackgroundWindow(WindowState candidate,
+            WindowState imeWindow, @NavigationBarPosition int navBarPosition) {
+        if (imeWindow != null && imeWindow.isVisible() && navBarPosition == NAV_BAR_BOTTOM
+                && drawsBarBackground(imeWindow)) {
+            return imeWindow;
+        }
+        if (drawsBarBackground(candidate)) {
+            return candidate;
+        }
+        return null;
+    }
+
     private boolean isImmersiveMode(WindowState win) {
         if (win == null) {
             return false;
         }
-        if (win == getNotificationShade() || win.isActivityTypeDream()) {
+        if (win.mPolicy.getWindowLayerLw(win) > win.mPolicy.getWindowLayerFromTypeLw(
+                WindowManager.LayoutParams.TYPE_STATUS_BAR) || win.isActivityTypeDream()) {
             return false;
         }
         return getInsetsPolicy().hasHiddenSources(Type.navigationBars());
@@ -2741,16 +2784,39 @@ public class DisplayPolicy {
     void onPowerKeyDown(boolean isScreenOn) {
         // Detect user pressing the power button in panic when an application has
         // taken over the whole screen.
-        boolean panic = mImmersiveModeConfirmation.onPowerKeyDown(isScreenOn,
-                SystemClock.elapsedRealtime(), isImmersiveMode(mSystemUiControllingWindow),
-                isNavBarEmpty(mLastDisableFlags));
+        boolean panic = false;
+        if (!CLIENT_TRANSIENT && !CLIENT_IMMERSIVE_CONFIRMATION) {
+            panic = mImmersiveModeConfirmation.onPowerKeyDown(isScreenOn,
+                    SystemClock.elapsedRealtime(), isImmersiveMode(mSystemUiControllingWindow),
+                    isNavBarEmpty(mLastDisableFlags));
+        } else {
+            panic = isPowerKeyDownPanic(isScreenOn, SystemClock.elapsedRealtime(),
+                    isImmersiveMode(mSystemUiControllingWindow), isNavBarEmpty(mLastDisableFlags));
+        }
         if (panic) {
             mHandler.post(mHiddenNavPanic);
         }
     }
 
+    private boolean isPowerKeyDownPanic(boolean isScreenOn, long time, boolean inImmersiveMode,
+            boolean navBarEmpty) {
+        if (!isScreenOn && (time - mPanicTime < mPanicThresholdMs)) {
+            // turning the screen back on within the panic threshold
+            return !mImmersiveConfirmationWindowExists;
+        }
+        if (isScreenOn && inImmersiveMode && !navBarEmpty) {
+            // turning the screen off, remember if we were in immersive mode
+            mPanicTime = time;
+        } else {
+            mPanicTime = 0;
+        }
+        return false;
+    }
+
     void onVrStateChangedLw(boolean enabled) {
-        mImmersiveModeConfirmation.onVrStateChangedLw(enabled);
+        if (!CLIENT_TRANSIENT && !CLIENT_IMMERSIVE_CONFIRMATION) {
+            mImmersiveModeConfirmation.onVrStateChangedLw(enabled);
+        }
     }
 
     /**
@@ -2763,7 +2829,9 @@ public class DisplayPolicy {
      *                      {@link ActivityManager#LOCK_TASK_MODE_PINNED}.
      */
     public void onLockTaskStateChangedLw(int lockTaskState) {
-        mImmersiveModeConfirmation.onLockTaskModeChangedLw(lockTaskState);
+        if (!CLIENT_TRANSIENT && !CLIENT_IMMERSIVE_CONFIRMATION) {
+            mImmersiveModeConfirmation.onLockTaskModeChangedLw(lockTaskState);
+        }
     }
 
     /** Called when a {@link android.os.PowerManager#USER_ACTIVITY_EVENT_TOUCH} is sent. */
@@ -2780,7 +2848,11 @@ public class DisplayPolicy {
     }
 
     boolean onSystemUiSettingsChanged() {
-        return mImmersiveModeConfirmation.onSettingChanged(mService.mCurrentUserId);
+        if (CLIENT_TRANSIENT || CLIENT_IMMERSIVE_CONFIRMATION) {
+            return false;
+        } else {
+            return mImmersiveModeConfirmation.onSettingChanged(mService.mCurrentUserId);
+        }
     }
 
     /**
@@ -2878,9 +2950,9 @@ public class DisplayPolicy {
             pw.print(prefix); pw.print("mNavBarColorWindowCandidate=");
             pw.println(mNavBarColorWindowCandidate);
         }
-        if (mNavBarBackgroundWindow != null) {
-            pw.print(prefix); pw.print("mNavBarBackgroundWindow=");
-            pw.println(mNavBarBackgroundWindow);
+        if (mNavBarBackgroundWindowCandidate != null) {
+            pw.print(prefix); pw.print("mNavBarBackgroundWindowCandidate=");
+            pw.println(mNavBarBackgroundWindowCandidate);
         }
         if (mLastStatusBarAppearanceRegions != null) {
             pw.print(prefix); pw.println("mLastStatusBarAppearanceRegions=");
@@ -2994,7 +3066,9 @@ public class DisplayPolicy {
         mDisplayContent.mTransitionController.unregisterLegacyListener(mAppTransitionListener);
         mHandler.post(mGestureNavigationSettingsObserver::unregister);
         mHandler.post(mForceShowNavBarSettingsObserver::unregister);
-        mImmersiveModeConfirmation.release();
+        if (!CLIENT_TRANSIENT && !CLIENT_IMMERSIVE_CONFIRMATION) {
+            mImmersiveModeConfirmation.release();
+        }
         if (mService.mPointerLocationEnabled) {
             setPointerLocationEnabled(false);
         }

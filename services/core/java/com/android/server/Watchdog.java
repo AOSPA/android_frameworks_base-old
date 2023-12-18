@@ -1020,7 +1020,7 @@ public class Watchdog implements Dumpable {
                         mActivity.addErrorToDropBox(
                                 dropboxTag, null, "system_server", null, null, null,
                                 null, report.toString(), finalStack, null, null, null,
-                                errorId);
+                                errorId, null);
                     }
                 }
             };
