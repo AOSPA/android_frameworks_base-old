@@ -63,11 +63,14 @@
         android:title="@string/quick_settings_wifi_label"
         android:icon="@drawable/ic_statusbar_wifi" />
 
+     <!--
+     TODO: port it to the new statusbar wifi model
      <com.android.systemui.tuner.TunerSwitch
         android:key="wifi_standard"
         android:title="@string/status_bar_wifi_standard"
         sysui:defValue="@*android:bool/config_show_network_standard"
         android:icon="@drawable/ic_statusbar_wifi_standard" />
+     -->
 
     <com.android.systemui.tuner.StatusBarSwitch
         android:key="ethernet"
