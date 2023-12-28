@@ -21,7 +21,12 @@ import static com.android.systemui.flags.Flags.TRACKPAD_GESTURE_COMMON;
 import static com.android.systemui.util.kotlin.JavaAdapterKt.collectFlow;
 
 import android.app.StatusBarManager;
+import android.database.ContentObserver;
+import android.hardware.display.AmbientDisplayConfiguration;
+import android.os.Handler;
 import android.os.PowerManager;
+import android.os.UserHandle;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.GestureDetector;
 import android.view.InputDevice;
@@ -43,6 +48,7 @@ import com.android.systemui.bouncer.ui.binder.KeyguardBouncerViewBinder;
 import com.android.systemui.bouncer.ui.viewmodel.KeyguardBouncerViewModel;
 import com.android.systemui.classifier.FalsingCollector;
 import com.android.systemui.dagger.SysUISingleton;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.flags.Flags;
@@ -54,12 +60,14 @@ import com.android.systemui.keyguard.shared.model.TransitionStep;
 import com.android.systemui.keyguard.ui.viewmodel.PrimaryBouncerToGoneTransitionViewModel;
 import com.android.systemui.log.BouncerLogger;
 import com.android.systemui.power.domain.interactor.PowerInteractor;
+import com.android.systemui.settings.UserTracker;
 import com.android.systemui.shared.animation.DisableSubpixelTextTransitionListener;
 import com.android.systemui.statusbar.DragDownHelper;
 import com.android.systemui.statusbar.LockscreenShadeTransitionController;
 import com.android.systemui.statusbar.NotificationInsetsController;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
+import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.notification.data.repository.NotificationExpansionRepository;
 import com.android.systemui.statusbar.notification.stack.AmbientState;
@@ -137,9 +145,18 @@ public class NotificationShadeWindowViewController {
                     step.getTransitionState() == TransitionState.RUNNING;
             };
     private final SystemClock mClock;
+    private final PowerManager mPowerManager;
+    private final AmbientDisplayConfiguration mAmbientDisplayConfiguration;
+    private final UserTracker mUserTracker;
+
+    private GestureDetector mDoubleTapGestureListener;
+    private SettingsObserver mSettingsObserver;
+    private boolean mDoubleTapEnabled;
 
     @Inject
     public NotificationShadeWindowViewController(
+            @Main Handler handler,
+            UserTracker userTracker,
             LockscreenShadeTransitionController transitionController,
             FalsingCollector falsingCollector,
             SysuiStatusBarStateController statusBarStateController,
@@ -227,6 +244,28 @@ public class NotificationShadeWindowViewController {
                     progressProvider -> progressProvider.addCallback(
                             mDisableSubpixelTextTransitionListener));
         }
+
+        mUserTracker = userTracker;
+        mPowerManager = mView.getContext().getSystemService(PowerManager.class);
+        mDoubleTapGestureListener = new GestureDetector(mView.getContext(),
+                new GestureDetector.SimpleOnGestureListener() {
+            @Override
+            public boolean onDoubleTap(MotionEvent event) {
+                if (mDoubleTapEnabled
+                        && mStatusBarStateController.getState() == StatusBarState.KEYGUARD
+                        && !mService.isBouncerShowing()
+                        && !mNotificationPanelViewController.isShadeFullyExpanded()
+                        && !mStatusBarStateController.isDozing()
+                        && !mStatusBarStateController.isPulsing()) {
+                    mPowerManager.goToSleep(event.getEventTime());
+                    return true;
+                }
+                return false;
+            }
+        });
+        mAmbientDisplayConfiguration = new AmbientDisplayConfiguration(mView.getContext());
+        mSettingsObserver = new SettingsObserver(handler);
+        mSettingsObserver.register();
     }
 
     /**
@@ -311,6 +350,7 @@ public class NotificationShadeWindowViewController {
                 }
 
                 mFalsingCollector.onTouchEvent(ev);
+                mDoubleTapGestureListener.onTouchEvent(ev);
                 mPulsingWakeupGestureHandler.onTouchEvent(ev);
                 if (mDreamingWakeupGestureHandler != null
                         && mDreamingWakeupGestureHandler.onTouchEvent(ev)) {
@@ -571,5 +611,40 @@ public class NotificationShadeWindowViewController {
     @VisibleForTesting
     void setDragDownHelper(DragDownHelper dragDownHelper) {
         mDragDownHelper = dragDownHelper;
+    }
+
+    private final class SettingsObserver extends ContentObserver {
+        SettingsObserver(Handler handler) {
+            super(handler);
+        }
+
+        @Override
+        public void onChange(boolean selfChange) {
+            update();
+        }
+
+        public void register() {
+            mView.getContext().getContentResolver().registerContentObserver(
+                    Settings.Secure.getUriFor(Settings.Secure.DOZE_DOUBLE_TAP_GESTURE),
+                    false, this);
+            mView.getContext().getContentResolver().registerContentObserver(
+                    Settings.System.getUriFor(Settings.System.GESTURE_DOUBLE_TAP),
+                    false, this);
+            update();
+        }
+
+        public void update() {
+            final boolean gesturesEnabled = Settings.System.getIntForUser(
+                    mView.getContext().getContentResolver(), Settings.System.GESTURES_ENABLED, 1,
+                    UserHandle.USER_CURRENT) == 1;
+            final int doubleTapVal = Settings.System.getIntForUser(
+                    mView.getContext().getContentResolver(), Settings.System.GESTURE_DOUBLE_TAP,
+                    mView.getContext().getResources().getInteger(
+                            com.android.internal.R.integer.config_doubleTapDefault),
+                    UserHandle.USER_CURRENT);
+            mDoubleTapEnabled = (gesturesEnabled && (doubleTapVal == 1 || doubleTapVal == 2))
+                    || mAmbientDisplayConfiguration.doubleTapGestureEnabled(
+                            mUserTracker.getUserId());
+        }
     }
 }
