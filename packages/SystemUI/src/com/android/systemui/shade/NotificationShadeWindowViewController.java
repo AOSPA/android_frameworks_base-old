@@ -60,6 +60,7 @@ import com.android.systemui.statusbar.LockscreenShadeTransitionController;
 import com.android.systemui.statusbar.NotificationInsetsController;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
+import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.notification.data.repository.NotificationExpansionRepository;
 import com.android.systemui.statusbar.notification.stack.AmbientState;
@@ -137,6 +138,7 @@ public class NotificationShadeWindowViewController {
                     step.getTransitionState() == TransitionState.RUNNING;
             };
     private final SystemClock mClock;
+    private GestureDetector mDoubleTapGestureListener;
 
     @Inject
     public NotificationShadeWindowViewController(
@@ -227,6 +229,24 @@ public class NotificationShadeWindowViewController {
                     progressProvider -> progressProvider.addCallback(
                             mDisableSubpixelTextTransitionListener));
         }
+
+        mDoubleTapGestureListener = new GestureDetector(mView.getContext(),
+                new GestureDetector.SimpleOnGestureListener() {
+            @Override
+            public boolean onDoubleTap(MotionEvent event) {
+                if (mStatusBarStateController.getState() == StatusBarState.KEYGUARD
+                        && !mService.isBouncerShowing()
+                        && !mNotificationPanelViewController.isShadeFullyExpanded()
+                        && !mStatusBarStateController.isDozing()
+                        && !mStatusBarStateController.isPulsing()) {
+                    PowerManager pm = (PowerManager) mView.getContext().getSystemService(
+                            Context.POWER_SERVICE);
+                    pm.goToSleep(event.getEventTime());
+                    return true;
+                }
+                return false;
+            }
+        });
     }
 
     /**
@@ -311,6 +331,7 @@ public class NotificationShadeWindowViewController {
                 }
 
                 mFalsingCollector.onTouchEvent(ev);
+                mDoubleTapGestureListener.onTouchEvent(ev);
                 mPulsingWakeupGestureHandler.onTouchEvent(ev);
                 if (mDreamingWakeupGestureHandler != null
                         && mDreamingWakeupGestureHandler.onTouchEvent(ev)) {
