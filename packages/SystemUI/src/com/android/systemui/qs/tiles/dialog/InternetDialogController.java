@@ -1265,7 +1265,9 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         public void onCallStateChanged(int callState) {
             Log.d(TAG, "onCallStateChanged: " + callState);
             mNonDdsCallState = callState;
-            mCallback.onNonDdsCallStateChanged(callState);
+            if (mCallback != null) {
+                mCallback.onNonDdsCallStateChanged(callState);
+            }
         }
     }
 
@@ -1279,7 +1281,9 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         public void onCallStateChanged(int callState) {
             Log.d(TAG, "onCallStateChanged: " + callState);
             mNonDdsCallState = callState;
-            mCallback.onNonDdsCallStateChanged(callState);
+            if (mCallback != null) {
+                mCallback.onNonDdsCallStateChanged(callState);
+            }
         }
     }
 
