@@ -145,8 +145,6 @@ class FontScalingDialog(
      */
     @MainThread
     fun updateFontScaleDelayed(delayMsFromSource: Long) {
-        doneButton.isEnabled = false
-
         var delayMs = delayMsFromSource
         if (systemClock.elapsedRealtime() - lastUpdateTime < MIN_UPDATE_INTERVAL_MS) {
             delayMs += MIN_UPDATE_INTERVAL_MS
@@ -199,22 +197,17 @@ class FontScalingDialog(
             title.post {
                 title.setTextAppearance(R.style.TextAppearance_Dialog_Title)
                 doneButton.setTextAppearance(R.style.Widget_Dialog_Button)
-                doneButton.isEnabled = true
             }
         }
     }
 
     @WorkerThread
     fun updateFontScale() {
-        if (
-            !systemSettings.putStringForUser(
-                Settings.System.FONT_SCALE,
-                strEntryValues[lastProgress.get()],
-                userTracker.userId
-            )
-        ) {
-            title.post { doneButton.isEnabled = true }
-        }
+        systemSettings.putStringForUser(
+            Settings.System.FONT_SCALE,
+            strEntryValues[lastProgress.get()],
+            userTracker.userId
+        )
     }
 
     @WorkerThread
