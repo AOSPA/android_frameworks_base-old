@@ -43,7 +43,7 @@ class ToggleIconView constructor(
     }
 
     private val colorActive = Utils.getColorAttrDefaultColor(context, android.R.attr.colorAccent)
-    private val colorInactive = Utils.getColorAttrDefaultColor(context, R.attr.shadeInactive)
+    private val colorInactive = Utils.getColorAttrDefaultColor(context, R.attr.offStateColor)
     private val colorSecondaryActive = Utils.getColorAttrDefaultColor(context, com.android.internal.R.attr.textColorPrimaryInverse)
     private val colorSecondaryInactive = Utils.getColorAttrDefaultColor(context, android.R.attr.textColorPrimary)
 
