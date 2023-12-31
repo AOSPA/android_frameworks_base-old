@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "f8de473c_758b1bc5",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 6
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000427
+      },
+      "writtenOn": "2023-12-31T07:04:39Z",
+      "side": 1,
+      "message": "can we refactor the business logic into its own injectable and just inject that into the viewcontroller? should make the logic more portable.",
+      "revId": "6352a69799037bf20846769d17ced796fa0bd120",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
