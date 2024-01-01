@@ -16,6 +16,24 @@
       "message": "this seems overly granular.  why is it necessary for this animation but not others?  if there\u0027s a better animation out there, I\u0027m open to it.",
       "revId": "78d9597e089054bbd13cb775046e133257465173",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "b4038e2c_8b453d78",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000469
+      },
+      "writtenOn": "2024-01-01T03:14:17Z",
+      "side": 1,
+      "message": "capacitive fp wake and unlock, this animation only slows it down, so we better have no animation for that, maybe we can rid the toggle and make that the case for wake-and-unlock scenario",
+      "parentUuid": "0a970df9_909badc5",
+      "revId": "78d9597e089054bbd13cb775046e133257465173",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
