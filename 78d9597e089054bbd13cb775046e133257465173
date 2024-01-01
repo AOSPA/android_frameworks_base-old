@@ -88,6 +88,24 @@
       "parentUuid": "57a31b87_3670b559",
       "revId": "78d9597e089054bbd13cb775046e133257465173",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "b06e33ed_717ed4af",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2024-01-01T04:23:55Z",
+      "side": 1,
+      "message": "like you said then, I think we should just skip it for wake and unlock, kinda like we do for face unlock.  what do you think?",
+      "parentUuid": "61de5db4_8e22b1ee",
+      "revId": "78d9597e089054bbd13cb775046e133257465173",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
