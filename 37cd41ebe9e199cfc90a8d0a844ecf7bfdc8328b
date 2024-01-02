@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "01a3f554_5e4b29b1",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2024-01-02T10:15:10Z",
+      "side": 1,
+      "message": "doesn\u0027t work well with phone1\u0027s cutout",
+      "revId": "37cd41ebe9e199cfc90a8d0a844ecf7bfdc8328b",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
