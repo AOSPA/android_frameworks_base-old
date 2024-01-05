@@ -141,8 +141,9 @@ public class AmbientDisplayConfiguration {
 
     /** @hide */
     public boolean doubleTapGestureEnabled(int user) {
-        return boolSettingDefaultOn(Settings.Secure.DOZE_DOUBLE_TAP_GESTURE, user)
-                && doubleTapSensorAvailable();
+        return aospaDoubleTapGestureEnabled(user)
+                || (boolSettingDefaultOn(Settings.Secure.DOZE_DOUBLE_TAP_GESTURE, user)
+                        && doubleTapSensorAvailable());
     }
 
     /** @hide */
@@ -349,5 +350,16 @@ public class AmbientDisplayConfiguration {
 
     private void putDozeSetting(String name, String value, int userId) {
         Settings.Secure.putStringForUser(mContext.getContentResolver(), name, value, userId);
+    }
+
+    private boolean aospaGestureEnabled(int user) {
+        return boolSettingDefaultOn(Settings.System.GESTURES_ENABLED, user);
+    }
+
+    private boolean aospaDoubleTapGestureEnabled(int user) {
+        return aospaGestureEnabled(user)
+                && boolSetting(Settings.System.GESTURE_DOUBLE_TAP, user,
+                        mContext.getResources().getInteger(
+                                com.android.internal.R.integer.config_doubleTapDefault));
     }
 }
