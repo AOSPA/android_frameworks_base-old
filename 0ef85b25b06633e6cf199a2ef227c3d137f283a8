@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "3b071114_6ca227e4",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 7
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000143
+      },
+      "writtenOn": "2024-01-05T15:36:37Z",
+      "side": 1,
+      "message": "Works, but adds a noticeable delay on tap to wake right now",
+      "revId": "0ef85b25b06633e6cf199a2ef227c3d137f283a8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
