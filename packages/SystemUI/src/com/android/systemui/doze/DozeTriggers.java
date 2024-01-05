@@ -29,11 +29,13 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.database.ContentObserver;
 import android.hardware.display.AmbientDisplayConfiguration;
 import android.os.Looper;
 import android.os.Handler;
 import android.os.SystemClock;
 import android.os.UserHandle;
+import android.provider.Settings;
 import android.text.format.Formatter;
 import android.util.IndentingPrintWriter;
 import android.util.Log;
@@ -114,6 +116,8 @@ public class DozeTriggers implements DozeMachine.Part {
     private long mNotificationPulseTime;
     private Runnable mAodInterruptRunnable;
     private Object mTapToken;
+    private DoubleTapSettingsObserver mDoubleTapSettingsObserver;
+    private boolean mDoubleTapEnabled;
 
     /** see {@link #onProximityFar} prox for callback */
     private boolean mWantProxSensor;
@@ -232,6 +236,7 @@ public class DozeTriggers implements DozeMachine.Part {
         mUserTracker = userTracker;
         mTapDelay = mContext.getResources().getInteger(
                 com.android.internal.R.integer.config_singleTapDelay);
+        mDoubleTapSettingsObserver = new DoubleTapSettingsObserver(mMainHandler);
     }
 
     @Override
@@ -333,7 +338,7 @@ public class DozeTriggers implements DozeMachine.Part {
                     mDozeLog.traceSensorEventDropped(pulseReason, "prox reporting near");
                     return;
                 }
-                if (isDoubleTap || (isTap && mTapDelay <= 0)) {
+                if (isDoubleTap || (isTap && (mTapDelay <= 0 || !mDoubleTapEnabled)) {
                     if (mTapToken != null) {
                         mMainHandler.removeCallbacksAndMessages(mTapToken);
                         mTapToken = null;
@@ -723,4 +728,40 @@ public class DozeTriggers implements DozeMachine.Part {
             onNotification(onPulseSuppressedListener);
         }
     };
+
+    private final class DoubleTapSettingsObserver extends ContentObserver {
+        DoubleTapSettingsObserver(Handler handler) {
+            super(handler);
+            register();
+            update();
+        }
+
+        @Override
+        public void onChange(boolean selfChange) {
+            update();
+        }
+
+        private void register() {
+            mContext.getContentResolver().registerContentObserver(
+                    Settings.Secure.getUriFor(Settings.Secure.DOZE_DOUBLE_TAP_GESTURE),
+                    false, this);
+            mContext.getContentResolver().registerContentObserver(
+                    Settings.System.getUriFor(Settings.System.GESTURE_DOUBLE_TAP),
+                    false, this);
+        }
+
+        private void update() {
+            final boolean gesturesEnabled = Settings.System.getIntForUser(
+                    mContext.getContentResolver(), Settings.System.GESTURES_ENABLED, 1,
+                    UserHandle.USER_CURRENT) == 1;
+            final int doubleTapVal = Settings.System.getIntForUser(
+                    mContext.getContentResolver(), Settings.System.GESTURE_DOUBLE_TAP,
+                    mContext.getResources().getInteger(
+                            com.android.internal.R.integer.config_doubleTapDefault),
+                    UserHandle.USER_CURRENT);
+            mDoubleTapEnabled = (gesturesEnabled && (doubleTapVal == 1 || doubleTapVal == 2))
+                    || mAmbientDisplayConfiguration.doubleTapGestureEnabled(
+                            mUserTracker.getUserId());
+        }
+    }
 }
