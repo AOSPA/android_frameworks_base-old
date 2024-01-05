@@ -333,7 +333,7 @@ public class DozeTriggers implements DozeMachine.Part {
                     mDozeLog.traceSensorEventDropped(pulseReason, "prox reporting near");
                     return;
                 }
-                if (isDoubleTap || (isTap && mTapDelay <= 0)) {
+                if (isDoubleTap || (isTap && (mTapDelay <= 0 || !mConfig.doubleTapGestureEnabled(UserHandle.USER_CURRENT)))) {
                     if (mTapToken != null) {
                         mMainHandler.removeCallbacksAndMessages(mTapToken);
                         mTapToken = null;
