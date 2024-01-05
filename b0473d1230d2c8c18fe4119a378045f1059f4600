@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "fedef529_d41f1a20",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 10
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000143
+      },
+      "writtenOn": "2024-01-05T09:19:02Z",
+      "side": 1,
+      "message": "Please drop dependency of dt2w and make it depend on the launcher setting",
+      "revId": "b0473d1230d2c8c18fe4119a378045f1059f4600",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
