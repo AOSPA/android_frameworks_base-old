@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "dc4f59ca_c2566e7c",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000092
+      },
+      "writtenOn": "2024-01-07T20:27:10Z",
+      "side": 1,
+      "message": "better adapt light theme to qpr1 instead of reverting new color tokens",
+      "revId": "2a6731cc3dc8018b573d72a95a8725017c604c00",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
