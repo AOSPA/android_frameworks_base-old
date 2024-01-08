@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "89ac532b_073a0e6c",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 5
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000845
+      },
+      "writtenOn": "2024-01-08T17:52:51Z",
+      "side": 1,
+      "message": "crashes systemUI multiple times (stops after bluetooth device is disconnected)\n\nsteps to reproduce:\nturn on bluetooth\npair earbuds\nsystemui crashes\nplace earbuds back in case\nsystemui stops crashing\n\ntrimmed log: https://katb.in/alozesajini",
+      "revId": "efb0524c172ccb63b4e67b4e8e25a6b6783d8734",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
