@@ -16,6 +16,23 @@
       "message": "very much illegal to remove camera sounds in countries forced",
       "revId": "72d4d1ca61e2ccc8ac016682671f668a092b50b3",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "a9905d45_b68842b1",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000055
+      },
+      "writtenOn": "2024-01-09T07:35:46Z",
+      "side": 1,
+      "message": "Yeah, its important as well as its a security measure that should be good to have.",
+      "revId": "72d4d1ca61e2ccc8ac016682671f668a092b50b3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
