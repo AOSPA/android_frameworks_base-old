@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "65a7aa48_9082c189",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2024-01-09T07:19:41Z",
+      "side": 1,
+      "message": "very much illegal to remove camera sounds in countries forced",
+      "revId": "72d4d1ca61e2ccc8ac016682671f668a092b50b3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
