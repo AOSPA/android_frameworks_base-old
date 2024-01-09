@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "adf1625d_acb3f8e0",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 6
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000760
+      },
+      "writtenOn": "2024-01-09T01:36:59Z",
+      "side": 1,
+      "message": "well if u connect ear buds, it doesnt crash, but if u connect earbuds and pull down the qs, it starts loop crashing untill u manage to disconnect the earbuds",
+      "revId": "b4d82e5cef96ce2aec9daccd6dff48e08593d6ae",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
