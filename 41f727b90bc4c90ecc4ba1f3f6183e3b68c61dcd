@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "e1a4c8d7_dae4fe75",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 6
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000469
+      },
+      "writtenOn": "2024-01-11T10:36:00Z",
+      "side": 1,
+      "message": "breaks in landscape mode when the cutout is on the left",
+      "revId": "41f727b90bc4c90ecc4ba1f3f6183e3b68c61dcd",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
