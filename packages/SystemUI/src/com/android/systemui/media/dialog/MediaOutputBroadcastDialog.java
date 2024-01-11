@@ -521,6 +521,7 @@ public class MediaOutputBroadcastDialog extends MediaOutputBaseDialog {
     public void handleLeBroadcastMetadataChanged() {
         Log.d(TAG, "handleLeBroadcastMetadataChanged:");
         refreshUi();
+        startBroadcastWithConnectedDevices();
     }
 
     @Override
