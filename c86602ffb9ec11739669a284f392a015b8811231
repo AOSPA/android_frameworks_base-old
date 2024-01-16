@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "3be7a4cd_fa05858f",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 6
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000143
+      },
+      "writtenOn": "2024-01-16T16:08:42Z",
+      "side": 1,
+      "message": "Can we also add single tap from our custom setting?\nIdk if any device still uses it but why not add it here as well.",
+      "revId": "c86602ffb9ec11739669a284f392a015b8811231",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
