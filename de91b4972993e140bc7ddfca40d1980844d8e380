@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "e44e461c_38606532",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 5
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2024-01-20T19:49:09Z",
+      "side": 1,
+      "message": "To be honest I\u0027d prefer it to have no visual changes at a first glance. Like keep the reboot option in the first menu and open the advanced one on long press + add the safe mode option there instead of normal reboot. I also don\u0027t see a reason to add restart SysUI, so maybe remove that too.",
+      "revId": "de91b4972993e140bc7ddfca40d1980844d8e380",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
