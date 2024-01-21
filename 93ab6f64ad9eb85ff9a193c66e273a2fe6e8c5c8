@@ -51,6 +51,24 @@
       "parentUuid": "ff6124b6_315b3ee8",
       "revId": "93ab6f64ad9eb85ff9a193c66e273a2fe6e8c5c8",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "e4ee31a8_58e5f3ba",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000953
+      },
+      "writtenOn": "2024-01-21T19:46:04Z",
+      "side": 1,
+      "message": "Hi, do you have a version of this or the spoof Google Photos and Netflix commit for Uvite QPR1?\n\nhttps://gerrit.aospa.co/c/AOSPA/android_frameworks_base/+/36841?tab\u003dcomments\n\nThis one conflicts too as of the QPR1 merge. I want these for my personal builds.",
+      "parentUuid": "1b2dd26d_89fa5421",
+      "revId": "93ab6f64ad9eb85ff9a193c66e273a2fe6e8c5c8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ],
   "submitRequirementResults": []
