@@ -26,6 +26,7 @@ import android.os.UserHandle
 import android.provider.Settings
 import android.provider.Settings.System.GESTURE_DOUBLE_TAP
 import android.provider.Settings.System.GESTURE_SINGLE_TAP
+import android.provider.Settings.System.GESTURES_ENABLED
 import android.view.GestureDetector
 import android.view.MotionEvent
 import com.android.systemui.Dumpable
@@ -94,27 +95,28 @@ class PulsingGestureListener @Inject constructor(
             override fun onChange(selfChange: Boolean) = update()
 
             fun update() {
-                val customDoubleTap = systemSettings.getIntForUser(
+                val doubleTap = systemSettings.getInt(
                         GESTURE_DOUBLE_TAP,
                         context.resources.getInteger(
-                            com.android.internal.R.integer.config_doubleTapDefault),
-                        UserHandle.USER_CURRENT
+                            com.android.internal.R.integer.config_doubleTapDefault)
                 )
-                val customSingleTap = systemSettings.getIntForUser(
+                val singleTap = systemSettings.getInt(
                         GESTURE_SINGLE_TAP,
                         context.resources.getInteger(
-                            com.android.internal.R.integer.config_singleTapDefault),
-                        UserHandle.USER_CURRENT
+                            com.android.internal.R.integer.config_singleTapDefault)
                 )
+                val gesturesEnabled = systemSettings.getInt(GESTURES_ENABLED, 1) == 1
                 // WAKE_UP = 1; PULSE_AMBIENT = 2; from KeyHandler
-                customDoubleTapEnabled = customDoubleTap == 1 || customDoubleTap == 2
-                customSingleTapEnabled = customSingleTap == 1 || customSingleTap == 2
+                customDoubleTapEnabled = gesturesEnabled && (doubleTap == 1 || doubleTap == 2)
+                customSingleTapEnabled = gesturesEnabled && (singleTap == 1 || singleTap == 2)
             }
         }
         systemSettings.registerContentObserverForUser(
-                GESTURE_DOUBLE_TAP, settingsObserver, UserHandle.USER_CURRENT)
+                GESTURE_DOUBLE_TAP, settingsObserver, UserHandle.USER_ALL)
         systemSettings.registerContentObserverForUser(
-                GESTURE_SINGLE_TAP, settingsObserver, UserHandle.USER_CURRENT)
+                GESTURE_SINGLE_TAP, settingsObserver, UserHandle.USER_ALL)
+        systemSettings.registerContentObserverForUser(
+                GESTURES_ENABLED, settingsObserver, UserHandle.USER_ALL)
         settingsObserver.update()
 
         dumpManager.registerDumpable(this)
