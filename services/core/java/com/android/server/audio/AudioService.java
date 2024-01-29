@@ -392,7 +392,6 @@ public class AudioService extends IAudioService.Stub
     private static final int MSG_DISPATCH_AUDIO_MODE = 40;
     private static final int MSG_ROUTING_UPDATED = 41;
     private static final int MSG_INIT_HEADTRACKING_SENSORS = 42;
-    private static final int MSG_PERSIST_SPATIAL_AUDIO_DEVICE_SETTINGS = 43;
     private static final int MSG_ADD_ASSISTANT_SERVICE_UID = 44;
     private static final int MSG_REMOVE_ASSISTANT_SERVICE_UID = 45;
     private static final int MSG_UPDATE_ACTIVE_ASSISTANT_SERVICE_UID = 46;
@@ -1032,6 +1031,8 @@ public class AudioService extends IAudioService.Stub
         mAudioPolicy = audioPolicy;
         mPlatformType = AudioSystem.getPlatformType(context);
 
+        mDeviceBroker = new AudioDeviceBroker(mContext, this, mAudioSystem);
+
         mIsSingleVolume = AudioSystem.isSingleVolume(context);
 
         mUserManagerInternal = LocalServices.getService(UserManagerInternal.class);
@@ -1044,13 +1045,14 @@ public class AudioService extends IAudioService.Stub
 
         mSfxHelper = new SoundEffectsHelper(mContext, playerBase -> ignorePlayerLogs(playerBase));
 
-        final boolean binauralEnabledDefault = SystemProperties.getBoolean(
+        boolean binauralEnabledDefault = SystemProperties.getBoolean(
                 "ro.audio.spatializer_binaural_enabled_default", true);
-        final boolean transauralEnabledDefault = SystemProperties.getBoolean(
+        boolean transauralEnabledDefault = SystemProperties.getBoolean(
                 "ro.audio.spatializer_transaural_enabled_default", true);
-        final boolean headTrackingEnabledDefault = mContext.getResources().getBoolean(
+        boolean headTrackingEnabledDefault = mContext.getResources().getBoolean(
                 com.android.internal.R.bool.config_spatial_audio_head_tracking_enabled_default);
-        mSpatializerHelper = new SpatializerHelper(this, mAudioSystem,
+
+        mSpatializerHelper = new SpatializerHelper(this, mAudioSystem, mDeviceBroker,
                 binauralEnabledDefault, transauralEnabledDefault, headTrackingEnabledDefault);
 
         mVibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
@@ -1217,8 +1219,6 @@ public class AudioService extends IAudioService.Stub
 
         mUseFixedVolume = mContext.getResources().getBoolean(
                 com.android.internal.R.bool.config_useFixedVolume);
-
-        mDeviceBroker = new AudioDeviceBroker(mContext, this, mAudioSystem);
 
         mRecordMonitor = new RecordingActivityMonitor(mContext);
         mRecordMonitor.registerRecordingCallback(mVoiceRecordingActivityMonitor, true);
@@ -2871,8 +2871,11 @@ public class AudioService extends IAudioService.Stub
         if (devices == null) {
             return AudioSystem.ERROR;
         }
+
+        devices = retrieveBluetoothAddresses(devices);
+
         final String logString = String.format(
-                "setPreferredDeviceForStrategy u/pid:%d/%d strat:%d dev:%s",
+                "setPreferredDevicesForStrategy u/pid:%d/%d strat:%d dev:%s",
                 Binder.getCallingUid(), Binder.getCallingPid(), strategy,
                 devices.stream().map(e -> e.toString()).collect(Collectors.joining(",")));
         sDeviceLogger.enqueue(new EventLogger.StringEvent(logString).printLog(TAG));
@@ -2928,7 +2931,7 @@ public class AudioService extends IAudioService.Stub
                     status, strategy));
             return new ArrayList<AudioDeviceAttributes>();
         } else {
-            return devices;
+            return anonymizeAudioDeviceAttributesList(devices);
         }
     }
 
@@ -2943,6 +2946,9 @@ public class AudioService extends IAudioService.Stub
                                                 @NonNull AudioDeviceAttributes device) {
         super.setDeviceAsNonDefaultForStrategy_enforcePermission();
         Objects.requireNonNull(device);
+
+        device = retrieveBluetoothAddress(device);
+
         final String logString = String.format(
                 "setDeviceAsNonDefaultForStrategy u/pid:%d/%d strat:%d dev:%s",
                 Binder.getCallingUid(), Binder.getCallingPid(), strategy, device.toString());
@@ -2969,6 +2975,9 @@ public class AudioService extends IAudioService.Stub
                                                    AudioDeviceAttributes device) {
         super.removeDeviceAsNonDefaultForStrategy_enforcePermission();
         Objects.requireNonNull(device);
+
+        device = retrieveBluetoothAddress(device);
+
         final String logString = String.format(
                 "removeDeviceAsNonDefaultForStrategy strat:%d dev:%s", strategy, device.toString());
         sDeviceLogger.enqueue(new EventLogger.StringEvent(logString).printLog(TAG));
@@ -3003,7 +3012,7 @@ public class AudioService extends IAudioService.Stub
                     status, strategy));
             return new ArrayList<AudioDeviceAttributes>();
         } else {
-            return devices;
+            return anonymizeAudioDeviceAttributesList(devices);
         }
     }
 
@@ -3016,7 +3025,8 @@ public class AudioService extends IAudioService.Stub
             return;
         }
         enforceModifyAudioRoutingPermission();
-        mDeviceBroker.registerStrategyPreferredDevicesDispatcher(dispatcher);
+        mDeviceBroker.registerStrategyPreferredDevicesDispatcher(
+                dispatcher, isBluetoothPrividged());
     }
 
     /** @see AudioManager#removeOnPreferredDevicesForStrategyChangedListener(
@@ -3040,7 +3050,8 @@ public class AudioService extends IAudioService.Stub
             return;
         }
         enforceModifyAudioRoutingPermission();
-        mDeviceBroker.registerStrategyNonDefaultDevicesDispatcher(dispatcher);
+        mDeviceBroker.registerStrategyNonDefaultDevicesDispatcher(
+                dispatcher, isBluetoothPrividged());
     }
 
     /** @see AudioManager#removeOnNonDefaultDevicesForStrategyChangedListener(
@@ -3056,7 +3067,7 @@ public class AudioService extends IAudioService.Stub
     }
 
     /**
-     * @see AudioManager#setPreferredDeviceForCapturePreset(int, AudioDeviceAttributes)
+     * @see AudioManager#setPreferredDevicesForCapturePreset(int, AudioDeviceAttributes)
      */
     public int setPreferredDevicesForCapturePreset(
             int capturePreset, List<AudioDeviceAttributes> devices) {
@@ -3074,6 +3085,8 @@ public class AudioService extends IAudioService.Stub
             Log.e(TAG, "Unsupported output routing in " + logString);
             return AudioSystem.ERROR;
         }
+
+        devices = retrieveBluetoothAddresses(devices);
 
         final int status = mDeviceBroker.setPreferredDevicesForCapturePresetSync(
                 capturePreset, devices);
@@ -3121,7 +3134,7 @@ public class AudioService extends IAudioService.Stub
                     status, capturePreset));
             return new ArrayList<AudioDeviceAttributes>();
         } else {
-            return devices;
+            return anonymizeAudioDeviceAttributesList(devices);
         }
     }
 
@@ -3135,7 +3148,8 @@ public class AudioService extends IAudioService.Stub
             return;
         }
         enforceModifyAudioRoutingPermission();
-        mDeviceBroker.registerCapturePresetDevicesRoleDispatcher(dispatcher);
+        mDeviceBroker.registerCapturePresetDevicesRoleDispatcher(
+                dispatcher, isBluetoothPrividged());
     }
 
     /**
@@ -3155,7 +3169,9 @@ public class AudioService extends IAudioService.Stub
     public @NonNull ArrayList<AudioDeviceAttributes> getDevicesForAttributes(
             @NonNull AudioAttributes attributes) {
         enforceQueryStateOrModifyRoutingPermission();
-        return getDevicesForAttributesInt(attributes, false /* forVolume */);
+
+        return new ArrayList<AudioDeviceAttributes>(anonymizeAudioDeviceAttributesList(
+                getDevicesForAttributesInt(attributes, false /* forVolume */)));
     }
 
     /** @see AudioManager#getAudioDevicesForAttributes(AudioAttributes)
@@ -3165,7 +3181,8 @@ public class AudioService extends IAudioService.Stub
      */
     public @NonNull ArrayList<AudioDeviceAttributes> getDevicesForAttributesUnprotected(
             @NonNull AudioAttributes attributes) {
-        return getDevicesForAttributesInt(attributes, false /* forVolume */);
+        return new ArrayList<AudioDeviceAttributes>(anonymizeAudioDeviceAttributesList(
+                getDevicesForAttributesInt(attributes, false /* forVolume */)));
     }
 
     /**
@@ -6622,6 +6639,10 @@ public class AudioService extends IAudioService.Stub
         return mContentResolver;
     }
 
+    /*package*/ SettingsAdapter getSettings() {
+        return mSettings;
+    }
+
     ///////////////////////////////////////////////////////////////////////////
     // Internal methods
     ///////////////////////////////////////////////////////////////////////////
@@ -7369,6 +7390,8 @@ public class AudioService extends IAudioService.Stub
         Objects.requireNonNull(device);
         AudioManager.enforceValidVolumeBehavior(deviceVolumeBehavior);
 
+        device = retrieveBluetoothAddress(device);
+
         sVolumeLogger.enqueue(new EventLogger.StringEvent("setDeviceVolumeBehavior: dev:"
                 + AudioSystem.getOutputDeviceName(device.getInternalType()) + " addr:"
                 + device.getAddress() + " behavior:"
@@ -7452,6 +7475,8 @@ public class AudioService extends IAudioService.Stub
         // verify parameters
         Objects.requireNonNull(device);
 
+        device = retrieveBluetoothAddress(device);
+
         return getDeviceVolumeBehaviorInt(device);
     }
 
@@ -7526,9 +7551,12 @@ public class AudioService extends IAudioService.Stub
     /**
      * see AudioManager.setWiredDeviceConnectionState()
      */
-    public void setWiredDeviceConnectionState(AudioDeviceAttributes attributes,
+    public void setWiredDeviceConnectionState(@NonNull AudioDeviceAttributes attributes,
             @ConnectionState int state, String caller) {
         super.setWiredDeviceConnectionState_enforcePermission();
+        Objects.requireNonNull(attributes);
+
+        attributes = retrieveBluetoothAddress(attributes);
 
         if (state != CONNECTION_STATE_CONNECTED
                 && state != CONNECTION_STATE_DISCONNECTED) {
@@ -7569,6 +7597,9 @@ public class AudioService extends IAudioService.Stub
             boolean connected) {
         Objects.requireNonNull(device);
         enforceModifyAudioRoutingPermission();
+
+        device = retrieveBluetoothAddress(device);
+
         mDeviceBroker.setTestDeviceConnectionState(device,
                 connected ? CONNECTION_STATE_CONNECTED : CONNECTION_STATE_DISCONNECTED);
         // simulate a routing update from native
@@ -9285,10 +9316,6 @@ public class AudioService extends IAudioService.Stub
                     mSpatializerHelper.onInitSensors();
                     break;
 
-                case MSG_PERSIST_SPATIAL_AUDIO_DEVICE_SETTINGS:
-                    onPersistSpatialAudioDeviceSettings();
-                    break;
-
                 case MSG_RESET_SPATIALIZER:
                     mSpatializerHelper.reset(/* featureEnabled */ mHasSpatializerEffect);
                     break;
@@ -10344,39 +10371,103 @@ public class AudioService extends IAudioService.Stub
     }
 
     void onInitSpatializer() {
-        final String settings = mSettings.getSecureStringForUser(mContentResolver,
-                Settings.Secure.SPATIAL_AUDIO_ENABLED, UserHandle.USER_CURRENT);
-        if (settings == null) {
-            Log.e(TAG, "error reading spatial audio device settings");
-        }
-        mSpatializerHelper.init(/*effectExpected*/ mHasSpatializerEffect, settings);
+        mDeviceBroker.onReadAudioDeviceSettings();
+        mSpatializerHelper.init(/*effectExpected*/ mHasSpatializerEffect);
         mSpatializerHelper.setFeatureEnabled(mHasSpatializerEffect);
     }
 
-    /**
-     * post a message to persist the spatial audio device settings.
-     * Message is delayed by 1s on purpose in case of successive changes in quick succession (at
-     * init time for instance)
-     * Note this method is made public to work around a Mockito bug where it needs to be public
-     * in order to be mocked by a test a the same package
-     * (see https://code.google.com/archive/p/mockito/issues/127)
-     */
-    public void persistSpatialAudioDeviceSettings() {
-        sendMsg(mAudioHandler,
-                MSG_PERSIST_SPATIAL_AUDIO_DEVICE_SETTINGS,
-                SENDMSG_REPLACE, /*arg1*/ 0, /*arg2*/ 0, TAG,
-                /*delay*/ 1000);
+    private boolean isBluetoothPrividged() {
+        return PackageManager.PERMISSION_GRANTED == mContext.checkCallingOrSelfPermission(
+                android.Manifest.permission.BLUETOOTH_CONNECT)
+                || Binder.getCallingUid() == Process.SYSTEM_UID;
     }
 
-    void onPersistSpatialAudioDeviceSettings() {
-        final String settings = mSpatializerHelper.getSADeviceSettings();
-        Log.v(TAG, "saving spatial audio device settings: " + settings);
-        boolean res = mSettings.putSecureStringForUser(mContentResolver,
-                Settings.Secure.SPATIAL_AUDIO_ENABLED,
-                settings, UserHandle.USER_CURRENT);
-        if (!res) {
-            Log.e(TAG, "error saving spatial audio device settings: " + settings);
+    List<AudioDeviceAttributes> retrieveBluetoothAddresses(List<AudioDeviceAttributes> devices) {
+        if (isBluetoothPrividged()) {
+            return devices;
         }
+
+        List<AudioDeviceAttributes> checkedDevices = new ArrayList<AudioDeviceAttributes>();
+        for (AudioDeviceAttributes ada : devices) {
+            if (ada == null) {
+                continue;
+            }
+            checkedDevices.add(retrieveBluetoothAddressUncheked(ada));
+        }
+        return checkedDevices;
+    }
+
+    AudioDeviceAttributes retrieveBluetoothAddress(@NonNull AudioDeviceAttributes ada) {
+        if (isBluetoothPrividged()) {
+            return ada;
+        }
+        return retrieveBluetoothAddressUncheked(ada);
+    }
+
+    AudioDeviceAttributes retrieveBluetoothAddressUncheked(@NonNull AudioDeviceAttributes ada) {
+        Objects.requireNonNull(ada);
+        if (AudioSystem.isBluetoothDevice(ada.getInternalType())) {
+            String anonymizedAddress = anonymizeBluetoothAddress(ada.getAddress());
+            for (AdiDeviceState ads : mDeviceBroker.getImmutableDeviceInventory()) {
+                if (!(AudioSystem.isBluetoothDevice(ads.getInternalDeviceType())
+                        && (ada.getInternalType() == ads.getInternalDeviceType())
+                        && anonymizedAddress.equals(anonymizeBluetoothAddress(
+                                ads.getDeviceAddress())))) {
+                    continue;
+                }
+                ada.setAddress(ads.getDeviceAddress());
+                break;
+            }
+        }
+        return ada;
+    }
+
+    /**
+     * Convert a Bluetooth MAC address to an anonymized one when exposed to a non privileged app
+     * Must match the implementation of BluetoothUtils.toAnonymizedAddress()
+     * @param address Mac address to be anonymized
+     * @return anonymized mac address
+     */
+    static String anonymizeBluetoothAddress(String address) {
+        if (address == null || address.length() != "AA:BB:CC:DD:EE:FF".length()) {
+            return null;
+        }
+        return "XX:XX:XX:XX" + address.substring("XX:XX:XX:XX".length());
+    }
+
+    private List<AudioDeviceAttributes> anonymizeAudioDeviceAttributesList(
+                List<AudioDeviceAttributes> devices) {
+        if (isBluetoothPrividged()) {
+            return devices;
+        }
+        return anonymizeAudioDeviceAttributesListUnchecked(devices);
+    }
+
+    /* package */ List<AudioDeviceAttributes> anonymizeAudioDeviceAttributesListUnchecked(
+            List<AudioDeviceAttributes> devices) {
+        List<AudioDeviceAttributes> anonymizedDevices = new ArrayList<AudioDeviceAttributes>();
+        for (AudioDeviceAttributes ada : devices) {
+            anonymizedDevices.add(anonymizeAudioDeviceAttributesUnchecked(ada));
+        }
+        return anonymizedDevices;
+    }
+
+    private AudioDeviceAttributes anonymizeAudioDeviceAttributesUnchecked(
+            AudioDeviceAttributes ada) {
+        if (!AudioSystem.isBluetoothDevice(ada.getInternalType())) {
+            return ada;
+        }
+        AudioDeviceAttributes res = new AudioDeviceAttributes(ada);
+        res.setAddress(anonymizeBluetoothAddress(ada.getAddress()));
+        return res;
+    }
+
+    private AudioDeviceAttributes anonymizeAudioDeviceAttributes(AudioDeviceAttributes ada) {
+        if (isBluetoothPrividged()) {
+            return ada;
+        }
+
+        return anonymizeAudioDeviceAttributesUnchecked(ada);
     }
 
     //==========================================================================================
@@ -10426,13 +10517,16 @@ public class AudioService extends IAudioService.Stub
         Objects.requireNonNull(usages);
         Objects.requireNonNull(device);
         enforceModifyAudioRoutingPermission();
+
+        final AudioDeviceAttributes ada = retrieveBluetoothAddress(device);
+
         if (timeOutMs <= 0 || usages.length == 0) {
             throw new IllegalArgumentException("Invalid timeOutMs/usagesToMute");
         }
         Log.i(TAG, "muteAwaitConnection dev:" + device + " timeOutMs:" + timeOutMs
                 + " usages:" + Arrays.toString(usages));
 
-        if (mDeviceBroker.isDeviceConnected(device)) {
+        if (mDeviceBroker.isDeviceConnected(ada)) {
             // not throwing an exception as there could be a race between a connection (server-side,
             // notification of connection in flight) and a mute operation (client-side)
             Log.i(TAG, "muteAwaitConnection ignored, device (" + device + ") already connected");
@@ -10444,12 +10538,19 @@ public class AudioService extends IAudioService.Stub
                         + mMutingExpectedDevice);
                 throw new IllegalStateException("muteAwaitConnection already in progress");
             }
-            mMutingExpectedDevice = device;
+            mMutingExpectedDevice = ada;
             mMutedUsagesAwaitingConnection = usages;
-            mPlaybackMonitor.muteAwaitConnection(usages, device, timeOutMs);
+            mPlaybackMonitor.muteAwaitConnection(usages, ada, timeOutMs);
         }
-        dispatchMuteAwaitConnection(cb -> { try {
-            cb.dispatchOnMutedUntilConnection(device, usages); } catch (RemoteException e) { } });
+        dispatchMuteAwaitConnection((cb, isPrivileged) -> {
+            try {
+                AudioDeviceAttributes dev = ada;
+                if (!isPrivileged) {
+                    dev = anonymizeAudioDeviceAttributesUnchecked(ada);
+                }
+                cb.dispatchOnMutedUntilConnection(dev, usages);
+            } catch (RemoteException e) { }
+        });
     }
 
     @android.annotation.EnforcePermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
@@ -10458,7 +10559,7 @@ public class AudioService extends IAudioService.Stub
         super.getMutingExpectedDevice_enforcePermission();
 
         synchronized (mMuteAwaitConnectionLock) {
-            return mMutingExpectedDevice;
+            return anonymizeAudioDeviceAttributes(mMutingExpectedDevice);
         }
     }
 
@@ -10467,6 +10568,9 @@ public class AudioService extends IAudioService.Stub
     public void cancelMuteAwaitConnection(@NonNull AudioDeviceAttributes device) {
         Objects.requireNonNull(device);
         enforceModifyAudioRoutingPermission();
+
+        final AudioDeviceAttributes ada = retrieveBluetoothAddress(device);
+
         Log.i(TAG, "cancelMuteAwaitConnection for device:" + device);
         final int[] mutedUsages;
         synchronized (mMuteAwaitConnectionLock) {
@@ -10476,7 +10580,7 @@ public class AudioService extends IAudioService.Stub
                 Log.i(TAG, "cancelMuteAwaitConnection ignored, no expected device");
                 return;
             }
-            if (!device.equalTypeAddress(mMutingExpectedDevice)) {
+            if (!ada.equalTypeAddress(mMutingExpectedDevice)) {
                 Log.e(TAG, "cancelMuteAwaitConnection ignored, got " + device
                         + "] but expected device is" + mMutingExpectedDevice);
                 throw new IllegalStateException("cancelMuteAwaitConnection for wrong device");
@@ -10486,8 +10590,14 @@ public class AudioService extends IAudioService.Stub
             mMutedUsagesAwaitingConnection = null;
             mPlaybackMonitor.cancelMuteAwaitConnection("cancelMuteAwaitConnection dev:" + device);
         }
-        dispatchMuteAwaitConnection(cb -> { try { cb.dispatchOnUnmutedEvent(
-                    AudioManager.MuteAwaitConnectionCallback.EVENT_CANCEL, device, mutedUsages);
+        dispatchMuteAwaitConnection((cb, isPrivileged) -> {
+            try {
+                AudioDeviceAttributes dev = ada;
+                if (!isPrivileged) {
+                    dev = anonymizeAudioDeviceAttributesUnchecked(ada);
+                }
+                cb.dispatchOnUnmutedEvent(
+                        AudioManager.MuteAwaitConnectionCallback.EVENT_CANCEL, dev, mutedUsages);
             } catch (RemoteException e) { } });
     }
 
@@ -10501,7 +10611,7 @@ public class AudioService extends IAudioService.Stub
         super.registerMuteAwaitConnectionDispatcher_enforcePermission();
 
         if (register) {
-            mMuteAwaitConnectionDispatchers.register(cb);
+            mMuteAwaitConnectionDispatchers.register(cb, isBluetoothPrividged());
         } else {
             mMuteAwaitConnectionDispatchers.unregister(cb);
         }
@@ -10525,8 +10635,14 @@ public class AudioService extends IAudioService.Stub
             mPlaybackMonitor.cancelMuteAwaitConnection(
                     "checkMuteAwaitConnection device " + device + " connected, unmuting");
         }
-        dispatchMuteAwaitConnection(cb -> { try { cb.dispatchOnUnmutedEvent(
-                AudioManager.MuteAwaitConnectionCallback.EVENT_CONNECTION, device, mutedUsages);
+        dispatchMuteAwaitConnection((cb, isPrivileged) -> {
+            try {
+                AudioDeviceAttributes ada = device;
+                if (!isPrivileged) {
+                    ada = anonymizeAudioDeviceAttributesUnchecked(device);
+                }
+                cb.dispatchOnUnmutedEvent(AudioManager.MuteAwaitConnectionCallback.EVENT_CONNECTION,
+                        ada, mutedUsages);
             } catch (RemoteException e) { } });
     }
 
@@ -10546,7 +10662,8 @@ public class AudioService extends IAudioService.Stub
             mMutingExpectedDevice = null;
             mMutedUsagesAwaitingConnection = null;
         }
-        dispatchMuteAwaitConnection(cb -> { try {
+        dispatchMuteAwaitConnection((cb, isPrivileged) -> {
+            try {
                 cb.dispatchOnUnmutedEvent(
                         AudioManager.MuteAwaitConnectionCallback.EVENT_TIMEOUT,
                         timedOutDevice, mutedUsages);
@@ -10554,13 +10671,14 @@ public class AudioService extends IAudioService.Stub
     }
 
     private void dispatchMuteAwaitConnection(
-            java.util.function.Consumer<IMuteAwaitConnectionCallback> callback) {
+            java.util.function.BiConsumer<IMuteAwaitConnectionCallback, Boolean> callback) {
         final int nbDispatchers = mMuteAwaitConnectionDispatchers.beginBroadcast();
         // lazy initialization as errors unlikely
         ArrayList<IMuteAwaitConnectionCallback> errorList = null;
         for (int i = 0; i < nbDispatchers; i++) {
             try {
-                callback.accept(mMuteAwaitConnectionDispatchers.getBroadcastItem(i));
+                callback.accept(mMuteAwaitConnectionDispatchers.getBroadcastItem(i),
+                        (Boolean) mMuteAwaitConnectionDispatchers.getBroadcastCookie(i));
             } catch (Exception e) {
                 if (errorList == null) {
                     errorList = new ArrayList<>(1);
@@ -13038,6 +13156,9 @@ public class AudioService extends IAudioService.Stub
             @NonNull AudioDeviceAttributes device, @IntRange(from = 0) long delayMillis) {
         Objects.requireNonNull(device, "device must not be null");
         enforceModifyAudioRoutingPermission();
+
+        device = retrieveBluetoothAddress(device);
+
         final String getterKey = "additional_output_device_delay="
                 + device.getInternalType() + "," + device.getAddress(); // "getter" key as an id.
         final String setterKey = getterKey + "," + delayMillis;     // append the delay for setter
@@ -13058,6 +13179,9 @@ public class AudioService extends IAudioService.Stub
     @IntRange(from = 0)
     public long getAdditionalOutputDeviceDelay(@NonNull AudioDeviceAttributes device) {
         Objects.requireNonNull(device, "device must not be null");
+
+        device = retrieveBluetoothAddress(device);
+
         final String key = "additional_output_device_delay";
         final String reply = AudioSystem.getParameters(
                 key + "=" + device.getInternalType() + "," + device.getAddress());
@@ -13085,6 +13209,9 @@ public class AudioService extends IAudioService.Stub
     @IntRange(from = 0)
     public long getMaxAdditionalOutputDeviceDelay(@NonNull AudioDeviceAttributes device) {
         Objects.requireNonNull(device, "device must not be null");
+
+        device = retrieveBluetoothAddress(device);
+
         final String key = "max_additional_output_device_delay";
         final String reply = AudioSystem.getParameters(
                 key + "=" + device.getInternalType() + "," + device.getAddress());
