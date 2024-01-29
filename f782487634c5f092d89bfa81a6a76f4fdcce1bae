@@ -16,6 +16,23 @@
       "message": "no need of this ig. as i have removed this metric from fragment",
       "revId": "f782487634c5f092d89bfa81a6a76f4fdcce1bae",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "52877740_5b6e5ae5",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000469
+      },
+      "writtenOn": "2024-01-29T17:37:14Z",
+      "side": 1,
+      "message": "unnecessary",
+      "revId": "f782487634c5f092d89bfa81a6a76f4fdcce1bae",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
