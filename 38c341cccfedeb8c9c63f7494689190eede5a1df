@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "59aa903b_c6756909",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2024-02-05T06:20:26Z",
+      "side": 1,
+      "message": "i never understood the point of this - it’s not a very good indicator about how good the phone is sleeping now, just historically (as it’s just total sleep since boot)",
+      "revId": "38c341cccfedeb8c9c63f7494689190eede5a1df",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
