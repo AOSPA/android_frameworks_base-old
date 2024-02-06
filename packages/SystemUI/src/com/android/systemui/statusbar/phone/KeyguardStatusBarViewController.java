@@ -20,6 +20,7 @@ import static android.app.StatusBarManager.DISABLE2_SYSTEM_ICONS;
 import static android.app.StatusBarManager.DISABLE_SYSTEM_INFO;
 
 import static com.android.systemui.statusbar.StatusBarState.KEYGUARD;
+import com.android.systemui.statusbar.phone.KeyguardBypassController;
 
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -443,6 +444,11 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
 
     /** Animate the keyguard status bar in. */
     public void animateKeyguardStatusBarIn() {
+        if (!mKeyguardBypassController.getBypassEnabled()) {
+            mLogger.log(TAG, LogLevel.DEBUG, "bypass lockscreen enabled");
+            return;
+        }
+
         mLogger.log(TAG, LogLevel.DEBUG, "animating status bar in");
         if (mDisableStateTracker.isDisabled()) {
             // If our view is disabled, don't allow us to animate in.
@@ -513,6 +519,7 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
                         && !mDozing
                         && !hideForBypass
                         && !mDisableStateTracker.isDisabled()
+                        && mKeyguardBypassController.getBypassEnabled()
                         ? View.VISIBLE : View.INVISIBLE;
 
         updateViewState(newAlpha, newVisibility);
