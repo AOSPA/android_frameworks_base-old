@@ -4793,7 +4793,7 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
         public void onTuningChanged(String key, String newValue) {
             if (STATUS_BAR_QUICK_QS_PULLDOWN.equals(key)) {
                 mQsController.setOneFingerQsIntercept(
-                        TunerService.parseIntegerSwitch(newValue, true));
+                        TunerService.parseIntegerSwitch(newValue, false));
             }
         }
     }
