@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "c93ab89d_8cea85e4",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardStatusBarViewController.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 272,
+      "author": {
+        "id": 1000469
+      },
+      "writtenOn": "2024-02-06T06:53:10Z",
+      "side": 1,
+      "message": "get rid of this and use mKeyguardBypassController.getBypassEnabled() directly",
+      "revId": "b62c3c1e2eca6d44b1dbd254925b2f344cb28840",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "7862118c_3a9d6c38",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardStatusBarViewController.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 454,
+      "author": {
+        "id": 1000469
+      },
+      "writtenOn": "2024-02-06T06:53:10Z",
+      "side": 1,
+      "message": "indentation",
+      "revId": "b62c3c1e2eca6d44b1dbd254925b2f344cb28840",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
