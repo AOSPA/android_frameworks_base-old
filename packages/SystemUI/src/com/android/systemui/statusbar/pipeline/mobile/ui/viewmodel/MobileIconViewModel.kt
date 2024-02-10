@@ -55,6 +55,7 @@ interface MobileIconViewModelCommon {
     val icon: Flow<SignalIconModel>
     val contentDescription: Flow<ContentDescription>
     val roaming: Flow<Boolean>
+    val isRoamingVisible: Flow<Boolean>
     /** The RAT icon (LTE, 3G, 5G, etc) to be displayed. Null if we shouldn't show anything */
     val networkTypeIcon: Flow<Icon.Resource?>
     val activityInVisible: Flow<Boolean>
@@ -225,6 +226,18 @@ constructor(
         }
         .distinctUntilChanged()
         .stateIn(scope, SharingStarted.WhileSubscribed(), false)
+
+    override val isRoamingVisible: StateFlow<Boolean> =
+        combine(
+                roaming,
+                iconInteractor.isRoamingForceHidden
+            ) { isRoaming, isHidden ->
+                // If it's force hidden, just hide.
+                // Otherwise follow roaming state
+                isRoaming && !isHidden
+            }
+            .distinctUntilChanged()
+            .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
     private val activity: Flow<DataActivityModel?> =
         if (!constants.shouldShowActivityConfig) {
