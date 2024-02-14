@@ -16,6 +16,23 @@
       "message": "for personal builds",
       "revId": "1f2b90969fbaa4a4bd3c7b1cd0924558f72a5ee1",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "bce8acc2_301070f0",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 12
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000055
+      },
+      "writtenOn": "2024-02-14T15:26:25Z",
+      "side": 1,
+      "message": "Not a bad idea to be honest",
+      "revId": "1f2b90969fbaa4a4bd3c7b1cd0924558f72a5ee1",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
