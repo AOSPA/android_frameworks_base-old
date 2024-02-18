@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "81d1f2e3_5ab4b441",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBypassController.kt",
+        "patchSetId": 1
+      },
+      "lineNbr": 181,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2024-02-18T19:03:14Z",
+      "side": 1,
+      "message": "are you sure about this condition?\nthat we just don\u0027t need to change bypassEnabledBiometric to bypassEnabled ?",
+      "revId": "d9606eea940e2af2017dd17cda90adac3321ef70",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
