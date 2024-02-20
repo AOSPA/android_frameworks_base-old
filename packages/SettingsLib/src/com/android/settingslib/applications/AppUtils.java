@@ -320,4 +320,16 @@ public class AppUtils {
         }
         return -1;
     }
+
+    /**
+     * Returns list of clonable non-system, non-overlay app package names.
+     */
+    public List<String> getCloneableAppListStr(Context context) {
+        return context.getPackageManager().getInstalledPackagesAsUser(0, UserHandle.myUserId())
+                .stream()
+                .filter(packageInfo -> !packageInfo.applicationInfo.isSystemApp()
+                        && !packageInfo.applicationInfo.isResourceOverlay())
+                .map(packageInfo -> packageInfo.packageName)
+                .collect(Collectors.toList());
+    }
 }
