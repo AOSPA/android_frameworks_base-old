@@ -159,6 +159,18 @@ public class BatteryManager {
     public static final String EXTRA_CHARGING_STATUS = "android.os.extra.CHARGING_STATUS";
 
     /**
+     * Extra for {@link android.content.Intent#ACTION_BATTERY_CHANGED}:
+     * Int value representing the current battery capacity in microampere-hours.
+     */
+    public static final String EXTRA_CURRENT_CAPACITY = "current_capacity";
+
+    /**
+     * Extra for {@link android.content.Intent#ACTION_BATTERY_CHANGED}:
+     * Int value representing the design capacity of the battery in microampere-hours.
+     */
+    public static final String EXTRA_DESIGN_CAPACITY = "design_capacity";
+
+    /**
      * Extra for {@link android.content.Intent#ACTION_BATTERY_LEVEL_CHANGED}:
      * Contains list of Bundles representing battery events
      * @hide
