@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "10a81b34_59104332",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000890
+      },
+      "writtenOn": "2024-02-27T12:42:19Z",
+      "side": 1,
+      "message": "I don’t think indentation is necessary for preprocessors plus it doesn’t look clean IMO.",
+      "revId": "95beae8e241e1cfba122c2edb812fb9353cdda58",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
