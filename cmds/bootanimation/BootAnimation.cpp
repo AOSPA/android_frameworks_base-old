@@ -442,7 +442,7 @@ public:
                         // ignore hotplug of a secondary display
                         continue;
                     }
-
+#if 0
                     DisplayMode displayMode;
                     const status_t error = SurfaceComposerClient::getActiveDisplayMode(
                         mBootAnimation->mDisplayToken, &displayMode);
@@ -451,6 +451,7 @@ public:
                     }
                     mBootAnimation->resizeSurface(displayMode.resolution.getWidth(),
                         displayMode.resolution.getHeight());
+#endif
                 }
             }
         } while (numEvents > 0);
