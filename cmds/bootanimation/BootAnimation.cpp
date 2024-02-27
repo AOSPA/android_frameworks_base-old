@@ -449,8 +449,6 @@ public:
                     if (error != NO_ERROR) {
                         SLOGE("Can't get active display mode.");
                     }
-                    mBootAnimation->resizeSurface(displayMode.resolution.getWidth(),
-                        displayMode.resolution.getHeight());
                 }
             }
         } while (numEvents > 0);
@@ -676,33 +674,6 @@ ui::Rotation BootAnimation::parseOrientationProperty() {
 void BootAnimation::projectSceneToWindow() {
     glViewport(0, 0, mWidth, mHeight);
     glScissor(0, 0, mWidth, mHeight);
-}
-
-void BootAnimation::resizeSurface(int newWidth, int newHeight) {
-    // We assume this function is called on the animation thread.
-    if (newWidth == mWidth && newHeight == mHeight) {
-        return;
-    }
-    SLOGV("Resizing the boot animation surface to %d %d", newWidth, newHeight);
-
-    eglMakeCurrent(mDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-    eglDestroySurface(mDisplay, mSurface);
-
-    mFlingerSurfaceControl->updateDefaultBufferSize(newWidth, newHeight);
-    const auto limitedSize = limitSurfaceSize(newWidth, newHeight);
-    mWidth = limitedSize.width;
-    mHeight = limitedSize.height;
-
-    EGLConfig config = getEglConfig(mDisplay);
-    EGLSurface surface = eglCreateWindowSurface(mDisplay, config, mFlingerSurface.get(), nullptr);
-    if (eglMakeCurrent(mDisplay, surface, surface, mContext) == EGL_FALSE) {
-        SLOGE("Can't make the new surface current. Error %d", eglGetError());
-        return;
-    }
-
-    projectSceneToWindow();
-
-    mSurface = surface;
 }
 
 bool BootAnimation::preloadAnimation() {

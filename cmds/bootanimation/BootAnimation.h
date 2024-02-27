@@ -200,7 +200,6 @@ private:
     bool preloadAnimation();
     EGLConfig getEglConfig(const EGLDisplay&);
     ui::Size limitSurfaceSize(int width, int height) const;
-    void resizeSurface(int newWidth, int newHeight);
     void projectSceneToWindow();
     void rotateAwayFromNaturalOrientationIfNeeded();
     ui::Rotation parseOrientationProperty();
