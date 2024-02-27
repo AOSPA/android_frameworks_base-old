@@ -449,8 +449,10 @@ public:
                     if (error != NO_ERROR) {
                         SLOGE("Can't get active display mode.");
                     }
+                    #if 0
                     mBootAnimation->resizeSurface(displayMode.resolution.getWidth(),
                         displayMode.resolution.getHeight());
+                    #endif
                 }
             }
         } while (numEvents > 0);
