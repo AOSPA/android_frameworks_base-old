@@ -58,7 +58,6 @@ import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
-import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.PrintWriterPrinter;
@@ -79,11 +78,8 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 
-/**
- * @hide
- * (non final for mocking/spying)
- */
-public class AudioDeviceBroker {
+/** @hide */
+/*package*/ final class AudioDeviceBroker {
 
     private static final String TAG = "AS.AudioDeviceBroker";
 
@@ -2021,10 +2017,6 @@ public class AudioDeviceBroker {
                     }
                 } break;
 
-                case MSG_PERSIST_AUDIO_DEVICE_SETTINGS:
-                    onPersistAudioDeviceSettings();
-                    break;
-
                 case MSG_CHECK_COMMUNICATION_ROUTE_CLIENT_STATE: {
                     synchronized (mDeviceStateLock) {
                         onCheckCommunicationRouteClientState(msg.arg1, msg.arg2 == 1);
@@ -2110,8 +2102,6 @@ public class AudioDeviceBroker {
 
     private static final int MSG_L_NOTIFY_PREFERRED_AUDIOPROFILE_APPLIED = 52;
     private static final int MSG_L_CHECK_COMMUNICATION_DEVICE_REMOVAL = 53;
-
-    private static final int MSG_PERSIST_AUDIO_DEVICE_SETTINGS = 54;
 
     private static final int MSG_L_RECEIVED_BT_EVENT = 55;
 
@@ -2676,106 +2666,5 @@ public class AudioDeviceBroker {
                         .setUsage(AudioAttributes.USAGE_MEDIA).build(),
                 info.getId(),
                 null /*mixerAttributes*/);
-    }
-
-    /**
-     * post a message to persist the audio device settings.
-     * Message is delayed by 1s on purpose in case of successive changes in quick succession (at
-     * init time for instance)
-     * Note this method is made public to work around a Mockito bug where it needs to be public
-     * in order to be mocked by a test a the same package
-     * (see https://code.google.com/archive/p/mockito/issues/127)
-     */
-    public void persistAudioDeviceSettings() {
-        sendMsg(MSG_PERSIST_AUDIO_DEVICE_SETTINGS, SENDMSG_REPLACE, /*delay*/ 1000);
-    }
-
-    void onPersistAudioDeviceSettings() {
-        final String deviceSettings = mDeviceInventory.getDeviceSettings();
-        Log.v(TAG, "saving AdiDeviceState: " + deviceSettings);
-        final SettingsAdapter settings = mAudioService.getSettings();
-        boolean res = settings.putSecureStringForUser(mAudioService.getContentResolver(),
-                Settings.Secure.AUDIO_DEVICE_INVENTORY,
-                deviceSettings, UserHandle.USER_CURRENT);
-        if (!res) {
-            Log.e(TAG, "error saving AdiDeviceState: " + deviceSettings);
-        }
-    }
-
-    void onReadAudioDeviceSettings() {
-        final SettingsAdapter settingsAdapter = mAudioService.getSettings();
-        final ContentResolver contentResolver = mAudioService.getContentResolver();
-        String settings = settingsAdapter.getSecureStringForUser(contentResolver,
-                Settings.Secure.AUDIO_DEVICE_INVENTORY, UserHandle.USER_CURRENT);
-        if (settings == null) {
-            Log.i(TAG, "reading AdiDeviceState from legacy key"
-                    + Settings.Secure.SPATIAL_AUDIO_ENABLED);
-            // legacy string format for key SPATIAL_AUDIO_ENABLED has the same order of fields like
-            // the strings for key AUDIO_DEVICE_INVENTORY. This will ensure to construct valid
-            // device settings when calling {@link #setDeviceSettings()}
-            settings = settingsAdapter.getSecureStringForUser(contentResolver,
-                    Settings.Secure.SPATIAL_AUDIO_ENABLED, UserHandle.USER_CURRENT);
-            if (settings == null) {
-                Log.i(TAG, "no AdiDeviceState stored with legacy key");
-            } else if (!settings.equals("")) {
-                // Delete old key value and update the new key
-                if (!settingsAdapter.putSecureStringForUser(contentResolver,
-                        Settings.Secure.SPATIAL_AUDIO_ENABLED,
-                        /*value=*/"",
-                        UserHandle.USER_CURRENT)) {
-                    Log.w(TAG, "cannot erase the legacy AdiDeviceState with key "
-                            + Settings.Secure.SPATIAL_AUDIO_ENABLED);
-                }
-                if (!settingsAdapter.putSecureStringForUser(contentResolver,
-                        Settings.Secure.AUDIO_DEVICE_INVENTORY,
-                        settings,
-                        UserHandle.USER_CURRENT)) {
-                    Log.e(TAG, "error updating the new AdiDeviceState with key "
-                            + Settings.Secure.AUDIO_DEVICE_INVENTORY);
-                }
-            }
-        }
-
-        if (settings != null && !settings.equals("")) {
-            setDeviceSettings(settings);
-        }
-    }
-
-    void setDeviceSettings(String settings) {
-        mDeviceInventory.setDeviceSettings(settings);
-    }
-
-    /** Test only method. */
-    String getDeviceSettings() {
-        return mDeviceInventory.getDeviceSettings();
-    }
-
-    Collection<AdiDeviceState> getImmutableDeviceInventory() {
-        return mDeviceInventory.getImmutableDeviceInventory();
-    }
-
-    void addOrUpdateDeviceSAStateInInventory(AdiDeviceState deviceState) {
-        mDeviceInventory.addOrUpdateDeviceSAStateInInventory(deviceState);
-    }
-
-    void addOrUpdateBtAudioDeviceCategoryInInventory(AdiDeviceState deviceState) {
-        mDeviceInventory.addOrUpdateAudioDeviceCategoryInInventory(deviceState);
-    }
-
-    @Nullable
-    AdiDeviceState findDeviceStateForAudioDeviceAttributes(AudioDeviceAttributes ada,
-            int canonicalType) {
-        return mDeviceInventory.findDeviceStateForAudioDeviceAttributes(ada, canonicalType);
-    }
-
-    @Nullable
-    AdiDeviceState findBtDeviceStateForAddress(String address, boolean isBle) {
-        return mDeviceInventory.findBtDeviceStateForAddress(address, isBle);
-    }
-
-    //------------------------------------------------
-    // for testing purposes only
-    void clearDeviceInventory() {
-        mDeviceInventory.clearDeviceInventory();
     }
 }
