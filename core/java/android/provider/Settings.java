@@ -10282,13 +10282,6 @@ public final class Settings {
         public static final String SPATIAL_AUDIO_ENABLED = "spatial_audio_enabled";
 
         /**
-         * Internal collection of audio device inventory items
-         * The device item stored are {@link com.android.server.audio.AdiDeviceState}
-         * @hide
-         */
-        public static final String AUDIO_DEVICE_INVENTORY = "audio_device_inventory";
-
-        /**
          * Stores a boolean that defines whether the CSD as a feature is enabled or not.
          * @hide
          */
