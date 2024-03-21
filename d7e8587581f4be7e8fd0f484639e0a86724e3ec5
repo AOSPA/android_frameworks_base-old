@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "2e0f5b30_a92c562e",
+        "filename": "packages/SystemUI/res/values/strings.xml",
+        "patchSetId": 1
+      },
+      "lineNbr": 1461,
+      "author": {
+        "id": 1000469
+      },
+      "writtenOn": "2024-03-21T16:10:47Z",
+      "side": 1,
+      "message": "already defined in aospa_strings",
+      "revId": "d7e8587581f4be7e8fd0f484639e0a86724e3ec5",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
