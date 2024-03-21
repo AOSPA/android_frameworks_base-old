@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "98f5d77b_4872aba9",
+        "filename": "packages/SystemUI/res/xml/status_bar_prefs.xml",
+        "patchSetId": 1
+      },
+      "lineNbr": 99,
+      "author": {
+        "id": 1000469
+      },
+      "writtenOn": "2024-03-21T16:09:46Z",
+      "side": 0,
+      "message": "unnecessary change, can revert this file back to original.",
+      "revId": "94889cacb209cfef1ce837937104d8f7aee48398",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
