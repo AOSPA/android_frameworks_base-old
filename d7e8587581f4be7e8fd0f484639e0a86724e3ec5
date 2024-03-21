@@ -16,6 +16,24 @@
       "message": "already defined in aospa_strings",
       "revId": "d7e8587581f4be7e8fd0f484639e0a86724e3ec5",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "22978a87_9db92dd3",
+        "filename": "packages/SystemUI/res/values/strings.xml",
+        "patchSetId": 1
+      },
+      "lineNbr": 1461,
+      "author": {
+        "id": 1000895
+      },
+      "writtenOn": "2024-03-21T17:56:38Z",
+      "side": 1,
+      "message": "done",
+      "parentUuid": "2e0f5b30_a92c562e",
+      "revId": "d7e8587581f4be7e8fd0f484639e0a86724e3ec5",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
