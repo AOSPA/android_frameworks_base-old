@@ -16,6 +16,24 @@
       "message": "please remove this nl",
       "revId": "b86ce5833bb04ddb9a6c5af6b4388ad5ba5292dd",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "d9219f2e_f8915aba",
+        "filename": "packages/SystemUI/res/layout/volume_dialog.xml",
+        "patchSetId": 3
+      },
+      "lineNbr": 149,
+      "author": {
+        "id": 1000469
+      },
+      "writtenOn": "2024-03-25T14:09:19Z",
+      "side": 1,
+      "message": "dont think i can do that, using nano and it\u0027ll always add newline at end of file",
+      "parentUuid": "1766b50f_76af66ec",
+      "revId": "b86ce5833bb04ddb9a6c5af6b4388ad5ba5292dd",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
