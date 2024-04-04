@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "9440c5d4_2fce8668",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000730
+      },
+      "writtenOn": "2024-04-04T04:36:00Z",
+      "side": 1,
+      "message": "care to share some screenshots?",
+      "revId": "f6f6b0b2a5b05b47b16141c9a19e48e883248e97",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
