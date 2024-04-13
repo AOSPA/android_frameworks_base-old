@@ -70,6 +70,14 @@ public abstract class TunerService {
         }
     }
 
+    public static int parseInteger(String str, int defaultValue) {
+        try {
+            return Integer.parseInt(str);
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
     /** */
     public abstract void showResetRequest(Runnable onDisabled);
 
