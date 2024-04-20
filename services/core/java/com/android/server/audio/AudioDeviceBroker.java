@@ -893,8 +893,9 @@ public class AudioDeviceBroker {
                                     BluetoothProfile.STATE_CONNECTED));
                 }
             }
-        } else if (data.mInfo.getProfile() == BluetoothProfile.A2DP && data.mPreviousDevice != null
-                   && data.mNewDevice != null && !data.mPreviousDevice.equals(data.mNewDevice)) {
+        } else if (data.mPreviousDevice != null && data.mNewDevice != null
+                && data.mInfo.getProfile() == BluetoothProfile.A2DP
+                && mDeviceInventory.isA2dpDeviceConnected(data.mPreviousDevice)) {
             final String name = TextUtils.emptyIfNull(data.mNewDevice.getName());
             new MediaMetrics.Item(MediaMetrics.Name.AUDIO_DEVICE + MediaMetrics.SEPARATOR
                     + "queueOnBluetoothActiveDeviceChanged_update")
