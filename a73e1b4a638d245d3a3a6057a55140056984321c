@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "bbd24b87_fbe9a4fe",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 7
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000895
+      },
+      "writtenOn": "2024-04-24T17:09:56Z",
+      "side": 1,
+      "message": "https://imgur.com/a/29syBlO",
+      "revId": "a73e1b4a638d245d3a3a6057a55140056984321c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
