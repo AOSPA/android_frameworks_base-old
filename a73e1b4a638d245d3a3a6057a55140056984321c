@@ -33,6 +33,23 @@
       "message": "see Adithya\u0027s message above",
       "revId": "a73e1b4a638d245d3a3a6057a55140056984321c",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "11ef628d_027c491f",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 7
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000895
+      },
+      "writtenOn": "2024-04-25T05:30:16Z",
+      "side": 1,
+      "message": "i checked and its fine with latest patch but i dont know how it will result in phone1",
+      "revId": "a73e1b4a638d245d3a3a6057a55140056984321c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
