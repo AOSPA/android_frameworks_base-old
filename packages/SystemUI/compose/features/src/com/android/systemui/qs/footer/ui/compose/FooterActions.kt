@@ -121,7 +121,7 @@ fun FooterActions(
         }
     }
 
-    val backgroundColor = colorAttr(R.attr.underSurface)
+    val backgroundColor = Color.Transparent
     val contentColor = LocalAndroidColorScheme.current.onSurface
     val backgroundTopRadius = dimensionResource(R.dimen.qs_corner_radius)
     val backgroundModifier =
@@ -238,7 +238,7 @@ private fun IconButton(
     modifier: Modifier = Modifier,
 ) {
     Expandable(
-        color = colorAttr(model.backgroundColor),
+        color = Color.Transparent,
         shape = CircleShape,
         onClick = model.onClick,
         modifier = modifier,
