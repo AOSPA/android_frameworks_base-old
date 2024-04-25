@@ -64,9 +64,9 @@ class BatteryStatusChip @JvmOverloads constructor(context: Context, attrs: Attri
     @SuppressLint("UseCompatLoadingForDrawables")
     private fun updateResources() {
         val primaryColor =
-            Utils.getColorAttrDefaultColor(context, com.android.internal.R.attr.colorPrimary)
+            Utils.getColorAttrDefaultColor(context, com.android.internal.R.attr.textColorPrimaryInverse)
         val textColorSecondary =
-            Utils.getColorAttrDefaultColor(mContext, android.R.attr.textColorSecondary)
+            Utils.getColorAttrDefaultColor(mContext, android.R.attr.textColorSecondaryInverse)
         batteryMeterView.updateColors(primaryColor, textColorSecondary, primaryColor)
         roundedContainer.background = mContext.getDrawable(R.drawable.statusbar_chip_bg)
     }
