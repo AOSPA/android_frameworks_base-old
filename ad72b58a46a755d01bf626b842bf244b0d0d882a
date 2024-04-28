@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "2f432983_4150cc45",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 14
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000953
+      },
+      "writtenOn": "2024-04-28T10:41:09Z",
+      "side": 1,
+      "message": "Ugly. Dual Tone QS is meant for contrast. \"KDragon\" isn\u0027t a better designer than Google staff",
+      "revId": "ad72b58a46a755d01bf626b842bf244b0d0d882a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
