@@ -16,6 +16,24 @@
       "message": "Ugly. Dual Tone QS is meant for contrast. \"KDragon\" isn\u0027t a better designer than Google staff",
       "revId": "ad72b58a46a755d01bf626b842bf244b0d0d882a",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "c3c796b5_6020c6f6",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 14
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2024-04-28T12:50:21Z",
+      "side": 1,
+      "message": "unfortunately, that contrast does have bad legiblity for text under sunlight",
+      "parentUuid": "2f432983_4150cc45",
+      "revId": "ad72b58a46a755d01bf626b842bf244b0d0d882a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
