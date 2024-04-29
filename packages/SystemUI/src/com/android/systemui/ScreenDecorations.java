@@ -566,12 +566,8 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
             List<DecorProvider> decorProviders = getProviders(mHwcScreenDecorationSupport != null);
             removeRedundantOverlayViews(decorProviders);
 
-            if (mHwcScreenDecorationSupport != null) {
-                createHwcOverlay();
-            } else {
-                removeHwcOverlay();
-            }
-
+            // Overlays are added in 2 steps: first the standard overlays. Then, if applicable, the
+            // HWC overlays. This ensures that the HWC overlays are always on top
             boolean[] hasCreatedOverlay = new boolean[BOUNDS_POSITION_LENGTH];
             final boolean shouldOptimizeVisibility = shouldOptimizeVisibility();
             Integer bound;
@@ -586,6 +582,13 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
                 if (!hasCreatedOverlay[i]) {
                     removeOverlay(i);
                 }
+            }
+
+            // Adding the HWC overlays second so they are on top by default
+            if (mHwcScreenDecorationSupport != null) {
+                createHwcOverlay();
+            } else {
+                removeHwcOverlay();
             }
 
             if (shouldOptimizeVisibility) {
