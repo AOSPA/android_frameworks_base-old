@@ -81,7 +81,7 @@
     <string translatable="false" name="status_bar_tty">tty</string>
     <string translatable="false" name="status_bar_speakerphone">speakerphone</string>
     <string translatable="false" name="status_bar_zen">zen</string>
-    <string translatable="false" name="status_bar_mute">status_bar_mute</string>
+    <string translatable="false" name="status_bar_mute">mute</string>
     <string translatable="false" name="status_bar_volume">volume</string>
     <string translatable="false" name="status_bar_wifi">wifi</string>
     <string translatable="false" name="status_bar_cdma_eri">cdma_eri</string>
