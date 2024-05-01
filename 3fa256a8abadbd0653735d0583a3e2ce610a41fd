@@ -1,0 +1,78 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "3d8e20a9_3cf8fbd4",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/StatusBarBluetoothView.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 61,
+      "author": {
+        "id": 1000469
+      },
+      "writtenOn": "2024-05-01T05:10:04Z",
+      "side": 1,
+      "message": "line length\n```suggestion\n    public static StatusBarBluetoothView fromContext(\n            Context context, String slot, boolean blocked) {\n```",
+      "revId": "3fa256a8abadbd0653735d0583a3e2ce610a41fd",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "03c54974_38aec9ff",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/StatusBarBluetoothView.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 70,
+      "author": {
+        "id": 1000469
+      },
+      "writtenOn": "2024-05-01T05:10:04Z",
+      "side": 1,
+      "message": "use ternary operator\n```suggestion\n        v.setVisibleState(blocked ? STATE_HIDDEN : STATE_ICON);\n```",
+      "range": {
+        "startLine": 66,
+        "startChar": 8,
+        "endLine": 70,
+        "endChar": 9
+      },
+      "revId": "3fa256a8abadbd0653735d0583a3e2ce610a41fd",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "4e7d0853_26ff9a6d",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBarIconController.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 509,
+      "author": {
+        "id": 1000469
+      },
+      "writtenOn": "2024-05-01T05:10:04Z",
+      "side": 1,
+      "message": "line length\n```suggestion\n        private StatusBarBluetoothView onCreateStatusBarBluetoothView(\n                String slot, boolean blocked) {\n```",
+      "revId": "3fa256a8abadbd0653735d0583a3e2ce610a41fd",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "55e21d1a_48911c18",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBarIconController.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 510,
+      "author": {
+        "id": 1000469
+      },
+      "writtenOn": "2024-05-01T05:10:04Z",
+      "side": 1,
+      "message": "line length\n```suggestion\n            StatusBarBluetoothView view \u003d\n                    StatusBarBluetoothView.fromContext(mContext, slot, blocked);\n```",
+      "revId": "3fa256a8abadbd0653735d0583a3e2ce610a41fd",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
