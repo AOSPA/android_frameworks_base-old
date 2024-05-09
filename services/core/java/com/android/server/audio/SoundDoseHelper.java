@@ -16,9 +16,6 @@
 
 package com.android.server.audio;
 
-import static android.media.AudioManager.AUDIO_DEVICE_CATEGORY_HEADPHONES;
-import static android.media.AudioManager.AUDIO_DEVICE_CATEGORY_UNKNOWN;
-
 import static com.android.server.audio.AudioService.MAX_STREAM_VOLUME;
 import static com.android.server.audio.AudioService.MIN_STREAM_VOLUME;
 import static com.android.server.audio.AudioService.MSG_SET_DEVICE_VOLUME;
@@ -58,7 +55,6 @@ import com.android.server.utils.EventLogger;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -196,9 +192,6 @@ public class SoundDoseHelper {
 
     @GuardedBy("mCsdAsAFeatureLock")
     private boolean mIsCsdAsAFeatureEnabled = false;
-
-    private final ArrayList<ISoundDose.AudioDeviceCategory> mCachedAudioDeviceCategories =
-            new ArrayList<>();
 
     private final Object mCsdStateLock = new Object();
 
@@ -522,43 +515,6 @@ public class SoundDoseHelper {
 
         if (doUpdate) {
             updateCsdEnabled("setCsdAsAFeatureEnabled");
-        }
-    }
-
-    void setAudioDeviceCategory(String address, int internalAudioType, boolean isHeadphone) {
-        if (!mEnableCsd.get()) {
-            return;
-        }
-
-        final ISoundDose soundDose = mSoundDose.get();
-        if (soundDose == null) {
-            Log.w(TAG, "Sound dose interface not initialized");
-            return;
-        }
-
-        try {
-            final ISoundDose.AudioDeviceCategory audioDeviceCategory =
-                    new ISoundDose.AudioDeviceCategory();
-            audioDeviceCategory.address = address;
-            audioDeviceCategory.internalAudioType = internalAudioType;
-            audioDeviceCategory.csdCompatible = isHeadphone;
-            soundDose.setAudioDeviceCategory(audioDeviceCategory);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Exception while forcing the internal MEL computation", e);
-        }
-    }
-
-    void initCachedAudioDeviceCategories(Collection<AdiDeviceState> deviceStates) {
-        for (final AdiDeviceState state : deviceStates) {
-            if (state.getAudioDeviceCategory() != AUDIO_DEVICE_CATEGORY_UNKNOWN) {
-                final ISoundDose.AudioDeviceCategory audioDeviceCategory =
-                        new ISoundDose.AudioDeviceCategory();
-                audioDeviceCategory.address = state.getDeviceAddress();
-                audioDeviceCategory.internalAudioType = state.getInternalDeviceType();
-                audioDeviceCategory.csdCompatible =
-                        state.getAudioDeviceCategory() == AUDIO_DEVICE_CATEGORY_HEADPHONES;
-                mCachedAudioDeviceCategories.add(audioDeviceCategory);
-            }
         }
     }
 
@@ -886,16 +842,6 @@ public class SoundDoseHelper {
         }
 
         Log.v(TAG, "Initializing sound dose");
-
-        try {
-            if (mCachedAudioDeviceCategories.size() > 0) {
-                soundDose.initCachedAudioDeviceCategories(mCachedAudioDeviceCategories.toArray(
-                        new ISoundDose.AudioDeviceCategory[0]));
-                mCachedAudioDeviceCategories.clear();
-            }
-        } catch (RemoteException e) {
-            Log.e(TAG, "Exception while forcing the internal MEL computation", e);
-        }
 
         synchronized (mCsdAsAFeatureLock) {
             mIsCsdAsAFeatureEnabled = mSettings.getSecureIntForUser(

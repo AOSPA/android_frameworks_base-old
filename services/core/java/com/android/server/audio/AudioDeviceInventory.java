@@ -20,8 +20,6 @@
  */
 package com.android.server.audio;
 
-import static android.media.AudioSystem.DEVICE_OUT_ALL_A2DP_SET;
-import static android.media.AudioSystem.DEVICE_OUT_ALL_BLE_SET;
 import static android.media.AudioSystem.isBluetoothDevice;
 
 import android.annotation.NonNull;
@@ -69,12 +67,11 @@ import com.google.android.collect.Sets;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map.Entry;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -99,68 +96,19 @@ public class AudioDeviceInventory {
     private static final String mMetricsId = "audio.device.";
 
     private final Object mDeviceInventoryLock = new Object();
-
     @GuardedBy("mDeviceInventoryLock")
     private final ArrayList<AdiDeviceState> mDeviceInventory = new ArrayList<>(0);
 
-
-    Collection<AdiDeviceState> getImmutableDeviceInventory() {
+    List<AdiDeviceState> getImmutableDeviceInventory() {
         synchronized (mDeviceInventoryLock) {
             return List.copyOf(mDeviceInventory);
         }
     }
 
-    /**
-     * Adds a new AdiDeviceState or updates the spatial audio related properties of the matching
-     * AdiDeviceState in the {@link AudioDeviceInventory#mDeviceInventory} list.
-     * @param deviceState the device to update
-     */
-    void addOrUpdateDeviceSAStateInInventory(AdiDeviceState deviceState) {
+    void addDeviceStateToInventory(AdiDeviceState deviceState) {
         synchronized (mDeviceInventoryLock) {
-            mDeviceInventory.merge(deviceState.getDeviceId(), deviceState, (oldState, newState) -> {
-                oldState.setHasHeadTracker(newState.hasHeadTracker());
-                oldState.setHeadTrackerEnabled(newState.isHeadTrackerEnabled());
-                oldState.setSAEnabled(newState.isSAEnabled());
-                return oldState;
-            });
+            mDeviceInventory.add(deviceState);
         }
-    }
-
-    /**
-     * Adds a new AdiDeviceState or updates the audio device cateogory of the matching
-     * AdiDeviceState in the {@link AudioDeviceInventory#mDeviceInventory} list.
-     * @param deviceState the device to update
-     */
-    void addOrUpdateAudioDeviceCategoryInInventory(AdiDeviceState deviceState) {
-        synchronized (mDeviceInventoryLock) {
-            mDeviceInventory.merge(deviceState.getDeviceId(), deviceState, (oldState, newState) -> {
-                oldState.setAudioDeviceCategory(newState.getAudioDeviceCategory());
-                return oldState;
-            });
-        }
-    }
-
-    /**
-     * Finds the BT device that matches the passed {@code address}. Currently, this method only
-     * returns a valid device for A2DP and BLE devices.
-     *
-     * @param address MAC address of BT device
-     * @param isBle true if the device is BLE, false for A2DP
-     * @return the found {@link AdiDeviceState} or {@code null} otherwise.
-     */
-    @Nullable
-    AdiDeviceState findBtDeviceStateForAddress(String address, boolean isBle) {
-        synchronized (mDeviceInventoryLock) {
-            final Set<Integer> deviceSet = isBle ? DEVICE_OUT_ALL_BLE_SET : DEVICE_OUT_ALL_A2DP_SET;
-            for (Integer internalType : deviceSet) {
-                AdiDeviceState deviceState = mDeviceInventory.get(
-                        new Pair<>(internalType, address));
-                if (deviceState != null) {
-                    return deviceState;
-                }
-            }
-        }
-        return null;
     }
 
     AdiDeviceState findDeviceStateForAudioDeviceAttributes(AudioDeviceAttributes ada,
@@ -179,7 +127,6 @@ public class AudioDeviceInventory {
         return null;
     }
 
-    /** Clears all cached {@link AdiDeviceState}'s. */
     void clearDeviceInventory() {
         synchronized (mDeviceInventoryLock) {
             mDeviceInventory.clear();
@@ -1321,11 +1268,11 @@ public class AudioDeviceInventory {
             AudioDeviceInfo[] connectedDevices = AudioManager.getDevicesStatic(
                     AudioManager.GET_DEVICES_ALL);
 
-            Iterator<Entry<Pair<Integer, Integer>, List<AudioDeviceAttributes>>> itRole =
+            Iterator<Map.Entry<Pair<Integer, Integer>, List<AudioDeviceAttributes>>> itRole =
                     rolesMap.entrySet().iterator();
 
             while (itRole.hasNext()) {
-                Entry<Pair<Integer, Integer>, List<AudioDeviceAttributes>> entry =
+                Map.Entry<Pair<Integer, Integer>, List<AudioDeviceAttributes>> entry =
                         itRole.next();
                 Pair<Integer, Integer> keyRole = entry.getKey();
                 Iterator<AudioDeviceAttributes> itDev = rolesMap.get(keyRole).iterator();
@@ -2642,8 +2589,7 @@ public class AudioDeviceInventory {
             // Note if the device is not compatible with spatialization mode or the device
             // type is not canonical, it will be ignored in {@link SpatializerHelper}.
             if (devState != null) {
-                addOrUpdateDeviceSAStateInInventory(devState);
-                addOrUpdateAudioDeviceCategoryInInventory(devState);
+                addDeviceStateToInventory(devState);
             }
         }
     }
