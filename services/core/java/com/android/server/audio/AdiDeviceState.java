@@ -16,7 +16,6 @@
 
 package com.android.server.audio;
 
-import static android.media.AudioManager.AUDIO_DEVICE_CATEGORY_UNKNOWN;
 import static android.media.AudioSystem.DEVICE_NONE;
 import static android.media.AudioSystem.isBluetoothDevice;
 
@@ -24,7 +23,6 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.media.AudioDeviceAttributes;
 import android.media.AudioDeviceInfo;
-import android.media.AudioManager;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -43,12 +41,8 @@ import java.util.Objects;
     private final int mDeviceType;
 
     private final int mInternalDeviceType;
-
     @NonNull
     private final String mDeviceAddress;
-
-    @AudioManager.AudioDeviceCategory
-    private int mAudioDeviceCategory = AUDIO_DEVICE_CATEGORY_UNKNOWN;
 
     private boolean mSAEnabled;
     private boolean mHasHeadTracker = false;
@@ -116,15 +110,6 @@ import java.util.Objects;
         return mHasHeadTracker;
     }
 
-    @AudioDeviceInfo.AudioDeviceType
-    public int getAudioDeviceCategory() {
-        return mAudioDeviceCategory;
-    }
-
-    public void setAudioDeviceCategory(@AudioDeviceInfo.AudioDeviceType int audioDeviceCategory) {
-        mAudioDeviceCategory = audioDeviceCategory;
-    }
-
     @Override
     public boolean equals(Object obj) {
         if (this == obj) {
@@ -143,22 +128,20 @@ import java.util.Objects;
                 && mDeviceAddress.equals(sads.mDeviceAddress)  // NonNull
                 && mSAEnabled == sads.mSAEnabled
                 && mHasHeadTracker == sads.mHasHeadTracker
-                && mHeadTrackerEnabled == sads.mHeadTrackerEnabled
-                && mAudioDeviceCategory == sads.mAudioDeviceCategory;
+                && mHeadTrackerEnabled == sads.mHeadTrackerEnabled;
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(mDeviceType, mInternalDeviceType, mDeviceAddress, mSAEnabled,
-                mHasHeadTracker, mHeadTrackerEnabled, mAudioDeviceCategory);
+                mHasHeadTracker, mHeadTrackerEnabled);
     }
 
     @Override
     public String toString() {
         return "type: " + mDeviceType
                 + " internal type: " + mInternalDeviceType
-                + " addr: " + mDeviceAddress + " bt audio type: "
-                + AudioManager.audioDeviceCategoryToString(mAudioDeviceCategory)
+                + " addr: " + mDeviceAddress
                 + " enabled: " + mSAEnabled + " HT: " + mHasHeadTracker
                 + " HTenabled: " + mHeadTrackerEnabled;
     }
@@ -170,7 +153,6 @@ import java.util.Objects;
                 .append(SETTING_FIELD_SEPARATOR).append(mHasHeadTracker ? "1" : "0")
                 .append(SETTING_FIELD_SEPARATOR).append(mHeadTrackerEnabled ? "1" : "0")
                 .append(SETTING_FIELD_SEPARATOR).append(mInternalDeviceType)
-                .append(SETTING_FIELD_SEPARATOR).append(mAudioDeviceCategory)
                 .toString());
     }
 
@@ -195,27 +177,21 @@ import java.util.Objects;
         String[] fields = TextUtils.split(persistedString, SETTING_FIELD_SEPARATOR);
         // we may have 5 fields for the legacy AdiDeviceState and 6 containing the internal
         // device type
-        if (fields.length < 5 || fields.length > 7) {
-            // different number of fields may mean corruption, ignore those settings
-            // newly added fields are optional (mInternalDeviceType, mBtAudioDeviceCategory)
+        if (fields.length != 5 && fields.length != 6) {
+            // expecting all fields, fewer may mean corruption, ignore those settings
             return null;
         }
         try {
             final int deviceType = Integer.parseInt(fields[0]);
             int internalDeviceType = -1;
-            if (fields.length >= 6) {
+            if (fields.length == 6) {
                 internalDeviceType = Integer.parseInt(fields[5]);
-            }
-            int audioDeviceCategory = AUDIO_DEVICE_CATEGORY_UNKNOWN;
-            if (fields.length == 7) {
-                audioDeviceCategory = Integer.parseInt(fields[6]);
             }
             final AdiDeviceState deviceState = new AdiDeviceState(deviceType,
                     internalDeviceType, fields[1]);
             deviceState.setHasHeadTracker(Integer.parseInt(fields[2]) == 1);
             deviceState.setHasHeadTracker(Integer.parseInt(fields[3]) == 1);
             deviceState.setHeadTrackerEnabled(Integer.parseInt(fields[4]) == 1);
-            deviceState.setAudioDeviceCategory(audioDeviceCategory);
             return deviceState;
         } catch (NumberFormatException e) {
             Log.e(TAG, "unable to parse setting for AdiDeviceState: " + persistedString, e);
@@ -227,4 +203,5 @@ import java.util.Objects;
         return new AudioDeviceAttributes(AudioDeviceAttributes.ROLE_OUTPUT,
                 mDeviceType, mDeviceAddress);
     }
+
 }
