@@ -248,6 +248,15 @@ final class InstallPackageHelper {
      */
     final private HashMap<String, String> mPackagesToBeDisabled = new HashMap<>();
 
+    /**
+     * Tracks packages that need to be disabled for QSPA enabled taregts.
+     * List of packages path on the file system.
+     */
+    final private List<String> mPackagesPathToBeDisabledForQSPA = new ArrayList<String>();
+    final private boolean mQspaEnabled = SystemProperties.getBoolean(
+                                                "ro.vendor.config.qspa.apps", false);
+
+
     // TODO(b/198166813): remove PMS dependency
     InstallPackageHelper(PackageManagerService pm, AppDataHelper appDataHelper) {
         mPm = pm;
@@ -265,6 +274,18 @@ final class InstallPackageHelper {
         mViewCompiler = pm.mInjector.getViewCompiler();
         mSharedLibraries = pm.mInjector.getSharedLibrariesImpl();
         mUpdateOwnershipHelper = pm.mInjector.getUpdateOwnershipHelper();
+
+        if (mQspaEnabled) {
+            mPackagesPathToBeDisabledForQSPA.add("/system_ext/priv-app/SystemUI");
+            mPackagesPathToBeDisabledForQSPA.add("/system_ext/priv-app/Launcher3QuickStepGo");
+            mPackagesPathToBeDisabledForQSPA.add("/system_ext/priv-app/Launcher3Go");
+            mPackagesPathToBeDisabledForQSPA.add("/system/app/PrintSpooler");
+            mPackagesPathToBeDisabledForQSPA.add("/system/priv-app/StatementService");
+            mPackagesPathToBeDisabledForQSPA.add("/product/app/Calendar");
+        } else {
+            mPackagesPathToBeDisabledForQSPA.add("/system_ext/app/HeadlessLauncher");
+        }
+
     }
 
     InstallPackageHelper(PackageManagerService pm) {
@@ -3766,6 +3787,15 @@ final class InstallPackageHelper {
                 Log.w(TAG, "Dropping cache of " + file.getAbsolutePath());
                 cacher.cleanCachedResult(file);
             }
+
+
+            if (mPackagesPathToBeDisabledForQSPA != null &&
+                    mPackagesPathToBeDisabledForQSPA.contains(file.toString())) {
+                // Ignore entries contained in {@link #mPackagesPathToBeDisabledForQSPA}
+                Slog.d(TAG, "QSPA is " + mQspaEnabled + " ignoring package for install : " + file);
+                continue;
+            }
+
 
             if (mPackagesToBeDisabled.values() != null &&
                     (mPackagesToBeDisabled.values().contains(file.toString()) ||
