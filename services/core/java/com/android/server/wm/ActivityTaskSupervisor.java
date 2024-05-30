@@ -60,6 +60,7 @@ import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_CLEANUP
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_IDLE;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_RECENTS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_ROOT_TASK;
+import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_SERVICETRACKER;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_SWITCH;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_IDLE;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.POSTFIX_PAUSE;
@@ -229,6 +230,9 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     private static final int START_HOME_MSG = FIRST_SUPERVISOR_TASK_MSG + 16;
     private static final int TOP_RESUMED_STATE_LOSS_TIMEOUT_MSG = FIRST_SUPERVISOR_TASK_MSG + 17;
 
+    private static final String AIDL_SERVICE =
+            "vendor.qti.hardware.servicetrackeraidl.IServicetracker/default";
+
     // Used to indicate that windows of activities should be preserved during the resize.
     static final boolean PRESERVE_WINDOWS = true;
 
@@ -291,7 +295,8 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     private AppOpsManager mAppOpsManager;
     private VirtualDeviceManager mVirtualDeviceManager;
 
-    private IServicetracker mServicetracker;
+    private vendor.qti.hardware.servicetracker.V1_0.IServicetracker mServicetracker;
+    private vendor.qti.hardware.servicetrackeraidl.IServicetracker  mServicetracker_aidl;
 
     /** Common synchronization logic used to save things to disks. */
     PersisterQueue mPersisterQueue;
@@ -490,25 +495,44 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     }
 
     public IServicetracker getServicetrackerInstance() {
-        if (mServicetracker == null) {
-            try {
-                mServicetracker = IServicetracker.getService(false);
-            } catch (java.util.NoSuchElementException e) {
-                // Service doesn't exist or cannot be opened logged below
-            } catch (RemoteException e) {
-                Slog.e(TAG, "Failed to get servicetracker interface", e);
-                return null;
+        if (ServiceManager.isDeclared(AIDL_SERVICE)){
+                try {
+                    IBinder mBinder = ServiceManager.getService(AIDL_SERVICE);
+                    mServicetracker_aidl =
+                        vendor.qti.hardware.servicetrackeraidl.IServicetracker.Stub.asInterface(mBinder);
+                } catch (java.util.NoSuchElementException e) {
+                    // Service doesn't exist or cannot be opened logged below
+                } catch (Exception e) {
+                    if (DEBUG_SERVICETRACKER) Slog.e(TAG, "Failed to get servicetracker AIDL interface", e);
+                    return null;
+                }
+                if (mServicetracker_aidl == null) {
+                    if (DEBUG_SERVICETRACKER) Slog.w(TAG, "servicetracker AIDL not available");
+                    return null;
+                }
+                return mServicetracker_aidl;
+            } else {
+                if (mServicetracker == null) {
+                    try {
+                        mServicetracker = IServicetracker.getService(false);
+                    } catch (java.util.NoSuchElementException e) {
+                        // Service doesn't exist or cannot be opened logged below
+                    } catch (RemoteException e) {
+                        if (DEBUG_SERVICETRACKER) Slog.e(TAG, "Failed to get servicetracker interface", e);
+                        return null;
+                    }
+                    if (mServicetracker == null) {
+                        if (DEBUG_SERVICETRACKER) Slog.w(TAG, "servicetracker HIDL not available");
+                        return null;
+                    }
+                }
+                return mServicetracker;
             }
-            if (mServicetracker == null) {
-                Slog.w(TAG, "servicetracker HIDL not available");
-                return null;
-            }
-        }
-        return mServicetracker;
     }
 
     public void destroyServicetrackerInstance() {
         mServicetracker = null;
+        mServicetracker_aidl = null;
     }
 
     void onUserUnlocked(int userId) {
