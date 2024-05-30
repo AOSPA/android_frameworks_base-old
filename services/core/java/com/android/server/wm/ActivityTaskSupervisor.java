@@ -229,6 +229,9 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     private static final int START_HOME_MSG = FIRST_SUPERVISOR_TASK_MSG + 16;
     private static final int TOP_RESUMED_STATE_LOSS_TIMEOUT_MSG = FIRST_SUPERVISOR_TASK_MSG + 17;
 
+    private static final String AIDL_SERVICE =
+            "vendor.qti.hardware.servicetrackeraidl.IServicetracker/default";
+
     // Used to indicate that windows of activities should be preserved during the resize.
     static final boolean PRESERVE_WINDOWS = true;
 
@@ -291,7 +294,8 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     private AppOpsManager mAppOpsManager;
     private VirtualDeviceManager mVirtualDeviceManager;
 
-    private IServicetracker mServicetracker;
+    private vendor.qti.hardware.servicetracker.V1_0.IServicetracker mServicetracker;
+    private vendor.qti.hardware.servicetrackeraidl.IServicetracker  mServicetracker_aidl;
 
     /** Common synchronization logic used to save things to disks. */
     PersisterQueue mPersisterQueue;
@@ -490,25 +494,44 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     }
 
     public IServicetracker getServicetrackerInstance() {
-        if (mServicetracker == null) {
-            try {
-                mServicetracker = IServicetracker.getService(false);
-            } catch (java.util.NoSuchElementException e) {
-                // Service doesn't exist or cannot be opened logged below
-            } catch (RemoteException e) {
-                Slog.e(TAG, "Failed to get servicetracker interface", e);
-                return null;
-            }
+        if (ServiceManager.isDeclared(AIDL_SERVICE)){
+                try {
+                    IBinder mBinder = ServiceManager.getService(AIDL_SERVICE);
+                    mServicetracker_aidl =
+                        vendor.qti.hardware.servicetrackeraidl.IServicetracker.Stub.asInterface(mBinder);
+                } catch (java.util.NoSuchElementException e) {
+                    // Service doesn't exist or cannot be opened logged below
+                } catch (Exception e) {
+                    if (DEBUG_SERVICE) Slog.e(TAG, "Failed to get servicetracker AIDL interface", e);
+                    return null;
+                }
+                if (mServicetracker_aidl == null) {
+                    if (DEBUG_SERVICE) Slog.w(TAG, "servicetracker AIDL not available");
+                    return null;
+                }
+                return mServicetracker_aidl;
+        } else {
             if (mServicetracker == null) {
-                Slog.w(TAG, "servicetracker HIDL not available");
-                return null;
+                try {
+                    mServicetracker = IServicetracker.getService(false);
+                } catch (java.util.NoSuchElementException e) {
+                    // Service doesn't exist or cannot be opened logged below
+                } catch (RemoteException e) {
+                    Slog.e(TAG, "Failed to get servicetracker interface", e);
+                    return null;
+                }
+                if (mServicetracker == null) {
+                    Slog.w(TAG, "servicetracker HIDL not available");
+                    return null;
+                }
             }
+            return mServicetracker;
         }
-        return mServicetracker;
     }
 
     public void destroyServicetrackerInstance() {
         mServicetracker = null;
+        mServicetracker_aidl = null;
     }
 
     void onUserUnlocked(int userId) {
