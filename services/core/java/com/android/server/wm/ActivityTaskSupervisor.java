@@ -128,6 +128,7 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.PowerManager;
 import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.Trace;
 import android.os.UserHandle;
@@ -228,6 +229,9 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     private static final int REPORT_PIP_MODE_CHANGED_MSG = FIRST_SUPERVISOR_TASK_MSG + 15;
     private static final int START_HOME_MSG = FIRST_SUPERVISOR_TASK_MSG + 16;
     private static final int TOP_RESUMED_STATE_LOSS_TIMEOUT_MSG = FIRST_SUPERVISOR_TASK_MSG + 17;
+
+    private static final String AIDL_SERVICE =
+            "vendor.qti.hardware.servicetrackeraidl.IServicetracker/default";
 
     // Used to indicate that windows of activities should be preserved during the resize.
     static final boolean PRESERVE_WINDOWS = true;
@@ -490,6 +494,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     }
 
     public IServicetracker getServicetrackerInstance() {
+        if (ServiceManager.isDeclared(AIDL_SERVICE)) return null;
         if (mServicetracker == null) {
             try {
                 mServicetracker = IServicetracker.getService(false);
