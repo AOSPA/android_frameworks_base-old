@@ -131,6 +131,7 @@
         android:icon="@*android:drawable/ic_battery" />
 
     <com.android.systemui.tuner.ClockPreference
+        android:key="clock"
         android:title="@string/tuner_time"
         android:icon="@drawable/ic_statusbar_clock"
         android:summary="%s"
