@@ -1707,11 +1707,15 @@ public final class NotificationPanelViewController implements ShadeSurface, Dump
     @ClockSize
     private int computeDesiredClockSizeForSplitShade() {
         // Media is not visible to the user on AOD.
-        boolean isMediaVisibleToUser =
-                mMediaDataManager.hasActiveMediaOrRecommendation() && !isOnAod();
+        boolean isMediaVisibleToUser = mMediaDataManager.hasActiveMediaOrRecommendation();
         if (isMediaVisibleToUser) {
-            // When media is visible, it overlaps with the large clock. Use small clock instead.
-            return SMALL;
+            if (isOnAod()) {
+                // When media is playing and the device is in AOD mode, use large clock.
+                return LARGE;
+            } else {
+                // When media is visible (and not on AOD), it overlaps with the large clock. Use small clock instead.
+                return SMALL;
+            }
         }
         // To prevent the weather clock from overlapping with the notification shelf on AOD, we use
         // the small clock here
