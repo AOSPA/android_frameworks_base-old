@@ -22,7 +22,9 @@ import com.android.systemui.common.coroutine.ConflatedCallbackFlow.conflatedCall
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background
+import com.android.systemui.statusbar.pipeline.ims.data.model.ImsIconModel
 import com.android.systemui.statusbar.pipeline.ims.data.model.ImsStateModel
+import com.android.systemui.tuner.TunerService
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -43,6 +45,7 @@ import kotlinx.coroutines.withContext
 
 interface CommonImsRepository {
     val imsStates: StateFlow<List<ImsStateModel>>
+    val imsIconState: StateFlow<ImsIconModel>
     fun getRepoForSubId(subId: Int): ImsRepository
 }
 
@@ -55,6 +58,7 @@ constructor(
     @Background private val bgDispatcher: CoroutineDispatcher,
     @Application private val scope: CoroutineScope,
     private val imsRepoFactory: ImsRepositoryImpl.Factory,
+    tunerService: TunerService,
 ): CommonImsRepository {
 
     private var subIdRepositoryCache: MutableMap<Int, ImsRepository> =
@@ -121,6 +125,43 @@ constructor(
             }
             .stateIn(scope, started = SharingStarted.WhileSubscribed(), listOf())
 
+    override val imsIconState: StateFlow<ImsIconModel> =
+        conflatedCallbackFlow {
+                var showHdIcon = false
+                var showVowifiIcon = false
+                val callback =
+                    object : TunerService.Tunable {
+                        override fun onTuningChanged(key: String, newValue: String?) {
+                            when (key) {
+                                KEY_HD_ICON -> {
+                                    showHdIcon =
+                                        TunerService.parseIntegerSwitch(newValue, false)
+                                }
+                                KEY_VOWIFI_ICON -> {
+                                    showVowifiIcon =
+                                        TunerService.parseIntegerSwitch(newValue, false)
+                                }
+                                else -> return
+                            }
+                            trySend(
+                                ImsIconModel(
+                                    showHdIcon = showHdIcon,
+                                    showVowifiIcon = showVowifiIcon
+                                )
+                            )
+                        }
+                    }
+                tunerService.addTunable(callback, KEY_HD_ICON)
+                tunerService.addTunable(callback, KEY_VOWIFI_ICON)
+
+                awaitClose { tunerService.removeTunable(callback) }
+            }
+            .stateIn(
+                scope,
+                started = SharingStarted.WhileSubscribed(),
+                initialValue = ImsIconModel()
+            )
+
     override fun getRepoForSubId(subId: Int): ImsRepository =
         getOrCreateRepoForSubId(subId)
 
@@ -130,5 +171,10 @@ constructor(
 
     private fun createRepositoryForSubId(subId: Int): ImsRepository {
         return imsRepoFactory.build(subId)
+    }
+
+    private companion object {
+        const val KEY_HD_ICON = "hd_calling"
+        const val KEY_VOWIFI_ICON = "vowifi"
     }
 }

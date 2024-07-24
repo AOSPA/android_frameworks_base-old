@@ -95,15 +95,17 @@
         android:title="@string/status_bar_roaming"
         android:icon="@drawable/ic_statusbar_roaming" />
 
-    <com.android.systemui.tuner.StatusBarSwitch
+    <com.android.systemui.tuner.TunerSwitch
         android:icon="@drawable/ic_statusbar_hd_calling"
         android:key="hd_calling"
-        android:title="@string/status_bar_hd_calling" />
+        android:title="@string/status_bar_hd_calling"
+        sysui:defValue="false" />
 
-    <com.android.systemui.tuner.StatusBarSwitch
+    <com.android.systemui.tuner.TunerSwitch
         android:icon="@drawable/ic_statusbar_vowifi"
         android:key="vowifi"
-        android:title="@string/status_bar_vowifi" />
+        android:title="@string/status_bar_vowifi"
+        sysui:defValue="false" />
 
     <com.android.systemui.tuner.StatusBarSwitch
         android:key="vpn"

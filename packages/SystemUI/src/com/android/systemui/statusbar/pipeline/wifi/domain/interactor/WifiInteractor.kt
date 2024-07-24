@@ -18,6 +18,7 @@ package com.android.systemui.statusbar.pipeline.wifi.domain.interactor
 
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
+import com.android.systemui.statusbar.pipeline.ims.data.repository.CommonImsRepository
 import com.android.systemui.statusbar.pipeline.shared.data.model.ConnectivitySlot
 import com.android.systemui.statusbar.pipeline.shared.data.model.DataActivityModel
 import com.android.systemui.statusbar.pipeline.shared.data.repository.ConnectivityRepository
@@ -78,6 +79,7 @@ class WifiInteractorImpl
 constructor(
     connectivityRepository: ConnectivityRepository,
     wifiRepository: WifiRepository,
+    commonImsRepo: CommonImsRepository,
     @Application scope: CoroutineScope,
 ) : WifiInteractor {
 
@@ -143,7 +145,7 @@ constructor(
         .stateIn(scope, SharingStarted.WhileSubscribed(), VoWifiState.Disabled)
 
     override val isVoWifiForceHidden: Flow<Boolean> =
-        connectivityRepository.forceHiddenSlots.map { it.contains(ConnectivitySlot.VOWIFI) }
+        commonImsRepo.imsIconState.map { !it.showVowifiIcon }
 
     private fun anyNonMatchingNetworkExists(
         currentNetwork: WifiNetworkModel.Active,
