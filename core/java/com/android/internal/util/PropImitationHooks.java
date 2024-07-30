@@ -214,14 +214,6 @@ public class PropImitationHooks {
                 .anyMatch(elem -> elem.getClassName().contains("DroidGuard"));
     }
 
-    public static void onEngineGetCertificateChain() {
-        // Check stack for SafetyNet or Play Integrity
-        if (isCallerSafetyNet() || sIsFinsky) {
-            dlog("Blocked key attestation sIsGms=" + sIsGms + " sIsFinsky=" + sIsFinsky);
-            throw new UnsupportedOperationException();
-        }
-    }
-
     public static boolean hasSystemFeature(String name, boolean has) {
         if (sIsPhotos && !sIsPixelDevice && has
                 && sPixelFeatures.stream().anyMatch(name::contains)) {
