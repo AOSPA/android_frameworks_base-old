@@ -157,6 +157,7 @@ public class PocketService extends SystemService implements IBinder.DeathRecipie
     private int mVendorSensorState = VENDOR_SENSOR_UNKNOWN;
     private int mLastVendorSensorState = VENDOR_SENSOR_UNKNOWN;
     private String mVendorPocketSensor;
+    private float mVendorPocketSensorValue;
     private boolean mVendorSensorRegistered;
     private Sensor mVendorSensor;
 
@@ -173,6 +174,8 @@ public class PocketService extends SystemService implements IBinder.DeathRecipie
         mSensorManager = (SensorManager) mContext.getSystemService(Context.SENSOR_SERVICE);
         mVendorPocketSensor = mContext.getResources().getString(
                         com.android.internal.R.string.config_pocketJudgeVendorSensorName);
+        mVendorPocketSensorValue = mContext.getResources().getFloat(
+                        com.android.internal.R.dimen.config_pocketJudgeVendorSensorValue);
         mProximitySensor = mSensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
         if (mProximitySensor != null) {
             mProximityMaxRange = mProximitySensor.getMaximumRange();
@@ -757,7 +760,7 @@ public class PocketService extends SystemService implements IBinder.DeathRecipie
                 if (DEBUG) Log.d(TAG, "Event has no values! event.values null ? " + (sensorEvent.values == null));
                 mVendorSensorState = VENDOR_SENSOR_UNKNOWN;
             } else {
-                final boolean isVendorPocket = sensorEvent.values[0] == 1.0;
+                final boolean isVendorPocket = sensorEvent.values[0] == mVendorPocketSensorValue;
                 if (DEBUG) {
                     final long time = SystemClock.uptimeMillis();
                     Log.d(TAG, "Event: time=" + time + ", value=" + sensorEvent.values[0]
