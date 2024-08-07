@@ -42,6 +42,9 @@ public class PropImitationHooks {
     private static final String TAG = "PropImitationHooks";
     private static final boolean DEBUG = false;
 
+    private static final Boolean sEnablePropImitation =
+            SystemProperties.getBoolean("persist.sys.propimitation.enable", true);
+
     private static final String PACKAGE_ARCORE = "com.google.ar.core";
     private static final String PACKAGE_FINSKY = "com.android.vending";
     private static final String PACKAGE_GMS = "com.google.android.gms";
@@ -72,6 +75,11 @@ public class PropImitationHooks {
     private static volatile boolean sIsPixelDevice, sIsGms, sIsFinsky, sIsPhotos;
 
     public static void setProps(Context context) {
+        if (!sEnablePropImitation) {
+            dlog("Prop imitation is disabled by config");
+            return;
+        }
+
         final String packageName = context.getPackageName();
         final String processName = Application.getProcessName();
 
@@ -196,6 +204,11 @@ public class PropImitationHooks {
     }
 
     public static boolean shouldBypassTaskPermission(Context context) {
+        if (!sEnablePropImitation) {
+            dlog("Prop imitation is disabled by config");
+            return false;
+        }
+
         // GMS doesn't have MANAGE_ACTIVITY_TASKS permission
         final int callingUid = Binder.getCallingUid();
         final int gmsUid;
@@ -215,6 +228,11 @@ public class PropImitationHooks {
     }
 
     public static void onEngineGetCertificateChain() {
+        if (!sEnablePropImitation) {
+            dlog("Prop imitation is disabled by config");
+            return;
+        }
+
         // Check stack for SafetyNet or Play Integrity
         if (isCallerSafetyNet() || sIsFinsky) {
             dlog("Blocked key attestation sIsGms=" + sIsGms + " sIsFinsky=" + sIsFinsky);
