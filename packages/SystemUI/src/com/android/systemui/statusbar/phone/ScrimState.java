@@ -96,7 +96,7 @@ public enum ScrimState {
             mFrontTint = Color.BLACK;
             mFrontAlpha = .66f;
 
-            mBehindTint = Color.TRANSPARENT;
+            mBehindTint = Color.BLACK;
             mBehindAlpha = 1f;
         }
     },
