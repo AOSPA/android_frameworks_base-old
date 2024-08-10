@@ -37,4 +37,11 @@
     <!-- Material next track off color-->
     <color name="settingslib_track_off_color">@android:color/system_surface_container_highest_dark
     </color>
+
+    <color name="settingslib_track_on_color_end">@android:color/btn_default_material_dark</color>
+    <color name="settingslib_track_on_color_start">@android:color/background_device_default_light</color>
+    <color name="switch_thumb_active">@android:color/Teal_700</color>
+    <color name="switch_thumb_inactive">@android:color/accent_material_dark</color>
+    <color name="switch_track_inactive">@android:color/autofill_background_material_dark</color>
+
 </resources>
