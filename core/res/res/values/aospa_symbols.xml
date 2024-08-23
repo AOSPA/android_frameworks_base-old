@@ -69,8 +69,9 @@
     <!-- Whether to use Richtap vibration -->
     <java-symbol type="bool" name="config_usesRichtapVibration" />
 
-    <!-- PropImitationHooks -->
+    <!-- Prop/KeyboxImitationHooks -->
     <java-symbol type="array" name="config_certifiedBuildProperties" />
+    <java-symbol type="array" name="config_certifiedKeybox" />
     <java-symbol type="string" name="config_stockFingerprint" />
     <java-symbol type="string" name="config_netflixSpoofModel" />
 
