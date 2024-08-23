@@ -101,6 +101,18 @@
         <item>VERSION.RELEASE:1.0</item>
       -->
     </string-array>
+    <string-array name="config_keybox" translatable="false">
+      <!--
+        <item>EC.PRIV:</item>
+        <item>EC.CERT_1:</item>
+        <item>EC.CERT_2:</item>
+        <item>EC.CERT_3:</item>
+        <item>RSA.PRIV:</item>
+        <item>RSA.CERT_1:</item>
+        <item>RSA.CERT_2:</item>
+        <item>RSA.CERT_3:</item>
+      -->
+    </string-array>
 
     <!-- Build fingerprint from stock ROM -->
     <string name="config_stockFingerprint" translatable="false"></string>
